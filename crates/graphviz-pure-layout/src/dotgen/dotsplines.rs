@@ -1073,9 +1073,10 @@ impl Dot<'_> {
             id: graphviz_pure_core::SubgraphId(0),
             name: "xxx".to_string(),
             is_cluster: false,
-            graph_attrs: [("rank".to_string(), "source".to_string())]
-                .into_iter()
-                .collect(),
+            graph_attrs: graphviz_pure_core::AttrMap::from_plain([(
+                "rank".to_string(),
+                "source".to_string(),
+            )]),
             node_defaults: Default::default(),
             edge_defaults: Default::default(),
             nodes: vec![auxt],
@@ -2429,9 +2430,9 @@ mod tests {
     }
 
     fn attrs(kv: &[(&str, &str)]) -> graphviz_pure_core::AttrMap {
-        kv.iter()
-            .map(|(k, v)| (k.to_string(), v.to_string()))
-            .collect()
+        graphviz_pure_core::AttrMap::from_plain(
+            kv.iter().map(|(k, v)| (k.to_string(), v.to_string())),
+        )
     }
 
     /// #84: the main graph declares weight, constraint, headclip, headport, fontcolor and

@@ -155,7 +155,7 @@ fn add_z(g: &LGraph<'_>, z_declared: bool, graph: &mut Graph) {
 
 /// `addZ`'s `agxset(n, N_z, "%lf" of POINTS_PER_INCH * ND_pos(n)[2])`.
 pub(crate) fn set_z(node: &mut graphviz_pure_core::NodeData, z: f64) {
-    graphviz_pure_core::set_attr(&mut node.attrs, "z", c_lf(72.0 * z), false);
+    node.attrs.set("z", c_lf(72.0 * z), false);
 }
 
 /// `printf("%lf", v)`.
@@ -1303,9 +1303,7 @@ mod tests {
         };
         let mut g = Graph::new("G", kind, false);
         let map = |a: Attrs<'_>| -> AttrMap {
-            a.iter()
-                .map(|(k, v)| (k.to_string(), v.to_string()))
-                .collect()
+            AttrMap::from_plain(a.iter().map(|(k, v)| (k.to_string(), v.to_string())))
         };
         g.graph_attrs = map(gattrs);
         for (name, a) in nodes {

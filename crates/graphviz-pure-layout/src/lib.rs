@@ -229,10 +229,8 @@ mod tests {
         let mut g = Graph::new("G", GraphKind::Directed, false);
         for &(t, h, attrs) in edges {
             let (t, h) = (g.ensure_node(t), g.ensure_node(h));
-            let attrs = attrs
-                .iter()
-                .map(|&(k, v)| (k.to_string(), v.to_string()))
-                .collect();
+            let attrs =
+                AttrMap::from_plain(attrs.iter().map(|&(k, v)| (k.to_string(), v.to_string())));
             g.add_edge(t, h, attrs);
         }
         g
@@ -407,10 +405,9 @@ mod tests {
             id: SubgraphId(i as u32),
             name: name.to_string(),
             is_cluster: name.starts_with("cluster"),
-            graph_attrs: attrs
-                .iter()
-                .map(|&(k, v)| (k.to_string(), v.to_string()))
-                .collect(),
+            graph_attrs: AttrMap::from_plain(
+                attrs.iter().map(|&(k, v)| (k.to_string(), v.to_string())),
+            ),
             node_defaults: AttrMap::new(),
             edge_defaults: AttrMap::new(),
             nodes: nodes.to_vec(),

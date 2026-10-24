@@ -11,7 +11,6 @@
 //! `ND_ht`).
 
 use crate::html_label::HtmlLabel;
-use graphviz_pure_core::attr_is_html;
 use graphviz_pure_core::cnum::{is_exactly_equal, is_exactly_zero};
 use graphviz_pure_core::math;
 use graphviz_pure_core::strtod::{sscanf, strtod};
@@ -398,7 +397,7 @@ fn label_l_text(l: &LabelGeometry, raw: &str, is_record: bool) -> String {
 
 /// `make_label` for the plain-text and HTML cases: returns the label geometry with
 /// `space = dimen`. `obj` describes the owning object for escape substitution; `is_html` is
-/// `aghtmlstr(str)` ([`graphviz_pure_core::attr_is_html`] for an attribute value), and
+/// `aghtmlstr(str)` ([`graphviz_pure_core::AttrMap::is_html`] for an attribute value), and
 /// `label` is then the HTML string's inner text.
 pub fn make_label(
     label: &str,
@@ -515,7 +514,7 @@ fn node_geometry_measured(node: &NodeData, env: &NodeSizeEnv<'_>) -> NodeGeometr
             dimen: Point::default(),
             space: Point::default(),
             valign: 'c',
-            html: attr_is_html(attrs, "label"),
+            html: attrs.is_html("label"),
             html_label: None,
             html_failed: false,
             text: None,
@@ -525,7 +524,7 @@ fn node_geometry_measured(node: &NodeData, env: &NodeSizeEnv<'_>) -> NodeGeometr
     } else {
         make_label(
             label_str,
-            attr_is_html(attrs, "label"),
+            attrs.is_html("label"),
             &obj,
             font_name,
             font_size,
@@ -540,7 +539,7 @@ fn node_geometry_measured(node: &NodeData, env: &NodeSizeEnv<'_>) -> NodeGeometr
         ..obj.clone()
     };
     let xlabel = attrs.get("xlabel").filter(|s| !s.is_empty()).map(|s| {
-        let html = attr_is_html(attrs, "xlabel");
+        let html = attrs.is_html("xlabel");
         make_label(s, html, &xobj, font_name, font_size, env.charset)
     });
 
@@ -648,7 +647,7 @@ fn graph_label_geometry_measured(
     };
     let label = make_label(
         s,
-        attr_is_html(attrs, "label"),
+        attrs.is_html("label"),
         &obj,
         late_nnstring(attrs, "fontname", DEFAULT_FONT_NAME),
         late_double(attrs, "fontsize", DEFAULT_FONT_SIZE, MIN_FONT_SIZE),
@@ -763,7 +762,7 @@ pub fn edge_label_geometry(
         attrs
             .get(key)
             .filter(|s| !s.is_empty())
-            .map(|s| make_label(s, attr_is_html(attrs, key), obj, name, size, env.charset))
+            .map(|s| make_label(s, attrs.is_html(key), obj, name, size, env.charset))
     };
     let label = mk("label", &obj, fontname, fontsize);
     // Later labels see `\L` = the main label's `lp->text`.
@@ -1844,7 +1843,7 @@ mod tests {
         assert_eq!(format!("{:.2}", g.label.dimen.y / 72.0), "0.67");
         assert_eq!(g.pos_flag, LABEL_AT_BOTTOM);
         assert!(g.border.is_none());
-        graphviz_pure_core::set_attr(&mut a, "label", "<B>Bold</B> x".into(), true);
+        a.set("label", "<B>Bold</B> x".into(), true);
         let c = graph_label_geometry("cluster_x", &a, false, false, Charset::Utf8).unwrap();
         assert!((c.label.dimen.x - (40.02 + 15.0)).abs() < 0.01);
         assert!((c.label.dimen.y - 24.0).abs() < 1e-9);
@@ -1886,7 +1885,7 @@ mod tests {
         let env = NodeSizeEnv::new("G");
         let q = node_geometry(&node(&[("label", "<x>")]), &env);
         let mut n = node(&[]);
-        graphviz_pure_core::set_attr(&mut n.attrs, "label", "x".into(), true);
+        n.attrs.set("label", "x".into(), true);
         let h = node_geometry(&n, &env);
         assert!(!q.label.html);
         assert!(h.label.html);

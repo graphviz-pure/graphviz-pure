@@ -1,8 +1,7 @@
 //! Canonical DOT writer (`dot -Tcanon`) matching Graphviz `lib/cgraph/write.c`.
 
 use graphviz_pure_core::{
-    AttrMap, EdgeData, EdgeId, Graph, GraphKind, HTML_VALUE_PREFIX, NodeData, NodeId, Port,
-    SubgraphId, attr_is_html,
+    AttrMap, EdgeData, EdgeId, Graph, GraphKind, NodeData, NodeId, Port, SubgraphId,
 };
 use std::collections::BTreeSet;
 
@@ -42,9 +41,9 @@ pub fn write_canon_forced(graph: &Graph, forced: &[BTreeSet<String>]) -> String 
 
     let mut root_node_defaults = effective_node_defaults(graph, &all_nodes, &graph.node_defaults);
     // dot declares `label="\N"` as the node default when the input does not.
-    root_node_defaults
-        .entry("label".to_string())
-        .or_insert_with(|| "\\N".to_string());
+    if !root_node_defaults.contains_key("label") {
+        root_node_defaults.insert("label".to_string(), "\\N".to_string());
+    }
     let root_edge_defaults = effective_edge_defaults(graph, &all_edges, &graph.edge_defaults);
 
     write_dict(&mut out, 1, "graph", &graph.graph_attrs, None, None);
@@ -130,27 +129,19 @@ fn subgraph_edge_membership(graph: &Graph) -> Vec<Vec<EdgeId>> {
 }
 
 fn effective_node_defaults(graph: &Graph, nodes: &[NodeId], defaults: &AttrMap) -> AttrMap {
-    defaults
-        .iter()
-        .filter(|(k, _)| {
-            nodes
-                .iter()
-                .all(|nid| graph.nodes[nid.0 as usize].attrs.contains_key(*k))
-        })
-        .map(|(k, v)| (k.clone(), v.clone()))
-        .collect()
+    defaults.filtered(|k, _| {
+        nodes
+            .iter()
+            .all(|nid| graph.nodes[nid.0 as usize].attrs.contains_key(k))
+    })
 }
 
 fn effective_edge_defaults(graph: &Graph, edges: &[EdgeId], defaults: &AttrMap) -> AttrMap {
-    defaults
-        .iter()
-        .filter(|(k, _)| {
-            edges
-                .iter()
-                .all(|eid| graph.edges[eid.0 as usize].attrs.contains_key(*k))
-        })
-        .map(|(k, v)| (k.clone(), v.clone()))
-        .collect()
+    defaults.filtered(|k, _| {
+        edges
+            .iter()
+            .all(|eid| graph.edges[eid.0 as usize].attrs.contains_key(k))
+    })
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -385,12 +376,9 @@ fn write_dict(
 ) {
     let entries: Vec<(&String, &String)> = attrs
         .iter()
-        .filter(|(k, _)| !k.starts_with(HTML_VALUE_PREFIX))
         .filter(|(k, v)| match parent_attrs {
             Some(_) if forced.is_some_and(|f| f.contains(*k)) => true,
-            Some(parent) => {
-                parent.get(*k) != Some(*v) || attr_is_html(parent, k) != attr_is_html(attrs, k)
-            }
+            Some(parent) => parent.get(*k) != Some(*v) || parent.is_html(k) != attrs.is_html(k),
             None => !v.is_empty(),
         })
         .collect();
@@ -409,7 +397,7 @@ fn write_dict(
         }
         out.push_str(&canon_str(k));
         out.push('=');
-        out.push_str(&canon_value(v, attr_is_html(attrs, k)));
+        out.push_str(&canon_value(v, attrs.is_html(k)));
     }
     if entries.len() > 1 {
         out.push('\n');
@@ -427,7 +415,7 @@ fn write_inline_attrs(out: &mut String, level: usize, attrs: &[(&String, &String
         }
         out.push_str(&canon_str(k));
         out.push('=');
-        out.push_str(&canon_value(v, attr_is_html(all, k)));
+        out.push_str(&canon_value(v, all.is_html(k)));
     }
     out.push(']');
 }
@@ -438,11 +426,8 @@ fn collect_non_default_node_attrs<'a>(
 ) -> Vec<(&'a String, &'a String)> {
     node.attrs
         .iter()
-        .filter(|(k, _)| !k.starts_with(HTML_VALUE_PREFIX))
         .filter(|(k, v)| match node_defaults.get(*k) {
-            Some(def_val) => {
-                *v != def_val || attr_is_html(&node.attrs, k) != attr_is_html(node_defaults, k)
-            }
+            Some(def_val) => *v != def_val || node.attrs.is_html(k) != node_defaults.is_html(k),
             None => !(*k == "label" && *v == "\\N"),
         })
         .collect()
@@ -454,15 +439,13 @@ fn collect_non_default_edge_attrs<'a>(
 ) -> Vec<(&'a String, &'a String)> {
     edge.attrs
         .iter()
-        .filter(|(k, _)| !k.starts_with(HTML_VALUE_PREFIX))
         .filter(|(k, v)| {
             if (*k == "tailport" && edge.tail_port != Port::default())
                 || (*k == "headport" && edge.head_port != Port::default())
             {
                 return false;
             }
-            edge_defaults.get(*k) != Some(*v)
-                || attr_is_html(&edge.attrs, k) != attr_is_html(edge_defaults, k)
+            edge_defaults.get(*k) != Some(*v) || edge.attrs.is_html(k) != edge_defaults.is_html(k)
         })
         .collect()
 }

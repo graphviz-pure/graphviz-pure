@@ -27,7 +27,6 @@ pub use font::{
 pub use geom::{BezierSegment, BoundingBox, Point, Spline};
 pub use graph::{
     AgName, AttrDicts, AttrMap, AttrSym, ClusterReg, EdgeData, EdgeId, EdgeLayout, Graph,
-    GraphKind, GraphLayout, HTML_VALUE_PREFIX, LabelPlace, NodeData, NodeId, NodeLayout, Obj, Port,
-    SubgraphData, SubgraphId, agnameof_buffer, apply_attrs, attr_is_html, has_cluster_prefix,
-    html_value_key, node_name_is_buffer, set_attr,
+    GraphKind, GraphLayout, LabelPlace, NodeData, NodeId, NodeLayout, Obj, Port, SubgraphData,
+    SubgraphId, agnameof_buffer, has_cluster_prefix, node_name_is_buffer,
 };

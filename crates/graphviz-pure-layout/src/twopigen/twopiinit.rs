@@ -29,7 +29,7 @@ pub fn twopi_layout(graph: &mut Graph) -> Result<()> {
     if let Some(s) = g.gattr("root") {
         if !s.is_empty() {
             // `agfindnode` maps the interned value, flag included, to a node.
-            let html = graphviz_pure_core::attr_is_html(&src.graph_attrs, "root");
+            let html = src.graph_attrs.is_html("root");
             ctr = src.agfindnode(s, html).map(|n| n.0 as usize);
             if ctr.is_none() {
                 graphviz_pure_core::diag::agwarningf(&format!(
@@ -113,7 +113,7 @@ pub fn twopi_layout(graph: &mut Graph) -> Result<()> {
             sym.defval = name.clone();
             sym.html_defval = html;
         }
-        graphviz_pure_core::set_attr(&mut graph.graph_attrs, "root", name, html);
+        graph.graph_attrs.set("root", name, html);
     }
     Ok(())
 }

@@ -874,6 +874,42 @@ fn html_and_plain_named_nodes_keep_their_own_label_fonts() {
     );
 }
 
+/// Issue #365: the port marked an HTML attribute value with a second attribute named
+/// `"\x01html:<name>"` in the same map, so an input attribute of that name turned a plain
+/// `label` into an HTML label. To C (cgraph's `aghtmlstr`, a flag on the string) it is an
+/// ordinary attribute: `a`'s label is the plain text `<b>x</b>`, and both are printed back.
+/// The expected output is C 16.1.0's.
+#[test]
+fn issue365_html_mark_named_attribute_is_ordinary() {
+    let src = "digraph { a [label=\"<b>x</b>\" \"\u{1}html:label\"=\"<b>x</b>\"]; b [label=<<b>y</b>>]; \
+               a -> b [\"\u{1}html:label\"=\"e\" label=\"e\"] }";
+    let (out, err, ok) = run(&["-Tdot"], src);
+    assert!(ok, "{err}");
+    assert_eq!(err, "");
+    assert_eq!(
+        out,
+        concat!(
+            "digraph {\n",
+            "\tgraph [bb=\"0,0,99.979,124.8\"];\n",
+            "\tnode [label=\"\\N\"];\n",
+            "\ta\t[\"\u{1}html:label\"=\"<b>x</b>\",\n",
+            "\t\theight=0.5,\n",
+            "\t\tlabel=\"<b>x</b>\",\n",
+            "\t\tpos=\"49.99,106.8\",\n",
+            "\t\twidth=1.3886];\n",
+            "\tb\t[height=0.5,\n",
+            "\t\tlabel=<<b>y</b>>,\n",
+            "\t\tpos=\"49.99,18\",\n",
+            "\t\twidth=0.75];\n",
+            "\ta -> b\t[\"\u{1}html:label\"=e,\n",
+            "\t\tlabel=e,\n",
+            "\t\tlp=\"53.097,62.4\",\n",
+            "\t\tpos=\"e,49.99,36.41 49.99,88.651 49.99,76.958 49.99,61.192 49.99,47.618\"];\n",
+            "}\n",
+        )
+    );
+}
+
 // Issue #166, same root cause: neato's ipsep mode matches diredgeconstraints="hier..." with
 // strncasecmp(str, "hier", 4) (lib/neatogen/neatoinit.c, majorization).
 #[test]

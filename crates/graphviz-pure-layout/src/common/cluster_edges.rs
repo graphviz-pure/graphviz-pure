@@ -379,8 +379,9 @@ pub fn undo_cluster_edges(ce: &ClusterEdges, work: &Graph, graph: &mut Graph) {
             }
             None => {
                 let mut a: AttrMap = graph.node_defaults.clone();
-                a.entry("label".to_string())
-                    .or_insert_with(|| "\\N".to_string());
+                if !a.contains_key("label") {
+                    a.insert("label".to_string(), "\\N".to_string());
+                }
                 let node = &mut graph.nodes[i];
                 node.attrs = a;
                 node.layout = NodeLayout {

@@ -301,9 +301,9 @@ impl Output {
             graph.nodes[i].order = o.max(0) as usize;
             if let Some(ph) = self.phase_attrs {
                 let a = &mut graph.nodes[i].attrs;
-                graphviz_pure_core::set_attr(a, "rank", r.to_string(), false);
+                a.set("rank", r.to_string(), false);
                 if ph >= 2 {
-                    graphviz_pure_core::set_attr(a, "order", o.to_string(), false);
+                    a.set("order", o.to_string(), false);
                 }
             }
         }

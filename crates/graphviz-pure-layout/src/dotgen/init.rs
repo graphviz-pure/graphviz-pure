@@ -307,7 +307,7 @@ impl<'a> Dot<'a> {
                 .get(n)
                 .and_then(|nd| nd.real)
                 .and_then(|r| self.input.nodes.get(r))
-                .is_some_and(|nd| graphviz_pure_core::attr_is_html(&nd.attrs, "group"))
+                .is_some_and(|nd| nd.attrs.is_html("group"))
         };
         let mut xpenalty = 1;
         if !tg.is_empty() && tg == hg && html(t) == html(h) {

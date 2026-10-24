@@ -265,6 +265,30 @@ mod tests {
         assert!(canon.find("a -> b").unwrap() < canon.find("a -> c").unwrap());
     }
 
+    // #365 review: write_canon copies the effective node and edge defaults with their HTML
+    // flags, so it writes HTML defaults once, as HTML, as C 16.1.0's `-Tcanon` does, and
+    // no node or edge repeats them.
+    #[test]
+    fn canon_keeps_html_defaults() {
+        let g = parse_dot(
+            "digraph { node [label=<<b>x</b>>]; edge [label=<<i>e</i>>]; a -> b; subgraph s { \
+             node [xlabel=<<u>s</u>>]; edge [headlabel=<h>]; c -> d } }",
+        )
+        .unwrap();
+        let canon = write_canon(&g);
+        for line in [
+            "\tnode [label=<<b>x</b>>];\n",
+            "\tedge [label=<<i>e</i>>];\n",
+            "\t\tnode [xlabel=<<u>s</u>>];\n",
+            "\t\tedge [headlabel=<h>];\n",
+            "\t\tc -> d;\n",
+            "\ta -> b;\n",
+        ] {
+            assert!(canon.contains(line), "{line:?} in {canon}");
+        }
+        assert_eq!(canon.matches("label=").count(), 4, "{canon}");
+    }
+
     #[test]
     fn verify_html_labels_and_ports() {
         let html = parse_dot(&read_fixture("html.gv")).unwrap();
@@ -273,7 +297,7 @@ mod tests {
         for node in &html.nodes {
             let label = node.attrs.get("label").expect("missing label");
             assert!(
-                graphviz_pure_core::attr_is_html(&node.attrs, "label"),
+                node.attrs.is_html("label"),
                 "expected HTML label, got {label}"
             );
             assert!(label.contains("<TABLE"));
@@ -290,10 +314,7 @@ mod tests {
         assert_eq!(html2.edges[0].tail_port.name.as_deref(), Some("here"));
         assert_eq!(html2.edges[0].head_port.name.as_deref(), Some("there"));
         assert!(html2.edges[2].attrs.contains_key("label"));
-        assert!(graphviz_pure_core::attr_is_html(
-            &html2.edges[2].attrs,
-            "label"
-        ));
+        assert!(html2.edges[2].attrs.is_html("label"));
     }
 
     #[test]
@@ -436,30 +457,28 @@ mod tests {
     // #81: `concat` joins an HTML operand's inner text into a plain string.
     #[test]
     fn concatenation_joins_inner_text_into_a_plain_string() {
-        use graphviz_pure_core::attr_is_html;
         let g = parse_dot("digraph { a [label=\"x\" + <b>, xlabel=<b> + \"y\"] }").unwrap();
         let a = &g.nodes[0].attrs;
         assert_eq!(a.get("label").map(String::as_str), Some("xb"));
         assert_eq!(a.get("xlabel").map(String::as_str), Some("by"));
-        assert!(!attr_is_html(a, "label") && !attr_is_html(a, "xlabel"));
+        assert!(!a.is_html("label") && !a.is_html("xlabel"));
         let g = parse_dot("digraph { a [label=<b>] }").unwrap();
         let a = &g.nodes[0].attrs;
         assert_eq!(a.get("label").map(String::as_str), Some("b"));
-        assert!(attr_is_html(a, "label"));
+        assert!(a.is_html("label"));
     }
 
     // #98: `concatPort` makes `port:compass` a plain string; a lone HTML port stays HTML.
     #[test]
     fn html_port_with_compass_is_a_plain_string() {
-        use graphviz_pure_core::attr_is_html;
         let g = parse_dot("digraph { a:<foo>:n -> b:<x> }").unwrap();
         let e = &g.edges[0];
         assert_eq!(e.attrs.get("tailport").map(String::as_str), Some("foo:n"));
-        assert!(!attr_is_html(&e.attrs, "tailport"));
+        assert!(!e.attrs.is_html("tailport"));
         assert_eq!(e.tail_port.name.as_deref(), Some("foo"));
         assert_eq!(e.tail_port.compass.as_deref(), Some("n"));
         assert_eq!(e.attrs.get("headport").map(String::as_str), Some("x"));
-        assert!(attr_is_html(&e.attrs, "headport"));
+        assert!(e.attrs.is_html("headport"));
         assert_eq!(e.head_port.name.as_deref(), Some("x"));
     }
 

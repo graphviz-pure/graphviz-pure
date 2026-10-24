@@ -4,7 +4,7 @@
 use super::model::Model;
 use super::num::fmt_g;
 use super::{y_dir, y_offset};
-use graphviz_pure_core::{Graph, Point, attr_is_html, math, set_attr};
+use graphviz_pure_core::{Graph, Point, math};
 use graphviz_pure_geom::shapes::{RecordField, ShapeKind};
 use std::collections::BTreeSet;
 use std::fmt::Write;
@@ -136,11 +136,11 @@ pub(crate) fn attach_attrs(
                 let _ = write!(pos, ",{}", g5(z));
             }
         }
-        set_attr(a, "pos", pos, false);
-        set_attr(a, "height", g5(n.ht / 72.0), false);
-        set_attr(a, "width", g5((n.lw + n.rw) / 72.0), false);
+        a.set("pos", pos, false);
+        a.set("height", g5(n.ht / 72.0), false);
+        a.set("width", g5((n.lw + n.rw) / 72.0), false);
         if let Some(xl) = n.xlabel.as_ref().filter(|l| l.set) {
-            set_attr(a, "xlp", pt(xl.pos), false);
+            a.set("xlp", pt(xl.pos), false);
         }
         if n.geom.shape == ShapeKind::Record
             && let Some(f) = &n.geom.record
@@ -148,9 +148,9 @@ pub(crate) fn attach_attrs(
             let mut s = String::new();
             record_rects(f, n.coord, y_off, &mut s);
             s.pop();
-            set_attr(a, "rects", s, false);
+            a.set("rects", s, false);
         } else if n_vertices && let Some(v) = vertices(n, y_off) {
-            set_attr(a, "vertices", v, false);
+            a.set("vertices", v, false);
         }
     }
     for (i, e) in m.edges.iter().enumerate() {
@@ -182,18 +182,18 @@ pub(crate) fn attach_attrs(
             }
         }
         let a = &mut g.edges[i].attrs;
-        set_attr(a, "pos", s, false);
+        a.set("pos", s, false);
         if let Some(l) = &e.label {
-            set_attr(a, "lp", pt(l.pos), false);
+            a.set("lp", pt(l.pos), false);
         }
         if let Some(l) = e.xlabel.as_ref().filter(|l| l.set) {
-            set_attr(a, "xlp", pt(l.pos), false);
+            a.set("xlp", pt(l.pos), false);
         }
         if let Some(l) = &e.head_label {
-            set_attr(a, "head_lp", pt(l.pos), false);
+            a.set("head_lp", pt(l.pos), false);
         }
         if let Some(l) = &e.tail_label {
-            set_attr(a, "tail_lp", pt(l.pos), false);
+            a.set("tail_lp", pt(l.pos), false);
         }
     }
     // rec_attach_bb
@@ -206,17 +206,15 @@ pub(crate) fn attach_attrs(
             g5(y_dir(b.ur.y, y_off))
         )
     };
-    set_attr(&mut g.graph_attrs, "bb", bbs(m.bb), false);
+    g.graph_attrs.set("bb", bbs(m.bb), false);
     if let Some(l) = m.label.as_ref().filter(|l| !l.text.is_empty()) {
-        set_attr(&mut g.graph_attrs, "lp", pt(l.pos), false);
-        set_attr(
-            &mut g.graph_attrs,
+        g.graph_attrs.set("lp", pt(l.pos), false);
+        g.graph_attrs.set(
             "lwidth",
             graphviz_pure_core::cnum::fmt_f(l.dimen.x / 72.0, 2),
             false,
         );
-        set_attr(
-            &mut g.graph_attrs,
+        g.graph_attrs.set(
             "lheight",
             graphviz_pure_core::cnum::fmt_f(l.dimen.y / 72.0, 2),
             false,
@@ -225,18 +223,16 @@ pub(crate) fn attach_attrs(
     let mut explicit: Vec<BTreeSet<String>> = vec![BTreeSet::new(); g.subgraphs.len()];
     for c in &m.clusters {
         let a = &mut g.subgraphs[c.sub].graph_attrs;
-        set_attr(a, "bb", bbs(c.bb), false);
+        a.set("bb", bbs(c.bb), false);
         explicit[c.sub].insert("bb".into());
         if let Some(l) = c.label.as_ref().filter(|l| !l.text.is_empty()) {
-            set_attr(a, "lp", pt(l.pos), false);
-            set_attr(
-                a,
+            a.set("lp", pt(l.pos), false);
+            a.set(
                 "lwidth",
                 graphviz_pure_core::cnum::fmt_f(l.dimen.x / 72.0, 2),
                 false,
             );
-            set_attr(
-                a,
+            a.set(
                 "lheight",
                 graphviz_pure_core::cnum::fmt_f(l.dimen.y / 72.0, 2),
                 false,
@@ -283,10 +279,10 @@ pub(crate) fn propagate_inherited(g: &mut Graph, orig: &Graph, explicit: &[BTree
                     Some(p) => &g.subgraphs[p].graph_attrs,
                 };
                 let pfinal = pattrs.get(k).cloned();
-                let html = attr_is_html(pattrs, k);
+                let html = pattrs.is_html(k);
                 match pfinal {
                     Some(v) => {
-                        set_attr(&mut g.subgraphs[s].graph_attrs, k, v, html);
+                        g.subgraphs[s].graph_attrs.set(k, v, html);
                     }
                     None => {
                         g.subgraphs[s].graph_attrs.remove(k);
@@ -314,8 +310,7 @@ pub(crate) fn propagate_inherited(g: &mut Graph, orig: &Graph, explicit: &[BTree
 /// a name, an attribute name or a plain attribute value.
 fn root_holds_plain(g: &Graph, s: &str) -> bool {
     let in_map = |m: &graphviz_pure_core::AttrMap| {
-        m.iter()
-            .any(|(k, v)| !k.starts_with('\u{1}') && (k == s || (v == s && !attr_is_html(m, k))))
+        m.iter().any(|(k, v)| k == s || (v == s && !m.is_html(k)))
     };
     (!g.empty_name && g.name == s)
         || in_map(&g.graph_attrs)
@@ -439,8 +434,8 @@ pub(crate) fn write_plain(
                 out.push_str("edge");
                 // `writenodeandport`: `agcanonStr` of the node name and the port.
                 let ports = [
-                    (e.tail, &tport, attr_is_html(&ge.attrs, "tailport")),
-                    (e.head, &hport, attr_is_html(&ge.attrs, "headport")),
+                    (e.tail, &tport, ge.attrs.is_html("tailport")),
+                    (e.head, &hport, ge.attrs.is_html("headport")),
                 ];
                 for (node, port, html) in ports {
                     out.push(' ');

@@ -1,7 +1,7 @@
 //! `agwrite` (`lib/cgraph/write.c`) over the parsed cgraph dictionaries kept in
 //! [`Graph::dicts`]: the writer behind `-Tdot`, `-Txdot` and `-Tcanon`.
 
-use graphviz_pure_core::{AttrMap, AttrSym, Graph, GraphKind, attr_is_html};
+use graphviz_pure_core::{AttrMap, AttrSym, Graph, GraphKind};
 use graphviz_pure_parser::canon_str_with;
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -251,7 +251,7 @@ impl W<'_> {
                 continue;
             }
             let v = Self::value(attrs, &n);
-            let html_v = attr_is_html(attrs, &n);
+            let html_v = attrs.is_html(&n);
             // `data->str[sym->id] != sym->defval` compares interned strings, flag included.
             if (v, html_v) != (defval.as_str(), html_defval) {
                 if cnt == 0 {
@@ -277,7 +277,7 @@ impl W<'_> {
     fn not_default_attrs(&self, n: usize) -> bool {
         let attrs = &self.g.nodes[n].attrs;
         self.g.dicts[0].node.iter().any(|(k, s)| {
-            (Self::value(attrs, k), attr_is_html(attrs, k)) != (s.defval.as_str(), s.html_defval)
+            (Self::value(attrs, k), attrs.is_html(k)) != (s.defval.as_str(), s.html_defval)
         })
     }
 
@@ -315,7 +315,7 @@ impl W<'_> {
             return;
         }
         self.out.push(':');
-        if attr_is_html(&self.edge_attrs[e], key) {
+        if self.edge_attrs[e].is_html(key) {
             let c = self.canon(&v, true);
             self.out.push_str(&c);
         } else if let Some((a, b)) = v.split_once(':') {
@@ -398,11 +398,11 @@ pub(crate) fn edge_attrs_with_ports(g: &Graph) -> Vec<AttrMap> {
                     (None, None) => None,
                 }
             };
-            if let Some(t) = port(&e.tail_port) {
-                a.entry("tailport".into()).or_insert(t);
+            if let Some(t) = port(&e.tail_port).filter(|_| !a.contains_key("tailport")) {
+                a.insert("tailport".into(), t);
             }
-            if let Some(h) = port(&e.head_port) {
-                a.entry("headport".into()).or_insert(h);
+            if let Some(h) = port(&e.head_port).filter(|_| !a.contains_key("headport")) {
+                a.insert("headport".into(), h);
             }
             a
         })

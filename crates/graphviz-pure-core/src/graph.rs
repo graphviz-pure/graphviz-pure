@@ -1,7 +1,7 @@
 use crate::geom::{BoundingBox, Point, Spline};
 use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub struct NodeId(pub u32);
@@ -12,7 +12,244 @@ pub struct EdgeId(pub u32);
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub struct SubgraphId(pub u32);
 
-pub type AttrMap = BTreeMap<String, String>;
+/// An object's attributes (cgraph's `agxget`/`agxset` values), by name. The values are
+/// strings, and [`AttrMap::is_html`] tells which are HTML strings (cgraph's `aghtmlstr`, a
+/// flag on the string), whose value is the inner text. The flag is not an attribute: no
+/// attribute name sets it (#365). The map reads like a `BTreeMap<String, String>`, which it
+/// dereferences to; it changes only through its methods, which keep the flags in step with
+/// the values (writing a plain value clears the flag, as `agxset` of a plain string does).
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct AttrMap {
+    values: BTreeMap<String, String>,
+    /// The keys whose value is an HTML string.
+    html: BTreeSet<String>,
+}
+
+impl AttrMap {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// A map of plain (not HTML) values.
+    pub fn from_plain(values: impl IntoIterator<Item = (String, String)>) -> Self {
+        AttrMap {
+            values: values.into_iter().collect(),
+            html: BTreeSet::new(),
+        }
+    }
+
+    /// `aghtmlstr(agget(obj, key))`: whether the value of `key` is an HTML string.
+    pub fn is_html(&self, key: &str) -> bool {
+        self.html.contains(key)
+    }
+
+    /// `agxset` / `agxset_html`: sets `key` to `value`, an HTML string's inner text when
+    /// `html`. Returns the previous value.
+    pub fn set(&mut self, key: &str, value: String, html: bool) -> Option<String> {
+        if html {
+            self.html.insert(key.to_string());
+        } else {
+            self.html.remove(key);
+        }
+        self.values.insert(key.to_string(), value)
+    }
+
+    /// Sets `key` to the plain string `value` (`agxset`), clearing its HTML flag.
+    pub fn insert(&mut self, key: String, value: String) -> Option<String> {
+        self.html.remove(&key);
+        self.values.insert(key, value)
+    }
+
+    /// Removes `key` and its HTML flag.
+    pub fn remove(&mut self, key: &str) -> Option<String> {
+        self.html.remove(key);
+        self.values.remove(key)
+    }
+
+    /// Keeps the attributes `keep` accepts, with their flags.
+    pub fn retain(&mut self, mut keep: impl FnMut(&String, &String) -> bool) {
+        let html = &mut self.html;
+        self.values.retain(|k, v| {
+            let kept = keep(k, v);
+            if !kept {
+                html.remove(k);
+            }
+            kept
+        });
+    }
+
+    pub fn clear(&mut self) {
+        self.values.clear();
+        self.html.clear();
+    }
+
+    /// Drops the HTML flag of `key`'s value, keeping the value.
+    pub fn unmark_html(&mut self, key: &str) {
+        self.html.remove(key);
+    }
+
+    /// Sets every attribute of `src` on `self`, each with its HTML flag (`applyattrs`).
+    pub fn extend_from(&mut self, src: &AttrMap) {
+        for (k, v) in &src.values {
+            self.set(k, v.clone(), src.is_html(k));
+        }
+    }
+
+    /// The attributes `keep` accepts, with their flags.
+    pub fn filtered(&self, mut keep: impl FnMut(&String, &String) -> bool) -> AttrMap {
+        let mut out = AttrMap::new();
+        for (k, v) in &self.values {
+            if keep(k, v) {
+                out.set(k, v.clone(), self.is_html(k));
+            }
+        }
+        out
+    }
+}
+
+impl std::ops::Deref for AttrMap {
+    type Target = BTreeMap<String, String>;
+    fn deref(&self) -> &Self::Target {
+        &self.values
+    }
+}
+
+impl<'a> IntoIterator for &'a AttrMap {
+    type Item = (&'a String, &'a String);
+    type IntoIter = std::collections::btree_map::Iter<'a, String, String>;
+    fn into_iter(self) -> Self::IntoIter {
+        self.values.iter()
+    }
+}
+
+impl Serialize for AttrMap {
+    fn serialize<S: serde::Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+        use serde::ser::SerializeStruct;
+        let mut st = s.serialize_struct("AttrMap", 2)?;
+        st.serialize_field("values", &self.values)?;
+        st.serialize_field("html", &self.html)?;
+        st.end()
+    }
+}
+
+impl<'de> Deserialize<'de> for AttrMap {
+    /// `{"values": {..}, "html": [..]}`, or the plain map of strings serialized before
+    /// 0.2.0, whose `"\u{1}html:<name>"` keys marked `<name>`'s value as HTML (when it held
+    /// that value).
+    fn deserialize<D: serde::Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        use serde::de::{self, MapAccess, SeqAccess, Visitor};
+        use std::fmt;
+
+        enum Field {
+            Str(String),
+            Map(BTreeMap<String, String>),
+            Seq(BTreeSet<String>),
+        }
+        impl<'de> Deserialize<'de> for Field {
+            fn deserialize<D: serde::Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+                struct V;
+                impl<'de> Visitor<'de> for V {
+                    type Value = Field;
+                    fn expecting(&self, f: &mut fmt::Formatter) -> fmt::Result {
+                        f.write_str("a string, a map of strings or a list of strings")
+                    }
+                    fn visit_str<E: de::Error>(self, v: &str) -> Result<Field, E> {
+                        Ok(Field::Str(v.to_string()))
+                    }
+                    fn visit_string<E: de::Error>(self, v: String) -> Result<Field, E> {
+                        Ok(Field::Str(v))
+                    }
+                    fn visit_map<A: MapAccess<'de>>(self, mut m: A) -> Result<Field, A::Error> {
+                        let mut out = BTreeMap::new();
+                        while let Some((k, v)) = m.next_entry::<String, String>()? {
+                            out.insert(k, v);
+                        }
+                        Ok(Field::Map(out))
+                    }
+                    fn visit_seq<A: SeqAccess<'de>>(self, mut q: A) -> Result<Field, A::Error> {
+                        let mut out = BTreeSet::new();
+                        while let Some(k) = q.next_element::<String>()? {
+                            out.insert(k);
+                        }
+                        Ok(Field::Seq(out))
+                    }
+                }
+                d.deserialize_any(V)
+            }
+        }
+
+        struct V;
+        impl<'de> Visitor<'de> for V {
+            type Value = AttrMap;
+            fn expecting(&self, f: &mut fmt::Formatter) -> fmt::Result {
+                f.write_str(
+                    "an attribute map: {\"values\": {name: value}, \"html\": [name]}, \
+                     or a map of strings (before 0.2.0)",
+                )
+            }
+            fn visit_map<A: MapAccess<'de>>(self, mut m: A) -> Result<AttrMap, A::Error> {
+                let mut fields = Vec::new();
+                while let Some((k, v)) = m.next_entry::<String, Field>()? {
+                    fields.push((k, v));
+                }
+                let typed = !fields.is_empty()
+                    && fields.iter().all(|(k, v)| {
+                        matches!(
+                            (k.as_str(), v),
+                            ("values", Field::Map(_)) | ("html", Field::Seq(_))
+                        )
+                    });
+                if typed {
+                    let mut a = AttrMap::new();
+                    for (_, v) in fields {
+                        match v {
+                            Field::Map(values) => a.values = values,
+                            Field::Seq(html) => a.html = html,
+                            Field::Str(_) => {}
+                        }
+                    }
+                    if let Some(k) = a.html.iter().find(|k| !a.values.contains_key(*k)) {
+                        return Err(de::Error::custom(format!(
+                            "attribute map: \"html\" names `{k}`, which has no value"
+                        )));
+                    }
+                    return Ok(a);
+                }
+                let mut plain = BTreeMap::new();
+                for (k, v) in fields {
+                    match v {
+                        Field::Str(v) => {
+                            plain.insert(k, v);
+                        }
+                        _ => {
+                            return Err(de::Error::custom(format!(
+                                "attribute map: `{k}` is not a string; expected \
+                                 {{\"values\": {{..}}, \"html\": [..]}} or a map of strings"
+                            )));
+                        }
+                    }
+                }
+                let mut a = AttrMap::new();
+                let mut marks = Vec::new();
+                for (k, v) in plain {
+                    match k.strip_prefix("\u{1}html:") {
+                        Some(name) => marks.push((name.to_string(), v)),
+                        None => {
+                            a.values.insert(k, v);
+                        }
+                    }
+                }
+                for (name, marked) in marks {
+                    if a.values.get(&name) == Some(&marked) {
+                        a.html.insert(name);
+                    }
+                }
+                Ok(a)
+            }
+        }
+        d.deserialize_map(V)
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum GraphKind {
@@ -74,47 +311,6 @@ pub struct EdgeData {
     /// The layout's result beyond the spline and the main label.
     #[serde(default)]
     pub layout: EdgeLayout,
-}
-
-/// Prefix of the private key that marks an attribute value as an HTML string (cgraph's
-/// `aghtmlstr` on the value): `attrs["\u{1}html:label"]` holds the value of `attrs["label"]`
-/// when that was written `<...>`. The value itself is the inner text, which is what every
-/// reader but the label makers and the writers sees. The mark is a key of the same map so
-/// that it travels with the value when the map is cloned or merged, as cgraph's flag travels
-/// with its string; it holds the value it marks so that writing another value (`agxset` of a
-/// plain string, such as a computed `bb`) unmarks it.
-pub const HTML_VALUE_PREFIX: &str = "\u{1}html:";
-
-/// The key of the mark [`HTML_VALUE_PREFIX`] puts on `key`.
-pub fn html_value_key(key: &str) -> String {
-    format!("{HTML_VALUE_PREFIX}{key}")
-}
-
-/// `aghtmlstr(agget(obj, key))`: whether the value of `key` in `attrs` is an HTML string.
-pub fn attr_is_html(attrs: &AttrMap, key: &str) -> bool {
-    attrs
-        .get(&html_value_key(key))
-        .is_some_and(|marked| attrs.get(key) == Some(marked))
-}
-
-/// `agxset` / `agxset_html`: sets `key` to `value`, an HTML string's inner text when `html`.
-pub fn set_attr(attrs: &mut AttrMap, key: &str, value: String, html: bool) {
-    let mark = html_value_key(key);
-    if html {
-        attrs.insert(mark, value.clone());
-    } else {
-        attrs.remove(&mark);
-    }
-    attrs.insert(key.to_string(), value);
-}
-
-/// Sets every attribute of `src` on `attrs`, each with its HTML mark (`applyattrs`).
-pub fn apply_attrs(attrs: &mut AttrMap, src: &AttrMap) {
-    for (k, v) in src {
-        if !k.starts_with(HTML_VALUE_PREFIX) {
-            set_attr(attrs, k, v.clone(), attr_is_html(src, k));
-        }
-    }
 }
 
 /// The name test of `is_a_cluster` (lib/common/utils.c): `strncasecmp(name, "cluster", 7)`.
@@ -588,9 +784,9 @@ impl Graph {
         let key = key.into_owned();
         let id = NodeId(self.nodes.len() as u32);
         let mut attrs = self.node_defaults.clone();
-        attrs
-            .entry("label".to_string())
-            .or_insert_with(|| "\\N".to_string());
+        if !attrs.contains_key("label") {
+            attrs.insert("label".to_string(), "\\N".to_string());
+        }
         self.nodes.push(NodeData {
             id,
             name: name.to_string(),
@@ -664,11 +860,11 @@ impl Graph {
                     || (self.kind == GraphKind::Undirected && e.tail == head && e.head == tail)
             })
         {
-            existing.attrs.extend(attrs);
+            existing.attrs.extend_from(&attrs);
             return existing.id;
         }
         let mut merged_attrs = self.edge_defaults.clone();
-        merged_attrs.extend(attrs);
+        merged_attrs.extend_from(&attrs);
         self.new_edge(tail, head, merged_attrs)
     }
 
@@ -826,5 +1022,100 @@ mod agnameof_tests {
         let mut g = nested(4);
         g.subgraphs[2].nodes.push(NodeId(3));
         assert!(!g.subgraph_lists_are_closed(), "s2 lists x3 twice");
+    }
+}
+
+#[cfg(test)]
+mod attr_map_tests {
+    use super::*;
+
+    // #365: the HTML flag is not an attribute, so no attribute name sets it.
+    #[test]
+    fn html_flag_is_not_an_attribute() {
+        let mut a = AttrMap::new();
+        a.insert("\u{1}html:label".into(), "<b>x</b>".into());
+        a.insert("label".into(), "<b>x</b>".into());
+        assert!(!a.is_html("label"));
+        assert_eq!(a.len(), 2);
+        a.set("label", "x".into(), true);
+        assert!(a.is_html("label"));
+        let mut b = AttrMap::new();
+        b.set("xlabel", "z".into(), true);
+        a.extend_from(&b);
+        assert!(a.is_html("xlabel"));
+        a.unmark_html("xlabel");
+        assert!(!a.is_html("xlabel"));
+    }
+
+    // agxset of a plain string clears the flag, even with the same text; removing the
+    // attribute clears it too.
+    #[test]
+    fn plain_writes_clear_the_flag() {
+        let mut a = AttrMap::new();
+        a.set("label", "x".into(), true);
+        a.insert("label".into(), "x".into());
+        assert!(!a.is_html("label"));
+        a.set("label", "x".into(), true);
+        a.remove("label");
+        a.insert("label".into(), "x".into());
+        assert!(!a.is_html("label"));
+        a.set("label", "x".into(), true);
+        a.retain(|k, _| k != "label");
+        a.insert("label".into(), "x".into());
+        assert!(!a.is_html("label"));
+        a.set("label", "x".into(), true);
+        a.set("shape", "box".into(), false);
+        let f = a.filtered(|k, _| k == "label");
+        assert!(f.is_html("label") && !f.contains_key("shape"));
+    }
+
+    // The public `add_edge` keeps the flags of the attributes it is given, on a new edge and
+    // on a strict graph's existing one.
+    #[test]
+    fn add_edge_keeps_html_flags() {
+        for strict in [false, true] {
+            let mut g = Graph::new("G", GraphKind::Directed, strict);
+            g.edge_defaults.set("color", "red".into(), false);
+            let (a, b) = (g.ensure_node("a"), g.ensure_node("b"));
+            let mut attrs = AttrMap::new();
+            attrs.set("label", "<b>e</b>".into(), true);
+            let e = g.add_edge(a, b, attrs);
+            assert!(g.edges[e.0 as usize].attrs.is_html("label"));
+            let mut more = AttrMap::new();
+            more.set("headlabel", "h".into(), true);
+            let e2 = g.add_edge(a, b, more);
+            let ed = &g.edges[e2.0 as usize];
+            assert!(ed.attrs.is_html("headlabel"));
+            assert_eq!(ed.attrs.get("color").map(String::as_str), Some("red"));
+            assert_eq!(e == e2, strict);
+        }
+    }
+
+    #[test]
+    fn serde_keeps_the_flag_and_reads_the_old_mark_keys() {
+        let mut a = AttrMap::new();
+        a.set("label", "x".into(), true);
+        a.insert("\u{1}html:shape".into(), "box".into());
+        let json = serde_json::to_string(&a).unwrap();
+        assert_eq!(
+            json,
+            r#"{"values":{"\u0001html:shape":"box","label":"x"},"html":["label"]}"#
+        );
+        let back: AttrMap = serde_json::from_str(&json).unwrap();
+        assert_eq!(back, a);
+        // a plain map is data serialized before 0.2.0, whose mark keys were the flag
+        let old: AttrMap = serde_json::from_str(
+            r#"{"label":"x","\u0001html:label":"x","xlabel":"y","\u0001html:xlabel":"z"}"#,
+        )
+        .unwrap();
+        assert!(old.is_html("label") && !old.is_html("xlabel"));
+        assert_eq!(old.keys().collect::<Vec<_>>(), ["label", "xlabel"]);
+        let err = serde_json::from_str::<AttrMap>(r#"{"label":1}"#).unwrap_err();
+        assert!(
+            err.to_string().contains("a string, a map of strings"),
+            "{err}"
+        );
+        let err = serde_json::from_str::<AttrMap>(r#"{"values":{},"html":["a"]}"#).unwrap_err();
+        assert!(err.to_string().contains("`a`, which has no value"), "{err}");
     }
 }

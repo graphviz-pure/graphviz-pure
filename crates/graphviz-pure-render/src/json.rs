@@ -658,11 +658,11 @@ fn edge_attrs_with_ports(g: &Graph) -> Vec<AttrMap> {
                     (None, None) => None,
                 }
             };
-            if let Some(t) = port(&e.tail_port) {
-                a.entry("tailport".into()).or_insert(t);
+            if let Some(t) = port(&e.tail_port).filter(|_| !a.contains_key("tailport")) {
+                a.insert("tailport".into(), t);
             }
-            if let Some(h) = port(&e.head_port) {
-                a.entry("headport".into()).or_insert(h);
+            if let Some(h) = port(&e.head_port).filter(|_| !a.contains_key("headport")) {
+                a.insert("headport".into(), h);
             }
             a
         })
@@ -684,35 +684,31 @@ pub(crate) fn write_json(
     // statement that makes no object can still declare one (`{} -> c [label=x]`). The
     // caller has recorded the layout's and renderers' attributes there (`sync_dicts`). A
     // graph built without dictionaries falls back to its defaults and its objects' values.
-    let (mut gd, mut nd, mut ed): (BTreeSet<String>, BTreeSet<String>, BTreeSet<String>) =
-        match g.dicts.first() {
-            Some(d) if g.dicts.len() == g.subgraphs.len() + 1 => (
-                d.graph.keys().cloned().collect(),
-                d.node.keys().cloned().collect(),
-                d.edge.keys().cloned().collect(),
-            ),
-            _ => (
-                g.graph_attrs
-                    .keys()
-                    .chain(g.subgraphs.iter().flat_map(|s| s.graph_attrs.keys()))
-                    .cloned()
-                    .collect(),
-                g.node_defaults
-                    .keys()
-                    .chain(g.nodes.iter().flat_map(|n| n.attrs.keys()))
-                    .cloned()
-                    .collect(),
-                g.edge_defaults
-                    .keys()
-                    .chain(edge_attrs.iter().flat_map(|a| a.keys()))
-                    .cloned()
-                    .collect(),
-            ),
-        };
-    // (an HTML value's mark is not an attribute)
-    for d in [&mut gd, &mut nd, &mut ed] {
-        d.retain(|k| !k.starts_with(graphviz_pure_core::HTML_VALUE_PREFIX));
-    }
+    let (gd, nd, ed): (BTreeSet<String>, BTreeSet<String>, BTreeSet<String>) = match g.dicts.first()
+    {
+        Some(d) if g.dicts.len() == g.subgraphs.len() + 1 => (
+            d.graph.keys().cloned().collect(),
+            d.node.keys().cloned().collect(),
+            d.edge.keys().cloned().collect(),
+        ),
+        _ => (
+            g.graph_attrs
+                .keys()
+                .chain(g.subgraphs.iter().flat_map(|s| s.graph_attrs.keys()))
+                .cloned()
+                .collect(),
+            g.node_defaults
+                .keys()
+                .chain(g.nodes.iter().flat_map(|n| n.attrs.keys()))
+                .cloned()
+                .collect(),
+            g.edge_defaults
+                .keys()
+                .chain(edge_attrs.iter().flat_map(|a| a.keys()))
+                .cloned()
+                .collect(),
+        ),
+    };
     let mut is_child = vec![false; g.subgraphs.len()];
     for s in &g.subgraphs {
         for c in &s.subgraphs {

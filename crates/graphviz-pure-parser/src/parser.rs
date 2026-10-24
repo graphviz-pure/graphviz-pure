@@ -6,8 +6,8 @@ use crate::lexer::{Lexer, ScanInput, ScanState, Token, TokenKind};
 type AttrMap2 = std::collections::BTreeMap<String, graphviz_pure_core::AttrSym>;
 
 use graphviz_pure_core::{
-    AttrMap, BoundingBox, EdgeId, Graph, GraphKind, GraphvizError, HTML_VALUE_PREFIX, NodeId, Port,
-    Result, SubgraphData, SubgraphId, apply_attrs, attr_is_html, set_attr,
+    AttrMap, BoundingBox, EdgeId, Graph, GraphKind, GraphvizError, NodeId, Port, Result,
+    SubgraphData, SubgraphId,
 };
 
 /// bison's `YYMAXDEPTH` (grammar.c): the most states its parser stack holds.
@@ -350,9 +350,9 @@ impl<'a> Parser<'a> {
         }
         self.graph = Graph::new(name.clone().unwrap_or_default(), kind, strict);
         self.graph.empty_name = name.as_deref() == Some("");
-        self.graph.graph_attrs.extend(self.globals.graph.clone());
-        self.graph.node_defaults.extend(self.globals.node.clone());
-        self.graph.edge_defaults.extend(self.globals.edge.clone());
+        self.graph.graph_attrs.extend_from(&self.globals.graph);
+        self.graph.node_defaults.extend_from(&self.globals.node);
+        self.graph.edge_defaults.extend_from(&self.globals.edge);
         self.sub_parent.clear();
         self.graph.dicts = vec![graphviz_pure_core::AttrDicts::default()];
         // gvContext declares the node label on cgraph's ProtoGraph, which every root copies.
@@ -375,13 +375,13 @@ impl<'a> Parser<'a> {
             (DictKind::Node, self.globals.node.clone()),
             (DictKind::Edge, self.globals.edge.clone()),
         ] {
-            for (k, v) in map {
+            for (k, v) in &map {
                 let d = self.dict_mut(0, kind);
-                let id = d.get(&k).map_or(d.len(), |s| s.id);
+                let id = d.get(k).map_or(d.len(), |s| s.id);
                 d.insert(
-                    k,
+                    k.clone(),
                     graphviz_pure_core::AttrSym {
-                        defval: v,
+                        defval: v.clone(),
                         print: false,
                         id,
                         html: false,
@@ -408,7 +408,9 @@ impl<'a> Parser<'a> {
             .map(|(k, v)| (k.clone(), v.defval.clone()))
             .collect();
         for (k, v) in declared {
-            self.graph.graph_attrs.entry(k).or_insert(v);
+            if !self.graph.graph_attrs.contains_key(&k) {
+                self.graph.graph_attrs.insert(k, v);
+            }
         }
     }
 
@@ -524,7 +526,7 @@ impl<'a> Parser<'a> {
         let key = key.text;
         if !self.fixed_at_root(DictKind::Graph, &key) {
             self.attr_stmt(DictKind::Graph, &key, &val.text, val.html);
-            set_attr(self.current_graph_attrs_mut(), &key, val.text, val.html);
+            self.current_graph_attrs_mut().set(&key, val.text, val.html);
         } else if let Some(sym) = self.dict_mut(0, DictKind::Graph).get_mut(&key) {
             sym.print = true;
         }
@@ -571,9 +573,6 @@ impl<'a> Parser<'a> {
         // `-G`/`-N`/`-E` symbols are `fixed`: root attribute statements keep them.
         let mut kept = AttrMap::new();
         for (k, v) in &attrs {
-            if k.starts_with(HTML_VALUE_PREFIX) {
-                continue;
-            }
             // `bindattrs` skips an edge `key`, and `attrstmt` then skips the unbound item:
             // `edge [key=k]` sets nothing.
             if kind == DictKind::Edge && k == "key" {
@@ -584,13 +583,13 @@ impl<'a> Parser<'a> {
                     sym.print = true;
                 }
             } else {
-                set_attr(&mut kept, k, v.clone(), attr_is_html(&attrs, k));
+                kept.set(k, v.clone(), attrs.is_html(k));
             }
         }
         let attrs = kept;
         for k in std::mem::take(&mut self.attr_order) {
             if let Some(v) = attrs.get(&k) {
-                self.attr_stmt(kind, &k, v, attr_is_html(&attrs, &k));
+                self.attr_stmt(kind, &k, v, attrs.is_html(&k));
             }
         }
         let target = match kind {
@@ -598,7 +597,7 @@ impl<'a> Parser<'a> {
             DictKind::Node => self.current_node_defaults_mut(),
             DictKind::Edge => self.current_edge_defaults_mut(),
         };
-        apply_attrs(target, &attrs);
+        target.extend_from(&attrs);
         Ok(())
     }
 
@@ -633,7 +632,7 @@ impl<'a> Parser<'a> {
                 }
                 self.attr_order.push(key.clone());
             }
-            set_attr(attrs, &key, val.text, val.html);
+            attrs.set(&key, val.text, val.html);
             if matches!(self.peek().kind, TokenKind::Comma | TokenKind::Semi) {
                 self.shift()?;
                 self.reduce(1)?;
@@ -766,7 +765,7 @@ impl<'a> Parser<'a> {
             && !attrs.is_empty()
         {
             for (node_id, _port) in nodes {
-                apply_attrs(&mut self.graph.nodes[node_id.0 as usize].attrs, attrs);
+                (self.graph.nodes[node_id.0 as usize].attrs).extend_from(attrs);
             }
         }
     }
@@ -779,12 +778,10 @@ impl<'a> Parser<'a> {
                 self.bind_attr(DictKind::Edge, &k);
             }
         }
-        let key = attrs
-            .get("key")
-            .map(|k| (k.clone(), attr_is_html(attrs, "key")));
+        let key = attrs.get("key").map(|k| (k.clone(), attrs.is_html("key")));
         let mut attrs = attrs.clone();
         attrs.remove("key");
-        attrs.remove(&graphviz_pure_core::html_value_key("key"));
+        attrs.unmark_html("key");
         for pair in items.windows(2) {
             // A subgraph's nodes as they are now, after the whole statement was read.
             let tails = self.item_endpoints(&pair[0]);
@@ -1014,7 +1011,7 @@ impl<'a> Parser<'a> {
                     if !self.graph.dicts[c + 1].graph.contains_key(name) {
                         let attrs = &self.graph.subgraphs[c].graph_attrs;
                         let v = attrs.get(name).cloned().unwrap_or_default();
-                        let html_defval = attr_is_html(attrs, name);
+                        let html_defval = attrs.is_html(name);
                         self.graph.dicts[c + 1].graph.insert(
                             name.to_string(),
                             graphviz_pure_core::AttrSym {
@@ -1054,9 +1051,9 @@ impl<'a> Parser<'a> {
         let node_id = self.graph.ensure_node_html(name, html);
         if is_new {
             let mut attrs = self.current_node_defaults().clone();
-            attrs
-                .entry("label".to_string())
-                .or_insert_with(|| "\\N".to_string());
+            if !attrs.contains_key("label") {
+                attrs.insert("label".to_string(), "\\N".to_string());
+            }
             let node = &mut self.graph.nodes[node_id.0 as usize];
             node.attrs = attrs;
             // A local name (`%…`) maps to an anonymous id, and `endgraph` forgets the name
@@ -1148,9 +1145,9 @@ impl<'a> Parser<'a> {
         };
         let mut merged_attrs = if is_new {
             let mut attrs = self.current_edge_defaults().clone();
-            apply_attrs(&mut attrs, edge_attrs);
+            attrs.extend_from(edge_attrs);
             let mut initial = self.graph.edge_defaults.clone();
-            initial.extend(attrs.clone());
+            initial.extend_from(&attrs);
             let id = self.graph.new_edge(tail, head, initial);
             debug_assert_eq!(id, edge_id);
             let edge = &mut self.graph.edges[edge_id.0 as usize];
@@ -1193,11 +1190,11 @@ impl<'a> Parser<'a> {
             if let Some((v, html)) = endpoint
                 && !edge_attrs.contains_key(key)
             {
-                set_attr(&mut merged_attrs, key, v.clone(), *html);
+                merged_attrs.set(key, v.clone(), *html);
             }
         }
         let edge = &mut self.graph.edges[edge_id.0 as usize];
-        apply_attrs(&mut edge.attrs, &merged_attrs);
+        edge.attrs.extend_from(&merged_attrs);
         edge.tail_port = edge
             .attrs
             .get("tailport")

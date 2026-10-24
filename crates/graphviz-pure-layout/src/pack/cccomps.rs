@@ -369,7 +369,7 @@ mod tests {
                 id: SubgraphId(i as u32),
                 name: String::new(),
                 is_cluster: false,
-                graph_attrs: [("cluster".to_string(), "true".to_string())].into(),
+                graph_attrs: AttrMap::from_plain([("cluster".to_string(), "true".to_string())]),
                 node_defaults: AttrMap::new(),
                 edge_defaults: AttrMap::new(),
                 nodes: vec![id],

@@ -86,11 +86,11 @@ impl<'a> Dot<'a> {
         // parsed graph always has dictionaries; a graph built without them has
         // no declared defaults, so its own values stand in.
         let defaults: graphviz_pure_core::AttrMap = match graph.dicts.first() {
-            Some(dict) => dict
-                .graph
-                .iter()
-                .map(|(k, s)| (k.clone(), s.defval.clone()))
-                .collect(),
+            Some(dict) => graphviz_pure_core::AttrMap::from_plain(
+                dict.graph
+                    .iter()
+                    .map(|(k, s)| (k.clone(), s.defval.clone())),
+            ),
             None => graph.graph_attrs.clone(),
         };
         let mut out = Vec::with_capacity(ccs.len());

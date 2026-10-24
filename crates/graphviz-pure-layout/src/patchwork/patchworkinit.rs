@@ -12,7 +12,7 @@ use graphviz_pure_core::{Graph, Point, Result};
 pub fn patchwork_layout(graph: &mut Graph) -> Result<()> {
     // patchwork_init_graph: `N_shape = agattr_text(g, AGNODE, "shape", "box")`
     // and `patchwork_init_node`: `agset(n, "shape", "box")`.
-    graphviz_pure_core::set_attr(&mut graph.node_defaults, "shape", "box".to_string(), false);
+    graph.node_defaults.set("shape", "box".to_string(), false);
     // agattr on the root sets the declared default, which agwrite prints.
     if let Some(d) = graph.dicts.first_mut() {
         let sym = d.node.entry("shape".to_string()).or_default();
@@ -20,7 +20,7 @@ pub fn patchwork_layout(graph: &mut Graph) -> Result<()> {
         sym.html_defval = false;
     }
     for n in &mut graph.nodes {
-        graphviz_pure_core::set_attr(&mut n.attrs, "shape", "box".to_string(), false);
+        n.attrs.set("shape", "box".to_string(), false);
     }
     // patchwork_init_edge only binds the edge record: no common_init_edge, so no labels.
     graph.layout.no_edge_init = true;
