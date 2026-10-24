@@ -616,6 +616,9 @@ pub struct InsideCtx {
     /// `s.scalex`, `s.scaley` of `poly_inside` (node size over `lw + rw` and
     /// `ht`); `None` means 1, which holds unless dot widened `rw` for loops.
     pub scale: Option<Point>,
+    /// `ND_lw`, `ND_rw` and `ND_ht` of the node when it is clipped (dot has them
+    /// flipped under `rankdir=LR`/`RL`); `epsf_inside` tests against these.
+    pub extent: Option<(f64, f64, f64)>,
 }
 
 fn same_side(p0: Point, p1: Point, l0: Point, l1: Point) -> bool {
@@ -664,8 +667,11 @@ impl NodeShape {
                 inside_box(pr, &b)
             }
             InsideFn::Epsf => {
-                let x2 = self.height / 2.0;
-                pr.y >= -x2 && pr.y <= x2 && pr.x >= -self.width / 2.0 && pr.x <= self.width / 2.0
+                let (lw, rw, ht) =
+                    ctx.extent
+                        .unwrap_or((self.width / 2.0, self.width / 2.0, self.height));
+                let x2 = ht / 2.0;
+                pr.y >= -x2 && pr.y <= x2 && pr.x >= -lw && pr.x <= rw
             }
             InsideFn::Star => {
                 if let Some(b) = ctx.bp {

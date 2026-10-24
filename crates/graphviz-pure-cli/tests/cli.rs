@@ -4596,6 +4596,62 @@ fn html_label_encoding_errors_are_reported() {
     );
 }
 
+/// Issue #364: `epsf_inside` (shapes.c:3992) rotates the point by `GD_rankdir` and tests it
+/// against `ND_ht`, `ND_lw` and `ND_rw`, which dot has flipped under `rankdir=LR`/`RL` when it
+/// clips. The port tested against the unflipped width and height, so under `LR` the edge ended
+/// at the node's width (and a compass port on the node moved both nodes). The expected output
+/// and warnings are C 16.1.0's.
+#[test]
+fn issue364_epsf_clip_uses_the_flipped_node_size() {
+    for (src, want) in [
+        (
+            "digraph { rankdir=LR; a [shape=epsf]; b; a -> b }",
+            r#"digraph {
+	graph [bb="0,0,144,36",
+		rankdir=LR
+	];
+	node [label="\N"];
+	a	[height=0.5,
+		pos="27,18",
+		shape=epsf,
+		width=0.75];
+	b	[height=0.5,
+		pos="117,18",
+		width=0.75];
+	a -> b	[pos="e,89.731,18 44.967,18 54.482,18 66.75,18 78.405,18"];
+}
+"#,
+        ),
+        (
+            "digraph { rankdir=RL; a [shape=epsf width=2 height=0.3]; b; a -> b; b -> a:n }",
+            r#"digraph {
+	graph [bb="0,0,234,74.44",
+		rankdir=RL
+	];
+	node [label="\N"];
+	a	[height=0.3,
+		pos="162,10.8",
+		shape=epsf,
+		width=2];
+	b	[height=0.5,
+		pos="27,45.8",
+		width=0.75];
+	a -> b	[pos="e,52.53,39.345 151.43,13.317 133.27,18.098 92.935,28.712 63.297,36.511"];
+	b -> a:n	[pos="e,90,79.8 48.645,57.189 59.213,63.013 71.595,69.827 80.036,74.44"];
+}
+"#,
+        ),
+    ] {
+        let (out, err, ok) = run(&["-Tdot"], src);
+        assert!(ok, "{err}");
+        assert_eq!(
+            err,
+            "Warning: shapefile not set or not found for epsf node a\n"
+        );
+        assert_eq!(out, want, "{src}");
+    }
+}
+
 // Issue #185. Under overlap=vpsc, stress_majorization_cola (lib/neatogen/
 // constrained_majorization_ipsep.c) ends with removeoverlaps(orig_n, ...), and initCMajVPSC
 // treats the last 2 * nclusters real nodes as the cluster boundary variables. C sizes

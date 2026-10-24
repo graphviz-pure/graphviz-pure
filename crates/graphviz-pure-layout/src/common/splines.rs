@@ -207,6 +207,7 @@ pub fn inside_ctx<S: SplineGraph + ?Sized>(g: &S, n: usize, bp: Option<BoundingB
         ..InsideCtx::default()
     };
     if let Some(shape) = g.shape(n) {
+        ctx.extent = Some((g.lw(n), g.rw(n), g.ht(n)));
         let (xsize, ysize) = if g.flip() {
             (g.ht(n), g.lw(n) + g.rw(n))
         } else {
