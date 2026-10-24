@@ -562,10 +562,10 @@ impl<'a> Parser<'a> {
         if self.peek().kind != TokenKind::LBracket {
             return Err(syntax_error(self.peek()));
         }
-        self.attr_brackets(&mut attrs)?;
+        self.attr_brackets(&mut attrs, true)?;
         while self.peek().kind == TokenKind::LBracket {
             self.reduce(1)?;
-            self.attr_brackets(&mut attrs)?;
+            self.attr_brackets(&mut attrs, true)?;
         }
         self.reduce(3)?;
 
@@ -613,12 +613,11 @@ impl<'a> Parser<'a> {
     /// `optattr : attrlist | /* empty */` after a node or edge statement.
     fn optattr(&mut self) -> Result<AttrMap> {
         self.attr_order.clear();
-        self.attr_items.clear();
         self.html_keys.clear();
         let mut attrs = AttrMap::new();
         self.reduce(0)?;
         while self.peek().kind == TokenKind::LBracket {
-            self.attr_brackets(&mut attrs)?;
+            self.attr_brackets(&mut attrs, false)?;
             self.reduce(1)?;
         }
         Ok(attrs)
@@ -627,7 +626,9 @@ impl<'a> Parser<'a> {
     /// `'[' optattrdefs ']'` of `attrlist`, reduced to `attrlist`: `optattrdefs : optattrdefs
     /// attrdefs | /* empty */`, `attrdefs : attrassignment optseparator`,
     /// `attrassignment : atom '=' atom` (`appendattr`) and `optseparator : ';' | ',' | /* empty */`.
-    fn attr_brackets(&mut self, attrs: &mut AttrMap) -> Result<()> {
+    ///
+    /// `items`: also keep every item in [`Parser::attr_items`], for an attribute statement.
+    fn attr_brackets(&mut self, attrs: &mut AttrMap, items: bool) -> Result<()> {
         self.expect(&TokenKind::LBracket)?;
         self.reduce(0)?;
         while Self::is_atom_token(&self.peek().kind) {
@@ -642,8 +643,10 @@ impl<'a> Parser<'a> {
                 }
                 self.attr_order.push(key.clone());
             }
-            self.attr_items
-                .push((key.clone(), val.text.clone(), val.html));
+            if items {
+                self.attr_items
+                    .push((key.clone(), val.text.clone(), val.html));
+            }
             set_attr(attrs, &key, val.text, val.html);
             if matches!(self.peek().kind, TokenKind::Comma | TokenKind::Semi) {
                 self.shift()?;
