@@ -51,14 +51,39 @@ impl P<'_> {
         self.i += rest.len() - r.len();
         Some(v)
     }
-    fn int(&mut self) -> Option<i64> {
+    /// `parseInt`: `strtol`, truncated to C's `int`.
+    fn int(&mut self) -> Option<i32> {
         let rest = self.rest();
-        let (v, r) = {
-            let (v, n) = crate::cnum::strtol(rest);
-            (n > 0).then(|| (v, &rest[n..]))
-        }?;
-        self.i += rest.len() - r.len();
-        Some(v)
+        let (v, n) = crate::cnum::strtol(rest);
+        if n == 0 {
+            return None;
+        }
+        self.i += n;
+        Some(v as i32)
+    }
+    /// `parseUInt`: `strtoul` (a `-` negates the magnitude, overflow gives `ULONG_MAX`),
+    /// truncated to C's `unsigned`.
+    fn uint(&mut self) -> Option<u32> {
+        let rest = self.rest();
+        let (_, n) = crate::cnum::strtol(rest);
+        if n == 0 {
+            return None;
+        }
+        let num = rest[..n]
+            .trim_start_matches(|c: char| c.is_ascii() && crate::cnum::is_c_space(c as u8));
+        let (neg, digits) = match num.as_bytes().first() {
+            Some(b'-') => (true, &num[1..]),
+            Some(b'+') => (false, &num[1..]),
+            _ => (false, num),
+        };
+        let v = digits
+            .bytes()
+            .try_fold(0u64, |v, d| {
+                v.checked_mul(10)?.checked_add(u64::from(d - b'0'))
+            })
+            .map_or(u64::MAX, |v| if neg { v.wrapping_neg() } else { v });
+        self.i += n;
+        Some(v as u32)
     }
     fn string(&mut self) -> Option<String> {
         let n = self.int()?;
@@ -91,10 +116,7 @@ impl P<'_> {
         Some(crate::charset::decode_slice(&self.s[start..end]))
     }
     fn polyline(&mut self) -> Option<Vec<(f64, f64)>> {
-        let n = self.int()?;
-        if n < 0 {
-            return None;
-        }
+        let n = self.uint()?;
         // Not sized from `n`: a count the input doesn't hold points for would overflow.
         let mut v = Vec::new();
         for _ in 0..n {
@@ -111,7 +133,7 @@ fn parse_color(s: &str) -> Option<Grad> {
     let bytes = crate::charset::encode(s);
     let b = &*bytes;
     let stops = |p: &mut P| -> Option<Vec<(f64, String)>> {
-        let n = p.int()?;
+        let n = p.uint()?;
         let mut v = Vec::new();
         for _ in 0..n {
             let f = p.real()?;
@@ -138,7 +160,10 @@ fn parse_color(s: &str) -> Option<Grad> {
             );
             Some(Grad::Radial(x0, y0, r0, x1, y1, r1, stops(&mut p)?))
         }
-        _ => Some(Grad::None(s.to_string())),
+        // `parseXDotColor`: a plain colour starts with `#`, `/` or an ASCII letter or digit.
+        Some(b'#' | b'/') => Some(Grad::None(s.to_string())),
+        Some(c) if c.is_ascii_alphanumeric() => Some(Grad::None(s.to_string())),
+        _ => None,
     }
 }
 
@@ -169,7 +194,7 @@ pub fn parse_xdot(s: &str) -> Vec<Op> {
                 let a = p.int()?;
                 let w = p.real()?;
                 let t = p.string()?;
-                Some(Op::Text(x, y, a, w, t))
+                Some(Op::Text(x, y, i64::from(a), w, t))
             })(),
             b'F' => (|| Some(Op::Font(p.real()?, p.string()?)))(),
             b'S' => p.string().map(Op::Style),
@@ -181,7 +206,7 @@ pub fn parse_xdot(s: &str) -> Vec<Op> {
                 p.string()?;
                 Some(Op::Image)
             })(),
-            b't' => p.int().map(|v| Op::FontChar(v as u64)),
+            b't' => p.uint().map(|v| Op::FontChar(u64::from(v))),
             _ => None,
         };
         match op {
@@ -324,4 +349,43 @@ pub fn xdot_bb(xd: &mut Background, bb: ((f64, f64), (f64, f64))) -> ((f64, f64)
     }
     xd.op_bbs = Some(boxes);
     (ll, ur)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn counts_are_cs_int_and_unsigned() {
+        // `parseUInt`: 4294967299 is 3 as an `unsigned`, and `strtoul` negates "-4294967293".
+        for s in [
+            "P 4294967299 0 0 10 0 10 10",
+            "P -4294967293 0 0 10 0 10 10",
+        ] {
+            assert_eq!(
+                parse_xdot(s),
+                [Op::Polygon(
+                    true,
+                    vec![(0.0, 0.0), (10.0, 0.0), (10.0, 10.0)]
+                )],
+                "{s}"
+            );
+        }
+        // `parseInt`: the alignment is LONG_MIN's low 32 bits, 0.
+        assert!(matches!(
+            parse_xdot("T 0 0 -9223372036854775808 5 2 -hi").as_slice(),
+            [Op::Text(_, _, 0, _, _)]
+        ));
+        assert_eq!(parse_xdot("t -1"), [Op::FontChar(u64::from(u32::MAX))]);
+    }
+
+    #[test]
+    fn a_colour_must_start_as_parsexdotcolor_accepts() {
+        assert!(parse_xdot("c 3 -!!! E 0 0 1 1").is_empty());
+        assert!(parse_xdot("c 2 -\u{e9} E 0 0 1 1").is_empty());
+        for c in ["#ff0000", "/x11/red", "red", "9"] {
+            let s = format!("c {} -{c}", c.len());
+            assert_eq!(parse_xdot(&s), [Op::Color(false, Grad::None(c.into()))]);
+        }
+    }
 }

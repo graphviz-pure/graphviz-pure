@@ -8757,6 +8757,17 @@ fn issue315_background_with_a_huge_count_or_fdp_cluster_edges_matches_c() {
         "graph 1 0.75 0.5\nnode a 0.375 0.25 0.75 0.5 a solid ellipse black lightgrey\nstop\n"
     );
 
+    // `parseXDotColor` rejects a colour starting with `!`, which ends the parse.
+    let (_, err, ok) = run(
+        &["-Tplain"],
+        "digraph G { _background=\"c 3 -!!! P 3 0 0 1 1 2 0\"; a->b }",
+    );
+    assert!(ok);
+    assert_eq!(
+        err,
+        "Warning: Could not parse \"_background\" attribute in graph G\n  \"c 3 -!!! P 3 0 0 1 1 2 0\"\n"
+    );
+
     let (out, err, ok) = run(
         &["-Kfdp", "-Txdot"],
         "digraph G { _background=\"c 7 -#ff0000 E 0 0 10 10\"; subgraph cluster_x { b } a -> cluster_x }",
