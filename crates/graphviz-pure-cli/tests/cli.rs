@@ -4596,6 +4596,110 @@ fn html_label_encoding_errors_are_reported() {
     );
 }
 
+/// Issue #380: `user_init` (psusershape.c:49) looks a `shape=epsf` file up in
+/// `EPSF_contents`, cdt's splay tree (`lib/cdt/dttree.c`), keyed by the pointer `safefile`
+/// returned. Through `imagepath` that is `findPath`'s buffer, which sits where the text it
+/// held at insertion placed it and compares by its current text, so a search steered by
+/// other keys can miss it: C reads `x.eps` where the port found `box.eps` under the buffer.
+/// In the second file, the first graph's key for `y.eps` is freed memory (read as `""`)
+/// that steers the second graph's search away from the buffer key. The expected output
+/// is C 16.1.0's.
+#[test]
+fn issue380_epsf_lookup_follows_the_splay_tree() {
+    let dir = std::env::temp_dir().join(format!("gvp-issue380-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    for (name, bb) in [
+        ("box.eps", "10 20 110 70"),
+        ("c.eps", "0 0 20 30"),
+        ("x.eps", "0 0 3 4"),
+        ("y.eps", "1 2 30 40"),
+    ] {
+        std::fs::write(dir.join(name), format!("%!PS\n%%BoundingBox: {bb}\n")).unwrap();
+    }
+    let dir = dir.to_string_lossy();
+    let cases = [
+        (
+            format!(
+                "digraph {{ imagepath=\"{dir}\"; a [shape=epsf shapefile=\"box.eps\"]; \
+                 b [shape=epsf shapefile=\"{dir}/c.eps\"]; e [shape=epsf shapefile=\"x.eps\"] }}"
+            ),
+            format!(
+                r#"-10 -20 translate newpath user_shape_0
+118 10 translate newpath user_shape_1
+156.5 23 translate newpath user_shape_2
+digraph {{
+	graph [bb="0,0,159.5,50",
+		imagepath="{dir}"
+	];
+	node [label="\N"];
+	a	[height=0.69444,
+		pos="50,25",
+		shape=epsf,
+		shapefile="box.eps",
+		width=1.3889];
+	b	[height=0.41667,
+		pos="128,25",
+		shape=epsf,
+		shapefile="{dir}/c.eps",
+		width=0.27778];
+	e	[height=0.055556,
+		pos="158,25",
+		shape=epsf,
+		shapefile="x.eps",
+		width=0.041667];
+}}
+"#
+            ),
+        ),
+        (
+            format!(
+                "digraph {{ imagepath=\"{dir}\"; a [shape=epsf shapefile=\"x.eps\"]; \
+                 b [shape=epsf shapefile=\"{dir}/y.eps\"] }}\n\
+                 digraph {{ imagepath=\"{dir}\"; b [shape=epsf shapefile=\"x.eps\"] }}"
+            ),
+            format!(
+                r#"0 17 translate newpath user_shape_0
+20 -2 translate newpath user_shape_1
+digraph {{
+	graph [bb="0,0,50,38",
+		imagepath="{dir}"
+	];
+	node [label="\N"];
+	a	[height=0.055556,
+		pos="1.5,19",
+		shape=epsf,
+		shapefile="x.eps",
+		width=0.041667];
+	b	[height=0.52778,
+		pos="35.5,19",
+		shape=epsf,
+		shapefile="{dir}/y.eps",
+		width=0.40278];
+}}
+0 0 translate newpath user_shape_2
+digraph {{
+	graph [bb="0,0,3,4",
+		imagepath="{dir}"
+	];
+	node [label="\N"];
+	b	[height=0.055556,
+		pos="1.5,2",
+		shape=epsf,
+		shapefile="x.eps",
+		width=0.041667];
+}}
+"#
+            ),
+        ),
+    ];
+    for (src, want) in cases {
+        let (out, err, ok) = run(&["-Tdot"], &src);
+        assert!(ok, "{err}");
+        assert_eq!(err, "");
+        assert_eq!(out, want, "{src}");
+    }
+}
+
 // Issue #185. Under overlap=vpsc, stress_majorization_cola (lib/neatogen/
 // constrained_majorization_ipsep.c) ends with removeoverlaps(orig_n, ...), and initCMajVPSC
 // treats the last 2 * nclusters real nodes as the cluster boundary variables. C sizes

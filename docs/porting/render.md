@@ -130,11 +130,14 @@ parsed input) matches C on 493 of 508 inputs (454 before).
   every output matches C byte for byte. The files are numbered as `user_init` keys
   `EPSF_contents`, by the pointer `safefile` returned: a later graph reads a file
   again under a new number, and with `imagepath` (or `--filepath`) a lookup finds the
-  file last read under its path's text. Where C compares with freed memory (a path
-  buffer that moved as it grew, keys of closed graphs steering the tree search) the
-  port does not follow it. Each node's file is looked up once per layout, as in C. The
-  port finds a buffer key whatever text the buffer then holds, where C's splay tree,
-  ordered by the text it held at insertion, can miss it (#380).
+  file last read under its path's text, if the search reaches it: `EPSF_contents` is
+  cdt's splay tree, which places a buffer key by the text it held at insertion and
+  compares it with the buffer's current text, so a search steered by other keys can
+  miss it (#380). The port keeps the same tree. A closed graph's key points at memory
+  macOS's allocator cleared, and compares as the empty string. Where C reads freed
+  memory otherwise (a path buffer that moved as it grew past 24 bytes, a closed graph's
+  string whose memory was reused) the port does not follow it. Each node's file is
+  looked up once per layout, as in C.
 - **Raster output.** The reference build has no `-Tpng`. The port rasterizes its SVG
   with resvg, which resolves no `<image>` (neither a file nor a `data:` URL), so a
   PNG shows no images; the warnings are the SVG job's.
