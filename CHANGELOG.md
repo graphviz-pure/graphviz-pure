@@ -6,6 +6,323 @@ All notable changes are listed here. The format follows
 
 ## [Unreleased]
 
+<!-- release-prep: replace this line with the release's intro paragraph -->
+
+### Breaking
+
+- `Graph::html_strings` is replaced by per-name flags (`NodeData::html_name`,
+  `SubgraphData::html_name`, `AttrSym::html`/`html_defval`) and a per-value mark in the
+  `AttrMap` (`attr_is_html`, `set_attr`); `canon_value` takes a flag; `TokenKind::Html` holds
+  the inner text; `is_html_string` and `is_html_value` are removed (#306).
+- `graphviz-pure-core`'s `NodeData`, `EdgeData`, `SubgraphData` and `Graph` have a public
+  `layout` field (`NodeLayout`, `EdgeLayout`, `GraphLayout`, with `LabelPlace`), so code that
+  builds them with a struct literal must set it; the reserved-attribute key constants
+  (`SEQ_KEY`, `CLUST_NODE_KEY`, `CLUSTER_LIST_KEY`, `TAIL_PORT_NAME_KEY`, `HEAD_PORT_NAME_KEY`,
+  `CONC_ARROW_FLAGS_KEY` and the other `\x01` keys) are removed (#110).
+- `graphviz-pure-core`'s `BezierSegment` has two new public fields, `sflag` and `eflag`, with
+  each end's arrow type. Code that builds a `BezierSegment` with a struct literal must set them.
+  Renderers draw an arrowhead only where its flag is not zero. Segments serialized by 0.1.x read
+  their arrowheads as `normal`. The arrow name parser is `graphviz_pure_core::arrows` (#285).
+- `AttrMap` is a struct, no longer a `BTreeMap<String, String>` alias. It keeps the HTML flag
+  (`aghtmlstr`) beside the values (`is_html`, `set`), derefs to the value map for reads, and
+  changes only through its methods (`insert`, `set`, `remove`, `retain`, `extend_from`,
+  `filtered`; `from_plain` builds one). `HTML_VALUE_PREFIX`, `html_value_key`, `attr_is_html`,
+  `set_attr` and `apply_attrs` are removed. Its serialized form is `{"values": {..}, "html":
+  [..]}`; the plain map written before 0.2.0 still reads (#365).
+- `graphviz-pure-core`'s `EdgeLayout::port_names` is a `PortNames` (`Input` or `Layout { tail,
+  head }`) instead of an `Option<(String, String)>` (#286, #376).
+- `graphviz_pure`'s root functions take and return ordinary text: `render_dot`,
+  `render_dot_all`, `render_dot_all_with_options`, `render_dot_all_partial`,
+  `render_svg_all_partial`, `parse_dot`, `parse_dot_all`, `layout_graph`,
+  `layout_graph_with_options`, `layout_graph_in_run`, `render_graph` and `render_graph_named`.
+  That includes the engine and format names, the `GlobalAttrs` (`-G`/`-N`/`-E`) values, the
+  outputs and the error messages. A real U+10FF00..=U+10FFFF character from a Rust caller is now
+  that character, as its UTF-8 bytes are to C, not a raw input byte. A parsed `Graph` still
+  holds its names and values in decoded form. **Migration:** if you called `charset::decode`
+  before `render_dot` (or another of these functions), or built `GlobalAttrs` from decoded
+  command-line arguments, call the same function in `graphviz_pure::decoded` with a
+  `charset::Decoded` (`decoded::render_dot(&Decoded::decode(bytes), ..)`), and `charset::encode`
+  the result for C's exact bytes. `GraphStream` (now built with `decoded::graph_stream`),
+  `GraphJobs`, `LayoutJobs` and `plugins::plugin_graph` moved to `graphviz_pure::decoded`.
+  (#378)
+
+### Added
+
+- `-P` draws the graph of the port's plugins, and `-v[n]` reports the plugins each step uses and
+  lists them, as C does for a build with built-in plugins. The layouts' verbose progress
+  messages are not ported yet (#298).
+- `graphviz_pure::decoded`, the entry points for input in the port's decoded form, and
+  `charset::Decoded`, the decoded source they take. Also `AttrMap::map` and
+  `GlobalAttrs::map_strings`. (#378)
+
+### Changed
+
+- Every build computes with the same math library, on every platform: Apple Silicon macOS (the
+  command line, the Rust crate, the Homebrew formula) now writes the same bytes as Linux,
+  Windows, Intel macOS and WebAssembly. Output changes on Apple Silicon for the inputs where
+  Apple's libm moved a layout (120 of the 2,594 corpus inputs, 114 of them sfdp). No build calls
+  a platform libm for a transcendental function any more (#327).
+- Fidelity is now measured against C Graphviz computing with the same math functions
+  (`scripts/dot-portable-libm.sh`): byte-identical on all 2,595 stable corpus inputs. The
+  comparison with stock C on macOS is informational (`gv-diff e2e --stock`) (#327).
+- Dot: where the nested layout of adjacent flat edges with ports leaves an edge without a spline
+  (its routing failed, or concentrate merged it), the layout now fails with an error where C
+  crashes. It no longer reports the edge lost twice or draws the graph without the merged edge,
+  so such `concentrate=true` graphs that drew with exit status 0 now exit 1 with no output
+  (#341).
+- A colour list with an empty segment at either end (`"red;0.3:"`, `":red;0.3"`) is split as C
+  splits it. The empty segment takes the weight left unassigned and draws nothing, so stripes,
+  wedges and multicolour edges are split like C's, and a gradient whose second segment is empty
+  (`bgcolor="red:"`) ends in black as in C instead of drawing plain red. An edge whose first
+  segment is empty draws no arrows, where C crashes (#385).
+
+### Fixed
+
+- Parser: the DOT scanner follows cgraph's `scan.l` and `fgets` reader. It warns `syntax
+  ambiguity - badly delimited number` like C (#97), keeps a backslash before CR LF in a quoted
+  string (#112), ignores a byte-order mark anywhere it stands alone and keeps it in a name
+  otherwise (#117), and lets a NUL hide the rest of its line (#120).
+- Diagnostics go through one sink, as C's `agerr` does: `-q`/`-q1` drop warnings, `-q2` drops
+  errors as well (the exit status still reports them), and control characters in every warning
+  and error are written as `\ooo`. `neato -n` reports a node without `pos` on C's two lines.
+  Several messages now read as C's: `layers not supported in xdot output`, and `option -Z
+  unrecognized` and `can't open` as errors (#121, #153, #150).
+- dot: the weight overflow checks of `virtual_weight` and `x_cutval` are ported. The layout
+  fails with C's message and exit status 1, where it used to draw from wrapped weights. `int`
+  arithmetic C leaves unchecked (huge `weight`, `minlen`, `ranksep`, `nodesep`, `margin`) wraps
+  as in C instead of panicking in builds with overflow checks. Where the wrapped values make C
+  crash (`update` with no entering edge) or assert (`TB_balance`), the layout fails with an
+  error. `largeMinlen`'s "Edge length … larger than maximum" error and network simplex's
+  internal errors are reported as in C. (#252, #271)
+- When the orthogonal router cannot build its maze, the messages C prints are now printed too
+  (`trapezoid segment construction failed`, `horizontal`/`vertical trapezoid construction
+  failed`, `failed at node N[side]`), without a prefix and without changing the exit status
+  (#127).
+- Numbers in attributes are read with the C library's grammar everywhere (hexadecimal floats,
+  `nan(…)`, `sscanf`'s partial reads), through one `strtod` in `graphviz-pure-core`. `pos`
+  accepts what C accepts (#220), and `dim=3` reads and writes `z` like C (#245). `ranksep=""`,
+  fractional `size`, `viewport` with a focus node, and fdp cluster `coords` now match C.
+- dot: with `concentrate=true`, an edge merged with an opposing edge now gets that edge's
+  arrowheads as C picks it (cgraph's `agfindedge` over its splay-tree edge dictionaries), and
+  the arrow type the layout chose, instead of the first opposing edge's (#247). The `degenerate
+  concentrated rank` warning is printed (#242).
+- dot no longer overflows the stack in `update_bb_bz`, or panics in `adjustregularpath`, on
+  layouts scaled past `INT_MAX` points (`ratio`, `ranksep` or `quantum` at 1e300, a huge
+  `fontsize`). Where C draws, the output is C's (#269, #270).
+- The CLI runs `dot`'s job pipeline. Each graph is read, laid out and rendered before the next
+  one. Every `-T` is a job with its `-o` file (later graphs go to stdout, as in C). Every format
+  reports render diagnostics and is laid out, `canon` and `dot_json` included. `-y`, `-s`, `-x`,
+  `-L`, `-O` with stdin, `-`, `--filepath` and C's usage, error messages and exit statuses now
+  match C (#158, #125, #108, #190, #126, #263, #264, #278, #281, #282, #294). The library's
+  `render_dot(.., "canon")` and the json formats without layout attributes now lay the graph out
+  too, as C does.
+- An infinite or huge edge label font size no longer hangs exterior label placement in dot and
+  neato. The port stops where Graphviz asserts (`xlhdxload`), places no exterior label and
+  prints a warning (#301).
+- HTML strings (`<…>`) keep their inner text and an HTML flag, as cgraph does: `+` and
+  `port:compass` make plain strings, HTML attribute names sort by their inner text, nodes and
+  subgraphs named by HTML strings are written `<b>` and kept apart from `b` and `"<b>"`, and
+  every reader but the labels sees the inner text (`shape=<box>`, an empty `label=<>`, a record
+  port `a:<f0>`) (#81, #98, #99, #119).
+- Print C's diagnostics the port handled silently, and exit 1 where C's is an error: neato's
+  `bad edge len`, `Max. iterations`, `start=self`, sgd's model fallbacks, `node positions are
+  ignored`, `stresswt`, unknown `model`/`mode`, the mds and circuit-model fallbacks, and
+  `legal.c`'s `trying to delete a non-line`; dot's `ordering` errors, `aspect` and curved-label
+  warnings, and the `lhead`/`ltail` warnings; twopi's `weight=0` error and missing `root`
+  warning; unknown `splines` values, duplicate cluster names, `pagedir`, an unclosed HTML
+  comment, routespl's box-space warning, sfdp's `quadtree=0` trace and `attribute macros not
+  implemented` (#255–#262, #275, #287, #307, #311, #313).
+- `sfdp` with `dim`/`dimen` above 2 and a `rotation` no longer panics. Graphviz asserts there
+  (`rotate`). The port lays the graph out without the rotation and prints a warning (#273).
+- Numbers now follow C's idioms as the reference build evaluates them
+  (`graphviz_pure_core::cnum`). `MIN`/`MAX` keep a NaN, `-0` is not zero where C compares bits,
+  and integer attributes narrow to `int` as `atoi`/`strtol`/`sscanf`/`ROUND` do. fdp with
+  `maxiter=2147483647` no longer hangs. `-Tjson` prints `nan`, and an infinite SVG page is
+  `-1pt`. A `fontsize=nan` label takes the size of an interned font, as C's font dictionary does
+  (#192, #194, #216, #272, #274, #292).
+- Parsing follows `grammar.y`: `+` joins only quoted and HTML strings, a lone `;` and a subgraph
+  without a body are syntax errors, `node a = [...]` (an attribute macro name) is accepted with
+  C's warning, and syntax errors name C's `near` token. Subgraphs may nest as deep as in C
+  (about 3330 levels, where bison's stack runs out with `memory exhausted`), instead of 256.
+  Edge keys follow `agedge`: a repeated key names the same edge, a new key on an existing edge
+  of a strict graph makes nothing, and the key is written as the edge's name (`-Tcanon`,
+  `-Tdot`, `-Txdot`; never in `-Tjson`). `subgraph ""` and `digraph ""` keep their empty names.
+  (#80, #92, #111, #115, #116, #118, #295, #297, #303)
+- `neato -n` (`-n1`, `-n2`, `-n3`, and the `nop`, `nop1`, `nop2` engines) now runs Graphviz's
+  own `Nop` path: overlap removal for `-n1`, `splines=ortho` and `curved`, placement of edge
+  labels and node xlabels without positions, `-n3`'s re-clipped first bezier with its warning,
+  `ratio` compared as written, and `user_pos`'s position errors (#142, #148, #149, #150, #195,
+  #266, #293, #300, #317). In `graphviz-pure-layout`, `neatoinit::neato_layout` takes the `-n`
+  level and the `nop` module is gone (its `LABEL_POS_KEY` is now
+  `common::postproc::LABEL_POS_KEY`).
+- dot with `pack`/`packmode`: a component's bounding box takes in only its own edges (#100);
+  `-Tdot` keeps a cluster's induced edges at the root as C does (#312); when a later component
+  cannot be laid out, the earlier components, the `_cc_*` subgraphs and the root's box are kept
+  as in C (#226). Packing's cell budget for huge components is 2^27 cells, measured against C,
+  so inputs C packs in a few seconds are packed (#250). A node in two non-nested clusters is
+  still laid out from fresh records in each component (#101, documented in
+  `docs/porting/crashes.md`).
+- The port now performs fused multiply-adds (`mul_add`) at every site where the reference C
+  build (Apple clang) fuses `a*b + c`, mapped from the build's disassembly
+  (`scripts/fma-sites.sh`). This fixes the off-by-one-ulp `shape=folder` tab corner (#96) and
+  covers the `start=regular` and sfdp leaf placements (#89, #90). Every platform computes the
+  same bits.
+- dot: flat edges between adjacent nodes with ports read `penwidth`, `arrowsize` and `fixed`
+  through the nested layout's attribute ids as C does (`-N`/`-E` defaults included, and `-G`
+  defaults reach the nested layout), after the heavy edge gets its weight, and read `""` for an
+  attribute declared after the node or edge (#84, #113).
+- json, dot_json, xdot_json and json0 output now warn `Duplicate cluster name "X"` for a second
+  cluster with a taken name, and count `cluster=true` subgraphs as clusters, as C does (#193).
+- With anonymous `cluster=true` subgraphs, `compound=true` and fdp/neato cluster edges warn `Two
+  clusters named %N` and resolve `lhead`/`ltail` as C does (#243).
+- Report the image and user-shape files C cannot load (`image`, `shapefile`, `shape=custom`,
+  `shape=epsf`, HTML `<IMG>`) with C's warnings, following `imagepath`, `--filepath=` and
+  `$SERVER_NAME`; an HTML `<IMG>` that cannot be loaded is an error (exit 1). HTML labels report
+  expat's encoding errors (bytes that are not UTF-8, `charset=big5`) and exit 1. An `epsf` node
+  without a loadable `shapefile` is no longer drawn as a box, and keeps its `width` and `height`
+  (#130, #131, #132).
+- dot: the invalid UTF-8 warning prints again for the auxiliary graph of flat adjacent edges
+  (`graph auxg`) and for the next component, and with `pack` after `cccomps`' cluster error, as
+  in C (#144, #105).
+- dot: flat edges between adjacent nodes with ports print the label diagnostics of their
+  auxiliary layout a second time, as C does; `size too small for label` and xlabel and head/tail
+  label diagnostics still print once, also as in C (#144). Regression test for the order of
+  `cccomps`' cluster error and the node sizing warnings with `pack` (#105).
+- dot: `-Tdot`, `-Txdot`, `-Tcanon` and the json formats write the subgraph membership dot's
+  layout leaves, as C does: root edges between a cluster's nodes are written inside it, and
+  nodes `node_induce` or `mark_clusters` removed are not. Under `pack`, anonymous clusters keep
+  their `%N` names, so they are packed as separate components and `lhead`/`ltail` can name them
+  (#102, #106, #108, #345).
+- HTML-like labels are tokenized as C's expat tokenizes them: a comment closed by `>` without
+  `--` continues until `-->`, `--` inside a comment is an error, errors are reported on the line
+  expat counts to, and element and attribute names follow XML's name characters (#316, #348,
+  #349). circo lays out nodes named `<G>` and `G` as one, as C does; fdp's cluster edges treat
+  `<cluster_x>` as cluster `cluster_x` (#305). `-Tplain` writes an empty label field where C
+  prints freed memory (#320).
+- dot no longer panics or hangs on rankings that `nslimit1` stops before they are normalised, on
+  root ranks left with no node, on the cluster-membership states where C's `neighbor` or
+  `flat_reorder` assertions fail, or on edges between zero-size or coincident ends whose
+  clipping walks cross. It stops with an error where C crashes, and keeps one segment for an
+  edge whose clipping walks cross (#357, #358, #359).
+- Writers: layout results travel to the renderers in typed fields, no longer in the graph's
+  attributes. Attributes named with a leading `\x01` are ordinary, as in C. Input `xlp`,
+  `head_lp`, `tail_lp` and `lp` no longer count as placed labels (an edge with no spline and
+  only such labels is not drawn). `-Tdot`/`-Txdot` write `vertices` for polygon nodes when the
+  graph declares it, `pos` has `dimen` coordinates for neato and sfdp, and a cluster's `bb`/`lp`
+  set by the layout is printed even when it equals the inherited value (#110, #124, #129, #328,
+  #329).
+- Several `-T` formats in one run share one graph, as in C: a later job writes the `_draw_`,
+  `bb`, `pos` and other attributes an earlier `-Txdot`/`-Tjson`/`-Tdot` job set, even where the
+  input declares them, and `-Txdot` after `-Txdot1.2` keeps `xdotversion=1.2` (#362, #367).
+- Input characters U+10FF00..U+10FFFF are no longer mistaken for the port's raw (non-UTF-8)
+  bytes: they are written, measured and parsed (records, HTML labels) as their four bytes, as
+  Graphviz does, and long strings with Latin-1 bytes break where Graphviz breaks them (#151).
+- An attribute declared only by a subgraph's defaults (`subgraph s { node [z=1] }`) now counts
+  as declared for the whole graph, as in Graphviz: neato writes `z` with `dim=3`, and `pos`,
+  `pin`, `len`, `weight`, `root`, `sortv`, `ordering`, `labelangle`, `labeldistance` and
+  patchwork's `fontsize` are read the same way (#291).
+- Anonymous graphs, subgraphs and clusters are named as C's `agnameof` names them (`%1` for the
+  root, `%<id>` for a subgraph) in messages, `\G`, cluster labels and SVG `<title>`s. Where one
+  C call prints several anonymous names, which share `agnameof`'s static buffer, all of them
+  show the last one, as in C (an edge between two `%`-named nodes is titled head→head in SVG)
+  (#267, #325, #344, #346, #354).
+- `drand48` and `rand` keep one state for the whole `dot` run, as in Graphviz, so later graphs
+  in a file (neato's random third coordinate, `-n`, stress and vpsc pivots) lay out as Graphviz
+  does. The library starts each call with a fresh state, and `LayoutJobs::continuing` or
+  `with_rand_state` lets a caller continue one (#290).
+- Images that C can load (`image=`, `shapefile=`, HTML `<IMG>`) are sized from their file
+  headers (PNG, GIF, JPEG, BMP, ICO, WEBP, SVG, PostScript, PDF) at the graph's `dpi`. They are
+  drawn as C's reference build draws them: an `<image>` element in SVG, an `I` operation in xdot
+  and the `_draw_` of `-Tjson`, and C's `No loadimage plugin` warning elsewhere. `shape=epsf`
+  writes C's `user_shape_N` PostScript call into the output, and PNG output draws no images
+  (#347).
+- A `style` with more than 63 items draws none of them after `truncating style`, as Graphviz
+  does, instead of the first 63 (#268).
+- dot: where a `samehead`/`sametail` port lies in no field of a record, edges are routed from
+  the previous edge's path-end boxes, as C does, instead of the node box (#360).
+- Deeply nested subgraphs and clusters lay out in about C's time and less memory than C: at
+  2,498 nested clusters, fdp needed 11.5 GB and now needs 157 MB, and dot, osage and patchwork
+  took 12–35 s and now take under a second (#323).
+- An edge whose multicolor `color` doesn't parse is drawn black with Graphviz's offsets and
+  arrow colours, and `layers`, `layersep` and `layerlistsep` split on bytes as Graphviz does
+  (#283).
+- The JSON writers write `"label": ""` for an edge `label` that is declared but has no value, as
+  Graphviz does (#324).
+- A graph attribute first declared in a subgraph gives that subgraph's child subgraphs their own
+  empty value, which `-Tdot` writes, as Graphviz does (#304).
+- The `nop`, `nop1` and `nop2` engines, and fdp with spline edges, turn `-n` off for the rest of
+  the run, as C's `Nop` global does. Before, `-n2` still applied to the graphs after them
+  (#332).
+- neato prints a node's `pos` error right after that node's other diagnostics, as C does.
+  Unknown arrow types are reported while the layout clips each edge, in C's order and number:
+  none when no edges are routed (`splines=none`, patchwork) and none when `-n` stops at a node
+  with no position (#331).
+- An arrowhead at an end that dot routed backwards is drawn with the type C gives it. Before, it
+  could take the opposing edge's type, such as `normal` instead of `dot` (#285).
+- "Arrow type … unknown" warnings print once per layout, where C prints them, in every engine
+  (#285).
+- dot: an edge drawn without a spline (a labelled edge under `splines=ortho` with `concentrate`)
+  writes the port names the layout kept into `\E`. Before, it used the input's
+  `tailport`/`headport` even where `sametail`/`samehead` had dropped them (#286).
+- dot: with `rankdir=LR` or `RL`, an edge at an `epsf` node is clipped at the node's border as
+  Graphviz clips it, using the node's flipped size (#364).
+- An attribute named `"\x01html:<name>"` is an ordinary attribute, as in Graphviz. It no longer
+  turns `<name>`'s value into an HTML string (#365).
+- Fdp makes nested cluster labels one level at a time, as C does, so a label's font size and
+  warnings follow C's order (#319).
+- Documented: under `neato mode=ipsep overlap=vpsc` with clusters, C's layout follows its
+  allocator's addresses and can change from run to run. The port breaks those ties in creation
+  order, which is what C computes with addresses in creation order, and is the same on every
+  platform (#225).
+- `shape=epsf`: with `imagepath`, a node's file is looked up in Graphviz's splay tree order, so
+  a later node whose path's text matches an earlier lookup no longer reuses that file when
+  Graphviz reads its own (#380).
+- A record field read before a record-label syntax error is measured, as in C, so its
+  measurement warnings print before `bad label format` (#370).
+- Dot with `phase=1`, `2` or `3` post-processes and packs what the layout left, as C does:
+  positions, bounding box, cluster boxes and node sizes, instead of every node at the origin
+  (#128).
+- `_background`, or a graph `_draw_` in its place, is drawn behind the graph, `neato -n` makes
+  room for it, and one that doesn't parse gets Graphviz's warning (#315).
+- A graph attribute repeated in one attribute statement is set once per occurrence, as in C, so
+  a subgraph's `layout` warning prints for each one (#393).
+- Internal: an edge's `fillcolor` is compared with its `color` as C compares its interned
+  pointers, so the renderer gets the same `set_fillcolor` calls as C (#389).
+- dot: the aux graph that lays out flat adjacent edges with ports declares every attribute of
+  the main graph, as C's `cloneGraph` does, including attributes only a subgraph declared
+  (#376).
+- A blank `sep` or `esep` (`""`, `" "`, `"+"`) is read as C 16.1.0 reads it (its `parseFactor`
+  reads uninitialised values, a stale pointer, there), instead of falling back to the other
+  attribute or the default margin. fdp's `sep value … is smaller than esep` note compares
+  margins as doubles, as C does (#372).
+- dot with `pack`: each component is laid out to its own `phase` and gets `rank`/`order` only
+  from it (#415).
+- dot with `pack`: a subgraph the input names `_cc_<i>` is the `i`-th component, as in Graphviz.
+  Its `splines`, `rank`, `phase` and other values apply to that component's layout, and the
+  subgraph is gone from the output after packing (#335).
+- The JSON writers warn `Could not parse xdot` for an xdot attribute that doesn't parse, as
+  Graphviz does; the CLI then writes no value, as Graphviz does, and the library writes `""`
+  (#377). An xdot fontchar prints as Graphviz prints it (#402).
+- dot: edges whose `samehead` or `sametail` group comes from opposite sides no longer print
+  `Unable to reclaim box space`, and no longer move the nodes to a huge x coordinate on some
+  inputs; a NaN spline is bounded at once, as in C (#396).
+- PNG and JPEG output run what C's cairo renderer runs: no extra invalid-UTF-8 warning from edge
+  tooltips, `layers not supported in png output` with the whole graph drawn as one layer, colour
+  names resolved as X11 colours (`green` is `#00ff00`), `labelaligned` edge labels drawn as
+  plain text at their point, image loaders named for cairo (`No loadimage plugin for
+  "ps:cairo"`), and the SVG's gradient ids left as C's when a png job runs first (#355).
+- A node with a `URL` or `tooltip` repeats its style diagnostics as C does, which parses its
+  style once more for the node's map shape (#384).
+- circo with several components and fdp apply the command-line graph attributes (`-Goverlap`,
+  `-Gnormalize`, `-Gscale`, `-Gsep`, `-Goverlap_scaling`, …) to their derived graphs as C does.
+  With `-Goverlap=false`, circo now overlaps the nodes of a component, as C 16.1.0 does, since
+  C's derived nodes have no width or height. (#398)
+
+### Deprecated
+
+- The `graphviz-pure-core/portable-math` feature does nothing and will be removed in the next
+  minor release (#327).
+
 ## [0.1.2] - 2026-10-22
 
 Fixes for the remaining crashes and hangs from the fuzzer, each made at its cause: where C
