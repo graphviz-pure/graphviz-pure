@@ -198,6 +198,12 @@ impl Output {
                 xlabel: lp_of(ed.xlabel),
                 head_label: place_of(ed.head_label),
                 tail_label: place_of(ed.tail_label),
+                // `\E` (in the title, `id`, `URL`, `tooltip`) reads `ED_tail_port(e).name`
+                // (labels.c:316) of every edge drawn, a labelled edge without a spline too.
+                port_names: Some((
+                    ed.tail_port.name.clone().unwrap_or_default(),
+                    ed.head_port.name.clone().unwrap_or_default(),
+                )),
                 ..Default::default()
             };
             let Some(bzs) = ed.spl.as_ref() else {
@@ -226,10 +232,6 @@ impl Output {
                 continue;
             };
             el.no_attrs = ed.edge_type == IGNORED;
-            el.port_names = Some((
-                ed.tail_port.name.clone().unwrap_or_default(),
-                ed.head_port.name.clone().unwrap_or_default(),
-            ));
             edge_layout.push(el);
             let spline = Spline {
                 segments: bzs

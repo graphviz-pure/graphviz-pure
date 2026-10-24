@@ -8505,6 +8505,76 @@ fn issue285_arrow_type_warnings_print_once_per_layout() {
     assert_eq!(err, "Warning: Arrow type \"foo\" unknown - ignoring\n");
 }
 
+/// Issue #286: `\E` substitutes `ED_tail_port(e).name` (labels.c:316), which C's
+/// `sametail` cleared, for every edge drawn. `c -> e` gets no spline under ortho with
+/// `concentrate`, but its label is drawn, and the port passed the layout's port names only
+/// for edges with a spline: its title kept the input's `se`. The expected SVG is C
+/// 16.1.0's, after the generator comment.
+#[test]
+fn issue286_edge_without_a_spline_takes_the_layouts_port_names() {
+    let src = "digraph G { concentrate=true; splines=ortho; subgraph cluster0 { a; e } \
+               c -> b [sametail=t1]; c -> e [tailport=se,label=yy,sametail=t1]; e -> c; }";
+    let (out, err, ok) = run(&["-Tsvg"], src);
+    assert!(ok, "{err}");
+    // sametail cleared `c -> e`'s port name: its title has none.
+    assert!(out.contains("<title>c&#45;&gt;e</title>"), "{out}");
+    let want = r#"<!-- Title: G Pages: 1 -->
+<svg width="166pt" height="222pt"
+ viewBox="0.00 0.00 166.00 222.00" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="graph0" class="graph" transform="scale(1 1) rotate(0) translate(4 217.8)">
+<title>G</title>
+<polygon fill="white" stroke="none" points="-4,4 -4,-217.8 162,-217.8 162,4 -4,4"/>
+<g id="clust1" class="cluster">
+<title>cluster0</title>
+<polygon fill="none" stroke="black" points="8,-153.8 8,-205.8 150,-205.8 150,-153.8 8,-153.8"/>
+</g>
+<!-- a -->
+<g id="node1" class="node">
+<title>a</title>
+<ellipse fill="none" stroke="black" cx="43" cy="-179.8" rx="27" ry="18"/>
+<text xml:space="preserve" text-anchor="middle" x="43" y="-175.6" font-family="Times,serif" font-size="14.00">a</text>
+</g>
+<!-- e -->
+<g id="node2" class="node">
+<title>e</title>
+<ellipse fill="none" stroke="black" cx="115" cy="-179.8" rx="27" ry="18"/>
+<text xml:space="preserve" text-anchor="middle" x="115" y="-175.6" font-family="Times,serif" font-size="14.00">e</text>
+</g>
+<!-- c -->
+<g id="node3" class="node">
+<title>c</title>
+<ellipse fill="none" stroke="black" cx="107" cy="-91" rx="27" ry="18"/>
+<text xml:space="preserve" text-anchor="middle" x="107" y="-86.8" font-family="Times,serif" font-size="14.00">c</text>
+</g>
+<!-- e&#45;&gt;c -->
+<g id="edge3" class="edge">
+<title>e&#45;&gt;c</title>
+<path fill="none" stroke="black" d="M111,-161.83C111,-161.83 111,-120.76 111,-120.76"/>
+<polygon fill="black" stroke="black" points="114.5,-120.76 111,-110.76 107.5,-120.76 114.5,-120.76"/>
+</g>
+<!-- c&#45;&gt;e -->
+<g id="edge2" class="edge">
+<title>c&#45;&gt;e</title>
+<text xml:space="preserve" text-anchor="middle" x="57" y="-131.2" font-family="Times,serif" font-size="14.00">yy</text>
+</g>
+<!-- b -->
+<g id="node4" class="node">
+<title>b</title>
+<ellipse fill="none" stroke="black" cx="107" cy="-18" rx="27" ry="18"/>
+<text xml:space="preserve" text-anchor="middle" x="107" y="-13.8" font-family="Times,serif" font-size="14.00">b</text>
+</g>
+<!-- c&#45;&gt;b -->
+<g id="edge1" class="edge">
+<title>c&#45;&gt;b</title>
+<path fill="none" stroke="black" d="M107,-90C107,-90 107,-47.68 107,-47.68"/>
+<polygon fill="black" stroke="black" points="110.5,-47.68 107,-37.68 103.5,-47.68 110.5,-47.68"/>
+</g>
+</g>
+</svg>
+"#;
+    assert_eq!(out.split_once(" -->\n").map(|(_, b)| b), Some(want));
+}
+
 /// neato ortho obstacles (`makeObstacle` with `isOrtho`) keep `margin = {0}`: a scaling
 /// `sep`/`esep` shrinks each box to its node's centre, so touching boxes are not reported.
 #[test]
