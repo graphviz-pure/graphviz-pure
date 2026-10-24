@@ -1277,7 +1277,8 @@ impl<'a, E: Engine> Emitter<'a, E> {
             } else {
                 color
             };
-            // A set `fillcolor` is never empty; an unset one is `color`, replaced with it.
+            // A set `fillcolor` is never empty; an unset one is `color`, replaced with it by
+            // the same `DEFAULT_COLOR`, one pointer as clang and gcc merge equal literals.
             let fillcolor = if fillcolor.is_empty() {
                 DEFAULT_COLOR
             } else {

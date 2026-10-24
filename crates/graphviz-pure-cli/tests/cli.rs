@@ -8508,7 +8508,8 @@ fn issue285_arrow_type_warnings_print_once_per_layout() {
 /// Issue #389: `emit_edge_graphics` tests `fillcolor != color` by pointer
 /// (`lib/common/emit.c:2418`, `:2433`). cgraph interns attribute values, so `fillcolor=red`
 /// shares `color=red`'s pointer, but not an HTML `color=<red>`'s, nor the `DEFAULT_COLOR`
-/// literal of a successful `multicolor` or an empty tapered `color`. Output is C 16.1.0's.
+/// literal of a successful `multicolor` or an empty tapered `color`, wherever `color=<red>` was
+/// set. Output is C 16.1.0's.
 #[test]
 fn issue389_edge_fillcolor_is_set_when_c_pointers_differ() {
     let nodes = r#"digraph {
@@ -8528,8 +8529,10 @@ fn issue389_edge_fillcolor_is_set_when_c_pointers_differ() {
 		pos="27,18",
 		width=0.75];
 "#;
-    for (attrs, edge) in [
+    // `(defaults, attrs, edge)`: the HTML mark of a default travels to the edge.
+    for (defaults, attrs, edge) in [
         (
+            "",
             "color=red fillcolor=red",
             r#"	a -> b	[_draw_="c 7 -#ff0000 B 4 27 71.7 27 64.41 27 55.73 27 47.54 ",
 		_hdraw_="S 5 -solid c 7 -#ff0000 C 7 -#ff0000 P 3 30.5 47.62 27 37.62 23.5 47.62 ",
@@ -8539,6 +8542,7 @@ fn issue389_edge_fillcolor_is_set_when_c_pointers_differ() {
 "#,
         ),
         (
+            "",
             r#"style=tapered penwidth=4 color="" fillcolor=black"#,
             r#"	a -> b	[_draw_="S 15 -setlinewidth(4) S 7 -tapered c 9 -#fffffe00 C 7 -#000000 P 42 29 71.7 28.91 70.8 28.82 69.89 28.72 68.97 28.63 68.03 28.53 \
 67.09 28.43 66.13 28.33 65.17 28.23 64.2 28.13 63.22 28.03 62.23 27.93 61.24 27.83 60.24 27.73 59.24 27.62 58.23 27.52 57.22 27.42 \
@@ -8553,6 +8557,7 @@ fn issue389_edge_fillcolor_is_set_when_c_pointers_differ() {
 "#,
         ),
         (
+            "",
             r#"color="red;0.5:blue" fillcolor=black"#,
             r#"	a -> b	[_draw_="c 7 -#ff0000 B 4 27 71.7 27 68.05 27 64.06 27 59.95 c 7 -#0000ff B 4 27 59.95 27 55.85 27 51.63 27 47.54 ",
 		_hdraw_="S 5 -solid c 7 -#0000ff C 7 -#0000ff P 3 30.5 47.62 27 37.62 23.5 47.62 ",
@@ -8562,6 +8567,7 @@ fn issue389_edge_fillcolor_is_set_when_c_pointers_differ() {
 "#,
         ),
         (
+            "",
             "color=<red> fillcolor=red arrowhead=dot",
             r#"	a -> b	[_draw_="c 7 -#ff0000 B 4 27 71.7 27 63.64 27 53.89 27 44.98 ",
 		_hdraw_="S 5 -solid c 7 -#ff0000 C 7 -#ff0000 E 27 40.6 4 4 ",
@@ -8571,11 +8577,31 @@ fn issue389_edge_fillcolor_is_set_when_c_pointers_differ() {
 		pos="e,27,36.104 27,71.697 27,63.644 27,53.894 27,44.982"];
 "#,
         ),
+        (
+            "edge [color=<red>]; ",
+            "fillcolor=red arrowhead=dot",
+            r#"	a -> b	[_draw_="c 7 -#ff0000 B 4 27 71.7 27 63.64 27 53.89 27 44.98 ",
+		_hdraw_="S 5 -solid c 7 -#ff0000 C 7 -#ff0000 E 27 40.6 4 4 ",
+		arrowhead=dot,
+		fillcolor=red,
+		pos="e,27,36.104 27,71.697 27,63.644 27,53.894 27,44.982"];
+"#,
+        ),
     ] {
-        let (out, err, ok) = run(&["-Txdot"], &format!("digraph {{ a -> b [{attrs}] }}"));
+        let src = format!("digraph {{ {defaults}a -> b [{attrs}] }}");
+        let (out, err, ok) = run(&["-Txdot"], &src);
         assert!(ok, "{err}");
-        assert_eq!(err, "", "{attrs}");
-        assert_eq!(out, format!("{nodes}{edge}}}\n"), "{attrs}");
+        assert_eq!(err, "", "{src}");
+        let decl = match defaults {
+            "" => String::new(),
+            d => format!("\t{}\n", d.trim_end()),
+        };
+        let nodes = nodes.replacen(
+            "\tnode [label=\"\\N\"];\n",
+            &format!("\tnode [label=\"\\N\"];\n{decl}"),
+            1,
+        );
+        assert_eq!(out, format!("{nodes}{edge}}}\n"), "{src}");
     }
 }
 
