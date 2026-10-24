@@ -8505,6 +8505,126 @@ fn issue285_arrow_type_warnings_print_once_per_layout() {
     assert_eq!(err, "Warning: Arrow type \"foo\" unknown - ignoring\n");
 }
 
+/// Issue #372: `parseFactor` (`lib/neatogen/adjust.c:1020`) takes sscanf's EOF on a blank
+/// `sep` or `esep` as success, with `x` and `y` uninitialised. They hold pointers `agget`
+/// left on the stack, subnormal as doubles, so C lays out as with 0 on every run and build
+/// (`docs/porting/crashes.md`). Output is C 16.1.0's.
+#[test]
+fn issue372_blank_sep_lays_out_like_c() {
+    for (src, want) in [
+        (
+            r#"graph { layout=fdp; sep=""; subgraph cluster_a { a -- b -- c } d -- a; subgraph cluster_b { e -- f } f -- d }"#,
+            r#"graph 1 3.8915 2.0091
+node a 1.4694 0.91312 0.75 0.5 a solid ellipse black lightgrey
+node b 1.3057 1.648 0.75 0.5 b solid ellipse black lightgrey
+node c 0.48611 1.4921 0.75 0.5 c solid ellipse black lightgrey
+node d 2.191 0.25 0.75 0.5 d solid ellipse black lightgrey
+node e 3.4053 1.551 0.75 0.5 e solid ellipse black lightgrey
+node f 3.1825 0.94446 0.75 0.5 f solid ellipse black lightgrey
+edge a b 4 1.4131 1.166 1.3964 1.2408 1.3782 1.3225 1.3616 1.3971 solid black
+edge b c 4 0.93905 1.5783 0.91007 1.5727 0.88079 1.5672 0.85182 1.5617 solid black
+edge d a 4 1.9666 0.45618 1.8789 0.53678 1.7786 0.62897 1.6911 0.70934 solid black
+edge e f 4 3.3147 1.3043 3.3012 1.2676 3.2873 1.2297 3.2738 1.1929 solid black
+edge f d 4 2.922 0.762 2.7774 0.66073 2.5981 0.53511 2.4532 0.43365 solid black
+stop
+"#,
+        ),
+        (
+            r#"graph { layout=neato; overlap=false; sep="+"; esep=""; a -- b; a -- c; a -- d; b -- c; x [width=2]; x -- a }"#,
+            r#"graph 1 5.7419 5.3503
+node a 2.9057 2.9308 0.75 0.5 a solid ellipse black lightgrey
+node b 4.607 0.75 0.75 0.5 b solid ellipse black lightgrey
+node c 2.2252 0.25 0.75 0.5 c solid ellipse black lightgrey
+node d 0.375 4.2175 0.75 0.5 d solid ellipse black lightgrey
+node x 4.7419 5.1003 2 0.5 x solid ellipse black lightgrey
+edge a b 4 3.0814 2.7056 3.4074 2.2877 4.1025 1.3966 4.4297 0.97721 solid black
+edge a c 4 2.8417 2.6786 2.7117 2.1664 2.418 1.0096 2.2885 0.49958 solid black
+edge a d 4 2.6055 3.0834 2.1197 3.3304 1.1668 3.8149 0.67879 4.063 solid black
+edge b c 4 4.2452 0.67406 3.7963 0.57981 3.0352 0.42004 2.5864 0.32583 solid black
+edge x a 4 4.5313 4.8514 4.1696 4.424 3.4361 3.5574 3.0919 3.1508 solid black
+stop
+"#,
+        ),
+    ] {
+        let (out, err, ok) = run(&["-Tplain"], src);
+        assert!(ok, "{err}");
+        assert_eq!(err, "");
+        assert_eq!(out, want, "{src}");
+    }
+}
+
+/// Issue #372: on a blank `sep`/`esep`, C's `parseFactor` reads stale pointers, positive
+/// subnormals. `compoundEdges`' note (`clusteredges.c:243`) then compares about
+/// `G <= G / 1.25` for `sep="+"` alone, so there is no note, and `G <= G` with `esep="+"`
+/// too, so there is one. `expand_t` holds doubles: the note does not round `1.00000001` to
+/// `1`, and `neatosplines.c:625` prints `0.1250000001` as `0.13`. Output is C 16.1.0's.
+#[test]
+fn issue372_compound_edges_note_compares_cs_stale_margins() {
+    for (src, want, want_err) in [
+        (
+            r#"graph { layout=fdp; splines=compound; sep="+"; subgraph cluster_x { a [pos="0,0!"] } d [pos="1.5,0!"]; e [pos="1.6,0!"]; c [pos="3,0!"]; a -- c; d -- e }"#,
+            r#"graph 1 4.981 0.72222
+node a 4.4949 0.36111 0.75 0.5 a solid ellipse black lightgrey
+node d 0.375 0.36111 0.75 0.5 d solid ellipse black lightgrey
+node e 1.1257 0.36111 0.75 0.5 e solid ellipse black lightgrey
+node c 1.8765 0.36111 0.75 0.5 c solid ellipse black lightgrey
+edge a c 4 4.1141 0.36111 3.6177 0.36111 2.7543 0.36111 2.2577 0.36111 solid black
+edge d e 4 0.75477 0.36111 0.75622 0.36111 0.75768 0.36111 0.75913 0.36111 solid black
+stop
+"#,
+            r#"Warning: compoundEdges: nodes touch - falling back to straight line edges
+Warning: some nodes with margin (0.00,0.00) touch - falling back to straight line edges
+"#,
+        ),
+        (
+            r#"graph { layout=fdp; splines=compound; sep="+"; esep="+"; subgraph cluster_x { a [pos="0,0!"] } d [pos="1.5,0!"]; e [pos="1.6,0!"]; c [pos="3,0!"]; a -- c; d -- e }"#,
+            r#"graph 1 4.981 0.72222
+node a 4.4949 0.36111 0.75 0.5 a solid ellipse black lightgrey
+node d 0.375 0.36111 0.75 0.5 d solid ellipse black lightgrey
+node e 1.1257 0.36111 0.75 0.5 e solid ellipse black lightgrey
+node c 1.8765 0.36111 0.75 0.5 c solid ellipse black lightgrey
+edge a c 4 4.1141 0.36111 3.6177 0.36111 2.7543 0.36111 2.2577 0.36111 solid black
+edge d e 4 0.75477 0.36111 0.75622 0.36111 0.75768 0.36111 0.75913 0.36111 solid black
+stop
+"#,
+            r#"Warning: compoundEdges: nodes touch - falling back to straight line edges
+sep value (0.000,0.000) is smaller than esep (0.000,0.000)
+Warning: some nodes with margin (0.00,0.00) touch - falling back to straight line edges
+"#,
+        ),
+        (
+            r#"graph { layout=fdp; splines=compound; sep="+1.00000001"; esep="+1"; subgraph cluster_x { a [pos="0,0!"] } d [pos="1.5,0!"]; e [pos="1.6,0!"]; c [pos="3,0!"]; a -- c; d -- e }"#,
+            r#"graph 1 5.1565 0.72222
+node a 4.6704 0.36111 0.75 0.5 a solid ellipse black lightgrey
+node d 0.375 0.36111 0.75 0.5 d solid ellipse black lightgrey
+node e 1.1535 0.36111 0.75 0.5 e solid ellipse black lightgrey
+node c 1.9321 0.36111 0.75 0.5 c solid ellipse black lightgrey
+edge a c 4 4.2896 0.36111 3.768 0.36111 2.8363 0.36111 2.314 0.36111 solid black
+edge d e 4 0.75515 0.36111 0.76133 0.36111 0.7675 0.36111 0.77368 0.36111 solid black
+stop
+"#,
+            r#"Warning: compoundEdges: nodes touch - falling back to straight line edges
+Warning: some nodes with margin (1.00,1.00) touch - falling back to straight line edges
+"#,
+        ),
+    ] {
+        let (out, err, ok) = run(&["-Tplain"], src);
+        assert!(ok, "{err}");
+        assert_eq!(err, want_err, "{src}");
+        assert_eq!(out, want, "{src}");
+    }
+    let src = "graph { layout=neato; splines=true; esep=\"+0.1250000001\"; \
+               a [pos=\"0,0!\"]; b [pos=\"0.3,0!\"]; c [pos=\"3,0!\"]; a -- c }";
+    let (_, err, ok) = run(&["-Tplain"], src);
+    assert!(ok, "{err}");
+    assert_eq!(
+        err,
+        "Warning: some nodes with margin (0.13,0.13) touch - falling back to straight line \
+         edges\n",
+        "{src}"
+    );
+}
+
 /// neato ortho obstacles (`makeObstacle` with `isOrtho`) keep `margin = {0}`: a scaling
 /// `sep`/`esep` shrinks each box to its node's centre, so touching boxes are not reported.
 #[test]

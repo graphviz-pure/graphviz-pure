@@ -157,11 +157,11 @@ impl Router {
             }
         }
         if !plegal_arrangement(&obs) {
-            // neatosplines.c:625; expand_t holds floats.
+            // neatosplines.c:625; expand_t holds doubles (adjust.h:41-44).
             graphviz_pure_core::diag::agwarningf(&format!(
                 "some nodes with margin ({},{}) touch - falling back to straight line edges\n",
-                graphviz_pure_core::cnum::fmt_f(f64::from(margin.x as f32), 2),
-                graphviz_pure_core::cnum::fmt_f(f64::from(margin.y as f32), 2)
+                graphviz_pure_core::cnum::fmt_f(margin.x, 2),
+                graphviz_pure_core::cnum::fmt_f(margin.y, 2)
             ));
             return None;
         }

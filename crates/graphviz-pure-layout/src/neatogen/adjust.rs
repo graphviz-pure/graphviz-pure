@@ -53,16 +53,36 @@ pub struct AdjustData {
     pub scaling: f64,
 }
 
-/// `sscanf(s, "%lf,%lf", &x, &y)` conversion count and values, then `if (i == 1) y = x`.
-/// C tests the count for truth, so EOF (`-1`, an empty or blank string) passes with `x`
-/// and `y` uninitialized; the port reads that as no conversion.
-fn scan2(s: &str) -> (usize, f64, f64) {
+/// What `parseFactor`'s uninitialised `x` and `y` hold after sscanf's EOF, as the port models
+/// it. In C they are stack residue: pointers or small integers, which as doubles are
+/// nonnegative subnormals (or 0), different in each call by a few bytes. Added to a size or
+/// to 1 they vanish, and the one comparison of two of them (`compoundEdges`' note) has a
+/// factor of 1.25 between its sides, so one fixed positive subnormal gives C's results.
+/// Measured on one C build; see `docs/porting/crashes.md`, "parseFactor's uninitialised
+/// x, y".
+const STALE_POINTER: f64 = f64::from_bits(1 << 32);
+
+/// What `sscanf(s, "%lf,%lf", &x, &y)` assigns.
+enum Scan2 {
+    /// It returned 0: nothing converted.
+    None,
+    /// It returned EOF (`-1`: the string is empty or blank), which C tests as true, with `x`
+    /// and `y` left uninitialised.
+    Eof,
+    /// One value, `x`.
+    One(f64),
+    /// Two values, `x` and `y`.
+    Two(f64, f64),
+}
+
+fn scan2(s: &str) -> Scan2 {
     let r = sscanf(s, "%lf,%lf");
     let [x, y, ..] = r.values;
     match r.count {
-        2 => (2, x, y),
-        1 => (1, x, x),
-        _ => (0, 0.0, 0.0),
+        2 => Scan2::Two(x, y),
+        1 => Scan2::One(x),
+        -1 => Scan2::Eof,
+        _ => Scan2::None,
     }
 }
 
@@ -74,10 +94,13 @@ fn parse_factor(s: &str, sepfact: f64, dflt: f64) -> Option<Expand> {
         Some(r) => (true, r),
         None => (false, s),
     };
-    let (i, x, y) = scan2(s);
-    if i == 0 {
-        return None;
-    }
+    // `if (i == 1) y = x`; on EOF, C's uninitialised x, y.
+    let (x, y) = match scan2(s) {
+        Scan2::None => return None,
+        Scan2::Eof => (STALE_POINTER, STALE_POINTER),
+        Scan2::One(x) => (x, x),
+        Scan2::Two(x, y) => (x, y),
+    };
     Some(if do_add {
         if sepfact > 1.0 {
             Expand {
@@ -286,19 +309,16 @@ fn simple_scale(g: &mut LGraph<'_>, sub: &Sub) -> bool {
     let Some(p) = g.gattr("scale") else {
         return false;
     };
-    let (i, sx, mut sy) = scan2(p);
-    if i == 0 {
-        return false;
-    }
     let iszero = |d: f64| d.abs() < 0.000_000_001;
-    if iszero(sx) {
-        return false;
-    }
-    if i == 1 {
-        sy = sx;
-    } else if iszero(sy) {
-        return false;
-    }
+    let (sx, sy) = match scan2(p) {
+        // On EOF C reads its uninitialised `sc.x`, stack residue, which `ISZERO` takes as 0
+        // (`docs/porting/crashes.md`, "parseFactor's uninitialised x, y").
+        Scan2::None | Scan2::Eof => return false,
+        Scan2::One(sx) if iszero(sx) => return false,
+        Scan2::One(sx) => (sx, sx),
+        Scan2::Two(sx, sy) if iszero(sx) || iszero(sy) => return false,
+        Scan2::Two(sx, sy) => (sx, sy),
+    };
     if sy == 1.0 && sx == 1.0 {
         return false;
     }
@@ -360,4 +380,32 @@ pub fn remove_overlap_as(g: &mut LGraph<'_>, sub: &Sub, flag: Option<&str>) -> b
 pub fn adjust_nodes(g: &mut LGraph<'_>, sub: &Sub) -> bool {
     let flag = g.gattr("overlap");
     remove_overlap_as(g, sub, flag)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // Issue #372: on a blank `sep`/`esep` C's sscanf returns EOF, which `parseFactor` takes
+    // as success with uninitialised `x`, `y`: a stale pointer, a positive subnormal. The
+    // values are C 16.1.0's (`dot -v`: `Node separation`, `Edge separation`, which print the
+    // subnormal as 0).
+    #[test]
+    fn parse_factor_reads_a_blank_value_as_a_stale_pointer() {
+        let f = |s, sepfact, dflt| parse_factor(s, sepfact, dflt).map(|e| (e.do_add, e.x, e.y));
+        let g = STALE_POINTER;
+        assert!(g > 0.0 && !g.is_normal());
+        for blank in ["", " ", "\t"] {
+            assert_eq!(f(blank, 1.0, 0.0), Some((false, 1.0, 1.0)));
+            assert_eq!(f(blank, SEPFACT, DFLT_MARGIN), Some((false, 1.0, 1.0)));
+        }
+        for plus in ["+", " + ", "+\n"] {
+            assert_eq!(f(plus, 1.0, 0.0), Some((true, g, g)));
+            assert_eq!(f(plus, SEPFACT, DFLT_MARGIN), Some((true, 4.0, 4.0)));
+            let e = f(plus, 1.0 / SEPFACT, SEPFACT * DFLT_MARGIN).unwrap();
+            assert!(e.0 && e.1 < g && e.1 > 0.0 && e.1 == e.2);
+        }
+        assert_eq!(f("x", 1.0, 0.0), None);
+        assert_eq!(f("+,1", 1.0, 0.0), None);
+    }
 }

@@ -668,3 +668,73 @@ call left there:
 The port does not model the second case. What C reads depends on the buffer's growth and on
 the order of every `parse_style` call in the run, which the port's renderers don't reproduce
 call for call. A truncated style gives no items in the port, C's result in the first case.
+
+## parseFactor's uninitialised x, y
+
+Closed: #372.
+
+`parseFactor` (`lib/neatogen/adjust.c:1020`) reads `sep` and `esep` with
+`if ((i = sscanf(s, "%lf,%lf", &x, &y)))`. On a value that is empty or blank after the
+optional `+`, `sscanf` returns `EOF` (-1), which passes the test. `x` and `y` are then
+uninitialised and `i != 1`, so C computes the margin from whatever their stack slots hold.
+
+What they hold was measured, not assumed. In the compiled function (the packaged arm64
+build), `x` and `y` live 0x38 and 0x40 bytes below the caller's frame. Every call follows
+an `agget` call from the same caller (`sepFactor`, `esepFactor`), so the slots hold what
+`agget` and its callees left there. In the build from source `parseFactor` is inlined, and
+they hold what earlier code left in `sepFactor`'s frame. Read with a debugger on every
+call, they are pointers (heap and stack addresses) or small integers, and their exact
+values change from run to run with address randomisation. These have their top 12 bits
+zero, so as a double each is a nonnegative subnormal (about 1e-314 here) or 0. Every use C
+makes of the margin in a layout then gives what 0 gives:
+
+- `1 + x / sepfact` is exactly 1.
+- An additive margin is added to node sizes and coordinates (at least 0.01 inch), where a
+  subnormal disappears.
+- `fmin(dflt, x / sepfact)` gives the subnormal and `fmax` gives `dflt`. `-v` prints both as
+  0 or as `dflt`.
+
+On `sep=""`, `" "`, `"+"`, `" + "`, `esep=""`, `"+"`, the same combined with a valid other
+value, and a `sep` declared only by a subgraph (so the root's value is `""`), the two
+C 16.1.0 builds (a packaged build and one built from source) gave the same separation
+values on every run. Across fdp, neato's overlap modes, splines and ortho, sfdp, circo and
+twopi, C's output was the same on every run.
+
+The values differ from call to call, and between the builds: in the packaged build, where
+`parseFactor` is a function of its own, the pointers read in `esepFactor` and in
+`sepFactor` called from `compoundEdges` differ by tens of bytes (`0x7c6d004c90` and
+`0x7c6d004c60`, with the same `y`). In the build from source, where it is inlined into
+`sepFactor`, they are `4` and a heap pointer, or a heap pointer and exactly 0. Only one
+place in C compares two of them: `compoundEdges`'s `sep value … is smaller than esep` note
+(`fdpgen/clusteredges.c:243`), reached when nodes touch. With `sep="+"` alone it tests
+about `G <= G / 1.25`, false since the factor dwarfs the gaps: no note. With `esep="+"` too
+it tests about `G <= G`, true where the `y` values are equal: a note. A model of 0 printed
+the note in both cases.
+
+So the port models the garbage as one fixed positive subnormal (`STALE_POINTER` in
+`neatogen/adjust.rs`, `2^32` as bits, about 2.1e-314). It acts as 0 in layouts and gives C's
+answer in that comparison. It is a model of undefined behaviour, measured on one build, the
+packaged arm64 one the goldens come from. The layouts agree on both builds, but the note
+does not: on 7 forms of it, the packaged build prints it for 3 (`+`/`+`, `+0`/`+`,
+`+`/blank) and the build from source, which reads different garbage, for none. The port
+follows the packaged build; another compiler or allocator can make C's garbage compare
+otherwise. The port matches C, the packaged build and the one with the
+port's math, on 9 `sep`/`esep` forms of that note in this PR and on 16 more in its review
+(declaration order, `sep` only in a subgraph, `pack`, `"+,"`), each stable over two C runs.
+`simpleScale`'s blank `scale` returns at its `ISZERO`, as C does. Two `f32` roundings of these
+margins (`compoundEdges`'s note and `neatosplines.c:625`'s `some nodes with margin`) were
+dropped with this: `expand_t` holds doubles (`adjust.h:41-44`).
+
+Measured on 612 inputs: 12 `sep`/`esep` forms × 17 engines and overlap modes × 3 graphs. C
+ran twice on each, and inputs where its two outputs differed were skipped. Over three
+measurements (the third with the stale-pointer model, the first two with 0):
+
+| Measurement | C varied | Port matched C, before | after | Still differ |
+|---|--:|--:|--:|--:|
+| first | 3 | 343 | 605 | 4 |
+| second | 6 | 343 | 604 | 2 |
+| third | 3 | 344 | 606 | 3 |
+
+Every input that still differs is `mode=ipsep` with clusters. There C's layout also changes
+between spellings of the same value (`sep="0"` and `sep="0,0"`), because VPSC breaks ties by
+heap address (#225).
