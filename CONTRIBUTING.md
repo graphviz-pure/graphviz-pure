@@ -72,10 +72,10 @@ fails if the layout or geom crates gain an `unwrap`, `expect`, index or integer-
 - **Pull requests** need the required CI checks to pass (tests on Linux, Windows and macOS
   arm64, the supply-chain check, and the cross-platform check that those platforms and WASM
   write the same bytes) and all review threads resolved. macOS x86-64 is checked after the
-  merge, on each push to master, and fuzzing runs once a day when the code changed; either
-  opens an issue when it fails. Rebase only when the pull request conflicts with `master`: the
-  merge queue tests each pull request merged onto `master` and the ones ahead of it. The "PR
-  risk report" job lists what a maintainer will read most closely:
+  merge, on each push to master, and opens an issue when it fails. Fuzzing runs once per
+  release, before it ([releasing.md](docs/releasing.md)). Rebase only when the pull request
+  conflicts with `master`: the merge queue tests each pull request merged onto `master` and the
+  ones ahead of it. The "PR risk report" job lists what a maintainer will read most closely:
   changes to workflows, scripts, build scripts and dependencies
   ([how pull requests are reviewed](docs/pull-requests.md)).
 
