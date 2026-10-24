@@ -681,11 +681,12 @@ uninitialised and `i != 1`, so C computes the margin from whatever their stack s
 What they hold was measured, not assumed. In the compiled function (the packaged arm64
 build), `x` and `y` live 0x38 and 0x40 bytes below the caller's frame. Every call follows
 an `agget` call from the same caller (`sepFactor`, `esepFactor`), so the slots hold what
-`agget` and its callees left there. Read with a debugger on every call, they are pointers
-(heap and stack addresses), and their exact values change from run to run with address
-randomisation. A user-space pointer has its top 12 bits zero, so as a double it is a
-nonnegative subnormal (about 1e-314 here). Every use C makes of the margin in a layout then
-gives what 0 gives:
+`agget` and its callees left there. In the build from source `parseFactor` is inlined, and
+they hold what earlier code left in `sepFactor`'s frame. Read with a debugger on every
+call, they are pointers (heap and stack addresses) or small integers, and their exact
+values change from run to run with address randomisation. These have their top 12 bits
+zero, so as a double each is a nonnegative subnormal (about 1e-314 here) or 0. Every use C
+makes of the margin in a layout then gives what 0 gives:
 
 - `1 + x / sepfact` is exactly 1.
 - An additive margin is added to node sizes and coordinates (at least 0.01 inch), where a
@@ -699,16 +700,25 @@ C 16.1.0 builds (a packaged build and one built from source) gave the same separ
 values on every run. Across fdp, neato's overlap modes, splines and ortho, sfdp, circo and
 twopi, C's output was the same on every run.
 
-The garbage is the same in every call of a run: each `parseFactor` call follows an `agget`
-from the same depth, which leaves the same pointer. The port models it as one fixed positive
-subnormal (`STALE_POINTER` in `neatogen/adjust.rs`, `2^32` as bits, about 2.1e-314): in
-layouts it acts as 0, and compared with a margin made from it, it is not 0. That comparison
-is `compoundEdges`'s `sep value … is smaller than esep` note (`fdpgen/clusteredges.c:243`),
-reached when nodes touch. With `sep="+"` alone, C compares `G <= G / 1.25` (false, no
-note); with `esep="+"` too, `G <= G` (true, a note). A model of 0 printed the note in both
-cases. The port matches C, the packaged build and the one with the port's math, on nine
-`sep`/`esep` forms of that comparison. `simpleScale`'s blank `scale` returns at its
-`ISZERO`, as C does.
+The values differ from call to call, and between the builds: in the packaged build, where
+`parseFactor` is a function of its own, the pointers read in `esepFactor` and in
+`sepFactor` called from `compoundEdges` differ by tens of bytes (`0x7c6d004c90` and
+`0x7c6d004c60`, with the same `y`). In the build from source, where it is inlined into
+`sepFactor`, they are `4` and a heap pointer, or a heap pointer and exactly 0. Only one
+place in C compares two of them: `compoundEdges`'s `sep value … is smaller than esep` note
+(`fdpgen/clusteredges.c:243`), reached when nodes touch. With `sep="+"` alone it tests
+about `G <= G / 1.25`, false since the factor dwarfs the gaps: no note. With `esep="+"` too
+it tests about `G <= G`, true where the `y` values are equal: a note. A model of 0 printed
+the note in both cases.
+
+So the port models the garbage as one fixed positive subnormal (`STALE_POINTER` in
+`neatogen/adjust.rs`, `2^32` as bits, about 2.1e-314). It acts as 0 in layouts and gives C's
+answer in that comparison. The port matches C, the packaged build and the one with the
+port's math, on 9 `sep`/`esep` forms of that note in this PR and on 16 more in its review
+(declaration order, `sep` only in a subgraph, `pack`, `"+,"`), each stable over two C runs.
+`simpleScale`'s blank `scale` returns at its `ISZERO`, as C does. Two `f32` roundings of these
+margins (`compoundEdges`'s note and `neatosplines.c:625`'s `some nodes with margin`) were
+dropped with this: `expand_t` holds doubles (`adjust.h:41-44`).
 
 Measured on 612 inputs: 12 `sep`/`esep` forms × 17 engines and overlap modes × 3 graphs. C
 ran twice on each, and inputs where its two outputs differed were skipped. Over three

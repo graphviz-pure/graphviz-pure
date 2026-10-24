@@ -53,11 +53,12 @@ pub struct AdjustData {
     pub scaling: f64,
 }
 
-/// What `parseFactor`'s uninitialised `x` and `y` hold after sscanf's EOF: a pointer `agget`
-/// left on the stack, which as a double is a positive subnormal, the same in every call of a
-/// run (`docs/porting/crashes.md`, "parseFactor's uninitialised x, y"). Added to a size or to
-/// 1 it vanishes, so C lays out as with 0; compared with another margin made from it, it is
-/// not 0.
+/// What `parseFactor`'s uninitialised `x` and `y` hold after sscanf's EOF: stack residue,
+/// pointers or small integers, which as doubles are nonnegative subnormals (or 0). They
+/// differ from call to call by a few bytes, and C's results depend only on that: added to a
+/// size or to 1 they vanish, and the one comparison of two of them (`compoundEdges`' note)
+/// has a factor of 1.25 between its sides. One fixed positive subnormal gives the same
+/// results (`docs/porting/crashes.md`, "parseFactor's uninitialised x, y").
 const STALE_POINTER: f64 = f64::from_bits(1 << 32);
 
 /// `sscanf(s, "%lf,%lf", &x, &y)` conversion count and values, then `if (i == 1) y = x`.
