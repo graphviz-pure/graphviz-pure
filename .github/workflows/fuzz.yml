@@ -4,8 +4,14 @@ name: Fuzzing
 # (.clusterfuzzlite/): panics, hangs and running out of memory on crafted DOT. No C oracle; the
 # differential fuzzer against C Graphviz is separate (docs/porting/fuzzing.md).
 #
-# - schedule, every 6 hours: a batch run that grows the corpus, then corpus pruning. The corpus,
-#   the crashes and the builds are kept as artifacts of this workflow.
+# - schedule, once a day: a batch run that grows the corpus, then corpus pruning. The corpus, the
+#   crashes and the builds are kept as artifacts of this workflow.
+# - A run whose inputs an earlier run already fuzzed is skipped. The inputs are what the fuzz
+#   targets are built from and seeded with (scripts/fuzz-inputs-key.sh): the crates' code, the
+#   fuzz workspace and the test graphs, not the version, docs, scripts or other tests. A run that
+#   passes uploads a `fuzzed-<key>` marker; the `inputs` job looks for one. So a day without code
+#   changes costs a minute, and a release branch, which only bumps the version and the changelog,
+#   reuses master's run. Dispatch with `force` to fuzz anyway.
 # Pull requests are not fuzzed here: the job took 25 minutes on every push of every pull request
 # and found one crash in 141 runs, while the agents fixing bugs waited for it. A failed scheduled
 # run opens an issue (scripts/ci-report-failure.sh), labelled `crash` when the run uploaded a
@@ -13,8 +19,14 @@ name: Fuzzing
 
 on:
   schedule:
-    - cron: "41 */6 * * *"
+    # 07:41 UTC: early morning in the maintainers' time zone, when nothing else queues.
+    - cron: "41 7 * * *"
   workflow_dispatch:
+    inputs:
+      force:
+        description: Fuzz even if these inputs were already fuzzed
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -26,11 +38,50 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  batch:
-    name: Batch fuzzing and corpus pruning
+  inputs:
+    name: Were these inputs fuzzed?
     if: >-
       (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
       && github.repository == 'graphviz-pure/graphviz-pure'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read # the markers of earlier runs
+    outputs:
+      key: ${{ steps.key.outputs.key }}
+      fuzzed: ${{ steps.key.outputs.fuzzed }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # Only markers from runs of this repository count. Artifacts expire after 90 days, after
+      # which the same inputs are fuzzed again.
+      - name: Look for a run that fuzzed the same inputs
+        id: key
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          REPO_ID: ${{ github.repository_id }}
+          FORCE: ${{ inputs.force }}
+        run: |
+          key=$(scripts/fuzz-inputs-key.sh)
+          echo "key=$key" >> "$GITHUB_OUTPUT"
+          run=$(gh api "repos/$GH_REPO/actions/artifacts?name=fuzzed-$key&per_page=100" \
+            --jq "[.artifacts[] | select(.expired | not) | select(.workflow_run.head_repository_id == $REPO_ID)]
+                  | first | .workflow_run.id // empty")
+          if [ -n "$run" ] && [ "$FORCE" != true ]; then
+            echo "Inputs $key were fuzzed by run $run: skipping." | tee -a "$GITHUB_STEP_SUMMARY"
+            echo "fuzzed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "Fuzzing inputs $key${run:+ again (force)}." | tee -a "$GITHUB_STEP_SUMMARY"
+            echo "fuzzed=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  batch:
+    name: Batch fuzzing and corpus pruning
+    needs: inputs
+    if: needs.inputs.outputs.fuzzed != 'true'
     runs-on: ubuntu-24.04
     # About 15 minutes to build, 60 to fuzz and up to 50 to prune.
     timeout-minutes: 150
@@ -65,10 +116,23 @@ jobs:
           mode: prune
           sanitizer: address
           fuzz-seconds: 3000
+      # The marker the inputs job looks for, uploaded only when fuzzing and pruning both passed.
+      - name: Record the inputs as fuzzed
+        env:
+          KEY: ${{ needs.inputs.outputs.key }}
+          COMMIT: ${{ github.sha }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/marker"
+          echo "fuzzed $COMMIT, inputs $KEY" > "$RUNNER_TEMP/marker/fuzzed.txt"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: fuzzed-${{ needs.inputs.outputs.key }}
+          path: ${{ runner.temp }}/marker/fuzzed.txt
+          retention-days: 90
 
   report:
     name: Open an issue for a failed run
-    needs: batch
+    needs: [inputs, batch]
     if: ${{ failure() && github.event_name == 'schedule' && github.repository == 'graphviz-pure/graphviz-pure' }}
     runs-on: ubuntu-24.04
     permissions:

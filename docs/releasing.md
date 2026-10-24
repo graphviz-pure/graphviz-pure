@@ -46,8 +46,10 @@ every command below.
    the branch. Write the release's intro paragraph where the script left its placeholder and fix
    superseded entries, in one push. A push restarts CI but not the dry run or fuzzing: start
    `release.yml` and `fuzz.yml` on the branch again (`$GH workflow run release.yml --ref
-   release/vX.Y.Z`, the same for `fuzz.yml`). `release-prep.sh` and `release-ping.sh` refuse to write as the
-   owner.
+   release/vX.Y.Z`, the same for `fuzz.yml`). Fuzzing takes about a minute when master's
+   newest fuzzed inputs are the branch's, since the release only changes the version and the
+   changelog; it fuzzes for an hour otherwise. `release-prep.sh` and `release-ping.sh` refuse to
+   write as the owner.
 3. **Check readiness:** `scripts/release-ready.sh X.Y.Z PR` prints a Markdown checklist and exits
    0 only when it all passes: no open `priority:p1`/`priority:p2` issue and no open
    "Cross-platform fails on master" issue; the newest runs of `ci.yml`, `cross-platform.yml`,
