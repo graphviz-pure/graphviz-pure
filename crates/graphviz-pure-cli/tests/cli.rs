@@ -8507,25 +8507,61 @@ fn issue285_arrow_type_warnings_print_once_per_layout() {
 
 /// Issue #370: `parse_reclbl` measures each field as it closes (`make_label` at
 /// `lib/common/shapes.c:3444`), so a field read before a syntax error, nested ones included,
-/// is measured and warned about before `bad label format`. Output is C 16.1.0's.
+/// is measured and warned about before `bad label format`. The width warning prints once
+/// per process, so each label runs alone. Output is C 16.1.0's.
 #[test]
 fn issue370_a_record_field_before_a_syntax_error_is_measured() {
+    for (label, byte) in [("{¤|", 194), ("{x|{ÿ|", 195)] {
+        let src = format!("digraph {{ a [shape=record, label=\"{label}\"] }}");
+        let (out, err, ok) = run(&["-Tcanon"], &src);
+        assert!(!ok);
+        assert_eq!(
+            err,
+            format!(
+                "Warning: Warning: no value for width of non-ASCII character {byte}. Falling \
+                 back to width of space character\nError: bad label format {label}\n"
+            )
+        );
+        assert_eq!(
+            out,
+            format!(
+                "digraph {{\n\tnode [label=\"\\N\"];\n\ta\t[label=\"{label}\",\n\t\t\
+                 shape=record];\n}}\n"
+            )
+        );
+    }
+}
+
+/// Issue #370: in an HTML record label, a hard space after a sub-table (`x|{a}\ |`) adds
+/// text to the field before the table, so the last close measures field 0 a second time
+/// (`shapes.c:3444` with `fp` still field 0) and keeps that label. Output is C 16.1.0's.
+#[test]
+fn issue370_html_record_hard_space_after_a_subtable_remeasures_the_field() {
     let (out, err, ok) = run(
-        &["-Tcanon"],
-        "digraph { a [shape=record, label=\"{¤|\"]; b [shape=record, label=\"{x|{ÿ|\"] }",
+        &["-Txdot"],
+        r"digraph { a [shape=record, label=<x|{a}\ |>] }",
     );
-    assert!(!ok);
-    assert_eq!(
-        err,
-        "Warning: Warning: no value for width of non-ASCII character 194. Falling back to \
-         width of space character\n\
-         Error: bad label format {¤|\n\
-         Error: bad label format {x|{ÿ|\n"
-    );
+    assert!(ok, "{err}");
+    assert_eq!(err, "");
     assert_eq!(
         out,
-        "digraph {\n\tnode [label=\"\\N\"];\n\ta\t[label=\"{¤|\",\n\t\tshape=record];\n\
-         \tb\t[label=\"{x|{ÿ|\",\n\t\tshape=record];\n}\n"
+        r#"digraph {
+	graph [_draw_="c 9 -#fffffe00 C 7 -#ffffff P 4 0 0 0 37 61.6 37 61.6 0 ",
+		bb="0,0,61.604,37",
+		xdotversion=1.7
+	];
+	node [label="\N"];
+	a	[_draw_="c 7 -#000000 p 4 0 0.5 0 36.5 61.6 36.5 61.6 0.5 c 7 -#000000 L 2 19.89 0.5 19.89 36.5 c 7 -#000000 L 2 42.1 0.5 42.1 36.5 ",
+		_ldraw_="F 14 11 -Times-Roman c 7 -#000000 T 8 12.9 -1 3.89 1 -\\ F 14 11 -Times-Roman c 7 -#000000 T 27.89 13 -1 6.21 1 -a F 14 11 -Times-Roman \
+c 7 -#000000 T 50.1 12.9 -1 3.5 1 -  ",
+		height=0.51389,
+		label=<x|{a}\ |>,
+		pos="30.802,18.5",
+		rects="0,0.5,19.89,36.5 19.89,0.7,42.104,36.5 42.104,0.5,61.604,36.5",
+		shape=record,
+		width=0.8556];
+}
+"#
     );
 }
 
