@@ -210,6 +210,49 @@ impl<'g> AuxSyms<'g> {
         AuxSyms { main, node, edge }
     }
 
+    /// auxg's dictionaries: agopen's ProtoGraph graph symbols and `rank`; every node and
+    /// edge symbol of the main graph's root, with its default, including those only a
+    /// subgraph's defaults declared; then `headport`, `tailport` and `weight` with `""`
+    /// where the main graph has none (cloneGraph, setState).
+    fn dicts(&self) -> graphviz_pure_core::AttrDicts {
+        use graphviz_pure_core::AttrSym;
+        fn declare(
+            dict: &mut std::collections::BTreeMap<String, AttrSym>,
+            main: &std::collections::BTreeMap<String, AttrSym>,
+            names: &[String],
+        ) {
+            for (id, k) in names.iter().enumerate() {
+                let sym = match main.get(k) {
+                    Some(m) => AttrSym { id, ..m.clone() },
+                    None => AttrSym {
+                        defval: String::new(),
+                        print: false,
+                        id,
+                        html: false,
+                        html_defval: false,
+                        proto: false,
+                    },
+                };
+                dict.insert(k.clone(), sym);
+            }
+        }
+        let mut d = graphviz_pure_core::AttrDicts::default();
+        let mut graph = Self::names(&self.main.graph);
+        graph.retain(|k| self.main.graph.get(k).is_some_and(|s| s.proto));
+        if !graph.iter().any(|k| k == "rank") {
+            graph.push("rank".to_string());
+        }
+        declare(&mut d.graph, &self.main.graph, &graph);
+        // agattr(auxg, AGRAPH, "rank", ""): a ProtoGraph `rank` keeps its id, with default "".
+        if let Some(r) = d.graph.get_mut("rank") {
+            r.defval = String::new();
+            r.html_defval = false;
+        }
+        declare(&mut d.node, &self.main.node, &self.node);
+        declare(&mut d.edge, &self.main.edge, &self.edge);
+        d
+    }
+
     /// The aux ids of a main dictionary's symbols: auxg copies the ProtoGraph's symbols with
     /// their ids, as the root did, so they come first in id order; cloneGraph then declares
     /// the others in name order.
@@ -621,8 +664,8 @@ impl Dot<'_> {
     fn finish_splines(&mut self) {
         self.splines_done = true;
         let declared = |k: &str| self.edge_attr_declared(k);
-        let has_head = declared("headlabel");
-        let has_tail = declared("taillabel");
+        let has_head = !self.port_label_syms_null && declared("headlabel");
+        let has_tail = !self.port_label_syms_null && declared("taillabel");
         if (has_head || has_tail) && (declared("labelangle") || declared("labeldistance")) {
             for n in self.nodes_of(0) {
                 if has_head {
@@ -1057,6 +1100,9 @@ impl Dot<'_> {
         aux.edge_defaults = input.edge_defaults.clone();
         let empty = graphviz_pure_core::AttrDicts::default();
         let syms = AuxSyms::new(input.dicts.first().unwrap_or(&empty));
+        if !input.dicts.is_empty() {
+            aux.dicts = vec![syms.dicts()];
+        }
         let rightx = self.nodes[hn0].coord.x;
         let leftx = self.nodes[tn0].coord.x;
         let (tn, hn) = if flip { (hn0, tn0) } else { (tn0, hn0) };
@@ -1175,6 +1221,7 @@ impl Dot<'_> {
         d.graphs[0].ranksep = self.graphs[0].ranksep;
         d.cl_type = self.cl_type;
         d.concentrate = self.concentrate;
+        d.port_label_syms_null = true;
         d.et = et;
         d.dot_init_subg();
         d.dot_init_node_edge();
@@ -2476,6 +2523,48 @@ mod tests {
         syms.fix_edge(&mut e);
         assert_eq!(e.get("penwidth").map(String::as_str), Some("5"));
         assert_eq!(e.get("fontcolor"), None);
+    }
+
+    /// #376: cloneGraph declares every node and edge symbol of the main root on auxg, with
+    /// its default, including one only a subgraph's defaults declared (`samehead` here,
+    /// default `""`), then `headport`/`tailport`/`weight`; auxg's graph dictionary holds
+    /// the ProtoGraph's symbols and `rank`.
+    #[test]
+    fn aux_graph_declares_every_main_symbol_as_clone_graph_does() {
+        let mut graph = dict(&["size", "label", "rankdir"]);
+        graph.get_mut("size").unwrap().proto = true;
+        graph.get_mut("label").unwrap().proto = false;
+        let mut node = dict(&["label", "shape"]);
+        node.get_mut("label").unwrap().defval = "\\N".to_string();
+        node.get_mut("shape").unwrap().defval = "box".to_string();
+        let main = graphviz_pure_core::AttrDicts {
+            graph,
+            node,
+            edge: dict(&["samehead", "color"]),
+        };
+        let d = AuxSyms::new(&main).dicts();
+        fn ids(
+            m: &std::collections::BTreeMap<String, graphviz_pure_core::AttrSym>,
+        ) -> Vec<(usize, &str, &str)> {
+            let mut v: Vec<(usize, &str, &str)> = m
+                .iter()
+                .map(|(k, s)| (s.id, k.as_str(), s.defval.as_str()))
+                .collect();
+            v.sort();
+            v
+        }
+        assert_eq!(ids(&d.graph), [(0, "size", ""), (1, "rank", "")]);
+        assert_eq!(ids(&d.node), [(0, "label", "\\N"), (1, "shape", "box")]);
+        assert_eq!(
+            ids(&d.edge),
+            [
+                (0, "color", ""),
+                (1, "samehead", ""),
+                (2, "headport", ""),
+                (3, "tailport", ""),
+                (4, "weight", "")
+            ]
+        );
     }
 
     /// `-N`/`-E` declare their attributes on cgraph's ProtoGraph, which auxg copies with the
