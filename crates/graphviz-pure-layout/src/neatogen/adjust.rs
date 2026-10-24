@@ -8,6 +8,7 @@
 
 use crate::common::types::{LGraph, Sub};
 use crate::common::utils::{map_bool, mapbool};
+use graphviz_pure_core::diag::fmt_f;
 use graphviz_pure_core::math;
 use graphviz_pure_core::strtod::{sscanf, strtod_rest};
 
@@ -128,38 +129,48 @@ fn parse_factor(s: &str, sepfact: f64, dflt: f64) -> Option<Expand> {
 
 /// `sepFactor(g)`: node separation for overlap removal.
 pub fn sep_factor(g: &LGraph<'_>) -> Expand {
-    if let Some(e) = g.gattr("sep").and_then(|s| parse_factor(s, 1.0, 0.0)) {
-        return e;
-    }
-    if let Some(e) = g
-        .gattr("esep")
-        .and_then(|s| parse_factor(s, SEPFACT, DFLT_MARGIN))
-    {
-        return e;
-    }
-    Expand {
-        x: DFLT_MARGIN,
-        y: DFLT_MARGIN,
-        do_add: true,
-    }
+    let e = g
+        .gattr("sep")
+        .and_then(|s| parse_factor(s, 1.0, 0.0))
+        .or_else(|| {
+            g.gattr("esep")
+                .and_then(|s| parse_factor(s, SEPFACT, DFLT_MARGIN))
+        })
+        .unwrap_or(Expand {
+            x: DFLT_MARGIN,
+            y: DFLT_MARGIN,
+            do_add: true,
+        });
+    verbose_separation("Node", &e);
+    e
+}
+
+/// sepFactor's and esepFactor's `-v` line.
+fn verbose_separation(what: &str, e: &Expand) {
+    graphviz_pure_core::verbose_msg!(
+        "{what} separation: add={} ({},{})\n",
+        i32::from(e.do_add),
+        fmt_f(e.x, 6),
+        fmt_f(e.y, 6)
+    );
 }
 
 /// `esepFactor(g)`: edge separation used to grow obstacles for routing.
 pub fn esep_factor(g: &LGraph<'_>) -> Expand {
-    if let Some(e) = g.gattr("esep").and_then(|s| parse_factor(s, 1.0, 0.0)) {
-        return e;
-    }
-    if let Some(e) = g
-        .gattr("sep")
-        .and_then(|s| parse_factor(s, 1.0 / SEPFACT, SEPFACT * DFLT_MARGIN))
-    {
-        return e;
-    }
-    Expand {
-        x: SEPFACT * DFLT_MARGIN,
-        y: SEPFACT * DFLT_MARGIN,
-        do_add: true,
-    }
+    let e = g
+        .gattr("esep")
+        .and_then(|s| parse_factor(s, 1.0, 0.0))
+        .or_else(|| {
+            g.gattr("sep")
+                .and_then(|s| parse_factor(s, 1.0 / SEPFACT, SEPFACT * DFLT_MARGIN))
+        })
+        .unwrap_or(Expand {
+            x: SEPFACT * DFLT_MARGIN,
+            y: SEPFACT * DFLT_MARGIN,
+            do_add: true,
+        });
+    verbose_separation("Edge", &e);
+    e
 }
 
 const TABLE: &[(AdjustMode, &str)] = &[
@@ -199,6 +210,40 @@ pub fn graph_adjust_mode(g: &LGraph<'_>, dflt: Option<&str>) -> AdjustData {
 
 /// `getAdjustMode(g, s, dp)`.
 pub fn get_adjust_mode(g: &LGraph<'_>, s: &str) -> AdjustData {
+    let dp = adjust_mode(g, s);
+    // dp->value is left uninitialised outside prism; the port prints 0
+    graphviz_pure_core::verbose_msg!(
+        "overlap: {} value {} scaling {}\n",
+        mode_print(dp.mode),
+        dp.value,
+        fmt_f(dp.scaling, 4)
+    );
+    dp
+}
+
+/// `adjustMode[].print`: the name `getAdjustMode` prints for a mode.
+fn mode_print(m: AdjustMode) -> &'static str {
+    match m {
+        AdjustMode::None => "none",
+        AdjustMode::Prism => "prism",
+        AdjustMode::Vor => "Voronoi",
+        AdjustMode::NScale => "scaling",
+        AdjustMode::Compress => "compress",
+        AdjustMode::Vpsc => "vpsc",
+        AdjustMode::Ipsep => "ipsep",
+        AdjustMode::Scale => "old scaling",
+        AdjustMode::ScaleXY => "x and y scaling",
+        AdjustMode::Ortho | AdjustMode::OrthoYX => "orthogonal constraints",
+        AdjustMode::OrthoXY => "xy orthogonal constraints",
+        AdjustMode::OrthoYXrev => "yx orthogonal constraints",
+        AdjustMode::POrtho | AdjustMode::POrthoYX => "pseudo-orthogonal constraints",
+        AdjustMode::POrthoXY => "xy pseudo-orthogonal constraints",
+        AdjustMode::POrthoYXrev => "yx pseudo-orthogonal constraints",
+    }
+}
+
+/// The mode [`get_adjust_mode`] picks.
+fn adjust_mode(g: &LGraph<'_>, s: &str) -> AdjustData {
     let mut dp = AdjustData {
         mode: AdjustMode::None,
         value: 0,
@@ -322,6 +367,7 @@ fn simple_scale(g: &mut LGraph<'_>, sub: &Sub) -> bool {
     if sy == 1.0 && sx == 1.0 {
         return false;
     }
+    graphviz_pure_core::verbose_msg!("scale = ({},{})\n", fmt_f(sx, 3), fmt_f(sy, 3));
     for &n in &sub.nodes {
         g.nodes[n].pos[0] *= sx;
         g.nodes[n].pos[1] *= sy;
@@ -339,6 +385,7 @@ pub fn remove_overlap_with(g: &mut LGraph<'_>, sub: &Sub, am: &AdjustData) -> bo
     if am.mode == AdjustMode::None {
         return nret;
     }
+    graphviz_pure_core::verbose_msg!("Adjusting {} using {}\n", sub.name, mode_print(am.mode));
     let ret = match am.mode {
         AdjustMode::NScale => super::scadjust::sc_adjust(g, sub, 1),
         AdjustMode::ScaleXY => super::scadjust::sc_adjust(g, sub, 0),

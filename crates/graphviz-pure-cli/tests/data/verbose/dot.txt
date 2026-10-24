@@ -1,0 +1,28 @@
+pack info:
+  mode   undefined
+  size   0
+  flags  0
+  margin 8
+pack info:
+  mode   node
+  size   0
+  flags  0
+fontname: "Times-Roman" resolved to: [internal hard-coded]
+[Graphviz] dotinit.c:305: TS Starting phase 1 [dot_rank]
+network simplex:  3 nodes 3 edges maxiter=2147483647 balance=1
+network simplex: 3 nodes 3 edges 0 iter T sec
+network simplex:  1 nodes 0 edges maxiter=2147483647 balance=1
+network simplex: 1 nodes 0 edges 0 iter T sec
+Maxrank = 2, minrank = 0
+[Graphviz] dotinit.c:311: TS Starting phase 2 [dot_mincross]
+mincross: pass 0 iter 0 trying 0 cur_cross 0 best_cross 0
+mincross: pass 0 iter 0 trying 0 cur_cross 0 best_cross 0
+merge2: graph %1, rank 0 has only 2 < 3 nodes
+merge2: graph %1, rank 1 has only 2 < 3 nodes
+merge2: graph %1, rank 2 has only 1 < 2 nodes
+mincross %1: 0 crossings, T secs.
+[Graphviz] dotinit.c:320: TS Starting phase 3 [dot_position]
+network simplex:  9 nodes 10 edges maxiter=2147483647 balance=2
+network simplex: 9 nodes 10 edges 0 iter T sec
+[Graphviz] routespl.c:235: TS routesplines: 3 edges, 11 boxes T sec
+[Graphviz] emit.c:4323: TS gvRenderJobs %1: T secs.

@@ -47,6 +47,19 @@ fn circumscribed_corner(a: f64, b: f64, i: usize, nsides: usize) -> Point {
     line_intersection(p0, m0, p1, m1)
 }
 
+/// makeSpline's and makePolyline's `Verbose > 1` line: `<kind> <tail> <head>`.
+pub(crate) fn verbose_edge(g: &LGraph<'_>, kind: &str, e: usize) {
+    if graphviz_pure_core::diag::verbose_byte() > 1
+        && let Some(ed) = g.edges.get(e)
+    {
+        let [t, h] = graphviz_pure_core::agnameof_buffer([
+            g.node_agnameof(ed.tail),
+            g.node_agnameof(ed.head),
+        ]);
+        graphviz_pure_core::diag::fprintf_stderr(&format!("{kind} {t} {h}\n"));
+    }
+}
+
 /// `makeObstacle(n, pmargin, isOrtho=false)`: the node's outline as a
 /// clockwise polygon grown by the margin.
 pub fn make_obstacle(g: &LGraph<'_>, n: usize, pmargin: &Expand) -> Option<Vec<Point>> {
@@ -232,6 +245,7 @@ impl Router {
             return;
         };
         let h = g.edges[e].head;
+        verbose_edge(g, "spline", e);
         clip_and_install(g, e, h, &spline);
         add_edge_labels(g, e);
     }
@@ -240,6 +254,7 @@ impl Router {
     fn make_polyline(&self, g: &mut LGraph<'_>, e: usize) {
         let spl = make_polyline(&g.edges[e].path);
         let h = g.edges[e].head;
+        verbose_edge(g, "polyline", e);
         clip_and_install(g, e, h, &spl);
         add_edge_labels(g, e);
     }

@@ -1004,6 +1004,7 @@ fn finish_edge(g: &mut LGraph<'_>, e: usize, mut spl: Vec<Point>, flip: bool) {
         spl.reverse();
     }
     let h = g.edges[e].head;
+    super::routing::verbose_edge(g, "spline", e);
     clip_and_install(g, e, h, &spl);
     add_edge_labels(g, e);
 }

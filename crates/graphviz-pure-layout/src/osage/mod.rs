@@ -13,7 +13,7 @@ use crate::common::utils::late_int;
 use crate::fdpgen::{ClusterTree, mk_clusters, subgraph_member_nodes};
 use crate::neatogen::adjust::DFLT_MARGIN;
 use crate::neatogen::neatosplines::{spline_edges_main, spline_edges0};
-use crate::pack::{PK_USER_VALS, PackInfo, PackMode, get_pack, get_pack_mode_info, put_rects};
+use crate::pack::{PK_USER_VALS, PackInfo, PackMode, put_rects};
 use graphviz_pure_core::{AttrMap, BoundingBox, Graph, Point, Result};
 
 /// Size of an empty cluster, in points.
@@ -67,6 +67,7 @@ impl Osage<'_, '_> {
 
     /// `layout(g, depth)`.
     fn layout(&mut self, c: Option<usize>, depth: i32) {
+        self.trace(depth, &format!("layout {}", self.gname(c)));
         let kids = self.tree.kids(c).to_vec();
         let mut nvs = 0usize;
         for &sc in &kids {
@@ -87,17 +88,12 @@ impl Osage<'_, '_> {
 
         // getPackInfo(g, l_array, DFLT_MARGIN, &pinfo)
         let attrs = self.attrs(c);
-        let mut pinfo = PackInfo {
-            margin: get_pack(
-                attrs.get("pack").map(String::as_str),
-                DFLT_MARGIN as i64,
-                DFLT_MARGIN as i64,
-            ) as u32,
-            ..PackInfo::default()
-        };
-        let pmode = get_pack_mode_info(
+        let mut pinfo = PackInfo::default();
+        let pmode = crate::pack::pack_info(
+            attrs.get("pack").map(String::as_str),
             attrs.get("packmode").map(String::as_str),
             PackMode::Array,
+            DFLT_MARGIN as i64,
             &mut pinfo,
         );
         if pmode < PackMode::Graph {
@@ -163,10 +159,14 @@ impl Osage<'_, '_> {
             rootbb.ur.x = rootbb.ur.x.max(bb.ur.x);
             rootbb.ur.y = rootbb.ur.y.max(bb.ur.y);
             match children[i] {
-                Child::Clust(sc) => self.g.clusters[sc].bb = bb,
+                Child::Clust(sc) => {
+                    self.g.clusters[sc].bb = bb;
+                    self.trace_bb(depth, &self.gname(Some(sc)), bb);
+                }
                 Child::Node(n) => {
                     self.g.nodes[n].coord =
                         Point::new((bb.ll.x + bb.ur.x) / 2.0, (bb.ll.y + bb.ur.y) / 2.0);
+                    self.trace_node(depth, n);
                 }
             }
         }
@@ -196,6 +196,7 @@ impl Osage<'_, '_> {
         rootbb.ur.x += margin;
         rootbb.ll.y -= margin + border[0].y;
         rootbb.ur.y += margin + border[2].y;
+        self.trace_bb(depth, &self.gname(c), rootbb);
 
         // Translate so that rootbb.LL is the origin.
         for ch in &children {
@@ -204,20 +205,65 @@ impl Osage<'_, '_> {
                     let bb = &mut self.g.clusters[sc].bb;
                     bb.ll = Point::new(bb.ll.x - rootbb.ll.x, bb.ll.y - rootbb.ll.y);
                     bb.ur = Point::new(bb.ur.x - rootbb.ll.x, bb.ur.y - rootbb.ll.y);
+                    let bb = *bb;
+                    self.trace_bb(depth, &self.gname(Some(sc)), bb);
                 }
                 Child::Node(n) => {
                     let p = &mut self.g.nodes[n].coord;
                     *p = Point::new(p.x - rootbb.ll.x, p.y - rootbb.ll.y);
+                    self.trace_node(depth, n);
                 }
             }
         }
         let ur = Point::new(rootbb.ur.x - rootbb.ll.x, rootbb.ur.y - rootbb.ll.y);
-        self.set_bb(c, BoundingBox::new(0.0, 0.0, ur.x, ur.y));
+        let bb = BoundingBox::new(0.0, 0.0, ur.x, ur.y);
+        self.trace_bb(depth, &self.gname(c), bb);
+        self.set_bb(c, bb);
+    }
+
+    /// `agnameof(g)` of the root or a cluster.
+    fn gname(&self, c: Option<usize>) -> String {
+        match c.and_then(|c| self.tree.subgraph.get(c)) {
+            Some(&s) => self.g.src.subgraph_name(s),
+            None => self.g.src.root_name().to_string(),
+        }
+    }
+
+    /// osage's `Verbose > 1` trace: `indent(depth)` and a line.
+    fn trace(&self, depth: i32, line: &str) {
+        if graphviz_pure_core::diag::verbose_byte() > 1 {
+            let indent = "  ".repeat(depth.max(0) as usize);
+            graphviz_pure_core::diag::fprintf_stderr(&format!("{indent}{line}\n"));
+        }
+    }
+
+    fn trace_bb(&self, depth: i32, name: &str, bb: BoundingBox) {
+        let f = |v: f64| graphviz_pure_core::diag::fmt_f(v, 6);
+        self.trace(
+            depth,
+            &format!(
+                "{name} : {} {} {} {}",
+                f(bb.ll.x),
+                f(bb.ll.y),
+                f(bb.ur.x),
+                f(bb.ur.y)
+            ),
+        );
+    }
+
+    fn trace_node(&self, depth: i32, n: usize) {
+        let f = |v: f64| graphviz_pure_core::diag::fmt_f(v, 6);
+        let p = self.g.nodes.get(n).map(|nd| nd.coord).unwrap_or_default();
+        self.trace(
+            depth,
+            &format!("{} : {} {}", self.g.node_agnameof(n).name, f(p.x), f(p.y)),
+        );
     }
 
     /// `reposition(g, depth)`.
     fn reposition(&mut self, c: Option<usize>, depth: i32) {
         let bb = self.bb(c);
+        self.trace(depth, &format!("reposition {}", self.gname(c)));
         if depth > 0 {
             for n in self.members(c) {
                 if self.parent[n] != Some(c) {
@@ -225,6 +271,7 @@ impl Osage<'_, '_> {
                 }
                 self.g.nodes[n].coord.x += bb.ll.x;
                 self.g.nodes[n].coord.y += bb.ll.y;
+                self.trace_node(depth, n);
             }
         }
         for sc in self.tree.kids(c).to_vec() {
@@ -234,6 +281,8 @@ impl Osage<'_, '_> {
                 s.ll.y += bb.ll.y;
                 s.ur.x += bb.ll.x;
                 s.ur.y += bb.ll.y;
+                let s = *s;
+                self.trace_bb(depth, &self.gname(Some(sc)), s);
             }
             self.reposition(Some(sc), depth + 1);
         }

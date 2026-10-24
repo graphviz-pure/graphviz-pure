@@ -170,23 +170,45 @@ impl Dot<'_> {
         }
         self.init_mincross(g)?;
         let mut nc: i64 = 0;
+        // C's `goto done` on a failed pass runs cleanup2, which reports the crossings so far;
+        // the port abandons the layout, so it reports them alone
+        macro_rules! pass {
+            ($e:expr) => {
+                match $e {
+                    Ok(v) => v,
+                    Err(e) => {
+                        self.report_crossings(g, nc);
+                        return Err(e);
+                    }
+                }
+            };
+        }
         for comp in 0..self.graphs[g].comp.len() {
             self.init_mccomp(g, comp);
-            nc += self.mincross(g, 0)?;
+            nc += pass!(self.mincross(g, 0));
         }
         self.merge2(g);
         for c in self.graphs[g].clust.clone() {
-            nc += self.mincross_clust(c)?;
+            nc += pass!(self.mincross_clust(c));
         }
         if !self.graphs[g].clust.is_empty() {
             let rem = self.agget(g, "remincross");
             if rem.is_none() || mapbool(rem) {
                 self.mark_lowclusters(g);
                 self.remincross = true;
-                nc = self.mincross(g, 2)?;
+                nc = pass!(self.mincross(g, 2));
             }
         }
         self.cleanup2(g, nc, true)
+    }
+
+    /// cleanup2's `-v` line: the crossings and the time since init_mincross.
+    fn report_crossings(&self, g: G, nc: i64) {
+        graphviz_pure_core::verbose_msg!(
+            "mincross {}: {nc} crossings, {} secs.\n",
+            self.graph_name(g),
+            graphviz_pure_core::diag::fmt_f(graphviz_pure_core::diag::elapsed_sec(), 2)
+        );
     }
 
     fn init_mccomp(&mut self, g: G, c: usize) {
@@ -484,6 +506,10 @@ impl Dot<'_> {
             }
             let mut trying = 0;
             for iter in 0..maxthispass {
+                graphviz_pure_core::verbose_msg!(
+                    "mincross: pass {pass} iter {iter} trying {trying} cur_cross {cur_cross} \
+                     best_cross {best_cross}\n"
+                );
                 let t = trying;
                 trying += 1;
                 if t >= self.min_quit {
@@ -587,6 +613,11 @@ impl Dot<'_> {
             for i in 0..self.rank_n(g, r) {
                 match self.rv(g, r, i) {
                     None => {
+                        graphviz_pure_core::verbose_msg!(
+                            "merge2: graph {}, rank {r} has only {i} < {} nodes\n",
+                            self.graph_name(g),
+                            self.rank_n(g, r)
+                        );
                         self.rk_mut(g, r).n = i;
                         break;
                     }
@@ -596,7 +627,7 @@ impl Dot<'_> {
         }
     }
 
-    fn cleanup2(&mut self, g: G, _nc: i64, has_vlists: bool) -> Result<(), String> {
+    fn cleanup2(&mut self, g: G, nc: i64, has_vlists: bool) -> Result<(), String> {
         if has_vlists {
             for c in self.graphs[g].clust.clone() {
                 self.rec_reset_vlists(c)?;
@@ -619,6 +650,7 @@ impl Dot<'_> {
             // free_matrix leaves a dangling (non-NULL) pointer in C; flat_edges()
             // only tests it for NULL, so the matrix is kept.
         }
+        self.report_crossings(g, nc);
         Ok(())
     }
 
@@ -776,6 +808,9 @@ impl Dot<'_> {
     }
 
     fn init_mincross(&mut self, g: G) -> Result<(), String> {
+        if graphviz_pure_core::diag::verbose_on() {
+            graphviz_pure_core::diag::start_timer();
+        }
         // Network simplex normalises each component's ranks to start at 0, but returns
         // before that when `nslimit1` allows no iteration (`maxiter <= 0`, ns.c:984), and
         // newrank's `readout_levels` only shifts a single component's ranks down from above

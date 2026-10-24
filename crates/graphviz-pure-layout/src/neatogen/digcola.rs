@@ -879,8 +879,14 @@ pub fn stress_majorization_with_hierarchy(
         return Ok(0);
     }
 
+    use graphviz_pure_core::diag::{elapsed_sec, fmt_f, start_timer};
+    let verbose = graphviz_pure_core::diag::verbose_on();
+    if verbose {
+        start_timer();
+    }
     let mut dij: Option<Vec<f32>> = None;
     if model == MODEL_SUBSET {
+        graphviz_pure_core::verbose_msg!("Calculating subset model");
         dij = Some(compute_apsp_artificial_weights_packed(graph, n));
     } else if model == MODEL_CIRCUIT {
         dij = circuit_model(graph, n);
@@ -893,9 +899,14 @@ pub fn stress_majorization_with_hierarchy(
             );
         }
     } else if model == MODEL_MDS {
+        graphviz_pure_core::verbose_msg!("Calculating MDS model");
         dij = mds_model(graph, n);
     }
-    let mut dij = dij.unwrap_or_else(|| compute_apsp_packed(graph, n));
+    let mut dij = dij.unwrap_or_else(|| {
+        graphviz_pure_core::verbose_msg!("Calculating shortest paths");
+        compute_apsp_packed(graph, n)
+    });
+    graphviz_pure_core::diag::verbose_phase("Setting initial positions");
     let length = n + n * (n - 1) / 2;
 
     if !smart_ini {
@@ -939,6 +950,7 @@ pub fn stress_majorization_with_hierarchy(
         .map(|i| d_coords[i][..n].iter().map(|&v| v as f32).collect())
         .collect();
     let constant_term = (n * (n - 1) / 2) as f64;
+    graphviz_pure_core::verbose_msg!(": {} sec", fmt_f(elapsed_sec(), 2));
 
     let mut lap2 = dij;
     let lap_length = n + n * (n - 1) / 2;

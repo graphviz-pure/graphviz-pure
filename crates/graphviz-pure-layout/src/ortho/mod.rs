@@ -1091,6 +1091,13 @@ pub fn ortho_edges_of<S: OrthoGraph + ?Sized>(
             };
             for (e, ispline) in routes {
                 let h = g.head(e);
+                if graphviz_pure_core::diag::verbose_byte() > 1 {
+                    graphviz_pure_core::diag::fprintf_stderr(&format!(
+                        "ortho {} {}\n",
+                        g.xl_name(g.tail(e)),
+                        g.xl_name(h)
+                    ));
+                }
                 clip_and_install_info(g, e, h, &ispline, sinfo);
             }
         }

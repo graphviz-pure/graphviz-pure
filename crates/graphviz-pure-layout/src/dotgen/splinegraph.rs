@@ -199,6 +199,14 @@ impl SplineGraph for Dot<'_> {
 }
 
 impl crate::common::xlabels::XLabelGraph for Dot<'_> {
+    fn xl_node_xlabel_text(&self, n: usize) -> String {
+        self.nodes
+            .get(n)
+            .and_then(|nd| nd.xlabel)
+            .and_then(|l| self.labels.get(l))
+            .map(|l| l.text.clone())
+            .unwrap_or_default()
+    }
     fn xl_label_text(&self, e: usize, k: LabelKind) -> String {
         self.label_index(e, k)
             .map(|l| self.labels[l].text.clone())

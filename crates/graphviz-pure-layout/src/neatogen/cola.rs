@@ -102,8 +102,14 @@ pub fn stress_majorization_cola(
     if maxi == 0 {
         return Ok(0);
     }
+    use graphviz_pure_core::diag::{elapsed_sec, fmt_f, fprintf_stderr, start_timer};
+    let verbose = graphviz_pure_core::diag::verbose_on();
+    if verbose {
+        start_timer();
+    }
     let mut dij: Option<Vec<f32>> = None;
     if model == MODEL_SUBSET {
+        graphviz_pure_core::verbose_msg!("Calculating subset model");
         dij = Some(compute_apsp_artificial_weights_packed(graph, n));
     } else if model == MODEL_CIRCUIT {
         dij = circuit_model(graph, n);
@@ -116,9 +122,14 @@ pub fn stress_majorization_cola(
             );
         }
     } else if model == MODEL_MDS {
+        graphviz_pure_core::verbose_msg!("Calculating MDS model");
         dij = mds_model(graph, n);
     }
-    let mut lap2 = dij.unwrap_or_else(|| compute_apsp_packed(graph, n));
+    let mut lap2 = dij.unwrap_or_else(|| {
+        graphviz_pure_core::verbose_msg!("Calculating shortest paths");
+        compute_apsp_packed(graph, n)
+    });
+    graphviz_pure_core::diag::verbose_phase("Setting initial positions");
 
     // for numerical stability, scale down layout
     let mut max = 1.0f64;
@@ -139,6 +150,7 @@ pub fn stress_majorization_cola(
     for v in d_coords[1].iter_mut().take(n) {
         *v -= y_0;
     }
+    graphviz_pure_core::verbose_msg!(": {} sec", fmt_f(elapsed_sec(), 2));
 
     let mut lap_length = n + n * (n - 1) / 2;
     square_vec(&mut lap2[..lap_length]);
@@ -233,6 +245,7 @@ pub fn stress_majorization_cola(
     let mut nsize_scale = 0.0f64;
     let mut converged = false;
     let mut iterations = 0i64;
+    let mut last_stress = 0.0f64;
     while iterations < maxi && !converged {
         for d in degrees.iter_mut() {
             *d = 0.0;
@@ -291,6 +304,11 @@ pub fn stress_majorization_cola(
             right_mult_with_vector_ff(&lap2, n, &coords[k], &mut tmp_coords);
             new_stress -= vectors_inner_productf(n, &coords[k], &tmp_coords);
         }
+        last_stress = new_stress;
+        if verbose {
+            let nl = if iterations % 10 == 0 { "\n" } else { "" };
+            fprintf_stderr(&format!("{} {nl}", fmt_f(new_stress, 3)));
+        }
         converged = new_stress < old_stress
             && (new_stress - old_stress).abs() / (old_stress + 1e-10).abs() < params.epsilon;
         old_stress = new_stress;
@@ -298,6 +316,10 @@ pub fn stress_majorization_cola(
         // gradually scale up the node sizes in the non-overlap constraints
         if (iterations >= maxi - 1 || converged) && opt.noverlap == 1 && nsize_scale < 0.999 {
             nsize_scale += 0.1;
+            graphviz_pure_core::verbose_msg!(
+                "nsizescale={},iterations={iterations}\n",
+                fmt_f(nsize_scale, 6)
+            );
             iterations = 0;
             converged = false;
         }
@@ -349,6 +371,13 @@ pub fn stress_majorization_cola(
         if too_many_cycle_errors(&hor, &vrt) {
             break;
         }
+    }
+    if verbose {
+        fprintf_stderr(&format!(
+            "\nfinal e = {} {iterations} iterations {} sec\n",
+            fmt_f(last_stress, 6),
+            fmt_f(elapsed_sec(), 2)
+        ));
     }
     if opt.noverlap == 2 {
         // C passes only the real nodes, and `initCMajVPSC` still treats the

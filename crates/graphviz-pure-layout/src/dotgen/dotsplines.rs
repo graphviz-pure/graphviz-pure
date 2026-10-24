@@ -500,6 +500,7 @@ impl Dot<'_> {
             return Ok(());
         }
         self.mark_lowclusters(0);
+        let route = crate::common::routespl::routesplines_init();
         let nodesep = self.graphs[0].nodesep;
         let mut sd = SplineInfoT {
             splinesep: f64::from(nodesep / 4),
@@ -671,6 +672,12 @@ impl Dot<'_> {
         // normalize splines so they always go from tail to head
         if normalize {
             self.edge_normalize();
+        }
+        if et == EdgeType::Curved {
+            // C calls no routesplinesterm for curved edges: its level stays open
+            std::mem::forget(route);
+        } else {
+            drop(route);
         }
         self.finish_splines();
         self.edges.truncate(edge_base);

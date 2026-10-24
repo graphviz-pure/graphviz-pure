@@ -196,6 +196,7 @@ fn make_spline(lg: &mut LGraph<'_>, e: usize, obs: &[Vec<Point>]) {
         return;
     };
     let hn = lg.edges[e].head;
+    crate::neatogen::routing::verbose_edge(lg, "spline", e);
     clip_and_install(lg, e, hn, &spline);
     add_edge_labels(lg, e);
 }

@@ -18,6 +18,8 @@ use graphviz_pure_core::math;
 use graphviz_pure_core::strtod::{Scanned, scan_lf, sscanf};
 use graphviz_pure_core::{Graph, NodeData, Point, Result};
 
+/// `cc_pfx`: the prefix of neato's component subgraphs.
+const CC_PFX: &str = "_neato_cc";
 /// `CL_OFFSET`: default margin around packed components, in points.
 pub const CL_OFFSET: i64 = 8;
 
@@ -323,7 +325,24 @@ fn majorization(
         opts |= OPT_SMART_INIT;
     }
     let mut coords = vec![vec![0.0f64; nv]; dim];
+    let verbose = graphviz_pure_core::diag::verbose_on;
+    let say = graphviz_pure_core::diag::fprintf_stderr;
+    let secs = || graphviz_pure_core::diag::fmt_f(graphviz_pure_core::diag::elapsed_sec(), 2);
+    if verbose() {
+        say(&format!(
+            "model {model} smart_init {} stresswt {} iterations {} tol {}\nconvert graph: ",
+            i32::from(init == INIT_SELF),
+            opts & super::stress::OPT_EXP_FLAG,
+            p.max_iter,
+            graphviz_pure_core::diag::fmt_f(p.epsilon, 6)
+        ));
+        graphviz_pure_core::diag::start_timer();
+        say("majorization\n");
+    }
     let (gp, _ne, nodes) = make_graph_data(g, sub, mode, model);
+    if verbose() {
+        say(&format!("{nv} nodes {} sec\n", secs()));
+    }
     let lgap = crate::common::utils::late_double(&g.src.graph_attrs, "levelsgap", 0.0, -f64::MAX);
     let rv = if mode == MODE_IPSEP {
         let mut opt = super::quad_prog_vpsc::IpsepOptions {
@@ -338,19 +357,27 @@ fn majorization(
         };
         let s = g.gattr("diredgeconstraints");
         opt.diredges = if mapbool(s) {
+            graphviz_pure_core::verbose_msg!("Generating Edge Constraints...\n");
             1
         } else if s.is_some_and(|s| {
             s.as_bytes()
                 .get(..4)
                 .is_some_and(|p| p.eq_ignore_ascii_case(b"hier"))
         }) {
+            graphviz_pure_core::verbose_msg!("Generating DiG-CoLa Edge Constraints...\n");
             2
         } else {
             0
         };
         opt.noverlap = match am.mode {
-            super::adjust::AdjustMode::Ipsep => 1,
-            super::adjust::AdjustMode::Vpsc => 2,
+            super::adjust::AdjustMode::Ipsep => {
+                graphviz_pure_core::verbose_msg!("Generating Non-overlap Constraints...\n");
+                1
+            }
+            super::adjust::AdjustMode::Vpsc => {
+                graphviz_pure_core::verbose_msg!("Removing overlaps as postprocess...\n");
+                2
+            }
             _ => 0,
         };
         let margin = super::adjust::sep_factor(g);
@@ -360,6 +387,11 @@ fn majorization(
             let d = 2.0 * (super::adjust::DFLT_MARGIN / 72.0);
             (d, d)
         };
+        graphviz_pure_core::verbose_msg!(
+            "gap={},{}\n",
+            graphviz_pure_core::diag::fmt_f(opt.gap.0, 6),
+            graphviz_pure_core::diag::fmt_f(opt.gap.1, 6)
+        );
         super::cola::stress_majorization_cola(
             g,
             p,
@@ -954,6 +986,12 @@ fn neato_layout_nop(graph: &mut Graph) {
     let decl = PosDecl::of(&full);
     let g0 = neato_init_node_edge(&full, ndim, inputscale, decl);
     add_z(&g0, decl.z, graph);
+    // init_nop's scan_graph, before `Reduce` deletes nodes
+    graphviz_pure_core::verbose_msg!(
+        "Scanning graph {}, {} nodes\n",
+        graph.root_name(),
+        graph.nodes.len()
+    );
     let reduced;
     let mut g = match super::stuff::reduce_set(graph) {
         None => g0,
@@ -1041,7 +1079,7 @@ pub fn neato_layout(graph: &mut Graph) -> Result<()> {
         let full = graph.clone();
         // `user_pos` on the whole graph, with what it declares before `Reduce` deletes nodes.
         let g0 = neato_init_node_edge(&full, ndim, inputscale, PosDecl::of(&full));
-        let (ccs, pin) = pccomps(&g0);
+        let (ccs, pin) = pccomps(&g0, CC_PFX);
         let mut new_index = vec![None; deleted.len()];
         let kept = deleted.iter().enumerate().filter(|(_, d)| !**d);
         for (new, (old, _)) in kept.enumerate() {
@@ -1107,9 +1145,14 @@ pub fn neato_layout(graph: &mut Graph) -> Result<()> {
         let (mut ccs, pin) = match reduced {
             Some((comps, pin, _)) => {
                 let n = g.nodes.len();
-                (comps.into_iter().map(|c| Sub::new(n, c)).collect(), pin)
+                let subs = comps.into_iter().enumerate().map(|(i, c)| {
+                    let mut s = Sub::new(n, c);
+                    s.name = format!("{CC_PFX}{i}");
+                    s
+                });
+                (subs.collect(), pin)
             }
-            None => pccomps(&g),
+            None => pccomps(&g, CC_PFX),
         };
         if ccs.len() > 1 {
             for (i, gc) in ccs.iter_mut().enumerate() {

@@ -142,18 +142,25 @@ pub fn sc_adjust(g: &mut LGraph<'_>, sub: &Sub, equal: i32) -> bool {
         if c == 0.0 {
             return false;
         }
+        graphviz_pure_core::verbose_msg!("compress {} \n", graphviz_pure_core::diag::fmt_g(c, 6));
         Point::new(c, c)
     } else {
         let mut aarr = mk_overlap_set(&nl);
         if aarr.len() == 1 {
             return false;
         }
-        if equal != 0 {
+        let s = if equal != 0 {
             let c = compute_scale(&aarr);
             Point::new(c, c)
         } else {
             compute_scale_xy(&mut aarr)
-        }
+        };
+        graphviz_pure_core::verbose_msg!(
+            "scale by {},{} \n",
+            graphviz_pure_core::diag::fmt_g(s.x, 6),
+            graphviz_pure_core::diag::fmt_g(s.y, 6)
+        );
+        s
     };
     for p in &nl {
         g.nodes[p.np].pos[0] = s.x * p.pos.x;

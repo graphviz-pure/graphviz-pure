@@ -1,5 +1,7 @@
 //! Squarified treemap, ported from `lib/patchwork/tree_map.c`.
 
+use graphviz_pure_core::diag::{fmt_f, fprintf_stderr, verbose_on};
+
 /// `rectangle`: centre `x` and full `size`.
 #[derive(Debug, Clone, Copy, Default, PartialEq)]
 pub struct Rectangle {
@@ -23,6 +25,15 @@ fn squarify(area: &[f64], recs: &mut [Rectangle], mut fillrec: Rectangle) {
         let w = fillrec.size[0].min(fillrec.size[1]);
         if n == 0 {
             return;
+        }
+        if verbose_on() {
+            fprintf_stderr(&format!(
+                "trying to add to rect {{{} +/- {}, {} +/- {}}}\ntotal added so far = {nadded}\n",
+                fmt_f(fillrec.x[0], 6),
+                fmt_f(fillrec.size[0], 6),
+                fmt_f(fillrec.x[1], 6),
+                fmt_f(fillrec.size[1], 6)
+            ));
         }
         let area = &area[off..];
         if nadded == 0 {
@@ -52,6 +63,12 @@ fn squarify(area: &[f64], recs: &mut [Rectangle], mut fillrec: Rectangle) {
             continue;
         }
         let recs = &mut recs[off..];
+        graphviz_pure_core::verbose_msg!(
+            "adding {nadded} items, total area = {}, w = {}, area/w={}\n",
+            fmt_f(totalarea, 6),
+            fmt_f(w, 6),
+            fmt_f(totalarea / w, 6)
+        );
         if fillrec.size[0] <= fillrec.size[1] {
             // Tall rectangle: lay the items along x, left to right, at the top.
             let hh = totalarea / w;

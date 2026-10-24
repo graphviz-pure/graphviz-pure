@@ -58,6 +58,22 @@ pub fn patchwork_layout(graph: &mut Graph) -> Result<()> {
     let env = graphviz_pure_geom::NodeSizeEnv::from_graph(&src);
     for &n in &res.walk_order {
         let _ = graphviz_pure_geom::node_geometry(&src.nodes[n], &env);
+        if graphviz_pure_core::diag::verbose_on()
+            && let Some(Some((center, size))) = res.nodes.get(n)
+        {
+            use graphviz_pure_core::diag::{fmt_f, fmt_g};
+            graphviz_pure_core::diag::fprintf_stderr(&format!(
+                "{} coord {} {} ht {} width {}\n",
+                src.agnameof(graphviz_pure_core::Obj::Node(graphviz_pure_core::NodeId(
+                    n as u32
+                )))
+                .name,
+                fmt_g(center.x, 5),
+                fmt_g(center.y, 5),
+                fmt_f(size.y, 6),
+                fmt_f(size.x, 6)
+            ));
+        }
     }
     let mut g = graphviz_pure_core::diag::quietly(|| LGraph::new_unported(&src, 2, EdgeType::Line));
     // patchwork_init_edge binds the edge record without common_init_edge, so

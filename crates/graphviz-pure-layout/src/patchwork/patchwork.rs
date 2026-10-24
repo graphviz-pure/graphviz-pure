@@ -162,8 +162,34 @@ impl Builder<'_> {
             size: [w - m, h - m],
         };
         if let Some(recs) = tree_map(&areas_sorted, crec) {
-            for (i, &c) in list.iter().enumerate() {
-                self.nodes[c].r = recs[i];
+            use graphviz_pure_core::diag::fmt_f;
+            let f = |v: f64| fmt_f(v, 6);
+            if let Some(r) = self.nodes.get(t).map(|nd| nd.r) {
+                graphviz_pure_core::verbose_msg!(
+                    "rec {} {} {} {}\n",
+                    f(r.x[0]),
+                    f(r.x[1]),
+                    f(r.size[0]),
+                    f(r.size[1])
+                );
+            }
+            for ((&c, &q), &area) in list.iter().zip(&recs).zip(&areas_sorted) {
+                if let Some(nd) = self.nodes.get_mut(c) {
+                    nd.r = q;
+                }
+                graphviz_pure_core::verbose_msg!(
+                    "{} - {} {} {} {} = {} ({} {} {} {})\n",
+                    f(area),
+                    f(q.x[0] - q.size[0] * 0.5),
+                    f(q.x[1] - q.size[1] * 0.5),
+                    f(q.x[0] + q.size[0] * 0.5),
+                    f(q.x[1] + q.size[1] * 0.5),
+                    f(q.size[0] * q.size[1]),
+                    f(q.x[0]),
+                    f(q.x[1]),
+                    f(q.size[0]),
+                    f(q.size[1])
+                );
             }
         }
         for c in self.nodes[t].children.clone() {

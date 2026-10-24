@@ -1,0 +1,10 @@
+fontname: "Times-Roman" resolved to: [internal hard-coded]
+  margin 4
+pack info:
+  mode   array
+  size   0
+  flags  0
+array packing: row major 2 rows 2 columns
+Edge separation: add=1 (3.200000,3.200000)
+Creating edges using line segments
+[Graphviz] emit.c:4323: TS gvRenderJobs %1: T secs.

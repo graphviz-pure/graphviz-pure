@@ -164,6 +164,121 @@ pub fn verbose_byte() -> u8 {
     }
 }
 
+/// `if (Verbose)`: whether `-v` (at any level) is on.
+pub fn verbose_on() -> bool {
+    verbose_byte() != 0
+}
+
+/// `fprintf(stderr, ...)` under `if (Verbose)`: the layouts' progress messages. The arguments
+/// are `format!`'s, formatted only when `-v` is on.
+#[macro_export]
+macro_rules! verbose_msg {
+    ($($arg:tt)*) => {
+        if $crate::diag::verbose_on() {
+            $crate::diag::fprintf_stderr(&format!($($arg)*));
+        }
+    };
+}
+
+/// `GV_INFO(...)` (`lib/util/debug.h`): `gv_info!(file, line, format...)`, under `-v`
+/// ([`gv_info_line`]); the message is formatted only when `-v` is on.
+#[macro_export]
+macro_rules! gv_info {
+    ($file:expr, $line:expr, $($arg:tt)*) => {
+        if $crate::diag::verbose_on() {
+            $crate::diag::gv_info_line($file, $line, &format!($($arg)*));
+        }
+    };
+}
+
+/// `GV_INFO(...)` (`lib/util/debug.h`): under `-v`, `[Graphviz] <file>:<line>: <time> <msg>`
+/// and a newline, where `file` and `line` are C's (the port names the C site it follows). C
+/// stamps local time; the port, which reads no time zone, stamps UTC.
+pub fn gv_info_line(file: &str, line: u32, msg: &str) {
+    let (y, mo, d, h, mi, sec) = utc_now();
+    fprintf_stderr(&format!(
+        "[Graphviz] {file}:{line}: {y:04}-{mo:02}-{d:02} {h:02}:{mi:02}:{sec:02} {msg}\n"
+    ));
+}
+
+/// The time as UTC calendar fields (year, month, day, hour, minute, second).
+fn utc_now() -> (i64, i64, i64, i64, i64, i64) {
+    #[cfg(not(target_arch = "wasm32"))]
+    let secs = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| d.as_secs() as i64);
+    // wasm32-unknown-unknown has no clock (the wasm bindings never set a verbose level)
+    #[cfg(target_arch = "wasm32")]
+    let secs = 0i64;
+    civil(secs)
+}
+
+/// Seconds since 1970 as UTC calendar fields (year, month, day, hour, minute, second).
+fn civil(secs: i64) -> (i64, i64, i64, i64, i64, i64) {
+    let (days, rem) = (secs.div_euclid(86_400), secs.rem_euclid(86_400));
+    // Howard Hinnant's days-to-civil
+    let z = days + 719_468;
+    let era = z.div_euclid(146_097);
+    let doe = z - era * 146_097;
+    let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let d = doy - (153 * mp + 2) / 5 + 1;
+    let m = if mp < 10 { mp + 3 } else { mp - 9 };
+    let y = yoe + era * 400 + i64::from(m <= 2);
+    (y, m, d, rem / 3600, rem / 60 % 60, rem % 60)
+}
+
+thread_local! {
+    static TIMER: Cell<Option<std::time::Duration>> = const { Cell::new(None) };
+}
+
+/// The time since the process (thread) started counting, for [`start_timer`].
+fn clock() -> std::time::Duration {
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        use std::sync::OnceLock;
+        static ORIGIN: OnceLock<std::time::Instant> = OnceLock::new();
+        ORIGIN.get_or_init(std::time::Instant::now).elapsed()
+    }
+    #[cfg(target_arch = "wasm32")]
+    {
+        std::time::Duration::ZERO
+    }
+}
+
+/// The majorization solvers' `-v` step: `: <seconds> sec`, a newline and the next phase's
+/// name, then the clock restarted for it.
+pub fn verbose_phase(next: &str) {
+    if verbose_on() {
+        fprintf_stderr(&format!(": {} sec\n{next}", fmt_f(elapsed_sec(), 2)));
+        start_timer();
+    }
+}
+
+/// `start_timer()` (`lib/common/timing.c`): starts the clock [`elapsed_sec`] reads. C measures
+/// processor time, the port wall time.
+pub fn start_timer() {
+    TIMER.with(|t| t.set(Some(clock())));
+}
+
+/// `elapsed_sec()`: seconds since the last [`start_timer`].
+pub fn elapsed_sec() -> f64 {
+    let start = TIMER.with(Cell::get).unwrap_or_default();
+    clock().saturating_sub(start).as_secs_f64()
+}
+
+/// C `printf("%.{prec}f", v)` (macOS libc): `nan`, `inf` and `-inf` for the non-finite values.
+pub fn fmt_f(v: f64, prec: usize) -> String {
+    if v.is_nan() {
+        "nan".to_string()
+    } else if v.is_infinite() {
+        if v > 0.0 { "inf" } else { "-inf" }.to_string()
+    } else {
+        format!("{v:.prec$}")
+    }
+}
+
 /// `fprintf(stderr, msg)`: a message C writes without `agerr`, so with no level, no count and
 /// no escaping. `msg` is written as C's bytes ([`crate::charset::encode`]).
 pub fn fprintf_stderr(msg: &str) {
@@ -257,6 +372,17 @@ pub fn reset_errors() {
 
 #[cfg(test)]
 mod tests {
+
+    // Issue #416: GV_INFO's time stamp, as UTC.
+    #[test]
+    fn gv_info_stamps_utc_calendar_time() {
+        assert_eq!(civil(0), (1970, 1, 1, 0, 0, 0));
+        assert_eq!(civil(951_782_400), (2000, 2, 29, 0, 0, 0));
+        assert_eq!(civil(1_793_017_384), (2026, 10, 26, 12, 23, 4));
+        assert_eq!(fmt_f(f64::NAN, 2), "nan");
+        assert_eq!(fmt_f(-f64::INFINITY, 2), "-inf");
+        assert_eq!(fmt_f(0.125, 2), "0.12");
+    }
     use super::*;
 
     fn out(level: AgErrLevel, msg: &str) -> Option<String> {

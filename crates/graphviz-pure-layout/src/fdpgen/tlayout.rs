@@ -364,11 +364,14 @@ fn g_adjust(
     for &n in &comp.nodes {
         let nd = &mut dg.nodes[n];
         nd.disp = [0.0, 0.0];
-        grid.add(
+        let (i, j) = (
             (nd.pos[0] / cell).floor() as i32,
             (nd.pos[1] / cell).floor() as i32,
-            n,
         );
+        grid.add(i, j, n);
+        if graphviz_pure_core::diag::verbose_byte() >= 3 {
+            graphviz_pure_core::diag::fprintf_stderr(&format!("grid({i},{j}): {}\n", nd.name));
+        }
     }
     for &n in &comp.nodes {
         for e in dg.outs(comp, n).collect::<Vec<_>>() {

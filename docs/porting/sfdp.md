@@ -126,5 +126,5 @@ sfdp uses libc `rand()` only (`cutil::CRand`, threaded through `LGraph::crand`):
 - `label_scheme=1|3` with prism tries: C crashes; the port skips the missing
   right-hand side instead.
 - `start=random` without a number seeds C from the clock; the port uses 1.
-- Verbose (`-v`) diagnostics and `spring_electrical_control_print` are not
-  ported.
+- Verbose (`-v`) diagnostics, `spring_electrical_control_print` included, are C's, except
+  those under `DEBUG_PRINT` and `TIME` (not defined in a release build of C either).

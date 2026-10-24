@@ -1007,7 +1007,7 @@ fn dist_2(p: Point, q: Point) -> f64 {
     dx.mul_add(dx, dy * dy)
 }
 
-fn count_overlap(info: &mut [Info]) -> u32 {
+fn count_overlap(info: &mut [Info], iter: u32) -> u32 {
     let mut count = 0;
     for ip in info.iter_mut() {
         ip.overlaps = false;
@@ -1020,6 +1020,9 @@ fn count_overlap(info: &mut [Info]) -> u32 {
                 info[j].overlaps = true;
             }
         }
+    }
+    if graphviz_pure_core::diag::verbose_byte() > 1 {
+        graphviz_pure_core::diag::fprintf_stderr(&format!("overlap [{iter}] : {count}\n"));
     }
     count
 }
@@ -1233,7 +1236,8 @@ pub fn adjust(g: &mut LGraph<'_>, sub: &Sub, mode: AdjustMode) -> bool {
     let xd = margin * (x1 - x0);
     let mut win = [x0 - xd, x1 + xd, y0 - yd, y1 + yd];
     let changed = if mode == AdjustMode::Scale {
-        if count_overlap(&mut info) == 0 {
+        let mut iter_cnt = 0;
+        if count_overlap(&mut info, iter_cnt) == 0 {
             false
         } else {
             rm_equality(&mut info);
@@ -1243,14 +1247,17 @@ pub fn adjust(g: &mut LGraph<'_>, sub: &Sub, mode: AdjustMode) -> bool {
                     ip.coord.x *= f;
                     ip.coord.y *= f;
                 }
-                if count_overlap(&mut info) == 0 {
+                iter_cnt = iter_cnt.wrapping_add(1);
+                if count_overlap(&mut info, iter_cnt) == 0 {
                     break;
                 }
             }
+            graphviz_pure_core::verbose_msg!("Number of iterations = {iter_cnt}\n");
             true
         }
     } else {
-        let mut overlap_cnt = count_overlap(&mut info);
+        let (mut iter_cnt, mut increase_cnt) = (0u32, 0u32);
+        let mut overlap_cnt = count_overlap(&mut info, iter_cnt);
         if overlap_cnt == 0 {
             false
         } else {
@@ -1262,7 +1269,8 @@ pub fn adjust(g: &mut LGraph<'_>, sub: &Sub, mode: AdjustMode) -> bool {
             loop {
                 voronoi_pass(&mut info, win, do_all, !first, &order);
                 first = false;
-                let cnt = count_overlap(&mut info);
+                iter_cnt = iter_cnt.wrapping_add(1);
+                let cnt = count_overlap(&mut info, iter_cnt);
                 if cnt == 0 {
                     break;
                 }
@@ -1274,10 +1282,13 @@ pub fn adjust(g: &mut LGraph<'_>, sub: &Sub, mode: AdjustMode) -> bool {
                 overlap_cnt = cnt;
                 do_all = true;
                 if bad_level > 0 {
+                    increase_cnt = increase_cnt.wrapping_add(1);
                     let (xd, yd) = (INCR * (win[1] - win[0]), INCR * (win[3] - win[2]));
                     win = [win[0] - xd, win[1] + xd, win[2] - yd, win[3] + yd];
                 }
             }
+            graphviz_pure_core::gv_info!("adjust.c", 456, "Number of iterations = {iter_cnt}");
+            graphviz_pure_core::gv_info!("adjust.c", 457, "Number of increases = {increase_cnt}");
             true
         }
     };

@@ -48,14 +48,13 @@ impl<'a> Dot<'a> {
         let mut pinfo = PackInfo::default();
         let mode = get_pack_mode_info(self.agget(0, "packmode"), PackMode::Undef, &mut pinfo);
         // getPackInfo(g, l_node, CL_OFFSET, &pinfo)
-        pinfo.margin = get_pack(
+        crate::pack::pack_info(
             self.agget(0, "pack"),
+            self.agget(0, "packmode"),
+            PackMode::Node,
             i64::from(CL_OFFSET),
-            i64::from(CL_OFFSET),
-        ) as u32;
-        pinfo.do_splines = false;
-        pinfo.fixed = None;
-        get_pack_mode_info(self.agget(0, "packmode"), PackMode::Node, &mut pinfo);
+            &mut pinfo,
+        );
         if mode == PackMode::Undef && pack < 0 {
             return DoDot::Whole;
         }
@@ -448,6 +447,10 @@ impl DotPack<'_, '_> {
 impl PackGraph for DotPack<'_, '_> {
     fn pk_ncomps(&self) -> usize {
         self.comps.len()
+    }
+    /// cccomps names its components `_cc_<i>`.
+    fn pk_name(&self, i: usize) -> String {
+        format!("_cc_{i}")
     }
     fn pk_compute_bb(&mut self, i: usize) {
         let c = &self.comps[i];

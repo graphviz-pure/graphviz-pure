@@ -8,6 +8,7 @@ use super::linalg::{solve, solve_circuit};
 use super::stress::has_pos;
 use super::{INIT_RANDOM, INIT_REGULAR, INIT_SELF, MODE_KK, MODE_SGD, NeatoParams};
 use crate::common::types::{LGraph, P_SET, Sub};
+use graphviz_pure_core::diag::{elapsed_sec, fmt_f, fprintf_stderr, start_timer, verbose_on};
 use graphviz_pure_core::math;
 use graphviz_pure_core::strtod::{atof, scan_lf};
 
@@ -129,6 +130,7 @@ pub fn scan_graph_mode(
     p: &mut NeatoParams,
 ) -> (usize, Option<KkState>) {
     let nv = sub.nodes.len();
+    graphviz_pure_core::verbose_msg!("Scanning graph {}, {nv} nodes\n", sub.name);
     let ne = g.nedges(sub);
     let len_declared = g.edge_attr_declared("len");
     let getdouble = |g: &LGraph<'_>, name: &str, v: &mut f64| {
@@ -218,6 +220,7 @@ pub fn nop_check_edge_lens(graph: &graphviz_pure_core::Graph) {
 
 /// `initial_positions(G, nG)` for KK.
 fn initial_positions(g: &mut LGraph<'_>, sub: &Sub, ng: usize, p: &NeatoParams) {
+    graphviz_pure_core::verbose_msg!("Setting initial positions\n");
     let init = super::neatoinit::check_start(g, sub, ng, INIT_RANDOM, p);
     if init == INIT_REGULAR {
         return;
@@ -248,6 +251,10 @@ fn distvec(p0: &[f64], p1: &[f64], vec: &mut [f64], ndim: usize) -> f64 {
 
 /// `diffeq_model(G, nG)`.
 fn diffeq_model(g: &LGraph<'_>, sub: &Sub, kk: &mut KkState, ng: usize) {
+    if verbose_on() {
+        fprintf_stderr("Setting up spring model: ");
+        start_timer();
+    }
     let ndim = g.ndim;
     for i in 0..ng {
         for j in 0..i {
@@ -284,6 +291,35 @@ fn diffeq_model(g: &LGraph<'_>, sub: &Sub, kk: &mut KkState, ng: usize) {
             }
         }
     }
+    graphviz_pure_core::verbose_msg!("{} sec\n", fmt_f(elapsed_sec(), 2));
+}
+
+/// `total_e(G, nG)`: twice the energy of the system.
+fn total_e(g: &LGraph<'_>, kk: &KkState, ng: usize) -> f64 {
+    let mut e = 0.0f64;
+    let rows = kk.nlist.iter().zip(kk.dist.iter().zip(&kk.spring));
+    for (i, (&ip, (dist, spring))) in rows.enumerate().take(ng.saturating_sub(1)) {
+        let cols = kk.nlist.iter().zip(dist.iter().zip(spring));
+        for (&jp, (&dij, &sij)) in cols.take(ng).skip(i.wrapping_add(1)) {
+            let (Some(pi), Some(pj)) = (g.nodes.get(ip), g.nodes.get(jp)) else {
+                continue;
+            };
+            let mut t0 = 0.0f64;
+            for (a, b) in pi.pos.iter().zip(&pj.pos).take(g.ndim) {
+                let t1 = a - b;
+                t0 = t1.mul_add(t1, t0);
+            }
+            // C (clang) fuses all three: fma(spring, fma(-2 d, sqrt(t0), fma(d, d, t0)), e)
+            let x = (-2.0 * dij).mul_add(t0.sqrt(), dij.mul_add(dij, t0));
+            e = sij.mul_add(x, e);
+        }
+    }
+    e
+}
+
+thread_local! {
+    /// choose_node's `static int cnt`: its calls in this process.
+    static CHOOSE_CNT: std::cell::Cell<i64> = const { std::cell::Cell::new(0) };
 }
 
 fn update_arrays(g: &LGraph<'_>, kk: &mut KkState, ng: usize, i: usize) {
@@ -352,6 +388,10 @@ fn d2e(g: &LGraph<'_>, kk: &KkState, ng: usize, n: usize, m: &mut [f64]) {
 }
 
 fn choose_node(g: &LGraph<'_>, kk: &KkState, ng: usize, p: &NeatoParams) -> Option<usize> {
+    let cnt = CHOOSE_CNT.with(|c| {
+        c.set(c.get().wrapping_add(1));
+        c.get()
+    });
     if kk.moves >= p.max_iter {
         return None;
     }
@@ -374,6 +414,10 @@ fn choose_node(g: &LGraph<'_>, kk: &KkState, ng: usize, p: &NeatoParams) -> Opti
     if max < p.epsilon * p.epsilon {
         None
     } else {
+        if verbose_on() && cnt % 100 == 0 {
+            let nl = if cnt % 1000 == 0 { "\n" } else { "" };
+            fprintf_stderr(&format!("{} {nl}", fmt_f(max.sqrt(), 3)));
+        }
         choice
     }
 }
@@ -403,6 +447,15 @@ fn solve_model(g: &mut LGraph<'_>, kk: &mut KkState, ng: usize, p: &NeatoParams)
     while let Some(m) = choose_node(g, kk, ng, p) {
         move_node(g, kk, ng, m, p);
     }
+    if verbose_on() {
+        let bang = if kk.moves == p.max_iter { "!" } else { "" };
+        fprintf_stderr(&format!(
+            "\nfinal e = {} {}{bang} iterations {} sec\n",
+            fmt_f(total_e(g, kk, ng), 6),
+            kk.moves,
+            fmt_f(elapsed_sec(), 2)
+        ));
+    }
     if kk.moves == p.max_iter {
         graphviz_pure_core::diag::agwarningf(&format!(
             "Max. iterations ({}) reached on graph {}\n",
@@ -420,6 +473,10 @@ pub fn shortest_path(
     ng: usize,
     initial_dist: f64,
 ) {
+    if verbose_on() {
+        fprintf_stderr("Calculating shortest paths: ");
+        start_timer();
+    }
     let mut heap: Vec<usize> = Vec::with_capacity(ng + 1);
     for &src in &sub.nodes.clone() {
         for &v in &sub.nodes {
@@ -454,6 +511,7 @@ pub fn shortest_path(
             }
         }
     }
+    graphviz_pure_core::verbose_msg!("{} sec\n", fmt_f(elapsed_sec(), 2));
 }
 
 fn heapup(g: &mut LGraph<'_>, heap: &mut [usize], v: usize) {
@@ -574,6 +632,14 @@ pub fn kk_neato(
     }
     initial_positions(g, sub, ng, p);
     diffeq_model(g, sub, kk, ng);
+    if verbose_on() {
+        fprintf_stderr(&format!(
+            "Solving model {model} iterations {} tol {}\n",
+            p.max_iter,
+            fmt_f(p.epsilon, 6)
+        ));
+        start_timer();
+    }
     solve_model(g, kk, ng, p);
 }
 

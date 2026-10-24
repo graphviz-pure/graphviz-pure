@@ -1,0 +1,22 @@
+fontname: "Times-Roman" resolved to: [internal hard-coded]
+overlap: none value V scaling 0.0000
+pack info:
+  mode   undefined
+  size   0
+  flags  0
+Scanning graph _neato_cc0, 3 nodes
+model 0 smart_init 0 stresswt 2 iterations 200 tol 0.000100
+convert graph: majorization
+3 nodes T sec
+Calculating shortest paths: T sec
+Setting initial positions: T sec: T sec
+Setting up stress function: T sec
+Solving model: 0.460 0.000 
+final e = 0.000013 7 iterations T sec
+Edge separation: add=1 (3.200000,3.200000)
+Creating edges using line segments
+Scanning graph _neato_cc1, 1 nodes
+Edge separation: add=1 (3.200000,3.200000)
+Creating edges using line segments
+step size = 10
+[Graphviz] emit.c:4323: TS gvRenderJobs %1: T secs.

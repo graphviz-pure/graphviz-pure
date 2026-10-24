@@ -792,6 +792,12 @@ pub fn estimate_text_size_styled(
 ) -> (f64, f64) {
     let width = font_size * estimate_text_width_1pt(font_name, text, bold, italic);
     let height = font_size * LINESPACING;
+    // textspan_size: with no text layout plugin, estimate_textspan_size resolves every font
+    if crate::diag::verbose_on() && crate::diag::reporting() && crate::diag::emit_once(font_name) {
+        crate::diag::fprintf_stderr(&format!(
+            "fontname: \"{font_name}\" resolved to: [internal hard-coded]\n"
+        ));
+    }
     (width, height)
 }
 

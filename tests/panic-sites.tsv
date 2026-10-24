@@ -22,7 +22,7 @@ layout/common/init.rs	0	0	24	0
 layout/common/ns.rs	8	0	149	50
 layout/common/ports.rs	0	0	18	3
 layout/common/postproc.rs	0	0	2	0
-layout/common/routespl.rs	0	0	31	22
+layout/common/routespl.rs	0	0	31	20
 layout/common/shapes.rs	0	0	75	38
 layout/common/splines.rs	2	1	96	46
 layout/common/types.rs	0	0	13	0
@@ -80,7 +80,7 @@ layout/neatogen/quad_prog_vpsc.rs	1	1	122	35
 layout/neatogen/robust.rs	0	0	29	13
 layout/neatogen/routing.rs	0	0	30	7
 layout/neatogen/scadjust.rs	0	0	29	8
-layout/neatogen/sgd.rs	0	0	56	26
+layout/neatogen/sgd.rs	0	0	53	25
 layout/neatogen/smart_ini.rs	8	0	201	36
 layout/neatogen/stress.rs	3	0	95	27
 layout/neatogen/stuff.rs	1	0	180	13
@@ -94,7 +94,7 @@ layout/ortho/trapezoid.rs	0	0	55	10
 layout/osage/mod.rs	0	0	27	4
 layout/pack/cccomps.rs	0	0	36	0
 layout/pack/mod.rs	1	0	78	44
-layout/patchwork/patchwork.rs	0	0	24	2
+layout/patchwork/patchwork.rs	0	0	22	2
 layout/patchwork/patchworkinit.rs	0	0	11	0
 layout/patchwork/tree_map.rs	0	0	20	3
 layout/sfdpgen/multilevel.rs	0	3	35	18

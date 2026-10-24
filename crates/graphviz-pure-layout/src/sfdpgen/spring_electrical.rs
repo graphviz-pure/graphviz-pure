@@ -76,6 +76,53 @@ pub struct SpringElectricalControl {
     pub edge_labeling_scheme: i32,
 }
 
+/// `spring_electrical_control_print(ctrl)` (`-v`).
+pub fn spring_electrical_control_print(ctrl: &SpringElectricalControl) {
+    use graphviz_pure_core::diag::{fmt_f, fprintf_stderr};
+    const SMOOTHINGS: [&str; 7] = [
+        "NONE",
+        "STRESS_MAJORIZATION_GRAPH_DIST",
+        "STRESS_MAJORIZATION_AVG_DIST",
+        "STRESS_MAJORIZATION_POWER_DIST",
+        "SPRING",
+        "TRIANGLE",
+        "RNG",
+    ];
+    const TSCHEMES: [&str; 4] = ["NONE", "NORMAL", "FAST", "HYBRID"];
+    let f = |v: f64| fmt_f(v, 3);
+    let name = |names: &[&'static str], i: i32| {
+        usize::try_from(i).ok().and_then(|i| names.get(i).copied())
+    };
+    fprintf_stderr(&format!(
+        "spring_electrical_control:\n  repulsive exponent: {}\n  random start {} seed {}\n  \
+         K : {} C : {}\n  max levels {}\n  quadtree size {QUADTREE_SIZE} max_level {}\n  \
+         Barnes-Hutt constant {} tolerance  {} maxiter {}\n  cooling {} step size  {} \
+         adaptive {}\n  beautify_leaves {} node weights 0 rotation {}\n  smoothing {} overlap \
+         {} initial_scaling {} do_shrinking {}\n  octree scheme {}\n  edge_labeling_scheme {}\n",
+        f(ctrl.p),
+        i32::from(ctrl.random_start),
+        ctrl.random_seed,
+        f(ctrl.k),
+        f(C),
+        ctrl.multilevels,
+        ctrl.max_qtree_level,
+        f(BH),
+        f(TOL),
+        ctrl.maxiter,
+        f(COOL),
+        f(ctrl.step),
+        i32::from(ctrl.adaptive_cooling),
+        i32::from(ctrl.beautify_leaves),
+        f(ctrl.rotation),
+        name(&SMOOTHINGS, ctrl.smoothing).unwrap_or(""),
+        ctrl.overlap,
+        f(ctrl.initial_scaling),
+        i32::from(ctrl.do_shrinking),
+        name(&TSCHEMES, ctrl.tscheme).unwrap_or(""),
+        ctrl.edge_labeling_scheme,
+    ));
+}
+
 impl Default for SpringElectricalControl {
     /// `spring_electrical_control_new()`.
     fn default() -> Self {
@@ -953,6 +1000,11 @@ pub fn multilevel_spring_electrical_embedding(
         } else if ctrl.tscheme == QUAD_TREE_FAST
             || (ctrl.tscheme == QUAD_TREE_HYBRID && ga.m > QUAD_TREE_HYBRID_SIZE)
         {
+            if ctrl.tscheme == QUAD_TREE_HYBRID && ga.m > 10 {
+                graphviz_pure_core::verbose_msg!(
+                    "QUAD_TREE_HYBRID, size larger than {QUAD_TREE_HYBRID_SIZE}, switch to fast quadtree"
+                );
+            }
             spring_electrical_embedding_fast(dim, ga, ctrl, &mut xc, flag);
         } else {
             spring_electrical_embedding(dim, ga, ctrl, &mut xc, flag);
@@ -978,6 +1030,7 @@ pub fn multilevel_spring_electrical_embedding(
     x[..xc.len()].copy_from_slice(&xc);
 
     post_process_smoothing(dim, &mut a, ctrl, x);
+    graphviz_pure_core::verbose_msg!("ctrl->overlap={}\n", ctrl.overlap);
 
     if dim == 2 {
         pcp_rotate(n, dim, x);
