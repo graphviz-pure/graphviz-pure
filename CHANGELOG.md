@@ -8,19 +8,36 @@ All notable changes are listed here. The format follows
 
 ## [0.2.0] - 2026-10-24
 
-<!-- release-prep: replace this line with the release's intro paragraph -->
+The first minor release. It changes the library API (breaking under 0.x), computes with one
+math library on every platform, and brings the round of fidelity fixes since 0.1.2, each made at
+its cause in C.
+
+- **Breaking for Rust callers.** `graphviz_pure`'s root functions take and return ordinary text;
+  code that decoded its input first calls the same function in `graphviz_pure::decoded`
+  (`decoded::render_dot(&Decoded::decode(bytes), ..)`). In `graphviz-pure-core`, HTML strings
+  are flagged per name and per value (`AttrMap` is now a struct), layout results live in typed
+  `layout` fields, and `BezierSegment` carries its arrow types. The serialized `AttrMap` and
+  `BezierSegment` change too; what 0.1.x wrote still reads. See Breaking below.
+- **One math library on every platform.** Apple Silicon macOS now writes the same bytes as
+  Linux, Windows, Intel macOS and WebAssembly, and fidelity is measured against C computing with
+  the same math functions.
+- **Fidelity.** The scanner and grammar, diagnostics, the `dot` job pipeline, packing, cluster
+  membership, HTML labels, images, `neato -n` and many layout details now follow C's code paths;
+  where C crashes or hangs, the port takes C's nearest failure path. All 2,595 stable corpus
+  inputs are byte-identical to C with the same math (2,592 at 0.1.2).
 
 ### Breaking
 
 - `Graph::html_strings` is replaced by per-name flags (`NodeData::html_name`,
-  `SubgraphData::html_name`, `AttrSym::html`/`html_defval`) and a per-value mark in the
-  `AttrMap` (`attr_is_html`, `set_attr`); `canon_value` takes a flag; `TokenKind::Html` holds
+  `SubgraphData::html_name`, `AttrSym::html`/`html_defval`) and a per-value HTML flag in the
+  `AttrMap` (see the `AttrMap` entry below); `canon_value` takes a flag; `TokenKind::Html` holds
   the inner text; `is_html_string` and `is_html_value` are removed (#306).
 - `graphviz-pure-core`'s `NodeData`, `EdgeData`, `SubgraphData` and `Graph` have a public
   `layout` field (`NodeLayout`, `EdgeLayout`, `GraphLayout`, with `LabelPlace`), so code that
-  builds them with a struct literal must set it; the reserved-attribute key constants
-  (`SEQ_KEY`, `CLUST_NODE_KEY`, `CLUSTER_LIST_KEY`, `TAIL_PORT_NAME_KEY`, `HEAD_PORT_NAME_KEY`,
-  `CONC_ARROW_FLAGS_KEY` and the other `\x01` keys) are removed (#110).
+  builds them with a struct literal must set it, and `EdgeLayout::port_names` is a `PortNames`
+  (`Input` or `Layout { tail, head }`); the reserved-attribute key constants (`SEQ_KEY`,
+  `CLUST_NODE_KEY`, `CLUSTER_LIST_KEY`, `TAIL_PORT_NAME_KEY`, `HEAD_PORT_NAME_KEY`,
+  `CONC_ARROW_FLAGS_KEY` and the other `\x01` keys) are removed (#110, #286, #376).
 - `graphviz-pure-core`'s `BezierSegment` has two new public fields, `sflag` and `eflag`, with
   each end's arrow type. Code that builds a `BezierSegment` with a struct literal must set them.
   Renderers draw an arrowhead only where its flag is not zero. Segments serialized by 0.1.x read
@@ -31,8 +48,6 @@ All notable changes are listed here. The format follows
   `filtered`; `from_plain` builds one). `HTML_VALUE_PREFIX`, `html_value_key`, `attr_is_html`,
   `set_attr` and `apply_attrs` are removed. Its serialized form is `{"values": {..}, "html":
   [..]}`; the plain map written before 0.2.0 still reads (#365).
-- `graphviz-pure-core`'s `EdgeLayout::port_names` is a `PortNames` (`Input` or `Layout { tail,
-  head }`) instead of an `Option<(String, String)>` (#286, #376).
 - `graphviz_pure`'s root functions take and return ordinary text: `render_dot`,
   `render_dot_all`, `render_dot_all_with_options`, `render_dot_all_partial`,
   `render_svg_all_partial`, `parse_dot`, `parse_dot_all`, `layout_graph`,
@@ -47,12 +62,18 @@ All notable changes are listed here. The format follows
   the result for C's exact bytes. `GraphStream` (now built with `decoded::graph_stream`),
   `GraphJobs`, `LayoutJobs` and `plugins::plugin_graph` moved to `graphviz_pure::decoded`.
   (#378)
+- `graphviz-pure-layout`'s `nop` module is gone: `neato -n` and the `nop` engines run through
+  `neatoinit::neato_layout`, and its `LABEL_POS_KEY` is gone with the other reserved keys
+  (#330).
 
 ### Added
 
 - `-P` draws the graph of the port's plugins, and `-v[n]` reports the plugins each step uses and
-  lists them, as C does for a build with built-in plugins. The layouts' verbose progress
-  messages are not ported yet (#298).
+  lists them, as C does for a build with built-in plugins (#298).
+- `-v` writes the layouts' verbose progress messages as C does (`Verbose`, `GV_INFO`): network
+  simplex, mincross and the dot phases, neato's models and solvers, overlap removal, packing,
+  fdp, sfdp, twopi, circo, osage and patchwork, font resolution, spline routing and label
+  placement, at C's levels (`-v2`, `-v3`). Time stamps are UTC. (#416)
 - `graphviz_pure::decoded`, the entry points for input in the port's decoded form, and
   `charset::Decoded`, the decoded source they take. Also `AttrMap::map` and
   `GlobalAttrs::map_strings`. (#378)
@@ -67,7 +88,7 @@ All notable changes are listed here. The format follows
 - Fidelity is now measured against C Graphviz computing with the same math functions
   (`scripts/dot-portable-libm.sh`): byte-identical on all 2,595 stable corpus inputs. The
   comparison with stock C on macOS is informational (`gv-diff e2e --stock`) (#327).
-- Dot: where the nested layout of adjacent flat edges with ports leaves an edge without a spline
+- dot: where the nested layout of adjacent flat edges with ports leaves an edge without a spline
   (its routing failed, or concentrate merged it), the layout now fails with an error where C
   crashes. It no longer reports the edge lost twice or draws the graph without the merged edge,
   so such `concentrate=true` graphs that drew with exit status 0 now exit 1 with no output
@@ -154,9 +175,7 @@ All notable changes are listed here. The format follows
   own `Nop` path: overlap removal for `-n1`, `splines=ortho` and `curved`, placement of edge
   labels and node xlabels without positions, `-n3`'s re-clipped first bezier with its warning,
   `ratio` compared as written, and `user_pos`'s position errors (#142, #148, #149, #150, #195,
-  #266, #293, #300, #317). In `graphviz-pure-layout`, `neatoinit::neato_layout` takes the `-n`
-  level and the `nop` module is gone (its `LABEL_POS_KEY` is now
-  `common::postproc::LABEL_POS_KEY`).
+  #266, #293, #300, #317).
 - dot with `pack`/`packmode`: a component's bounding box takes in only its own edges (#100);
   `-Tdot` keeps a cluster's induced edges at the root as C does (#312); when a later component
   cannot be laid out, the earlier components, the `_cc_*` subgraphs and the root's box are kept
@@ -230,8 +249,8 @@ All notable changes are listed here. The format follows
   (#267, #325, #344, #346, #354).
 - `drand48` and `rand` keep one state for the whole `dot` run, as in Graphviz, so later graphs
   in a file (neato's random third coordinate, `-n`, stress and vpsc pivots) lay out as Graphviz
-  does. The library starts each call with a fresh state, and `LayoutJobs::continuing` or
-  `with_rand_state` lets a caller continue one (#290).
+  does. The library starts each call with a fresh state, and `decoded::LayoutJobs::continuing`
+  or `with_rand_state` lets a caller continue one (#290).
 - Images that C can load (`image=`, `shapefile=`, HTML `<IMG>`) are sized from their file
   headers (PNG, GIF, JPEG, BMP, ICO, WEBP, SVG, PostScript, PDF) at the graph's `dpi`. They are
   drawn as C's reference build draws them: an `<image>` element in SVG, an `I` operation in xdot
@@ -270,26 +289,25 @@ All notable changes are listed here. The format follows
   Graphviz clips it, using the node's flipped size (#364).
 - An attribute named `"\x01html:<name>"` is an ordinary attribute, as in Graphviz. It no longer
   turns `<name>`'s value into an HTML string (#365).
-- Fdp makes nested cluster labels one level at a time, as C does, so a label's font size and
+- fdp makes nested cluster labels one level at a time, as C does, so a label's font size and
   warnings follow C's order (#319).
-- Documented: under `neato mode=ipsep overlap=vpsc` with clusters, C's layout follows its
-  allocator's addresses and can change from run to run. The port breaks those ties in creation
-  order, which is what C computes with addresses in creation order, and is the same on every
-  platform (#225).
+- Under `neato mode=ipsep overlap=vpsc` with clusters, C's layout follows its allocator's
+  addresses and can change from run to run. The port breaks those ties in creation order, which
+  is what C computes with addresses in creation order, and is the same on every platform (#225).
 - `shape=epsf`: with `imagepath`, a node's file is looked up in Graphviz's splay tree order, so
   a later node whose path's text matches an earlier lookup no longer reuses that file when
   Graphviz reads its own (#380).
 - A record field read before a record-label syntax error is measured, as in C, so its
   measurement warnings print before `bad label format` (#370).
-- Dot with `phase=1`, `2` or `3` post-processes and packs what the layout left, as C does:
+- dot with `phase=1`, `2` or `3` post-processes and packs what the layout left, as C does:
   positions, bounding box, cluster boxes and node sizes, instead of every node at the origin
   (#128).
 - `_background`, or a graph `_draw_` in its place, is drawn behind the graph, `neato -n` makes
   room for it, and one that doesn't parse gets Graphviz's warning (#315).
 - A graph attribute repeated in one attribute statement is set once per occurrence, as in C, so
   a subgraph's `layout` warning prints for each one (#393).
-- Internal: an edge's `fillcolor` is compared with its `color` as C compares its interned
-  pointers, so the renderer gets the same `set_fillcolor` calls as C (#389).
+- An edge's `fillcolor` is compared with its `color` as C compares its interned pointers, so the
+  renderer gets the same `set_fillcolor` calls as C (#389).
 - dot: the aux graph that lays out flat adjacent edges with ports declares every attribute of
   the main graph, as C's `cloneGraph` does, including attributes only a subgraph declared
   (#376).
