@@ -32,7 +32,8 @@ jobs:
       (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
       && github.repository == 'graphviz-pure/graphviz-pure'
     runs-on: ubuntu-24.04
-    timeout-minutes: 120
+    # About 15 minutes to build, 60 to fuzz and up to 50 to prune.
+    timeout-minutes: 150
     permissions:
       contents: read
       actions: read # the corpus kept by earlier runs
@@ -52,14 +53,18 @@ jobs:
           fuzz-seconds: 3600
           minimize-crashes: true
       # Batch runs only add to the corpus; pruning drops the inputs that add no coverage.
-      - name: Prune the corpus
+      # ClusterFuzzLite splits fuzz-seconds across the targets and gives each one's corpus merge
+      # that long: at 600 (60 s each), the merge of render_twopi's corpus after a batch run timed
+      # out (#439). Most merges take far less, and a target that finishes early leaves its time to
+      # the others.
+      - name: Prune the corpus (up to 5 min each)
         if: ${{ !cancelled() }}
         uses: google/clusterfuzzlite/actions/run_fuzzers@884713a6c30a92e5e8544c39945cd7cb630abcd1 # v1
         with:
           github-token: ${{ github.token }}
           mode: prune
           sanitizer: address
-          fuzz-seconds: 600
+          fuzz-seconds: 3000
 
   report:
     name: Open an issue for a failed run
