@@ -74,6 +74,9 @@ pub struct Parser<'a> {
     /// Keys of the last attribute list in source order: cgraph declares them in this
     /// order, which fixes their `sym->id`.
     attr_order: Vec<String>,
+    /// Every item of the last attribute list, repeats included, with its value and HTML
+    /// flag: `attrstmt` sets each one (`S->attrlist`).
+    attr_items: Vec<(String, String, bool)>,
     /// The keys in [`Parser::attr_order`] whose first occurrence was an HTML string: the
     /// first declaration names the attribute symbol, flag included (`bindattrs`).
     html_keys: std::collections::BTreeSet<String>,
@@ -112,6 +115,7 @@ impl<'a> Parser<'a> {
             globals: globals.clone(),
             rbrace_line: 0,
             attr_order: Vec::new(),
+            attr_items: Vec::new(),
             html_keys: std::collections::BTreeSet::new(),
             anon_ctr: 1,
             sub_parent: Vec::new(),
@@ -551,16 +555,17 @@ impl<'a> Parser<'a> {
         };
         // attrlist : optattr '[' optattrdefs ']', at least one
         self.attr_order.clear();
+        self.attr_items.clear();
         self.html_keys.clear();
         let mut attrs = AttrMap::new();
         self.reduce(0)?;
         if self.peek().kind != TokenKind::LBracket {
             return Err(syntax_error(self.peek()));
         }
-        self.attr_brackets(&mut attrs)?;
+        self.attr_brackets(&mut attrs, true)?;
         while self.peek().kind == TokenKind::LBracket {
             self.reduce(1)?;
-            self.attr_brackets(&mut attrs)?;
+            self.attr_brackets(&mut attrs, true)?;
         }
         self.reduce(3)?;
 
@@ -588,9 +593,12 @@ impl<'a> Parser<'a> {
             }
         }
         let attrs = kept;
-        for k in std::mem::take(&mut self.attr_order) {
-            if let Some(v) = attrs.get(&k) {
-                self.attr_stmt(kind, &k, v, attr_is_html(&attrs, &k));
+        // `attrstmt` runs `agattr` once per item, a repeated name included, each with its
+        // own value: the last one wins, and each call gives `setattr`'s diagnostics.
+        self.attr_order.clear();
+        for (k, v, html) in std::mem::take(&mut self.attr_items) {
+            if attrs.contains_key(&k) {
+                self.attr_stmt(kind, &k, &v, html);
             }
         }
         let target = match kind {
@@ -609,7 +617,7 @@ impl<'a> Parser<'a> {
         let mut attrs = AttrMap::new();
         self.reduce(0)?;
         while self.peek().kind == TokenKind::LBracket {
-            self.attr_brackets(&mut attrs)?;
+            self.attr_brackets(&mut attrs, false)?;
             self.reduce(1)?;
         }
         Ok(attrs)
@@ -618,7 +626,9 @@ impl<'a> Parser<'a> {
     /// `'[' optattrdefs ']'` of `attrlist`, reduced to `attrlist`: `optattrdefs : optattrdefs
     /// attrdefs | /* empty */`, `attrdefs : attrassignment optseparator`,
     /// `attrassignment : atom '=' atom` (`appendattr`) and `optseparator : ';' | ',' | /* empty */`.
-    fn attr_brackets(&mut self, attrs: &mut AttrMap) -> Result<()> {
+    ///
+    /// `items`: also keep every item in [`Parser::attr_items`], for an attribute statement.
+    fn attr_brackets(&mut self, attrs: &mut AttrMap, items: bool) -> Result<()> {
         self.expect(&TokenKind::LBracket)?;
         self.reduce(0)?;
         while Self::is_atom_token(&self.peek().kind) {
@@ -632,6 +642,10 @@ impl<'a> Parser<'a> {
                     self.html_keys.insert(key.clone());
                 }
                 self.attr_order.push(key.clone());
+            }
+            if items {
+                self.attr_items
+                    .push((key.clone(), val.text.clone(), val.html));
             }
             set_attr(attrs, &key, val.text, val.html);
             if matches!(self.peek().kind, TokenKind::Comma | TokenKind::Semi) {
