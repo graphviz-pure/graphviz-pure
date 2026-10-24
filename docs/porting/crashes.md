@@ -673,7 +673,7 @@ call for call. A truncated style gives no items in the port, C's result in the f
 
 Closed: #372.
 
-`parseFactor` (`lib/neatogen/adjust.c:1009`) reads `sep` and `esep` with
+`parseFactor` (`lib/neatogen/adjust.c:1020`) reads `sep` and `esep` with
 `if ((i = sscanf(s, "%lf,%lf", &x, &y)))`. On a value that is empty or blank after the
 optional `+`, `sscanf` returns `EOF` (-1), which passes the test. `x` and `y` are then
 uninitialised and `i != 1`, so C computes the margin from whatever their stack slots hold.
@@ -684,8 +684,8 @@ an `agget` call from the same caller (`sepFactor`, `esepFactor`), so the slots h
 `agget` and its callees left there. Read with a debugger on every call, they are pointers
 (heap and stack addresses), and their exact values change from run to run with address
 randomisation. A user-space pointer has its top 12 bits zero, so as a double it is a
-nonnegative subnormal (about 1e-314 here). Every use C makes of the margin then gives what
-0 gives:
+nonnegative subnormal (about 1e-314 here). Every use C makes of the margin in a layout then
+gives what 0 gives:
 
 - `1 + x / sepfact` is exactly 1.
 - An additive margin is added to node sizes and coordinates (at least 0.01 inch), where a
@@ -699,21 +699,27 @@ C 16.1.0 builds (a packaged build and one built from source) gave the same separ
 values on every run. Across fdp, neato's overlap modes, splines and ortho, sfdp, circo and
 twopi, C's output was the same on every run.
 
-The port reads `EOF` as `x = y = 0` (`scan2` in `neatogen/adjust.rs`); `simpleScale`'s
-blank `scale` then returns at its `ISZERO`, as C does. The one place this model can differ
-is a comparison of two garbage values: `compoundEdges`'s `sep value … is smaller than esep`
-note (`fdpgen/clusteredges.c:243`), when both `sep` and `esep` are a bare `+` and nodes
-touch. With 0 the port always prints the note.
+The garbage is the same in every call of a run: each `parseFactor` call follows an `agget`
+from the same depth, which leaves the same pointer. The port models it as one fixed positive
+subnormal (`STALE_POINTER` in `neatogen/adjust.rs`, `2^32` as bits, about 2.1e-314): in
+layouts it acts as 0, and compared with a margin made from it, it is not 0. That comparison
+is `compoundEdges`'s `sep value … is smaller than esep` note (`fdpgen/clusteredges.c:243`),
+reached when nodes touch. With `sep="+"` alone, C compares `G <= G / 1.25` (false, no
+note); with `esep="+"` too, `G <= G` (true, a note). A model of 0 printed the note in both
+cases. The port matches C, the packaged build and the one with the port's math, on nine
+`sep`/`esep` forms of that comparison. `simpleScale`'s blank `scale` returns at its
+`ISZERO`, as C does.
 
 Measured on 612 inputs: 12 `sep`/`esep` forms × 17 engines and overlap modes × 3 graphs. C
-ran twice on each, and inputs where its two outputs differed were skipped. Over two
-measurements:
+ran twice on each, and inputs where its two outputs differed were skipped. Over three
+measurements (the third with the stale-pointer model, the first two with 0):
 
 | Measurement | C varied | Port matched C, before | after | Still differ |
 |---|--:|--:|--:|--:|
 | first | 3 | 343 | 605 | 4 |
 | second | 6 | 343 | 604 | 2 |
+| third | 3 | 344 | 606 | 3 |
 
-Every input that still differs is `mode=ipsep` with
-clusters. There C's layout also changes between spellings of the same value (`sep="0"` and
-`sep="0,0"`), because VPSC breaks ties by heap address (#225).
+Every input that still differs is `mode=ipsep` with clusters. There C's layout also changes
+between spellings of the same value (`sep="0"` and `sep="0,0"`), because VPSC breaks ties by
+heap address (#225).

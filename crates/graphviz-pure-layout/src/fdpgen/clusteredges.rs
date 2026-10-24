@@ -200,31 +200,29 @@ fn make_spline(lg: &mut LGraph<'_>, e: usize, obs: &[Vec<Point>]) {
     add_edge_labels(lg, e);
 }
 
-/// The first failure's message in `compoundEdges` (`clusteredges.c:238-246`); `expand_t`
-/// holds floats, `pack` an int.
+/// The first failure's message in `compoundEdges` (`clusteredges.c:238-246`): `expand_t`
+/// holds doubles (`adjust.h:41-44`), `pack` an int.
 fn touch_warning(lg: &LGraph<'_>, pm: &Expand) {
     let margin = crate::neatogen::adjust::sep_factor(lg);
     let off = crate::neatogen::neatoinit::CL_OFFSET;
     let pack = crate::pack::get_pack(lg.gattr("pack"), off, off);
-    let f = |v: f64| f64::from(v as f32);
-    let (px, py) = (f(pm.x), f(pm.y));
     let f3 = |v: f64| graphviz_pure_core::cnum::fmt_f(v, 3);
     graphviz_pure_core::diag::agwarningf(
         "compoundEdges: nodes touch - falling back to straight line edges\n",
     );
-    if pack as f64 <= px || pack as f64 <= py {
+    if pack as f64 <= pm.x || pack as f64 <= pm.y {
         graphviz_pure_core::diag::agerr_prev(&format!(
             "pack value {pack} is smaller than esep ({},{})\n",
-            f3(px),
-            f3(py)
+            f3(pm.x),
+            f3(pm.y)
         ));
-    } else if f(margin.x) <= px || f(margin.y) <= py {
+    } else if margin.x <= pm.x || margin.y <= pm.y {
         graphviz_pure_core::diag::agerr_prev(&format!(
             "sep value ({},{}) is smaller than esep ({},{})\n",
-            f3(f(margin.x)),
-            f3(f(margin.y)),
-            f3(px),
-            f3(py)
+            f3(margin.x),
+            f3(margin.y),
+            f3(pm.x),
+            f3(pm.y)
         ));
     }
 }

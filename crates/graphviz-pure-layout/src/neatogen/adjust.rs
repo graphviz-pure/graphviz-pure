@@ -53,19 +53,23 @@ pub struct AdjustData {
     pub scaling: f64,
 }
 
+/// What `parseFactor`'s uninitialised `x` and `y` hold after sscanf's EOF: a pointer `agget`
+/// left on the stack, which as a double is a positive subnormal, the same in every call of a
+/// run (`docs/porting/crashes.md`, "parseFactor's uninitialised x, y"). Added to a size or to
+/// 1 it vanishes, so C lays out as with 0; compared with another margin made from it, it is
+/// not 0.
+const STALE_POINTER: f64 = f64::from_bits(1 << 32);
+
 /// `sscanf(s, "%lf,%lf", &x, &y)` conversion count and values, then `if (i == 1) y = x`.
 /// C tests the count for truth, so EOF (`-1`: the string is empty or blank) passes with `x`
-/// and `y` uninitialised. Those stack slots hold what `agget` left there: pointers, which
-/// read as doubles are subnormals, so C computes as with 0 (`docs/porting/crashes.md`,
-/// "parseFactor's uninitialised x, y"). The port uses 0; `simpleScale` then returns at its
-/// `ISZERO`, as C does.
+/// and `y` uninitialised ([`STALE_POINTER`]); `simpleScale` then returns at its `ISZERO`.
 fn scan2(s: &str) -> (i32, f64, f64) {
     let r = sscanf(s, "%lf,%lf");
     let [x, y, ..] = r.values;
     match r.count {
         2 => (2, x, y),
         1 => (1, x, x),
-        -1 => (-1, 0.0, 0.0),
+        -1 => (-1, STALE_POINTER, STALE_POINTER),
         _ => (0, 0.0, 0.0),
     }
 }
@@ -371,22 +375,23 @@ mod tests {
     use super::*;
 
     // Issue #372: on a blank `sep`/`esep` C's sscanf returns EOF, which `parseFactor` takes
-    // as success with uninitialised `x`, `y` (subnormal garbage, so 0 in effect). The
-    // values are C 16.1.0's (`dot -v`: `Node separation`, `Edge separation`).
+    // as success with uninitialised `x`, `y`: a stale pointer, a positive subnormal. The
+    // values are C 16.1.0's (`dot -v`: `Node separation`, `Edge separation`, which print the
+    // subnormal as 0).
     #[test]
-    fn parse_factor_reads_a_blank_value_as_zero() {
+    fn parse_factor_reads_a_blank_value_as_a_stale_pointer() {
         let f = |s, sepfact, dflt| parse_factor(s, sepfact, dflt).map(|e| (e.do_add, e.x, e.y));
+        let g = STALE_POINTER;
+        assert!(g > 0.0 && !g.is_normal());
         for blank in ["", " ", "\t"] {
             assert_eq!(f(blank, 1.0, 0.0), Some((false, 1.0, 1.0)));
             assert_eq!(f(blank, SEPFACT, DFLT_MARGIN), Some((false, 1.0, 1.0)));
         }
         for plus in ["+", " + ", "+\n"] {
-            assert_eq!(f(plus, 1.0, 0.0), Some((true, 0.0, 0.0)));
+            assert_eq!(f(plus, 1.0, 0.0), Some((true, g, g)));
             assert_eq!(f(plus, SEPFACT, DFLT_MARGIN), Some((true, 4.0, 4.0)));
-            assert_eq!(
-                f(plus, 1.0 / SEPFACT, SEPFACT * DFLT_MARGIN),
-                Some((true, 0.0, 0.0))
-            );
+            let e = f(plus, 1.0 / SEPFACT, SEPFACT * DFLT_MARGIN).unwrap();
+            assert!(e.0 && e.1 < g && e.1 > 0.0 && e.1 == e.2);
         }
         assert_eq!(f("x", 1.0, 0.0), None);
         assert_eq!(f("+,1", 1.0, 0.0), None);

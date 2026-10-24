@@ -8510,7 +8510,7 @@ fn issue285_arrow_type_warnings_print_once_per_layout() {
 /// left on the stack, subnormal as doubles, so C lays out as with 0 on every run and build
 /// (`docs/porting/crashes.md`). Output is C 16.1.0's.
 #[test]
-fn issue372_blank_sep_is_read_as_zero_like_c() {
+fn issue372_blank_sep_lays_out_like_c() {
     for (src, want) in [
         (
             r#"graph { layout=fdp; sep=""; subgraph cluster_a { a -- b -- c } d -- a; subgraph cluster_b { e -- f } f -- d }"#,
@@ -8549,6 +8549,67 @@ stop
         let (out, err, ok) = run(&["-Tplain"], src);
         assert!(ok, "{err}");
         assert_eq!(err, "");
+        assert_eq!(out, want, "{src}");
+    }
+}
+
+/// Issue #372: C's garbage is the same stale pointer in every `parseFactor` call, so
+/// `compoundEdges`' note (`clusteredges.c:243`) compares `G <= G / 1.25` for `sep="+"`
+/// alone (no note) and `G <= G` with `esep="+"` too (a note); `expand_t` holds doubles, so
+/// `1.00000001` is not rounded to `1`. Output is C 16.1.0's.
+#[test]
+fn issue372_compound_edges_note_compares_cs_stale_margins() {
+    for (src, want, want_err) in [
+        (
+            r#"graph { layout=fdp; splines=compound; sep="+"; subgraph cluster_x { a [pos="0,0!"] } d [pos="1.5,0!"]; e [pos="1.6,0!"]; c [pos="3,0!"]; a -- c; d -- e }"#,
+            r#"graph 1 4.981 0.72222
+node a 4.4949 0.36111 0.75 0.5 a solid ellipse black lightgrey
+node d 0.375 0.36111 0.75 0.5 d solid ellipse black lightgrey
+node e 1.1257 0.36111 0.75 0.5 e solid ellipse black lightgrey
+node c 1.8765 0.36111 0.75 0.5 c solid ellipse black lightgrey
+edge a c 4 4.1141 0.36111 3.6177 0.36111 2.7543 0.36111 2.2577 0.36111 solid black
+edge d e 4 0.75477 0.36111 0.75622 0.36111 0.75768 0.36111 0.75913 0.36111 solid black
+stop
+"#,
+            r#"Warning: compoundEdges: nodes touch - falling back to straight line edges
+Warning: some nodes with margin (0.00,0.00) touch - falling back to straight line edges
+"#,
+        ),
+        (
+            r#"graph { layout=fdp; splines=compound; sep="+"; esep="+"; subgraph cluster_x { a [pos="0,0!"] } d [pos="1.5,0!"]; e [pos="1.6,0!"]; c [pos="3,0!"]; a -- c; d -- e }"#,
+            r#"graph 1 4.981 0.72222
+node a 4.4949 0.36111 0.75 0.5 a solid ellipse black lightgrey
+node d 0.375 0.36111 0.75 0.5 d solid ellipse black lightgrey
+node e 1.1257 0.36111 0.75 0.5 e solid ellipse black lightgrey
+node c 1.8765 0.36111 0.75 0.5 c solid ellipse black lightgrey
+edge a c 4 4.1141 0.36111 3.6177 0.36111 2.7543 0.36111 2.2577 0.36111 solid black
+edge d e 4 0.75477 0.36111 0.75622 0.36111 0.75768 0.36111 0.75913 0.36111 solid black
+stop
+"#,
+            r#"Warning: compoundEdges: nodes touch - falling back to straight line edges
+sep value (0.000,0.000) is smaller than esep (0.000,0.000)
+Warning: some nodes with margin (0.00,0.00) touch - falling back to straight line edges
+"#,
+        ),
+        (
+            r#"graph { layout=fdp; splines=compound; sep="+1.00000001"; esep="+1"; subgraph cluster_x { a [pos="0,0!"] } d [pos="1.5,0!"]; e [pos="1.6,0!"]; c [pos="3,0!"]; a -- c; d -- e }"#,
+            r#"graph 1 5.1565 0.72222
+node a 4.6704 0.36111 0.75 0.5 a solid ellipse black lightgrey
+node d 0.375 0.36111 0.75 0.5 d solid ellipse black lightgrey
+node e 1.1535 0.36111 0.75 0.5 e solid ellipse black lightgrey
+node c 1.9321 0.36111 0.75 0.5 c solid ellipse black lightgrey
+edge a c 4 4.2896 0.36111 3.768 0.36111 2.8363 0.36111 2.314 0.36111 solid black
+edge d e 4 0.75515 0.36111 0.76133 0.36111 0.7675 0.36111 0.77368 0.36111 solid black
+stop
+"#,
+            r#"Warning: compoundEdges: nodes touch - falling back to straight line edges
+Warning: some nodes with margin (1.00,1.00) touch - falling back to straight line edges
+"#,
+        ),
+    ] {
+        let (out, err, ok) = run(&["-Tplain"], src);
+        assert!(ok, "{err}");
+        assert_eq!(err, want_err, "{src}");
         assert_eq!(out, want, "{src}");
     }
 }
