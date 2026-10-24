@@ -1411,6 +1411,9 @@ struct RecParser<'a> {
     pos: usize,
     html: bool,
     buf: Vec<u8>,
+    /// `make_label` for a field's text, run as the field closes, so a field read before
+    /// a syntax error is measured (and warned about) too.
+    measure: &'a dyn Fn(&str) -> LabelGeometry,
 }
 
 impl RecParser<'_> {
@@ -1525,8 +1528,10 @@ impl RecParser<'_> {
                         self.put(tsp as usize, 0);
                         let text = self.cstr();
                         if let Some(f) = fp {
-                            rv.flds[f].text = Some(text);
-                            rv.flds[f].lr = true;
+                            let fld = &mut rv.flds[f];
+                            fld.lp = Some((self.measure)(&text));
+                            fld.text = Some(text);
+                            fld.lr = true;
                         }
                         tsp = 0;
                         hstsp = 0;
@@ -1680,22 +1685,6 @@ fn pos_reclbl(f: &mut Field, mut ul: Point, sides: u8) {
     }
 }
 
-fn label_fields(
-    f: &mut Field,
-    html: bool,
-    obj: &LabelSubstContext<'_>,
-    font_name: &str,
-    font_size: f64,
-    charset: Charset,
-) {
-    if let Some(text) = &f.text {
-        f.lp = Some(make_label(text, html, obj, font_name, font_size, charset));
-    }
-    for sub in &mut f.flds {
-        label_fields(sub, html, obj, font_name, font_size, charset);
-    }
-}
-
 fn to_record_field(f: &Field) -> RecordField {
     RecordField {
         port: f.id.clone(),
@@ -1709,7 +1698,13 @@ fn to_record_field(f: &Field) -> RecordField {
 }
 
 /// `parse_reclbl` on `label` for `record_init`, falling back to `\N` on a syntax error.
-fn parse_record_label(label: &str, html: bool, lr: bool) -> Field {
+/// `measure` is `make_label` for each field's text, run as the field closes.
+fn parse_record_label(
+    label: &str,
+    html: bool,
+    lr: bool,
+    measure: &dyn Fn(&str) -> LabelGeometry,
+) -> Field {
     // C parses the label's bytes (`graphviz_pure_core::charset`).
     let src = graphviz_pure_core::charset::encode(label);
     let len = src.len().max(1).max(2);
@@ -1718,6 +1713,7 @@ fn parse_record_label(label: &str, html: bool, lr: bool) -> Field {
         pos: 0,
         html,
         buf: vec![0; len + 1],
+        measure,
     };
     if let Some(f) = p.parse(lr, true) {
         return f;
@@ -1730,6 +1726,7 @@ fn parse_record_label(label: &str, html: bool, lr: bool) -> Field {
         pos: 0,
         html,
         buf: vec![0; len + 1],
+        measure,
     };
     p.parse(lr, true).unwrap_or_default()
 }
@@ -1744,9 +1741,9 @@ fn record_init(
     let attrs = &node.attrs;
     let flip = !env.realflip;
     let html = geom.label.html;
-    let mut info = parse_record_label(label, html, flip);
-    let (font_name, font_size) = (geom.label.font_name.clone(), geom.label.font_size);
-    label_fields(&mut info, html, obj, &font_name, font_size, env.charset);
+    let (font_name, font_size) = (&geom.label.font_name, geom.label.font_size);
+    let measure = |text: &str| make_label(text, html, obj, font_name, font_size, env.charset);
+    let mut info = parse_record_label(label, html, flip, &measure);
     size_reclbl(attrs, &mut info);
     let mut sz = Point::new(inch2ps(geom.width), inch2ps(geom.height));
     if !mapbool(Some(attrs.get("fixedsize").map_or("false", String::as_str))) {
@@ -1809,25 +1806,21 @@ mod tests {
 
     #[test]
     fn record_port_overwrites_text_like_c() {
-        let mut f = parse_record_label("abc <p> def|x", false, true);
+        let obj = LabelSubstContext::for_node("n");
+        let measure =
+            |text: &str| make_label(text, false, &obj, "Times-Roman", 14.0, Charset::Utf8);
+        let f = parse_record_label("abc <p> def|x", false, true, &measure);
         assert_eq!(f.flds[0].text.as_deref(), Some(""));
         assert_eq!(f.flds[0].id.as_deref(), Some(""));
-        label_fields(
-            &mut f,
-            false,
-            &LabelSubstContext::for_node("n"),
-            "Times-Roman",
-            14.0,
-            Charset::Utf8,
-        );
         assert!(f.flds[0].lp.as_ref().unwrap().dimen.x == 0.0);
     }
 
     #[test]
     fn record_hard_spaces() {
-        let f = parse_record_label("a\\ \\ b  c|d", false, true);
+        let unmeasured = |_: &str| LabelGeometry::default();
+        let f = parse_record_label("a\\ \\ b  c|d", false, true, &unmeasured);
         assert_eq!(f.flds[0].text.as_deref(), Some("a  b  c"));
-        let f = parse_record_label("", false, true);
+        let f = parse_record_label("", false, true, &unmeasured);
         assert_eq!(f.flds[0].text.as_deref(), Some(" "));
     }
 
