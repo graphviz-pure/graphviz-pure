@@ -385,11 +385,12 @@ fn write_op(out: &mut String, op: &Op, level: &mut i32) {
     out.push('}');
 }
 
+/// `write_xdots`: the value's ops as a JSON list. When no op parses C warns and writes
+/// nothing after the key, which leaves the JSON invalid.
 fn write_xdots(out: &mut String, val: &str, level: &mut i32) {
     let ops = parse_xdot(val);
     if ops.is_empty() {
-        out.push('"');
-        out.push('"');
+        graphviz_pure_core::diag::agwarningf(&format!("Could not parse xdot \"{val}\"\n"));
         return;
     }
     out.push('\n');

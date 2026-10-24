@@ -8261,6 +8261,45 @@ stop
     }
 }
 
+// Issue #377: C's JSON `write_xdots` warns `Could not parse xdot` for a value with no op that
+// parses, and writes nothing after the key (invalid JSON). Output is C 16.1.0's.
+#[test]
+fn issue377_xdot_json_warns_and_writes_no_value_for_an_unparsable_xdot() {
+    let (out, err, ok) = run(&["-Txdot_json"], "digraph { a -> b [_hdraw_=\"zz\"] }");
+    assert!(ok);
+    assert_eq!(err, "Warning: Could not parse xdot \"zz\"\n");
+    assert_eq!(
+        out,
+        r#"{
+  "name": "%1",
+  "directed": true,
+  "strict": false,
+  "_subgraph_cnt": 0,
+  "objects": [
+    {
+      "_gvid": 0,
+      "name": "a",
+      "label": "\\N"
+    },
+    {
+      "_gvid": 1,
+      "name": "b",
+      "label": "\\N"
+    }
+  ],
+  "edges": [
+    {
+      "_gvid": 0,
+      "tail": 0,
+      "head": 1,
+      "_hdraw_": 
+    }
+  ]
+}
+"#
+    );
+}
+
 /// neato ortho obstacles (`makeObstacle` with `isOrtho`) keep `margin = {0}`: a scaling
 /// `sep`/`esep` shrinks each box to its node's centre, so touching boxes are not reported.
 #[test]
