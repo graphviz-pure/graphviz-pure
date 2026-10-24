@@ -13,6 +13,23 @@ pub(crate) fn strtol(s: &str) -> Option<(i64, &str)> {
 
 pub(crate) use graphviz_pure_core::cnum::{atoi, mapbool};
 
+/// A string C compares by pointer, with where it came from: an attribute's value or a
+/// string literal. cgraph interns attribute values (`agstrdup`, `lib/cgraph/refstr.c`,
+/// one dictionary per graph), so two values with the same text and HTML flag are one
+/// pointer; a literal is never an attribute's pointer.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct PtrStr<'a> {
+    pub text: &'a str,
+    /// The attribute key the value was read from; `None` for a literal.
+    key: Option<&'static str>,
+}
+
+impl<'a> PtrStr<'a> {
+    pub fn literal(text: &'a str) -> Self {
+        Self { text, key: None }
+    }
+}
+
 /// Read-only view of an object's attributes with the `late_*` helpers.
 #[derive(Clone, Copy)]
 pub(crate) struct Attrs<'a>(pub &'a AttrMap);
@@ -48,8 +65,42 @@ impl<'a> Attrs<'a> {
         self.get(k).filter(|s| !s.is_empty()).unwrap_or(dflt)
     }
 
+    /// [`Attrs::late_string`] with the result's identity: the attribute's value, else `dflt`
+    /// as a literal.
+    pub fn ptr_string(&self, k: &'static str, dflt: &'a str) -> PtrStr<'a> {
+        match self.get(k) {
+            Some(text) => PtrStr { text, key: Some(k) },
+            None => PtrStr::literal(dflt),
+        }
+    }
+
+    /// [`Attrs::late_nnstring`] with the result's identity: the attribute's value, else
+    /// `dflt` itself.
+    pub fn ptr_nnstring(&self, k: &'static str, dflt: PtrStr<'a>) -> PtrStr<'a> {
+        match self.nonempty(k) {
+            Some(text) => PtrStr { text, key: Some(k) },
+            None => dflt,
+        }
+    }
+
+    /// `a == b` on C's pointers. Equal literals are one pointer, as clang and gcc merge
+    /// them. The HTML flags are read only for equal texts from two attributes.
+    pub fn same_ptr(&self, a: PtrStr<'_>, b: PtrStr<'_>) -> bool {
+        a.text == b.text
+            && match (a.key, b.key) {
+                (None, None) => true,
+                (Some(x), Some(y)) => x == y || self.is_html(x) == self.is_html(y),
+                _ => false,
+            }
+    }
+
     pub fn mapbool(&self, k: &str) -> bool {
         mapbool(self.get(k))
+    }
+
+    /// `aghtmlstr(agget(obj, k))`: whether the value of `k` is an HTML string.
+    pub fn is_html(&self, k: &str) -> bool {
+        graphviz_pure_core::attr_is_html(self.0, k)
     }
 
     /// Non-empty value.
