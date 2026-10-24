@@ -19,6 +19,8 @@
 //! does, so extreme `weight`, `minlen` or `nodesep` values reach C's checks
 //! instead of panicking on the way.
 
+use graphviz_pure_core::diag::{elapsed_sec, fmt_f, fprintf_stderr, start_timer, verbose_on};
+
 pub const SEARCHSIZE: i32 = 30;
 
 /// The node and edge fields `ns.c` reads and writes. Nodes and edges are
@@ -1128,7 +1130,29 @@ pub fn rank2<G: NsGraph + ?Sized>(
         search_size: SEARCHSIZE,
         subtrees: Vec::new(),
     };
+    const NS: &str = "network simplex: ";
+    // graphSize, and ctx.N_nodes and ctx.N_edges, which init_graph counts the same way
+    let size = verbose_on().then(|| {
+        let nlist = g.nlist();
+        let ne: usize = nlist.iter().map(|&n| g.out_edges(n).len()).sum();
+        fprintf_stderr(&format!(
+            "{NS} {} nodes {ne} edges maxiter={maxiter} balance={balance}\n",
+            nlist.len()
+        ));
+        start_timer();
+        (nlist.len(), ne)
+    });
+    let done = |iter: i32| {
+        if let Some((nn, ne)) = size {
+            let nl = if iter >= 100 { "\n" } else { "" };
+            fprintf_stderr(&format!(
+                "{nl}{NS}{nn} nodes {ne} edges {iter} iter {} sec\n",
+                fmt_f(elapsed_sec(), 2)
+            ));
+        }
+    };
     if g.nlist().is_empty() {
+        done(0);
         return Ok(0);
     }
     let feasible = init_graph(g);
@@ -1164,6 +1188,11 @@ pub fn rank2<G: NsGraph + ?Sized>(
             return Ok(err);
         }
         iter += 1;
+        if size.is_some() && iter % 100 == 0 {
+            let lead = if iter % 1000 == 100 { NS } else { "" };
+            let nl = if iter % 1000 == 0 { "\n" } else { "" };
+            fprintf_stderr(&format!("{lead}{iter} {nl}"));
+        }
         if iter >= maxiter {
             break;
         }
@@ -1180,6 +1209,7 @@ pub fn rank2<G: NsGraph + ?Sized>(
             free_tree_list(g, &mut ctx);
         }
     }
+    done(iter);
     Ok(0)
 }
 

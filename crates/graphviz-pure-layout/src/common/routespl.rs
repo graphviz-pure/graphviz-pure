@@ -136,6 +136,14 @@ pub struct RealEdge<'a> {
 /// `routesplines_(pp, &npoints, polyline)`. Returns `None` where C returns NULL (and
 /// `npoints == 0`).
 pub fn routesplines_(pp: &mut Path, polyline: bool, real: RealEdge<'_>) -> Option<Vec<Point>> {
+    ROUTE.with(|r| {
+        let (depth, nedges, nboxes) = r.get();
+        r.set((
+            depth,
+            nedges.wrapping_add(1),
+            nboxes.wrapping_add(pp.boxes.len()),
+        ));
+    });
     if checkpath(pp) {
         return None;
     }
@@ -330,6 +338,25 @@ pub fn routesplines_(pp: &mut Path, polyline: bool, real: RealEdge<'_>) -> Optio
     {
         let is_horizontal = is_straight(&ps, |p| p.y);
         let is_vertical = is_straight(&ps, |p| p.x);
+        if let (Some(a), Some(b)) = (ps.first(), ps.last()) {
+            use graphviz_pure_core::diag::{fmt_f, gv_info};
+            let f = |v: f64| fmt_f(v, 3);
+            let ends = format!("[{}, {}] -- [{}, {}]", f(a.x), f(a.y), f(b.x), f(b.y));
+            if is_horizontal {
+                gv_info(
+                    "routespl.c",
+                    520,
+                    &format!("spline {ends} is horizontal; will be trivially bounded"),
+                );
+            }
+            if is_vertical {
+                gv_info(
+                    "routespl.c",
+                    534,
+                    &format!("spline {ends} is vertical; will be trivially bounded"),
+                );
+            }
+        }
         if is_horizontal || is_vertical {
             for b in boxes.iter_mut() {
                 b.ll.x = ps[0].x;
@@ -414,6 +441,42 @@ fn overlap(i0: f64, i1: f64, j0: f64, j1: f64) -> f64 {
     i1 - j0
 }
 
+thread_local! {
+    /// `routeinit`, `nedges` and `nboxes`: the nesting of `routesplinesinit` and the edges
+    /// and boxes routed since the outermost one.
+    static ROUTE: std::cell::Cell<(i32, i32, usize)> = const { std::cell::Cell::new((0, 0, 0)) };
+}
+
+/// `routesplinesinit()`: counts the edges and boxes routed until the matching
+/// [`routesplines_term`], and starts the clock (`-v`).
+pub fn routesplines_init() {
+    let depth = ROUTE.with(|r| r.get().0).wrapping_add(1);
+    if depth > 1 {
+        ROUTE.with(|r| r.set((depth, r.get().1, r.get().2)));
+        return;
+    }
+    ROUTE.with(|r| r.set((depth, 0, 0)));
+    if graphviz_pure_core::diag::verbose_on() {
+        graphviz_pure_core::diag::start_timer();
+    }
+}
+
+/// `routesplinesterm()`: at the outermost level, the `-v` summary.
+pub fn routesplines_term() {
+    let (depth, nedges, nboxes) = ROUTE.with(|r| r.get());
+    let depth = depth.wrapping_sub(1);
+    ROUTE.with(|r| r.set((depth, nedges, nboxes)));
+    if depth > 0 {
+        return;
+    }
+    let secs = graphviz_pure_core::diag::fmt_f(graphviz_pure_core::diag::elapsed_sec(), 2);
+    graphviz_pure_core::diag::gv_info(
+        "routespl.c",
+        235,
+        &format!("routesplines: {nedges} edges, {nboxes} boxes {secs} sec"),
+    );
+}
+
 /// `printpath(pp)` (`routespl.c:758-771`): every one of the `nbox` boxes (the caller's
 /// count, so after `checkpath` squeezes out degenerate boxes the tail repeats the last
 /// originals) and the end ports.
@@ -479,7 +542,18 @@ pub fn checkpath(thepath: &mut Path) -> bool {
         return true;
     }
     for bi in 0..boxn.saturating_sub(1) {
-        let (lo, hi) = boxes.split_at_mut(bi + 1);
+        let next = bi.wrapping_add(1);
+        if graphviz_pure_core::diag::verbose_on()
+            && let (Some(&a), Some(&b)) = (thepath.boxes.get(bi), thepath.boxes.get(next))
+            && !(b.ll.x > b.ur.x || b.ll.y > b.ur.y)
+            && (a.ur.x < b.ll.x || a.ll.x > b.ur.x || a.ur.y < b.ll.y || a.ll.y > b.ur.y)
+        {
+            graphviz_pure_core::diag::fprintf_stderr(&format!(
+                "in checkpath, boxes {bi} and {next} don't touch\n"
+            ));
+            printpath(thepath);
+        }
+        let (lo, hi) = thepath.boxes.split_at_mut(bi + 1);
         let ba = &mut lo[bi];
         let bb = &mut hi[0];
         if bb.ll.x > bb.ur.x || bb.ll.y > bb.ur.y {
@@ -561,6 +635,7 @@ pub fn checkpath(thepath: &mut Path) -> bool {
             }
         }
     }
+    let boxes = &mut thepath.boxes;
     let b0 = boxes[0];
     let sp = &mut thepath.start.p;
     if sp.x < b0.ll.x || sp.x > b0.ur.x || sp.y < b0.ll.y || sp.y > b0.ur.y {

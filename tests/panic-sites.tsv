@@ -94,7 +94,7 @@ layout/ortho/trapezoid.rs	0	0	55	10
 layout/osage/mod.rs	0	0	27	4
 layout/pack/cccomps.rs	0	0	36	0
 layout/pack/mod.rs	1	0	78	44
-layout/patchwork/patchwork.rs	0	0	24	2
+layout/patchwork/patchwork.rs	0	0	22	2
 layout/patchwork/patchworkinit.rs	0	0	11	0
 layout/patchwork/tree_map.rs	0	0	20	3
 layout/sfdpgen/multilevel.rs	0	3	35	18

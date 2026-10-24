@@ -86,7 +86,10 @@ fn derived_comps(dg: &CGraph, arena: &EdgeArena, n_total: usize) -> Vec<Sub> {
                 }
             }
         }
-        out.push(Sub::new(n_total, c));
+        let mut sub = Sub::new(n_total, c);
+        // ccomps(dg, &c_cnt, 0) names them with setPrefix's default
+        sub.name = format!("_cc_{}", out.len());
+        out.push(sub);
     }
     out
 }

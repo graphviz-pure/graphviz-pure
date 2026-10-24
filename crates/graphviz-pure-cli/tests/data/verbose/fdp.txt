@@ -1,0 +1,14 @@
+fontname: "Times-Roman" resolved to: [internal hard-coded]
+  margin 4
+pack info:
+  mode   node
+  size   0
+  flags  0
+layout %1
+xLayout tries = 9, mode = prism
+Node separation: add=1 (4.000000,4.000000)
+step size = 9
+end %1
+Edge separation: add=1 (3.200000,3.200000)
+Creating edges using line segments
+[Graphviz] emit.c:4323: TS gvRenderJobs %1: T secs.

@@ -13,6 +13,7 @@ use crate::common::geom::{add, sub as psub};
 use crate::common::types::{Bezier, LGraph, P_PIN, Sub};
 use crate::common::utils::{compute_bb, coord, scan_d};
 use crate::cutil::qsort_by;
+use graphviz_pure_core::diag::{fmt_f, fprintf_stderr, verbose_byte, verbose_msg, verbose_on};
 
 pub mod cccomps;
 use graphviz_pure_core::{BoundingBox, Point};
@@ -32,9 +33,9 @@ pub enum PackMode {
 
 pub const PK_COL_MAJOR: u32 = 1 << 0;
 pub const PK_USER_VALS: u32 = 1 << 1;
-pub const PK_TOP_ALIGN: u32 = 1 << 2;
-pub const PK_LEFT_ALIGN: u32 = 1 << 3;
-pub const PK_RIGHT_ALIGN: u32 = 1 << 4;
+pub const PK_LEFT_ALIGN: u32 = 1 << 2;
+pub const PK_RIGHT_ALIGN: u32 = 1 << 3;
+pub const PK_TOP_ALIGN: u32 = 1 << 4;
 pub const PK_BOT_ALIGN: u32 = 1 << 5;
 pub const PK_INPUT_ORDER: u32 = 1 << 6;
 
@@ -103,7 +104,30 @@ pub fn get_pack_mode_info(p: Option<&str>, dflt: PackMode, pinfo: &mut PackInfo)
             pinfo.mode = PackMode::Node;
         }
     }
+    if verbose_on() {
+        let mut m = format!("pack info:\n  mode   {}\n", mode_str(pinfo.mode));
+        if pinfo.mode == PackMode::Aspect {
+            m.push_str(&format!("  aspect {}\n", fmt_f(f64::from(pinfo.aspect), 6)));
+        }
+        m.push_str(&format!(
+            "  size   {}\n  flags  {}\n",
+            pinfo.sz, pinfo.flags
+        ));
+        fprintf_stderr(&m);
+    }
     pinfo.mode
+}
+
+/// `mode2Str(m)`.
+fn mode_str(m: PackMode) -> &'static str {
+    match m {
+        PackMode::Clust => "cluster",
+        PackMode::Node => "node",
+        PackMode::Graph => "graph",
+        PackMode::Array => "array",
+        PackMode::Aspect => "aspect",
+        PackMode::Undef => "undefined",
+    }
 }
 
 /// `getPack(g, not_def, dflt)`: the `pack` attribute.
@@ -125,10 +149,28 @@ pub fn get_pack_info(
     dflt_margin: i64,
     pinfo: &mut PackInfo,
 ) -> PackMode {
-    pinfo.margin = get_pack(g.gattr("pack"), dflt_margin, dflt_margin) as u32;
+    pack_info(
+        g.gattr("pack"),
+        g.gattr("packmode"),
+        dflt,
+        dflt_margin,
+        pinfo,
+    )
+}
+
+/// [`get_pack_info`] on the graph's `pack` and `packmode` values.
+pub fn pack_info(
+    pack: Option<&str>,
+    packmode: Option<&str>,
+    dflt: PackMode,
+    dflt_margin: i64,
+    pinfo: &mut PackInfo,
+) -> PackMode {
+    pinfo.margin = get_pack(pack, dflt_margin, dflt_margin) as u32;
+    verbose_msg(&format!("  margin {}\n", pinfo.margin));
     pinfo.do_splines = false;
     pinfo.fixed = None;
-    get_pack_mode_info(g.gattr("packmode"), dflt, pinfo)
+    get_pack_mode_info(packmode, dflt, pinfo)
 }
 
 /// DFS of `ccomps.c`: marks and collects the component of `n`.
@@ -153,7 +195,7 @@ fn dfs(g: &LGraph<'_>, root: &Sub, n: usize, mark: &mut [bool], out: &mut Vec<us
 /// `pccomps(g, &ncc, pfx, &pinned)`: connected components, with all pinned
 /// nodes (and what they reach) in the first one. Returns the components and
 /// whether a pinned component exists.
-pub fn pccomps(g: &LGraph<'_>) -> (Vec<Sub>, bool) {
+pub fn pccomps(g: &LGraph<'_>, pfx: &str) -> (Vec<Sub>, bool) {
     let root = g.root_sub();
     let n = g.nodes.len();
     let mut mark = vec![false; n];
@@ -178,6 +220,9 @@ pub fn pccomps(g: &LGraph<'_>) -> (Vec<Sub>, bool) {
         dfs(g, &root, v, &mut mark, &mut c);
         out.push(Sub::new(n, c));
     }
+    for (i, s) in out.iter_mut().enumerate() {
+        s.name = format!("{pfx}{i}");
+    }
     (out, pin)
 }
 
@@ -194,6 +239,10 @@ pub fn ccomps(g: &LGraph<'_>) -> Vec<Sub> {
         let mut c = Vec::new();
         dfs(g, &root, v, &mut mark, &mut c);
         out.push(Sub::new(n, c));
+    }
+    // setPrefix's default prefix
+    for (i, s) in out.iter_mut().enumerate() {
+        s.name = format!("_cc_{i}");
     }
     out
 }
@@ -223,6 +272,8 @@ pub enum PkClust {
 /// for dot (`dotgen::pack`).
 pub trait PackGraph {
     fn pk_ncomps(&self) -> usize;
+    /// `agnameof(gs[i])`, which the verbose messages print.
+    fn pk_name(&self, i: usize) -> String;
     /// `compute_bb(gs[i])`, storing the result as `GD_bb(gs[i])`.
     fn pk_compute_bb(&mut self, i: usize);
     /// `GD_bb(g)`.
@@ -266,6 +317,9 @@ struct LPack<'g, 'a> {
 impl PackGraph for LPack<'_, '_> {
     fn pk_ncomps(&self) -> usize {
         self.gs.len()
+    }
+    fn pk_name(&self, i: usize) -> String {
+        self.gs.get(i).map(|s| s.name.clone()).unwrap_or_default()
     }
     fn pk_compute_bb(&mut self, i: usize) {
         compute_bb(self.g, &mut self.gs[i], false);
@@ -433,7 +487,26 @@ fn compute_step(bbs: &[BoundingBox], margin: u32) -> i32 {
     let r = d.sqrt();
     let l1 = (-b + r) / (2.0 * a);
     let root = l1 as i32;
-    if root == 0 { 1 } else { root }
+    let root = if root == 0 { 1 } else { root };
+    if verbose_byte() > 2 {
+        let l2 = (-b - r) / (2.0 * a);
+        let f = |v: f64| fmt_f(v, 6);
+        fprintf_stderr(&format!(
+            "Packing: compute grid size\na {} b {} c {} d {} r {}\nroot {root} ({}) {} ({})\n r1 {} r2 {}\n",
+            f(a),
+            f(b),
+            f(c),
+            f(d),
+            f(r),
+            f(l1),
+            l2 as i32,
+            f(l2),
+            // clang: fmuladd(a * l, l, b * l) + c
+            f((a * l1).mul_add(l1, b * l1) + c),
+            f((a * l2).mul_add(l2, b * l2) + c),
+        ));
+    }
+    root
 }
 
 struct GInfo {
@@ -611,6 +684,7 @@ fn add_rect(ps: &mut PointSet, ll: Point, ur: Point, budget: &mut Budget) -> boo
 }
 
 /// `genBox(bb0, info, ssize, margin, center)`.
+#[allow(clippy::too_many_arguments)]
 fn gen_box(
     bb0: &BoundingBox,
     ssize: i32,
@@ -618,6 +692,7 @@ fn gen_box(
     center: Point,
     index: usize,
     budget: &mut Budget,
+    name: &str,
 ) -> Option<GInfo> {
     let m = f64::from(margin);
     let bb = BoundingBox::new(
@@ -640,13 +715,28 @@ fn gen_box(
     }
     let w = grid(bb0.ur.x - bb0.ll.x + 2.0 * m, ssize);
     let h = grid(bb0.ur.y - bb0.ll.y + 2.0 * m, ssize);
+    let cells: Vec<(i64, i64)> = ps.into_iter().collect();
+    verbose_cells(name, &cells, w, h);
     Some(GInfo {
         // A degenerate box (an empty component's ±DBL_MAX) saturates GRID's
         // double-to-int conversion; C's int sum then wraps.
         perim: w.wrapping_add(h),
-        cells: ps.into_iter().collect(),
+        cells,
         index,
     })
+}
+
+/// genBox's and genPoly's `Verbose > 2` dump: the cells in the PointSet's (x, y) order.
+fn verbose_cells(name: &str, cells: &[(i64, i64)], w: i32, h: i32) {
+    if verbose_byte() > 2 {
+        let mut sorted = cells.to_vec();
+        sorted.sort_unstable();
+        let mut m = format!("{name} no. cells {} W {w} H {h}\n", cells.len());
+        for (x, y) in sorted {
+            m.push_str(&format!("  {x} {y} cell\n"));
+        }
+        fprintf_stderr(&m);
+    }
 }
 
 /// `genPoly(root, g, info, ssize, pinfo, center)` for component `gi`.
@@ -737,9 +827,11 @@ fn gen_poly<P: PackGraph + ?Sized>(
     }
     let w = grid(gbb.ur.x - gbb.ll.x + 2.0 * margin, ssize);
     let h = grid(gbb.ur.y - gbb.ll.y + 2.0 * margin, ssize);
+    let cells: Vec<(i64, i64)> = ps.into_iter().collect();
+    verbose_cells(&g.pk_name(gi), &cells, w, h);
     Some(GInfo {
         perim: w.wrapping_add(h),
-        cells: ps.into_iter().collect(),
+        cells,
         index,
     })
 }
@@ -772,6 +864,14 @@ fn fits(
     for &(cx, cy) in &info.cells {
         ps.insert((cx.wrapping_add(x), cy.wrapping_add(y)));
     }
+    if verbose_byte() >= 2 {
+        fprintf_stderr(&format!(
+            "cc ({} cells) at ({x},{y}) ({},{})\n",
+            info.cells.len(),
+            fmt_f(place.x, 0),
+            fmt_f(place.y, 0)
+        ));
+    }
     Some(place)
 }
 
@@ -780,7 +880,16 @@ fn place_fixed(info: &GInfo, ps: &mut PointSet, center: Point) -> Point {
     for &c in &info.cells {
         ps.insert(c);
     }
-    Point::new(-center.x, -center.y)
+    let place = Point::new(-center.x, -center.y);
+    if verbose_byte() >= 2 {
+        fprintf_stderr(&format!(
+            "cc ({} cells) at ({},{})\n",
+            info.cells.len(),
+            fmt_f(place.x, 0),
+            fmt_f(place.y, 0)
+        ));
+    }
+    place
 }
 
 /// `placeGraph(i, info, ps, place, step, margin, bbs)`.
@@ -917,9 +1026,22 @@ fn poly_graphs<P: PackGraph + ?Sized>(g: &mut P, pinfo: &PackInfo) -> Option<Vec
             }
             fixed_cnt += 1;
         }
+        if verbose_byte() > 2 {
+            let b = g.pk_bb(i);
+            let f = |v: f64| graphviz_pure_core::diag::fmt_g(v, 5);
+            fprintf_stderr(&format!(
+                "bb[{}] {} {} {} {}\n",
+                g.pk_name(i),
+                f(b.ll.x),
+                f(b.ll.y),
+                f(b.ur.x),
+                f(b.ur.y)
+            ));
+        }
     }
     let bbs: Vec<BoundingBox> = (0..ng).map(|i| g.pk_bb(i)).collect();
     let step = compute_step(&bbs, pinfo.margin);
+    verbose_msg(&format!("step size = {step}\n"));
     if step <= 0 {
         return None;
     }
@@ -934,7 +1056,8 @@ fn poly_graphs<P: PackGraph + ?Sized>(g: &mut P, pinfo: &PackInfo) -> Option<Vec
     let Some(infos) = (0..ng)
         .map(|i| {
             if pinfo.mode == PackMode::Graph {
-                gen_box(&bbs[i], step, pinfo.margin, center, i, &mut budget)
+                let name = g.pk_name(i);
+                gen_box(&bbs[i], step, pinfo.margin, center, i, &mut budget, &name)
             } else {
                 gen_poly(g, i, step, pinfo, center, i, &mut budget)
             }
@@ -967,7 +1090,19 @@ fn poly_graphs<P: PackGraph + ?Sized>(g: &mut P, pinfo: &PackInfo) -> Option<Vec
             places[inf.index] = place_graph(i, inf, &mut ps, step, pinfo.margin, &bbs);
         }
     }
+    verbose_places(&places);
     Some(places)
+}
+
+/// polyRects' and polyGraphs' `Verbose > 1` list of the translations.
+fn verbose_places(places: &[Point]) {
+    if verbose_byte() > 1 {
+        let mut m = String::new();
+        for (i, p) in places.iter().enumerate() {
+            m.push_str(&format!("pos[{i}] {} {}\n", fmt_f(p.x, 0), fmt_f(p.y, 0)));
+        }
+        fprintf_stderr(&m);
+    }
 }
 
 /// `INC(m, c, r, nc, nr)`.
@@ -1009,6 +1144,14 @@ pub fn array_rects(gs: &[BoundingBox], pinfo: &PackInfo) -> Vec<Point> {
         };
         nr = ng.div_ceil(nc);
     }
+    verbose_msg(&format!(
+        "array packing: {} {nr} rows {nc} columns\n",
+        if row_major {
+            "row major"
+        } else {
+            "column major"
+        }
+    ));
     let mut widths = vec![0.0f64; nc + 1];
     let mut heights = vec![0.0f64; nr + 1];
     let m = f64::from(pinfo.margin);
@@ -1183,6 +1326,7 @@ pub fn put_rects(bbs: &[BoundingBox], pinfo: &PackInfo) -> Option<Vec<Point>> {
 /// `polyRects(ng, gs, pinfo)`.
 fn poly_rects(bbs: &[BoundingBox], pinfo: &PackInfo) -> Option<Vec<Point>> {
     let step = compute_step(bbs, pinfo.margin);
+    verbose_msg(&format!("step size = {step}\n"));
     if step <= 0 {
         return None;
     }
@@ -1190,7 +1334,7 @@ fn poly_rects(bbs: &[BoundingBox], pinfo: &PackInfo) -> Option<Vec<Point>> {
     let Some(infos) = bbs
         .iter()
         .enumerate()
-        .map(|(i, b)| gen_box(b, step, pinfo.margin, Point::default(), i, &mut budget))
+        .map(|(i, b)| gen_box(b, step, pinfo.margin, Point::default(), i, &mut budget, ""))
         .collect::<Option<Vec<GInfo>>>()
     else {
         warn_too_large();
@@ -1204,6 +1348,7 @@ fn poly_rects(bbs: &[BoundingBox], pinfo: &PackInfo) -> Option<Vec<Point>> {
         let inf = &infos[si];
         places[inf.index] = place_graph(i, inf, &mut ps, step, pinfo.margin, bbs);
     }
+    verbose_places(&places);
     Some(places)
 }
 
@@ -1236,9 +1381,9 @@ mod tests {
         let step = compute_step(&[huge, small], 8);
         assert_eq!(step, i32::MAX);
         let mut budget = Budget::for_step(step);
-        assert!(gen_box(&huge, step, 8, Point::default(), 0, &mut budget).is_none());
+        assert!(gen_box(&huge, step, 8, Point::default(), 0, &mut budget, "").is_none());
         let mut budget = Budget::for_step(step);
-        assert!(gen_box(&small, step, 8, Point::default(), 1, &mut budget).is_some());
+        assert!(gen_box(&small, step, 8, Point::default(), 1, &mut budget, "").is_some());
     }
 
     /// Issue #250: C packs the edge of `n1 [pos="-1e12,-1e15!"]`, about 3.4e7 cells at a

@@ -267,6 +267,10 @@ impl<'a> Dot<'a> {
         let nd = &self.input.nodes[r];
         let env = graphviz_pure_geom::NodeSizeEnv::from_graph(self.input);
         let geom = graphviz_pure_geom::node_geometry(nd, &env);
+        // lp->text, which addXLabels' -v trace prints
+        let xlabel_text = geom.xlabel.as_ref().map(|xl| {
+            graphviz_pure_geom::label_text(xl, nd.attrs.get("xlabel").map_or("", String::as_str))
+        });
         let (lw, rw, ht) = geom.nodesize(flip);
         let mut sized = nd.clone();
         sized.width = geom.width;
@@ -289,7 +293,7 @@ impl<'a> Dot<'a> {
         info.ht = ht;
         info.uf_size = 1;
         if let Some(xl) = &geom.xlabel {
-            let l = self.push_label(xl);
+            let l = self.push_label_text(xl, xlabel_text.unwrap_or_default());
             self.nodes[n].xlabel = Some(l);
             self.graphs[0].has_labels |= NODE_XLABEL;
         }

@@ -235,6 +235,7 @@ pub fn init_cmaj_vpsc_full(
         e.vs.push(v);
     }
     if diredges == 1 {
+        graphviz_pure_core::diag::verbose_msg("  generate edge constraints...\n");
         for i in 0..e.nv {
             let ed = graph[i].edists.as_ref().unwrap();
             for j in 1..graph[i].nedges() {
@@ -250,6 +251,7 @@ pub fn init_cmaj_vpsc_full(
             super::digcola::compute_hierarchy(graph, e.nv, 1e-2, 1e-1, None).ok()?;
         e.ndv = ndv;
         let levels = assign_digcola_levels(&ordering, e.nv, &ls, e.ndv);
+        graphviz_pure_core::diag::verbose_msg(&format!("Found {} DiG-CoLa boundaries\n", e.ndv));
         // create dummy vars (0 weight)
         for i in 0..e.ndv {
             let cvar = n + i;
@@ -312,6 +314,10 @@ pub fn init_cmaj_vpsc_full(
     e.f_array1 = vec![0.0; n];
     e.f_array2 = vec![0.0; n];
     e.f_array3 = vec![0.0; n];
+    graphviz_pure_core::diag::verbose_msg(&format!(
+        "  initCMajVPSC done: {} global constraints generated.\n",
+        e.m
+    ));
     Some(e)
 }
 
@@ -472,6 +478,7 @@ pub fn generate_nonoverlap_constraints(
     let nvars = e.nv + e.nldv + e.ndv;
     let vs = e.vs[..nvars].to_vec();
     let cs = e.cs.clone();
+    graphviz_pure_core::diag::verbose_msg(&format!("  generated {} constraints\n", e.m));
     e.solver.new_inc_vpsc(&vs, &cs);
     true
 }

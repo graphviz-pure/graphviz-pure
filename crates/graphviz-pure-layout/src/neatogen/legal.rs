@@ -163,9 +163,30 @@ fn real_intersect(vs: &Verts<'_>, first: usize, second: usize, p: Point) -> bool
     let avft = vs.pos[vs.after(first)];
     let vsd = vs.pos[second];
     let avsd = vs.pos[vs.after(second)];
-    (vft.x != avft.x && vsd.x != avsd.x)
+    let real = (vft.x != avft.x && vsd.x != avsd.x)
         || (vft.x == avft.x && vft != p && avft != p)
-        || (vsd.x == avsd.x && vsd != p && avsd != p)
+        || (vsd.x == avsd.x && vsd != p && avsd != p);
+    if real && graphviz_pure_core::diag::verbose_byte() > 1 {
+        let f = |v: f64| graphviz_pure_core::diag::fmt_f(v, 3);
+        // putSeg(1, firstv), putSeg(2, secondv)
+        let seg = |i: i32, a: Point, b: Point| {
+            format!(
+                "seg#{i} : ({}, {}) ({}, {})\n",
+                f(a.x),
+                f(a.y),
+                f(b.x),
+                f(b.y)
+            )
+        };
+        graphviz_pure_core::diag::fprintf_stderr(&format!(
+            "\nintersection at {} {}\n{}{}",
+            f(p.x),
+            f(p.y),
+            seg(1, vft, avft),
+            seg(2, vsd, avsd)
+        ));
+    }
+    real
 }
 
 fn find_intersection(vs: &Verts<'_>, l: usize, m: usize) -> bool {

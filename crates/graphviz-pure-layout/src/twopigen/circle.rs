@@ -260,6 +260,14 @@ fn get_rankseps(g: &LGraph<'_>, maxrank: u64) -> Vec<f64> {
 /// `setAbsolutePos(g, maxrank)`: polar to Cartesian.
 fn set_absolute_pos(g: &mut LGraph<'_>, sg: &Sub, r: &RData, maxrank: u64) {
     let ranksep = get_rankseps(g, maxrank);
+    if graphviz_pure_core::diag::verbose_on() {
+        let mut m = String::from("Rank separation = ");
+        for v in ranksep.iter().take((maxrank as usize).wrapping_add(1)) {
+            m.push_str(&format!("{} ", graphviz_pure_core::diag::fmt_f(*v, 3)));
+        }
+        m.push('\n');
+        graphviz_pure_core::diag::fprintf_stderr(&m);
+    }
     for &n in &sg.nodes {
         let hyp = ranksep[r.d[n].n_steps_to_center as usize];
         g.nodes[n].pos[0] = hyp * math::cos(r.d[n].theta);
@@ -287,6 +295,10 @@ pub fn circle_layout(
         None => find_center_node(g, sg, r)?,
     };
     let max_n_steps_to_center = set_parent_nodes(g, sg, r, center);
+    graphviz_pure_core::diag::verbose_msg(&format!(
+        "root = {} max steps to root = {max_n_steps_to_center}\n",
+        g.node_agnameof(center).name
+    ));
     if max_n_steps_to_center == u64::MAX {
         // C leaves the positions untouched.
         graphviz_pure_core::diag::agerrorf(

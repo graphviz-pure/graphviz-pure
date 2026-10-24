@@ -785,6 +785,8 @@ pub trait XLabelGraph: SplineGraph {
     fn xl_forcelabels(&self) -> bool;
     /// `lp->text` of edge label `k` of `e` (empty when the edge has no such label).
     fn xl_label_text(&self, e: usize, k: LabelKind) -> String;
+    /// `ND_xlabel(n)->text` (empty without one).
+    fn xl_node_xlabel_text(&self, n: usize) -> String;
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -935,8 +937,65 @@ pub fn add_xlabels<S: XLabelGraph + ?Sized>(g: &mut S) {
     }
     let force = g.xl_forcelabels();
     place_labels(&objs, &mut lbls, bb, force);
+    use graphviz_pure_core::diag::{fmt_f, fprintf_stderr, verbose_on};
+    if verbose_on() {
+        // printData
+        let f = |v: f64| fmt_f(v, 2);
+        let mut m = format!(
+            "{} objs {n_lbls} xlabels force={} bb=({},{}) ({},{})\n",
+            objs.len(),
+            i32::from(force),
+            f(bb.ll.x),
+            f(bb.ll.y),
+            f(bb.ur.x),
+            f(bb.ur.y)
+        );
+        if graphviz_pure_core::diag::verbose_byte() >= 2 {
+            let text = |li: usize| match refs.get(li) {
+                Some(&LblRef::NodeX(n)) => g.xl_node_xlabel_text(n),
+                Some(&LblRef::Edge(e, k)) => g.xl_label_text(e, k),
+                None => String::new(),
+            };
+            // `%p` of a label: the port has no heap address, so it prints a stand-in
+            let ptr = |li: Option<usize>| match li {
+                None => "0x0".to_string(),
+                Some(li) => format!(
+                    "0x{:x}",
+                    (li as u64).wrapping_mul(48).wrapping_add(0x6000_0000_0000)
+                ),
+            };
+            m.push_str("objects\n");
+            for (i, o) in objs.iter().enumerate() {
+                m.push_str(&format!(
+                    " [{i}] ({},{}) ({},{}) {} \"{}\"\n",
+                    f(o.pos.x),
+                    f(o.pos.y),
+                    f(o.sz.x),
+                    f(o.sz.y),
+                    ptr(o.lbl),
+                    o.lbl.map(text).unwrap_or_default()
+                ));
+            }
+            m.push_str("xlabels\n");
+            for (i, l) in lbls.iter().enumerate() {
+                m.push_str(&format!(
+                    " [{i}] {} set {} ({},{}) ({},{}) {}\n",
+                    ptr(Some(i)),
+                    i32::from(l.set),
+                    f(l.pos.x),
+                    f(l.pos.y),
+                    f(l.sz.x),
+                    f(l.sz.y),
+                    text(i)
+                ));
+            }
+        }
+        fprintf_stderr(&m);
+    }
     let cnt = lbls.iter().filter(|l| l.set).count();
-    if cnt != n_lbls {
+    if verbose_on() {
+        fprintf_stderr(&format!("{cnt} out of {n_lbls} labels positioned.\n"));
+    } else if cnt != n_lbls {
         graphviz_pure_core::diag::agwarningf(&format!(
             "{cnt} out of {n_lbls} exterior labels positioned.\n"
         ));
@@ -962,6 +1021,13 @@ pub fn add_xlabels<S: XLabelGraph + ?Sized>(g: &mut S) {
 }
 
 impl XLabelGraph for LGraph<'_> {
+    fn xl_node_xlabel_text(&self, n: usize) -> String {
+        self.nodes
+            .get(n)
+            .and_then(|nd| nd.xlabel.as_ref())
+            .map(|l| l.text.clone())
+            .unwrap_or_default()
+    }
     fn xl_label_text(&self, e: usize, k: LabelKind) -> String {
         let ed = &self.edges[e];
         match k {

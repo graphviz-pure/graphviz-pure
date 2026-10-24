@@ -404,10 +404,17 @@ impl Dot<'_> {
     pub fn dot_rank(&mut self) -> Result<(), String> {
         if mapbool(self.agget(0, "newrank")) {
             self.graphs[0].flags |= NEW_RANK;
-            self.dot2_rank(0)
+            self.dot2_rank(0)?;
         } else {
-            self.dot1_rank(0)
+            self.dot1_rank(0)?;
         }
+        if let Some(g) = self.graphs.first() {
+            graphviz_pure_core::diag::verbose_msg(&format!(
+                "Maxrank = {}, minrank = {}\n",
+                g.maxrank, g.minrank
+            ));
+        }
+        Ok(())
     }
 
     // ------------------------------------------------------------------

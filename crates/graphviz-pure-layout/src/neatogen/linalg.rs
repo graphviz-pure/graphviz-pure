@@ -147,6 +147,7 @@ pub fn matinv(a: &[Vec<f64>], ainv: &mut [Vec<f64>], n: usize) -> bool {
 
 /// `solveCircuit(nG, Gm, Gm_inv)`.
 pub fn solve_circuit(ng: usize, gm: &mut [Vec<f64>], gm_inv: &mut [Vec<f64>]) -> bool {
+    graphviz_pure_core::diag::verbose_msg("Calculating circuit model");
     for i in 0..ng {
         let mut sum = 0.0;
         for j in 0..ng {

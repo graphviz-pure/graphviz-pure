@@ -1,0 +1,30 @@
+fontname: "Times-Roman" resolved to: [internal hard-coded]
+overlap: prism value 0 scaling -4.0000
+Node separation: add=1 (4.000000,4.000000)
+spring_electrical_control:
+  repulsive exponent: -1.000
+  random start 1 seed 123
+  K : -1.000 C : 0.200
+  max levels 2147483647
+  quadtree size 45 max_level 10
+  Barnes-Hutt constant 0.600 tolerance  0.001 maxiter 500
+  cooling 0.900 step size  0.100 adaptive 1
+  beautify_leaves 0 node weights 0 rotation 0.000
+  smoothing NONE overlap 0 initial_scaling -4.000 do_shrinking 1
+  octree scheme NORMAL
+  edge_labeling_scheme 0
+  margin 8
+pack info:
+  mode   node
+  size   0
+  flags  0
+ctrl->overlap=0
+avg edge len=1.151627 avg_label-size= 2.944444
+Edge separation: add=1 (3.200000,3.200000)
+Creating edges using line segments
+ctrl->overlap=0
+avg edge len=1.000000 avg_label-size= 2.944444
+Edge separation: add=1 (3.200000,3.200000)
+Creating edges using line segments
+step size = 23
+[Graphviz] emit.c:4323: TS gvRenderJobs %1: T secs.

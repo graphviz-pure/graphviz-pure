@@ -24,7 +24,7 @@ fn dfs(dg: &DG, n: usize, out: &mut Vec<usize>, marks: &mut [bool]) {
 
 /// `findCComp(g, &pinned, counter)`: the components and whether a pinned
 /// node exists.
-pub fn find_ccomp(dg: &DG) -> (Vec<Comp>, bool) {
+pub fn find_ccomp(dg: &DG, counter: &mut usize) -> (Vec<Comp>, bool) {
     let n = dg.nodes.len();
     let mut marks = vec![false; n];
     let mut comps = Vec::new();
@@ -59,5 +59,13 @@ pub fn find_ccomp(dg: &DG) -> (Vec<Comp>, bool) {
         dfs(dg, i, &mut v, &mut marks);
         comps.push(Comp::new(n, v, false));
     }
+    // The derived graph is named "derived". The ports' or pinned nodes' component is `_`,
+    // the others `+`; the numbers go on across the layout's derived graphs.
+    let first_special = dg.has_ports || pinflag;
+    for (c, comp) in comps.iter_mut().enumerate() {
+        let sep = if c == 0 && first_special { '_' } else { '+' };
+        comp.name = format!("ccderived{sep}{}", c.wrapping_add(*counter));
+    }
+    *counter = counter.wrapping_add(comps.len());
     (comps, pinflag)
 }

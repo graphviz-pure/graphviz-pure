@@ -198,6 +198,14 @@ pub fn spline_edges_route(g: &mut LGraph<'_>, sub: &Sub, pmargin: &Expand, edget
     } else {
         None
     };
+    graphviz_pure_core::diag::verbose_msg(&format!(
+        "Creating edges using {}\n",
+        match &router {
+            Some(_) if edgetype == EdgeType::Spline => "splines",
+            Some(_) => "polylines",
+            None => "line segments",
+        }
+    ));
     if let Some(r) = &router {
         r.path_pass(g, sub);
     }
@@ -278,14 +286,24 @@ fn ortho_spline_edges(lg: &mut LGraph<'_>, sub: &Sub, pm: &Expand, et: EdgeType)
         .filter_map(|&n| ortho_obstacle(lg, n, pm))
         .collect();
     let mut use_edges = nop() > 1;
-    if super::legal::plegal_arrangement(&obs) {
-        crate::ortho::ortho_edges_of(lg, sub.nodes.clone(), false);
-        use_edges = true;
-    } else {
+    let legal = super::legal::plegal_arrangement(&obs);
+    if !legal {
         // neatosplines.c:623
         graphviz_pure_core::diag::agwarningf(
             "the bounding boxes of some nodes touch - falling back to straight line edges\n",
         );
+    }
+    graphviz_pure_core::diag::verbose_msg(&format!(
+        "Creating edges using {}\n",
+        if legal {
+            "orthogonal lines"
+        } else {
+            "line segments"
+        }
+    ));
+    if legal {
+        crate::ortho::ortho_edges_of(lg, sub.nodes.clone(), false);
+        use_edges = true;
     }
     for &n in &sub.nodes {
         let outs: Vec<usize> = lg.outs(sub, n).collect();

@@ -176,6 +176,9 @@ pub struct Sub {
     pub bb: BoundingBox,
     /// Top-level clusters (indices into [`LGraph::clusters`]).
     pub clusters: Vec<usize>,
+    /// `agnameof` of the subgraph C lays out (`_cc_0`, `_neato_cc1`, the root's name), which
+    /// the verbose messages print.
+    pub name: String,
 }
 
 impl Sub {
@@ -190,6 +193,7 @@ impl Sub {
             member,
             bb: BoundingBox::default(),
             clusters: Vec::new(),
+            name: String::new(),
         }
     }
 
@@ -246,6 +250,7 @@ impl<'a> LGraph<'a> {
         let mut s = Sub::new(self.nodes.len(), (0..self.nodes.len()).collect());
         s.bb = self.bb;
         s.clusters = self.root_clusters.clone();
+        s.name = self.src.root_name().to_string();
         s
     }
 

@@ -574,6 +574,16 @@ fn read_input(path: Option<&OsStr>) -> io::Result<Decoded> {
     Ok(Decoded::decode(bytes))
 }
 
+/// `FINISH()` in `gvRenderJobs` (`lib/common/emit.c`, at `line`): the `-v` timing.
+fn render_jobs_finish(graph: &graphviz_pure::Graph, line: u32) {
+    let secs = graphviz_pure_core::diag::fmt_f(graphviz_pure_core::diag::elapsed_sec(), 2);
+    graphviz_pure_core::diag::gv_info(
+        "emit.c",
+        line,
+        &format!("gvRenderJobs {}: {secs} secs.", graph.root_name()),
+    );
+}
+
 /// `agerrorf` of an input's error, as C's bytes. A syntax error names the file `aagerror`
 /// knows: the input, or the one a `# N "file"` line directive named.
 fn report_error(name: &str, e: &graphviz_pure_core::GraphvizError) {
@@ -664,6 +674,9 @@ impl Run<'_> {
         graph_index: usize,
         name: &str,
     ) -> io::Result<()> {
+        if graphviz_pure_core::diag::verbose_on() {
+            graphviz_pure_core::diag::start_timer();
+        }
         let mut graph_jobs = GraphJobs::new(graph);
         // the jobs have output files: C's `fprintf(job->output_file, ...)` text goes in them
         graph_jobs.write_output_file_text(true);
@@ -679,6 +692,10 @@ impl Run<'_> {
                 for _ in 0..3 {
                     plugins::load_device("xdot");
                 }
+                // that gvRender is a gvRenderJobs of its own, which restarts the shared
+                // clock and reports when it finishes
+                graphviz_pure_core::diag::start_timer();
+                render_jobs_finish(graph, 4323);
             }
             // Every job's device writes its own output (no format of the port does pages),
             // so the device open before it is finalized.
@@ -725,6 +742,7 @@ impl Run<'_> {
                 Err(e) => report_error(name, &e),
             }
         }
+        render_jobs_finish(graph, 4323);
         Ok(())
     }
 
@@ -739,7 +757,13 @@ impl Run<'_> {
     ) -> io::Result<bool> {
         match self.layout.layout(graph) {
             Ok(true) => self.render_jobs(graph, input, graph_index, name)?,
-            Ok(false) => agerrorf("Layout was not done.  Missing layout plugins? \n"),
+            Ok(false) => {
+                if graphviz_pure_core::diag::verbose_on() {
+                    graphviz_pure_core::diag::start_timer();
+                }
+                agerrorf("Layout was not done.  Missing layout plugins? \n");
+                render_jobs_finish(graph, 4212);
+            }
             // A layout the port stops where C exits (`graphviz_exit`) or crashes.
             Err(e) => {
                 report_error(name, &e);

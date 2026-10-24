@@ -8,6 +8,8 @@
 // Loops and late initialisations mirror the C control flow on purpose.
 #![allow(clippy::explicit_counter_loop, clippy::needless_late_init)]
 
+use graphviz_pure_core::diag::gv_info;
+
 pub mod acyclic;
 pub mod cg;
 pub mod class1;
@@ -263,11 +265,13 @@ impl<'a> Dot<'a> {
         }
         self.dot_init_subg();
         self.dot_init_node_edge();
+        gv_info("dotinit.c", 305, "Starting phase 1 [dot_rank]");
         self.dot_rank()?;
         self.gvdump("R");
         if maxphase == 1 {
             return Ok(());
         }
+        gv_info("dotinit.c", 311, "Starting phase 2 [dot_mincross]");
         if let Err(e) = self.dot_mincross() {
             if e == mincross::ABORT_LAYOUT {
                 self.aborted = true;
@@ -279,6 +283,7 @@ impl<'a> Dot<'a> {
         if maxphase == 2 {
             return Ok(());
         }
+        gv_info("dotinit.c", 320, "Starting phase 3 [dot_position]");
         self.dot_position()?;
         if self.aborted {
             return Ok(());

@@ -29,7 +29,7 @@ use crate::neatogen::neatosplines::{
     neato_set_aspect, spline_edges_by, spline_edges_main, spline_edges_route,
 };
 use crate::osage::register_clusters;
-use crate::pack::{PackInfo, PackMode, get_pack, get_pack_mode_info, put_graphs};
+use crate::pack::{PackInfo, PackMode, put_graphs};
 use graphviz_pure_core::math;
 use graphviz_pure_core::{AttrMap, BoundingBox, Graph, GraphKind, NodeId, Obj, Point, Result};
 use std::collections::HashMap;
@@ -184,6 +184,8 @@ pub struct Comp {
     pub nodes: Vec<usize>,
     /// The component carries the derived graph's ports (`PORTS(cg)`).
     pub has_ports: bool,
+    /// `agnameof(cg)`: `cc<dg>_<i>` or `cc<dg>+<i>` (`findCComp`).
+    pub name: String,
 }
 
 impl Comp {
@@ -197,6 +199,7 @@ impl Comp {
             member,
             nodes,
             has_ports,
+            name: String::new(),
         }
     }
 
@@ -413,6 +416,8 @@ struct Fdp<'g, 'a> {
     /// `DNODE(n)`: derived graph id and node.
     dnode: Vec<Option<(u32, usize)>>,
     next_uid: u32,
+    /// findCComp's `counter`: the components named so far.
+    cc_counter: usize,
     pack: PackInfo,
     coords_declared: bool,
     inputscale: f64,
@@ -500,6 +505,13 @@ impl Fdp<'_, '_> {
     /// for such a graph; the port keeps the derived nodes apart, as C does when the names
     /// differ.
     fn derive_graph(&mut self, g: Option<usize>) -> Option<DG> {
+        if graphviz_pure_core::diag::verbose_byte() >= 2 {
+            graphviz_pure_core::diag::fprintf_stderr(&format!(
+                "derive graph _dg_{} of {}\n",
+                self.next_uid,
+                self.gname(g)
+            ));
+        }
         let mut dg = DG {
             uid: self.next_uid,
             ..DG::default()
@@ -639,7 +651,17 @@ impl Fdp<'_, '_> {
                 }
                 let mut pn = DNode::new(DKind::Port);
                 pn.addr = self.heap.alloc();
-                pn.name = "_port".to_string();
+                // portName: the cluster, ND_id of the edge's ends (their index) and AGSEQ(e)
+                let (t, h) = self
+                    .rg
+                    .edges
+                    .get(pp.e)
+                    .map_or((0, 0), |re| (re.tail, re.head));
+                pn.name = format!(
+                    "_port_{}_({t})_({h})_{}",
+                    self.gname(Some(c)),
+                    pp.e.wrapping_add(1)
+                );
                 let dn = dg.add_node(pn);
                 let (de, _) = if dg.nodes[dn].addr > dg.nodes[m].addr {
                     dg.edge(m, dn)
@@ -918,12 +940,22 @@ impl Fdp<'_, '_> {
     }
 
     /// `layout(g, infop, counter)`; `Err` on non-comparable clusters.
+    /// `agnameof(g)` of the graph laid out: the root or a cluster.
+    fn gname(&self, g: Option<usize>) -> String {
+        let src = self.rg.src;
+        match g.and_then(|c| self.tree.subgraph.get(c)) {
+            Some(&s) => src.subgraph_name(s),
+            None => src.root_name().to_string(),
+        }
+    }
+
     fn layout(&mut self, g: Option<usize>) -> std::result::Result<(), ()> {
+        graphviz_pure_core::diag::verbose_msg(&format!("layout {}\n", self.gname(g)));
         for n in self.members_of(g) {
             self.dnode[n] = None;
         }
         let mut dg = self.derive_graph(g).ok_or(())?;
-        let (mut cc, pinned) = find_ccomp(&dg);
+        let (mut cc, pinned) = find_ccomp(&dg, &mut self.cc_counter);
 
         for ci in 0..cc.len() {
             let mut xpms = XParams::default();
@@ -969,7 +1001,9 @@ impl Fdp<'_, '_> {
                 .iter()
                 .map(|c| {
                     let nodes = c.nodes.iter().map(|&n| map[n]).collect();
-                    Sub::new(lg.nodes.len(), nodes)
+                    let mut s = Sub::new(lg.nodes.len(), nodes);
+                    s.name.clone_from(&c.name);
+                    s
                 })
                 .collect();
             let pts = if subs.len() > 1 {
@@ -1010,6 +1044,7 @@ impl Fdp<'_, '_> {
         for dn in &dg.nodes {
             self.heap.free(dn.addr);
         }
+        graphviz_pure_core::diag::verbose_msg(&format!("end {}\n", self.gname(g)));
         Ok(())
     }
 
@@ -1192,11 +1227,14 @@ pub fn fdp_layout(graph: &mut Graph) -> Result<()> {
     let inputscale = get_inputscale(&g);
     initial_positions(&mut g, inputscale);
 
-    let mut pack = PackInfo {
-        margin: get_pack(g.gattr("pack"), CL_OFFSET / 2, CL_OFFSET / 2) as u32,
-        ..PackInfo::default()
-    };
-    pack.mode = get_pack_mode_info(g.gattr("packmode"), PackMode::Node, &mut pack);
+    let mut pack = PackInfo::default();
+    pack.mode = crate::pack::pack_info(
+        g.gattr("pack"),
+        g.gattr("packmode"),
+        PackMode::Node,
+        CL_OFFSET / 2,
+        &mut pack,
+    );
 
     let nc = tree.len();
     let members: Vec<Vec<usize>> = tree
@@ -1229,6 +1267,7 @@ pub fn fdp_layout(graph: &mut Graph) -> Result<()> {
         parent: vec![None; n],
         dnode: vec![None; n],
         next_uid: 0,
+        cc_counter: 0,
         pack,
         coords_declared,
         inputscale,

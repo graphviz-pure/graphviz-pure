@@ -484,6 +484,10 @@ impl Dot<'_> {
             }
             let mut trying = 0;
             for iter in 0..maxthispass {
+                graphviz_pure_core::diag::verbose_msg(&format!(
+                    "mincross: pass {pass} iter {iter} trying {trying} cur_cross {cur_cross} \
+                     best_cross {best_cross}\n"
+                ));
                 let t = trying;
                 trying += 1;
                 if t >= self.min_quit {
@@ -587,6 +591,11 @@ impl Dot<'_> {
             for i in 0..self.rank_n(g, r) {
                 match self.rv(g, r, i) {
                     None => {
+                        graphviz_pure_core::diag::verbose_msg(&format!(
+                            "merge2: graph {}, rank {r} has only {i} < {} nodes\n",
+                            self.graph_name(g),
+                            self.rank_n(g, r)
+                        ));
                         self.rk_mut(g, r).n = i;
                         break;
                     }
@@ -596,7 +605,7 @@ impl Dot<'_> {
         }
     }
 
-    fn cleanup2(&mut self, g: G, _nc: i64, has_vlists: bool) -> Result<(), String> {
+    fn cleanup2(&mut self, g: G, nc: i64, has_vlists: bool) -> Result<(), String> {
         if has_vlists {
             for c in self.graphs[g].clust.clone() {
                 self.rec_reset_vlists(c)?;
@@ -619,6 +628,11 @@ impl Dot<'_> {
             // free_matrix leaves a dangling (non-NULL) pointer in C; flat_edges()
             // only tests it for NULL, so the matrix is kept.
         }
+        graphviz_pure_core::diag::verbose_msg(&format!(
+            "mincross {}: {nc} crossings, {} secs.\n",
+            self.graph_name(g),
+            graphviz_pure_core::diag::fmt_f(graphviz_pure_core::diag::elapsed_sec(), 2)
+        ));
         Ok(())
     }
 
@@ -776,6 +790,9 @@ impl Dot<'_> {
     }
 
     fn init_mincross(&mut self, g: G) -> Result<(), String> {
+        if graphviz_pure_core::diag::verbose_on() {
+            graphviz_pure_core::diag::start_timer();
+        }
         // Network simplex normalises each component's ranks to start at 0, but returns
         // before that when `nslimit1` allows no iteration (`maxiter <= 0`, ns.c:984), and
         // newrank's `readout_levels` only shifts a single component's ranks down from above

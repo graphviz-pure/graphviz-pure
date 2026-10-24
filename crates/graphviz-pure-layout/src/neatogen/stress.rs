@@ -14,6 +14,9 @@ use super::linalg::solve_circuit;
 use super::matrix_ops::*;
 use super::{MODEL_CIRCUIT, MODEL_MDS, MODEL_SUBSET, NeatoParams};
 use crate::common::types::{LGraph, P_FIX};
+use graphviz_pure_core::diag::{
+    elapsed_sec, fmt_f, fprintf_stderr, start_timer, verbose_msg, verbose_on,
+};
 
 pub const TOLERANCE_CG: f64 = 1e-3;
 pub const DFLT_ITERATIONS: i64 = 200;
@@ -118,6 +121,7 @@ pub fn mds_model(graph: &[VtxData], ng: usize) -> Option<Vec<f32>> {
     }
     let mut dij = compute_weighted_apsp_packed(graph, ng);
     let mut shift = 0;
+    let mut delta = 0.0f64;
     for i in 0..ng {
         shift += i;
         let w = graph[i].ewgts.as_ref().unwrap();
@@ -126,9 +130,12 @@ pub fn mds_model(graph: &[VtxData], ng: usize) -> Option<Vec<f32>> {
             if j < i {
                 continue;
             }
-            dij[i * ng + j - shift] = w[e];
+            let (slot, we) = (&mut dij[i * ng + j - shift], w[e]);
+            delta += f64::from((*slot - we).abs());
+            *slot = we;
         }
     }
+    verbose_msg(&format!("mdsModel: delta = {}\n", fmt_f(delta, 6)));
     Some(dij)
 }
 
@@ -226,6 +233,30 @@ pub fn compute_apsp_artificial_weights(graph: &[VtxData], n: usize) -> Vec<Vec<D
 /// `stress_majorization_kD_mkernel(graph, n, d_coords, nodes, dim, opts, model, maxi)`.
 /// Returns the iteration count, or `Err` when the solver fails.
 #[allow(clippy::too_many_arguments)]
+/// `compute_stressf(coords, lap, dim, n, exp)`: the layout's stress.
+fn compute_stressf(coords: &[Vec<f32>], lap: &[f32], dim: usize, n: usize, exp: i32) -> f64 {
+    let mut sum = 0.0f64;
+    // the packed matrix row by row: each row's diagonal entry, then its neighbours'
+    let mut lap = lap.iter();
+    for i in 0..n.saturating_sub(1) {
+        lap.next();
+        for j in (i..n).skip(1) {
+            let mut dist = 0.0f64;
+            for c in coords.iter().take(dim) {
+                let (ci, cj) = (c.get(i).copied(), c.get(j).copied());
+                let d = ci.unwrap_or_default() - cj.unwrap_or_default();
+                dist += f64::from(d * d);
+            }
+            let dist = dist.sqrt();
+            let l = f64::from(lap.next().copied().unwrap_or_default());
+            let dij = if exp == 2 { 1.0 / l.sqrt() } else { 1.0 / l };
+            // not fused in C
+            sum += (dij - dist) * (dij - dist) * l;
+        }
+    }
+    sum
+}
+
 pub fn stress_majorization_kd_mkernel(
     g: &LGraph<'_>,
     params: &NeatoParams,
@@ -241,10 +272,14 @@ pub fn stress_majorization_kd_mkernel(
     if maxi < 0 {
         return Ok(0);
     }
+    if verbose_on() {
+        start_timer();
+    }
     let smart_ini = opts & OPT_SMART_INIT != 0;
     let exp = opts & OPT_EXP_FLAG;
     let mut dij: Option<Vec<f32>> = None;
     if model == MODEL_SUBSET {
+        verbose_msg("Calculating subset model");
         dij = Some(compute_apsp_artificial_weights_packed(graph, n));
     } else if model == MODEL_CIRCUIT {
         dij = circuit_model(graph, n);
@@ -257,11 +292,13 @@ pub fn stress_majorization_kd_mkernel(
             );
         }
     } else if model == MODEL_MDS {
+        verbose_msg("Calculating MDS model");
         dij = mds_model(graph, n);
     }
     let mut lap2 = match dij {
         Some(d) => d,
         None => {
+            verbose_msg("Calculating shortest paths");
             if has_ewgts(graph) {
                 compute_weighted_apsp_packed(graph, n)
             } else {
@@ -270,6 +307,13 @@ pub fn stress_majorization_kd_mkernel(
         }
     };
 
+    if verbose_on() {
+        fprintf_stderr(&format!(
+            ": {} sec\nSetting initial positions",
+            fmt_f(elapsed_sec(), 2)
+        ));
+        start_timer();
+    }
     let have_pinned;
     if smart_ini && n > 1 {
         have_pinned = false;
@@ -303,8 +347,16 @@ pub fn stress_majorization_kd_mkernel(
     } else {
         have_pinned = init_layout(g, n, dim, d_coords, nodes);
     }
+    verbose_msg(&format!(": {} sec", fmt_f(elapsed_sec(), 2)));
     if n == 1 || maxi == 0 {
         return Ok(0);
+    }
+    if verbose_on() {
+        fprintf_stderr(&format!(
+            ": {} sec\nSetting up stress function",
+            fmt_f(elapsed_sec(), 2)
+        ));
+        start_timer();
     }
 
     let mut coords: Vec<Vec<f32>> = (0..dim)
@@ -343,6 +395,13 @@ pub fn stress_majorization_kd_mkernel(
     let mut dist_accumulator = vec![0.0f32; n];
     let mut lap1 = vec![0.0f32; lap_length];
     let mut old_stress = f64::MAX;
+    if verbose_on() {
+        fprintf_stderr(&format!(
+            ": {} sec\nSolving model: ",
+            fmt_f(elapsed_sec(), 2)
+        ));
+        start_timer();
+    }
     let mut converged = false;
     let mut iterations = 0i64;
     while iterations < maxi && !converged {
@@ -433,7 +492,22 @@ pub fn stress_majorization_kd_mkernel(
                 conjugate_gradient_mkernel(&lap2, ck, bk, n, TOLERANCE_CG, n)?;
             }
         }
+        if verbose_on() && iterations % 5 == 0 {
+            let nl = if iterations.wrapping_add(5) % 50 == 0 {
+                "\n"
+            } else {
+                ""
+            };
+            fprintf_stderr(&format!("{} {nl}", fmt_f(new_stress, 3)));
+        }
         iterations += 1;
+    }
+    if verbose_on() {
+        fprintf_stderr(&format!(
+            "\nfinal e = {} {iterations} iterations {} sec\n",
+            fmt_f(compute_stressf(&coords, &lap2, dim, n, exp), 6),
+            fmt_f(elapsed_sec(), 2)
+        ));
     }
     for i in 0..dim {
         for j in 0..n {

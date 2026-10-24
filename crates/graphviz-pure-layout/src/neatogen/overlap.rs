@@ -10,6 +10,7 @@ use crate::common::utils::map_bool;
 use crate::cutil::qsort_by;
 use crate::sfdpgen::post_process::{RelativePositionConstraints, StressMajorizationSmoother};
 use crate::sparse::{Format, MACHINEACC, SparseMatrix, distance};
+use graphviz_pure_core::diag::{fmt_f, fmt_g, fprintf_stderr, verbose_msg, verbose_on};
 use graphviz_pure_core::math;
 
 /// `call_tri(n, x)`: Delaunay graph plus the diagonal, symmetrized.
@@ -127,7 +128,9 @@ fn get_overlap_graph(
         }
     }
     let mut b = a.from_coordinate_format();
-    b.symmetrize(false)
+    let c = b.symmetrize(false);
+    verbose_msg(&format!("found {} clashes\n", c.nz));
+    c
 }
 
 /// `ideal_distance_avoid_overlap(dim, A, x, width, ideal, &tmax, &tmin)`.
@@ -205,6 +208,7 @@ fn overlap_scaling(
     } else {
         scale_coord(&mut x[..n], scale_sta);
         if !has_overlap(dim, m, x, width) {
+            verbose_msg(&format!(" shrinking with {} works\n", fmt_f(scale_sta, 6)));
             return;
         }
         scale_coord(&mut x[..n], 1.0 / scale_sta);
@@ -229,6 +233,11 @@ fn overlap_scaling(
         if !cont {
             break;
         }
+        verbose_msg(&format!(
+            "in overlap_scaling iter={iter}, maxiter={maxiter}, scaling bracket: {{{},{}}}\n",
+            fmt_f(scale_sta, 6),
+            fmt_f(scale_sto, 6)
+        ));
         let scale = 0.5 * (scale_sta + scale_sto);
         scale_coord(&mut x[..n], scale);
         let overlap = has_overlap(dim, m, x, width);
@@ -275,6 +284,10 @@ fn overlap_smoother_new(
     };
     if *max_overlap < 1.0 && shrink {
         let scale_sta = (*max_overlap * 1.0001).min(1.0);
+        verbose_msg(&format!(
+            " no overlap (overlap = {}), rescale to shrink\n",
+            fmt_f(*max_overlap - 1.0, 6)
+        ));
         overlap_scaling(dim, m, x, width, scale_sta, 1.0, 0.0001, 15);
         *max_overlap = 1.0;
         return sm;
@@ -330,6 +343,33 @@ fn average_edge_length(a: &mut SparseMatrix, dim: usize, coord: &[f64]) -> f64 {
     dist / f64::from(a.ia[a.m])
 }
 
+/// scale_to_edge_length's `-v` line.
+fn verbose_edge_length(dist: f64, avg_label_size: f64) {
+    verbose_msg(&format!(
+        "avg edge len={} avg_label-size= {}\n",
+        fmt_f(dist, 6),
+        fmt_f(avg_label_size, 6)
+    ));
+}
+
+/// `print_bounding_box(n, dim, x)`.
+fn print_bounding_box(n: usize, dim: usize, x: &[f64]) {
+    let mut xmin: Vec<f64> = x.iter().take(dim).copied().collect();
+    let mut xmax = xmin.clone();
+    for p in x.chunks(dim.max(1)).take(n) {
+        for ((lo, hi), &v) in xmin.iter_mut().zip(xmax.iter_mut()).zip(p) {
+            *lo = lo.min(v);
+            *hi = hi.max(v);
+        }
+    }
+    let mut m = String::from("bounding box = \n");
+    for (lo, hi) in xmin.iter().zip(&xmax) {
+        m.push_str(&format!("{{{},{}}}, ", fmt_f(*lo, 6), fmt_f(*hi, 6)));
+    }
+    m.push('\n');
+    fprintf_stderr(&m);
+}
+
 /// `remove_overlap(dim, A, x, label_sizes, ntry, initial_scaling, ELSCHEME_NONE, ...)`.
 pub fn remove_overlap(
     dim: usize,
@@ -381,12 +421,14 @@ pub fn remove_overlap_el(
         avg /= m as f64;
         let target = -initial_scaling * avg;
         let dist = average_edge_length(a, dim, x);
+        verbose_edge_length(dist, target);
         let s = target / dist.max(MACHINEACC);
         for v in x.iter_mut().take(dim * m) {
             *v *= s;
         }
     } else if initial_scaling > 0.0 {
         let dist = average_edge_length(a, dim, x);
+        verbose_edge_length(dist, initial_scaling);
         let s = initial_scaling / dist.max(MACHINEACC);
         for v in x.iter_mut().take(dim * m) {
             *v *= s;
@@ -399,7 +441,18 @@ pub fn remove_overlap_el(
         constraints.filter(|c| c.edge_labeling_scheme != 0 && !c.constr_nodes.is_empty());
     let has_penalty_terms = constraints.is_some();
     let mut i = 0;
+    let report = |i: i32, neighborhood_only: bool, max_overlap: f64, min_overlap: f64| {
+        verbose_msg(&format!(
+            "overlap removal neighbors only?= {} iter -- {i}, overlap factor = {} underlap factor = {}\n",
+            i32::from(neighborhood_only),
+            fmt_g(max_overlap - 1.0, 6),
+            fmt_g(min_overlap, 6)
+        ));
+    };
     while i < ntry {
+        if verbose_on() {
+            print_bounding_box(m, dim, x);
+        }
         let mut sm = overlap_smoother_new(
             a,
             m,
@@ -411,6 +464,7 @@ pub fn remove_overlap_el(
             &mut min_overlap,
             shrink,
         );
+        report(i, neighborhood_only, max_overlap, min_overlap);
         // check_convergence(max_overlap, res, has_penalty_terms, epsilon)
         let converged = if has_penalty_terms {
             res < epsilon
@@ -430,8 +484,10 @@ pub fn remove_overlap_el(
             continue;
         }
         res = sm.smooth_with(dim, x, 1, constraints);
+        verbose_msg(&format!("res = {}\n", fmt_f(res, 6)));
         i += 1;
     }
+    report(i, neighborhood_only, max_overlap, min_overlap);
     if has_penalty_terms {
         remove_overlap_el(dim, a, x, label_sizes, ntry, 0.0, None, do_shrinking);
     }

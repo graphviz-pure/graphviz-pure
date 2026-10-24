@@ -289,7 +289,10 @@ pub fn cccomps(g: &Graph) -> Vec<CComp> {
         let mut stack = vec![d0];
         mark[d0] = true;
         let mut set: BTreeSet<usize> = BTreeSet::new();
+        // dfs's count: the derived nodes of the component
+        let mut n_cnt = 0usize;
         while let Some(d) = stack.pop() {
+            n_cnt = n_cnt.wrapping_add(1);
             set.extend(members[d].iter().copied());
             for &o in &adj[d] {
                 if !mark[o] {
@@ -318,6 +321,19 @@ pub fn cccomps(g: &Graph) -> Vec<CComp> {
             .filter(|s| tree.cc_index_of.get(s).is_none_or(|&j| j > ci))
             .collect();
         tree.subg_induce(&top, None, &set, false, &mut subgraphs);
+        if graphviz_pure_core::diag::verbose_on() {
+            // graphviz_node_induce's count: the root's edges between the component's nodes
+            let e_cnt = g
+                .edges
+                .iter()
+                .filter(|e| {
+                    set.contains(&(e.tail.0 as usize)) && set.contains(&(e.head.0 as usize))
+                })
+                .count();
+            graphviz_pure_core::diag::fprintf_stderr(&format!(
+                "({ci:4}) {n_cnt:7} nodes {e_cnt:7} edges\n"
+            ));
+        }
         out.push(CComp {
             nodes: set.into_iter().collect(),
             subgraphs,
@@ -325,6 +341,13 @@ pub fn cccomps(g: &Graph) -> Vec<CComp> {
             user_subgraphs,
         });
     }
+    graphviz_pure_core::diag::verbose_msg(&format!(
+        "       {:7} nodes {:7} edges {:7} components {}\n",
+        nn,
+        g.edges.len(),
+        out.len(),
+        g.root_name()
+    ));
     out
 }
 

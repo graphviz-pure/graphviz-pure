@@ -170,6 +170,9 @@ pub fn sfdp_layout(graph: &mut Graph) -> Result<()> {
         } else {
             ctrl.overlap = -1;
         }
+        if graphviz_pure_core::diag::verbose_on() {
+            super::spring_electrical::spring_electrical_control_print(&ctrl);
+        }
 
         let mut ccs = ccomps(&g);
         if ccs.len() == 1 {
