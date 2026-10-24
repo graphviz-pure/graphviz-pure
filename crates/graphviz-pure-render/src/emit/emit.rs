@@ -1251,23 +1251,33 @@ impl<'a, E: Engine> Emitter<'a, E> {
         let numc = color.matches(':').count();
         let numsemi = color.matches(';').count();
         let mut color = color;
+        // Whether `color` is still the attribute's string rather than a literal.
+        let mut color_is_attr = a.get("color").is_some();
         if numsemi > 0 && numc > 0 {
             if self.multicolor(e, styles, color, arrowsize, penwidth) {
                 color = DEFAULT_COLOR;
+                color_is_attr = false;
             } else {
                 return;
             }
         }
         let fillcolor = a.late_nnstring("fillcolor", color);
-        if fillcolor != color {
+        let fill_ident = ColorIdent {
+            is_attr: a.nonempty("fillcolor").is_some(),
+            is_html: a.is_html("fillcolor"),
+        };
+        let color_html = a.is_html("color");
+        if fill_ident.differs(fillcolor, color, color_is_attr, color_html) {
             self.set_fillcolor(fillcolor);
         }
         if tapered {
             let color = if color.is_empty() {
+                color_is_attr = false;
                 DEFAULT_COLOR
             } else {
                 color
             };
+            // A set `fillcolor` is never empty; an unset one is `color`, replaced with it.
             let fillcolor = if fillcolor.is_empty() {
                 DEFAULT_COLOR
             } else {
@@ -1280,7 +1290,7 @@ impl<'a, E: Engine> Emitter<'a, E> {
             let stroke = super::geom::taper(&bz.list, dir, penwidth);
             self.polygon(&stroke, 1);
             self.set_pencolor(color);
-            if fillcolor != color {
+            if fill_ident.differs(fillcolor, color, color_is_attr, color_html) {
                 self.set_fillcolor(fillcolor);
             }
             if bz.sflag != 0 {
@@ -1711,8 +1721,57 @@ impl<E: Engine> Emitter<'_, E> {
     }
 }
 
+/// Where `emit_edge_graphics`'s `fillcolor` came from, for C's `fillcolor != color`, which
+/// compares pointers. `late_nnstring` returns `color` itself when `fillcolor` is unset or
+/// empty. cgraph interns attribute values (`agstrdup`, one dictionary per graph), so a set
+/// `fillcolor` is the same pointer as a `color` attribute with the same text and HTML flag,
+/// and never the same as the `DEFAULT_COLOR` literal that replaces `color` after a
+/// successful `multicolor` or, when tapered, an empty `color`.
+#[derive(Clone, Copy)]
+struct ColorIdent {
+    /// `fillcolor` is the attribute's string, not `color`.
+    is_attr: bool,
+    /// That string is an HTML string.
+    is_html: bool,
+}
+
+impl ColorIdent {
+    /// `fillcolor != color` as C's pointers: `color_is_attr` when `color` is the `color`
+    /// attribute's string, `color_html` when that is an HTML string.
+    fn differs(self, fillcolor: &str, color: &str, color_is_attr: bool, color_html: bool) -> bool {
+        self.is_attr && !(color_is_attr && fillcolor == color && self.is_html == color_html)
+    }
+}
+
 /// The tokens `strtok` gives for `s` and `delims`, both C's bytes: a multibyte character
 /// of `delims` is several delimiters, and a token can end inside a character.
 fn strtok<'s>(s: &'s [u8], delims: &'s [u8]) -> impl Iterator<Item = &'s [u8]> {
     s.split(|b| delims.contains(b)).filter(|t| !t.is_empty())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::ColorIdent;
+
+    #[test]
+    fn fillcolor_identity_follows_cgraph_interning() {
+        let unset = ColorIdent {
+            is_attr: false,
+            is_html: false,
+        };
+        let set = ColorIdent {
+            is_attr: true,
+            is_html: false,
+        };
+        // An unset fillcolor is `color` itself.
+        assert!(!unset.differs("red", "red", true, false));
+        assert!(!unset.differs("black", "black", false, false));
+        // Equal text interns to one pointer.
+        assert!(!set.differs("red", "red", true, false));
+        assert!(set.differs("red", "blue", true, false));
+        // The HTML flag is part of the string's identity.
+        assert!(set.differs("red", "red", true, true));
+        // `DEFAULT_COLOR` is a literal, never an attribute's string.
+        assert!(set.differs("black", "black", false, false));
+    }
 }

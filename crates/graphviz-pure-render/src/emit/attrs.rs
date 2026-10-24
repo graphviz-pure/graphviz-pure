@@ -52,6 +52,11 @@ impl<'a> Attrs<'a> {
         mapbool(self.get(k))
     }
 
+    /// `aghtmlstr(agget(obj, k))`: whether the value of `k` is an HTML string.
+    pub fn is_html(&self, k: &str) -> bool {
+        graphviz_pure_core::attr_is_html(self.0, k)
+    }
+
     /// Non-empty value.
     pub fn nonempty(&self, k: &str) -> Option<&'a str> {
         self.get(k).filter(|s| !s.is_empty())

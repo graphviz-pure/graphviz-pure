@@ -8505,6 +8505,80 @@ fn issue285_arrow_type_warnings_print_once_per_layout() {
     assert_eq!(err, "Warning: Arrow type \"foo\" unknown - ignoring\n");
 }
 
+/// Issue #389: `emit_edge_graphics` tests `fillcolor != color` by pointer
+/// (`lib/common/emit.c:2418`, `:2433`). cgraph interns attribute values, so `fillcolor=red`
+/// shares `color=red`'s pointer, but not an HTML `color=<red>`'s, nor the `DEFAULT_COLOR`
+/// literal of a successful `multicolor` or an empty tapered `color`. Output is C 16.1.0's.
+#[test]
+fn issue389_edge_fillcolor_is_set_when_c_pointers_differ() {
+    let nodes = r#"digraph {
+	graph [_draw_="c 9 -#fffffe00 C 7 -#ffffff P 4 0 0 0 108 54 108 54 0 ",
+		bb="0,0,54,108",
+		xdotversion=1.7
+	];
+	node [label="\N"];
+	a	[_draw_="c 7 -#000000 e 27 90 27 18 ",
+		_ldraw_="F 14 11 -Times-Roman c 7 -#000000 T 27 85.8 0 6.21 1 -a ",
+		height=0.5,
+		pos="27,90",
+		width=0.75];
+	b	[_draw_="c 7 -#000000 e 27 18 27 18 ",
+		_ldraw_="F 14 11 -Times-Roman c 7 -#000000 T 27 13.8 0 7 1 -b ",
+		height=0.5,
+		pos="27,18",
+		width=0.75];
+"#;
+    for (attrs, edge) in [
+        (
+            "color=red fillcolor=red",
+            r#"	a -> b	[_draw_="c 7 -#ff0000 B 4 27 71.7 27 64.41 27 55.73 27 47.54 ",
+		_hdraw_="S 5 -solid c 7 -#ff0000 C 7 -#ff0000 P 3 30.5 47.62 27 37.62 23.5 47.62 ",
+		color=red,
+		fillcolor=red,
+		pos="e,27,36.104 27,71.697 27,64.407 27,55.726 27,47.536"];
+"#,
+        ),
+        (
+            r#"style=tapered penwidth=4 color="" fillcolor=black"#,
+            r#"	a -> b	[_draw_="S 15 -setlinewidth(4) S 7 -tapered c 9 -#fffffe00 C 7 -#000000 P 42 29 71.7 28.91 70.8 28.82 69.89 28.72 68.97 28.63 68.03 28.53 \
+67.09 28.43 66.13 28.33 65.17 28.23 64.2 28.13 63.22 28.03 62.23 27.93 61.24 27.83 60.24 27.73 59.24 27.62 58.23 27.52 57.22 27.42 \
+56.21 27.31 55.19 27.21 54.18 27.1 53.16 27 52.15 27 52.15 26.9 53.16 26.79 54.18 26.69 55.19 26.58 56.21 26.48 57.22 26.38 58.23 \
+26.27 59.24 26.17 60.24 26.07 61.24 25.97 62.23 25.87 63.22 25.77 64.2 25.67 65.17 25.57 66.13 25.47 67.09 25.37 68.03 25.28 68.97 \
+25.18 69.89 25.09 70.8 25 71.7 ",
+		_hdraw_="S 15 -setlinewidth(4) S 5 -solid c 7 -#000000 C 7 -#000000 P 3 30.5 52.16 27 42.16 23.5 52.16 ",
+		fillcolor=black,
+		penwidth=4,
+		pos="e,27,36.104 27,71.697 27,65.763 27,58.908 27,52.146",
+		style=tapered];
+"#,
+        ),
+        (
+            r#"color="red;0.5:blue" fillcolor=black"#,
+            r#"	a -> b	[_draw_="c 7 -#ff0000 B 4 27 71.7 27 68.05 27 64.06 27 59.95 c 7 -#0000ff B 4 27 59.95 27 55.85 27 51.63 27 47.54 ",
+		_hdraw_="S 5 -solid c 7 -#0000ff C 7 -#0000ff P 3 30.5 47.62 27 37.62 23.5 47.62 ",
+		color="red;0.5:blue",
+		fillcolor=black,
+		pos="e,27,36.104 27,71.697 27,64.407 27,55.726 27,47.536"];
+"#,
+        ),
+        (
+            "color=<red> fillcolor=red arrowhead=dot",
+            r#"	a -> b	[_draw_="c 7 -#ff0000 B 4 27 71.7 27 63.64 27 53.89 27 44.98 ",
+		_hdraw_="S 5 -solid c 7 -#ff0000 C 7 -#ff0000 E 27 40.6 4 4 ",
+		arrowhead=dot,
+		color=<red>,
+		fillcolor=red,
+		pos="e,27,36.104 27,71.697 27,63.644 27,53.894 27,44.982"];
+"#,
+        ),
+    ] {
+        let (out, err, ok) = run(&["-Txdot"], &format!("digraph {{ a -> b [{attrs}] }}"));
+        assert!(ok, "{err}");
+        assert_eq!(err, "", "{attrs}");
+        assert_eq!(out, format!("{nodes}{edge}}}\n"), "{attrs}");
+    }
+}
+
 /// neato ortho obstacles (`makeObstacle` with `isOrtho`) keep `margin = {0}`: a scaling
 /// `sep`/`esep` shrinks each box to its node's centre, so touching boxes are not reported.
 #[test]
