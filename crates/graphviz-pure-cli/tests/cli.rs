@@ -8505,6 +8505,48 @@ fn issue285_arrow_type_warnings_print_once_per_layout() {
     assert_eq!(err, "Warning: Arrow type \"foo\" unknown - ignoring\n");
 }
 
+/// Issue #128: with `phase=3`, `dotLayout` stops after `dot_position` with
+/// `attach_phase_attrs(g, 2)` (`lib/dotgen/dotinit.c:326`), and `dot_layout` still runs
+/// `dotneato_postprocess` (`:517`): real positions, the bounding box, and the sizes
+/// `dot_position` left (a self-loop's widened node). Output is C 16.1.0's.
+#[test]
+fn issue128_dot_phase3_writes_the_positions_dot_position_left() {
+    let (out, err, ok) = run(
+        &["-Tdot"],
+        "digraph G { phase=3; n7 [style=diagonals]; n7 -> n7; a -> b; }",
+    );
+    assert!(ok, "{err}");
+    assert_eq!(err, "");
+    assert_eq!(
+        out,
+        r#"digraph G {
+	graph [bb="0,0,144,108",
+		phase=3
+	];
+	node [label="\N"];
+	n7	[height=0.5,
+		order=0,
+		pos="27,90",
+		rank=0,
+		style=diagonals,
+		width=1];
+	n7 -> n7;
+	a	[height=0.5,
+		order=1,
+		pos="117,90",
+		rank=0,
+		width=0.75];
+	b	[height=0.5,
+		order=0,
+		pos="117,18",
+		rank=1,
+		width=0.75];
+	a -> b;
+}
+"#
+    );
+}
+
 /// neato ortho obstacles (`makeObstacle` with `isOrtho`) keep `margin = {0}`: a scaling
 /// `sep`/`esep` shrinks each box to its node's centre, so touching boxes are not reported.
 #[test]

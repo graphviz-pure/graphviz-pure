@@ -15,7 +15,8 @@ pub struct Output {
     /// size, when `translate_drawing` did not reset them (`gv_nodesize` runs for
     /// rankdir != TB, unless the layout was abandoned and no postprocessing ran).
     node_size: Vec<Option<(f64, f64, f64)>>,
-    phase_attrs: Option<i32>,
+    /// `attach_phase_attrs(g, n)`: write `rank` (and `order` from 2) for `phase=n`.
+    pub(super) phase_attrs: Option<i32>,
     bb: BoundingBox,
     cluster_bb: Vec<(usize, BoundingBox)>,
     /// Spline, `lp`, and whether the label is unplaced (`!ED_label(e)->set`).
