@@ -5,12 +5,6 @@
 use graphviz_pure_core::AttrMap;
 use graphviz_pure_core::strtod::strtod_rest;
 
-/// `strtol(s, &end, 10)`: the value and the unparsed rest, or `None` with no digits.
-pub(crate) fn strtol(s: &str) -> Option<(i64, &str)> {
-    let (v, n) = graphviz_pure_core::cnum::strtol(s);
-    (n > 0).then(|| (v, &s[n..]))
-}
-
 pub(crate) use graphviz_pure_core::cnum::{atoi, mapbool};
 
 /// Read-only view of an object's attributes with the `late_*` helpers.

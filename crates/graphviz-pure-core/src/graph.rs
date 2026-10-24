@@ -251,6 +251,9 @@ pub struct GraphLayout {
     /// Root only: the image files and epsf shapes the layout found, which the renderers draw.
     #[serde(default)]
     pub usershapes: crate::usershape::UserShapes,
+    /// Root only: `GD_drawing(g)->xdots`, the `_background` ops `graph_init` parsed.
+    #[serde(default)]
+    pub background: Option<crate::xdot::Background>,
 }
 
 /// A cgraph object, as [`Graph::agnameof`] takes it: the root graph, a subgraph (by index)

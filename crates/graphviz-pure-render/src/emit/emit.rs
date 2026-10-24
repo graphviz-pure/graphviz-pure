@@ -670,6 +670,131 @@ impl<'a, E: Engine> Emitter<'a, E> {
                 self.boxf(clip, FILL);
             }
         }
+        if let Some(xd) = &m.g.layout.background {
+            self.emit_xdot(xd);
+        }
+    }
+
+    /// `emit_xdot`: draws the `_background` ops `init_xdot` parsed. An op is drawn when its
+    /// `bb` overlaps the clip box; outside `neato -n` (`xdotBB`) every `bb` is the zero box.
+    fn emit_xdot(&mut self, xd: &graphviz_pure_core::xdot::Background) {
+        use graphviz_pure_core::xdot::{Grad, Op, OpBox};
+        let pts = |v: &[(f64, f64)]| v.iter().map(|&(x, y)| Point::new(x, y)).collect::<Vec<_>>();
+        let mut image_warn = true;
+        let mut styled = false;
+        let mut filled = FILL;
+        for (i, op) in xd.ops.iter().enumerate() {
+            let b = xd.op_bbs.as_ref().map_or(OpBox::default(), |v| v[i]);
+            let bb = BoundingBox {
+                ll: Point::new(b.ll.0, b.ll.1),
+                ur: Point::new(b.ur.0, b.ur.1),
+            };
+            let visible = overlap(bb, self.job.clip);
+            match op {
+                Op::Ellipse(f, [x, y, w, h]) => {
+                    if visible {
+                        let a = [Point::new(x - w, y - h), Point::new(x + w, y + h)];
+                        self.ellipse(a, if *f { filled } else { 0 });
+                    }
+                }
+                Op::Polygon(f, v) => {
+                    if visible {
+                        self.polygon(&pts(v), if *f { filled } else { 0 });
+                    }
+                }
+                Op::Bezier(f, v) => {
+                    if visible {
+                        self.bezier(&pts(v), if *f { filled } else { 0 });
+                    }
+                }
+                Op::Polyline(v) => {
+                    if visible {
+                        self.polyline(&pts(v));
+                    }
+                }
+                Op::Text(x, y, align, _, text) => {
+                    // Only `xdotBB` makes the span; without it C passes NULL to
+                    // `gvrender_textspan` and crashes. The port draws no text there.
+                    if visible
+                        && let Some(sp) = b.span
+                        && let Some(name) = xd.ops[..i].iter().rev().find_map(|o| match o {
+                            Op::Font(_, n) => Some(n.as_str()),
+                            _ => None,
+                        })
+                    {
+                        let span = super::model::TextSpan {
+                            str: text.clone(),
+                            just: match align.signum() {
+                                -1 => 'l',
+                                1 => 'r',
+                                _ => 'n',
+                            },
+                            width: sp.width,
+                            height: sp.height,
+                            yoffset_centerline: sp.yoffset_centerline,
+                            font: super::model::TextFont::new(
+                                name,
+                                sp.fontsize,
+                                sp.fontflags as u8,
+                            ),
+                        };
+                        self.textspan(Point::new(*x, *y), &span);
+                    }
+                }
+                Op::Color(true, Grad::None(c)) => {
+                    self.set_fillcolor(c);
+                    filled = FILL;
+                }
+                Op::Color(false, Grad::None(c)) => {
+                    self.set_pencolor(c);
+                    filled = FILL;
+                }
+                Op::Color(true, Grad::Radial(x0, y0, r0, x1, y1, _, stops)) => {
+                    let angle = if x1 == x0 && y1 == y0 {
+                        0
+                    } else {
+                        (180.0 * math::acos((x0 - x1) / r0) / std::f64::consts::PI) as i32
+                    };
+                    if self.xdot_gradient(stops, angle) {
+                        filled = RGRADIENT;
+                    }
+                }
+                Op::Color(true, Grad::Linear(x0, y0, x1, y1, stops)) => {
+                    let angle =
+                        (180.0 * math::atan2(y1 - y0, x1 - x0) / std::f64::consts::PI) as i32;
+                    if self.xdot_gradient(stops, angle) {
+                        filled = GRADIENT;
+                    }
+                }
+                Op::Color(false, _) => agwarningf("gradient pen colors not yet supported.\n"),
+                Op::Style(st) => {
+                    let items = parse_style(st);
+                    self.set_style(&items);
+                    styled = true;
+                }
+                Op::Image => {
+                    if image_warn {
+                        agwarningf("Images unsupported in \"background\" attribute\n");
+                        image_warn = false;
+                    }
+                }
+                Op::Font(..) | Op::FontChar(_) => {}
+            }
+        }
+        if styled {
+            self.set_style(&default_line_style());
+        }
+    }
+
+    /// The fill and gradient colours of an `xd_grad_fill_color` op. C reads `stops[0]` and
+    /// `stops[1]` unchecked; with fewer stops the port leaves the colours as they are.
+    fn xdot_gradient(&mut self, stops: &[(f64, String)], angle: i32) -> bool {
+        let [(_, c0), (frac, c1), ..] = stops else {
+            return false;
+        };
+        self.set_fillcolor(c0);
+        self.set_gradient_vals(c1, angle, *frac);
+        true
     }
 
     fn emit_view(&mut self) {

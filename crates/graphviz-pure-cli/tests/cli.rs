@@ -8505,6 +8505,98 @@ fn issue285_arrow_type_warnings_print_once_per_layout() {
     assert_eq!(err, "Warning: Arrow type \"foo\" unknown - ignoring\n");
 }
 
+// Issue #315: `graph_init` parses `_background` (or the graph's `_draw_`) with `init_xdot`, and
+// `emit_background` draws its ops behind the graph. Outside `neato -n` every op's `bb` is the
+// zero box, so an op is drawn when the clip box holds the origin; `neato -n`'s `xdotBB` sizes
+// the ops, text included, into the graph's `bb`. Output is C 16.1.0's.
+#[test]
+fn issue315_background_ops_are_drawn_and_an_unparsable_one_warns() {
+    let (out, err, ok) = run(
+        &["-Tsvg"],
+        "digraph G { _background=\"c 7 -#ff0000 E 0 0 10 10\"; a }",
+    );
+    assert!(ok);
+    assert_eq!(err, "");
+    assert_eq!(
+        out.split_once("-->\n").unwrap().1,
+        "\
+         <!-- Title: G Pages: 1 -->\n\
+         <svg width=\"62pt\" height=\"44pt\"\n\
+         \x20viewBox=\"0.00 0.00 62.00 44.00\" xmlns=\"http://www.w3.org/2000/svg\" xmlns:xlink=\"http://www.w3.org/1999/xlink\">\n\
+         <g id=\"graph0\" class=\"graph\" transform=\"scale(1 1) rotate(0) translate(4 40)\">\n\
+         <title>G</title>\n\
+         <polygon fill=\"white\" stroke=\"none\" points=\"-4,4 -4,-40 58,-40 58,4 -4,4\"/>\n\
+         <ellipse fill=\"white\" stroke=\"#ff0000\" cx=\"0\" cy=\"0\" rx=\"10\" ry=\"10\"/>\n\
+         <!-- a -->\n\
+         <g id=\"node1\" class=\"node\">\n\
+         <title>a</title>\n\
+         <ellipse fill=\"none\" stroke=\"black\" cx=\"27\" cy=\"-18\" rx=\"27\" ry=\"18\"/>\n\
+         <text xml:space=\"preserve\" text-anchor=\"middle\" x=\"27\" y=\"-13.8\" font-family=\"Times,serif\" font-size=\"14.00\">a</text>\n\
+         </g>\n\
+         </g>\n\
+         </svg>\n\
+         "
+    );
+
+    let (out, err, ok) = run(&["-Tplain"], "digraph G { _background=\"Z 1 2\"; a -> b }");
+    assert!(ok);
+    assert_eq!(
+        err,
+        "Warning: Could not parse \"_background\" attribute in graph G\n  \"Z 1 2\"\n"
+    );
+    assert!(out.starts_with("graph 1 0.75 1.5\n"), "{out}");
+
+    let (out, err, ok) = run(
+        &["-Kneato", "-n", "-Tsvg"],
+        "graph G { _background=\"F 12 5 -Arial T 20 20 0 30 5 -hello \
+         C 39 -[0 0 100 0 2 0 7 -#ff0000 1 7 -#0000ff] P 3 0 0 30 0 0 30 S 6 -dashed \
+         I 0 0 1 1 3 -a.p I 0 0 1 1 3 -a.p\"; a [pos=\"0,0\"]; b [pos=\"100,40\"]; a -- b }",
+    );
+    assert!(ok);
+    assert_eq!(
+        err,
+        "Warning: Images unsupported in \"background\" attribute\n"
+    );
+    assert_eq!(
+        out.split_once("-->\n").unwrap().1,
+        "\
+         <!-- Title: G Pages: 1 -->\n\
+         <svg width=\"162pt\" height=\"84pt\"\n\
+         \x20viewBox=\"0.00 0.00 162.00 84.00\" xmlns=\"http://www.w3.org/2000/svg\" xmlns:xlink=\"http://www.w3.org/1999/xlink\">\n\
+         <g id=\"graph0\" class=\"graph\" transform=\"scale(1 1) rotate(0) translate(31 62)\">\n\
+         <title>G</title>\n\
+         <polygon fill=\"white\" stroke=\"none\" points=\"-31,22 -31,-62 131,-62 131,22 -31,22\"/>\n\
+         <text xml:space=\"preserve\" text-anchor=\"middle\" x=\"20\" y=\"-21.2\" font-family=\"Arial\" font-size=\"12.00\" fill=\"transparent\">hello</text>\n\
+         <defs>\n\
+         <linearGradient id=\"graph0_l_0\" gradientUnits=\"userSpaceOnUse\" x1=\"0\" y1=\"-15\" x2=\"30\" y2=\"-15\" >\n\
+         <stop offset=\"0.999\" style=\"stop-color:#ff0000;stop-opacity:1.;\"/>\n\
+         <stop offset=\"1\" style=\"stop-color:#0000ff;stop-opacity:1.;\"/>\n\
+         </linearGradient>\n\
+         </defs>\n\
+         <polygon fill=\"url(#graph0_l_0)\" stroke=\"none\" points=\"0,0 30,0 0,-30 0,0\"/>\n\
+         <!-- a -->\n\
+         <g id=\"node1\" class=\"node\">\n\
+         <title>a</title>\n\
+         <ellipse fill=\"none\" stroke=\"black\" cx=\"0\" cy=\"0\" rx=\"27\" ry=\"18\"/>\n\
+         <text xml:space=\"preserve\" text-anchor=\"middle\" x=\"0\" y=\"4.2\" font-family=\"Times,serif\" font-size=\"14.00\">a</text>\n\
+         </g>\n\
+         <!-- b -->\n\
+         <g id=\"node2\" class=\"node\">\n\
+         <title>b</title>\n\
+         <ellipse fill=\"none\" stroke=\"black\" cx=\"100\" cy=\"-40\" rx=\"27\" ry=\"18\"/>\n\
+         <text xml:space=\"preserve\" text-anchor=\"middle\" x=\"100\" y=\"-35.8\" font-family=\"Times,serif\" font-size=\"14.00\">b</text>\n\
+         </g>\n\
+         <!-- a&#45;&#45;b -->\n\
+         <g id=\"edge1\" class=\"edge\">\n\
+         <title>a&#45;&#45;b</title>\n\
+         <path fill=\"none\" stroke=\"black\" d=\"M23.45,-9.38C39.49,-15.8 60.68,-24.27 76.7,-30.68\"/>\n\
+         </g>\n\
+         </g>\n\
+         </svg>\n\
+         "
+    );
+}
+
 /// neato ortho obstacles (`makeObstacle` with `isOrtho`) keep `margin = {0}`: a scaling
 /// `sep`/`esep` shrinks each box to its node's centre, so touching boxes are not reported.
 #[test]
