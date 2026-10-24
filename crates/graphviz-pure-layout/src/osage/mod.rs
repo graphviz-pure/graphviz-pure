@@ -8,7 +8,7 @@
 
 use crate::common::init::{graph_label, pad};
 use crate::common::postproc::gv_postprocess;
-use crate::common::types::{EdgeType, LABEL_AT_TOP, LCluster, LGraph, RatioKind, Sub};
+use crate::common::types::{EdgeType, LABEL_AT_TOP, LCluster, LGraph, RatioKind, Sub, TextLabel};
 use crate::common::utils::late_int;
 use crate::fdpgen::{ClusterTree, mk_clusters, subgraph_member_nodes};
 use crate::neatogen::adjust::DFLT_MARGIN;
@@ -240,17 +240,28 @@ impl Osage<'_, '_> {
     }
 }
 
-/// `mkClusters` with `do_graph_label`: register every cluster with its label
-/// and border in `g.clusters` (indexed like the [`ClusterTree`]).
-pub fn register_clusters(g: &mut LGraph<'_>, tree: &ClusterTree) {
+/// `do_graph_label(subg)` for the subgraph `si`: its label, `GD_label_pos` and `GD_border`.
+pub fn cluster_label(g: &LGraph<'_>, si: usize) -> (Option<TextLabel>, u8, [Point; 4]) {
+    let sg = &g.src.subgraphs[si];
+    let name = g.src.subgraph_name(si);
+    let (label, label_pos) = graph_label(&sg.graph_attrs, &name, sg.html_name, false);
+    let mut border = [Point::default(); 4];
+    if let Some(l) = &label {
+        border[if label_pos & LABEL_AT_TOP != 0 { 2 } else { 0 }] = pad(l.dimen);
+    }
+    (label, label_pos, border)
+}
+
+/// `mkClusters`: register every cluster in `g.clusters` (indexed like the [`ClusterTree`]),
+/// with its label and border (`do_graph_label`) when `labels`. fdp makes them later, in
+/// `deriveGraph`, one level at a time.
+pub fn register_clusters(g: &mut LGraph<'_>, tree: &ClusterTree, labels: bool) {
     for c in 0..tree.len() {
-        let sg = &g.src.subgraphs[tree.subgraph[c]];
-        let name = g.src.subgraph_name(tree.subgraph[c]);
-        let (label, label_pos) = graph_label(&sg.graph_attrs, &name, sg.html_name, false);
-        let mut border = [Point::default(); 4];
-        if let Some(l) = &label {
-            border[if label_pos & LABEL_AT_TOP != 0 { 2 } else { 0 }] = pad(l.dimen);
-        }
+        let (label, label_pos, border) = if labels {
+            cluster_label(g, tree.subgraph[c])
+        } else {
+            (None, 0, [Point::default(); 4])
+        };
         g.clusters.push(LCluster {
             subgraph: tree.subgraph[c],
             bb: BoundingBox::default(),
@@ -268,7 +279,7 @@ pub fn osage_layout(graph: &mut Graph) -> Result<()> {
     let src = graph.clone();
     let mut g = LGraph::new(&src, 2, EdgeType::Line);
     let tree = mk_clusters(&src);
-    register_clusters(&mut g, &tree);
+    register_clusters(&mut g, &tree, true);
     let sortv_graph = src.graph_attr_declared("sortv");
     let sortv_node = g.node_attr_declared("sortv");
     let n = g.nodes.len();

@@ -2278,6 +2278,67 @@ fn pack_cccomps_error_precedes_node_sizing_warnings_like_c() {
 
 // Issue #21: `label_float` declared after the edge. cgraph gives the existing edge ""
 // (not the later default), `cloneEdge` copies that, and the label does not float.
+/// Issue #319: fdp's `deriveGraph` makes a graph's cluster labels (`do_graph_label`,
+/// `lib/fdpgen/layout.c:413`) one level at a time: `cluster_1` and `cluster_2`, then
+/// `cluster_11` when `cluster_1`'s layout reaches it. That order interns the label fonts, so
+/// `cluster_11`'s NaN fontsize matches `cluster_2`'s 20pt entry. Output is C 16.1.0's.
+#[test]
+fn issue319_fdp_sizes_nested_cluster_labels_one_level_at_a_time() {
+    let src = "graph { a; subgraph cluster_1 { label=\"ONE\"; fontsize=30; b; \
+               subgraph cluster_11 { label=\"ELEVENELEVENELEVEN\"; fontsize=nan; c } } \
+               subgraph cluster_2 { label=\"TWO\"; fontsize=20; d } }";
+    let (out, err, ok) = run(&["-Kfdp", "-Tdot"], src);
+    assert!(ok, "{err}");
+    assert_eq!(err, "");
+    assert_eq!(
+        out,
+        r#"graph {
+	graph [bb="0,0,342.5,324"];
+	node [label="\N"];
+	subgraph cluster_1 {
+		graph [bb="0,0,265,204",
+			fontsize=30,
+			label=ONE,
+			lheight=0.50,
+			lp="132.5,182",
+			lwidth=0.86
+		];
+		subgraph cluster_11 {
+			graph [bb="8,8,257,92",
+				fontsize=nan,
+				label=ELEVENELEVENELEVEN,
+				lheight=0.33,
+				lp="132.5,76",
+				lwidth=3.24
+			];
+			c	[height=0.5,
+				pos="132.5,34",
+				width=0.75];
+		}
+		b	[height=0.5,
+			pos="227.5,134",
+			width=0.75];
+	}
+	subgraph cluster_2 {
+		graph [bb="272.5,240,342.5,324",
+			fontsize=20,
+			label=TWO,
+			lheight=0.33,
+			lp="307.5,308",
+			lwidth=0.63
+		];
+		d	[height=0.5,
+			pos="307.5,266",
+			width=0.75];
+	}
+	a	[height=0.5,
+		pos="203.5,258",
+		width=0.75];
+}
+"#
+    );
+}
+
 #[test]
 fn label_float_declared_after_the_edge_does_not_float_like_c() {
     let src = "digraph G {
