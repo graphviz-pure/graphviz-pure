@@ -1,7 +1,7 @@
 module	unwrap	expect	index	arith
 geom/expat.rs	0	0	56	136
 geom/html_label.rs	0	0	51	57
-geom/node_size.rs	0	0	67	49
+geom/node_size.rs	0	0	66	49
 geom/pathplan/cvt.rs	0	0	7	6
 geom/pathplan/inpoly.rs	0	0	2	1
 geom/pathplan/route.rs	0	0	37	11

@@ -8505,6 +8505,30 @@ fn issue285_arrow_type_warnings_print_once_per_layout() {
     assert_eq!(err, "Warning: Arrow type \"foo\" unknown - ignoring\n");
 }
 
+/// Issue #370: `parse_reclbl` measures each field as it closes (`make_label` at
+/// `lib/common/shapes.c:3444`), so a field read before a syntax error, nested ones included,
+/// is measured and warned about before `bad label format`. Output is C 16.1.0's.
+#[test]
+fn issue370_a_record_field_before_a_syntax_error_is_measured() {
+    let (out, err, ok) = run(
+        &["-Tcanon"],
+        "digraph { a [shape=record, label=\"{¤|\"]; b [shape=record, label=\"{x|{ÿ|\"] }",
+    );
+    assert!(!ok);
+    assert_eq!(
+        err,
+        "Warning: Warning: no value for width of non-ASCII character 194. Falling back to \
+         width of space character\n\
+         Error: bad label format {¤|\n\
+         Error: bad label format {x|{ÿ|\n"
+    );
+    assert_eq!(
+        out,
+        "digraph {\n\tnode [label=\"\\N\"];\n\ta\t[label=\"{¤|\",\n\t\tshape=record];\n\
+         \tb\t[label=\"{x|{ÿ|\",\n\t\tshape=record];\n}\n"
+    );
+}
+
 /// neato ortho obstacles (`makeObstacle` with `isOrtho`) keep `margin = {0}`: a scaling
 /// `sep`/`esep` shrinks each box to its node's centre, so touching boxes are not reported.
 #[test]
