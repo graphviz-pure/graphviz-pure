@@ -222,8 +222,15 @@ impl<'g> AuxSyms<'g> {
             names: &[String],
         ) {
             for (id, k) in names.iter().enumerate() {
+                // agnewsym interns auxg's names as plain strings and leaves `print` unset
+                // (a copied ProtoGraph symbol keeps the ProtoGraph's).
                 let sym = match main.get(k) {
-                    Some(m) => AttrSym { id, ..m.clone() },
+                    Some(m) => AttrSym {
+                        id,
+                        html: false,
+                        print: m.proto && m.print,
+                        ..m.clone()
+                    },
                     None => AttrSym {
                         defval: String::new(),
                         print: false,
@@ -242,6 +249,9 @@ impl<'g> AuxSyms<'g> {
         if !graph.iter().any(|k| k == "rank") {
             graph.push("rank".to_string());
         }
+        // A ProtoGraph graph symbol takes the main root's default here, where auxg keeps the
+        // ProtoGraph's (`-G`) value; they differ only when the file sets that attribute at
+        // its root, and nothing reads a graph default on auxg (`aux.graph_attrs` above too).
         declare(&mut d.graph, &self.main.graph, &graph);
         // agattr(auxg, AGRAPH, "rank", ""): a ProtoGraph `rank` keeps its id, with default "".
         if let Some(r) = d.graph.get_mut("rank") {
