@@ -54,14 +54,18 @@ pub struct AdjustData {
 }
 
 /// `sscanf(s, "%lf,%lf", &x, &y)` conversion count and values, then `if (i == 1) y = x`.
-/// C tests the count for truth, so EOF (`-1`, an empty or blank string) passes with `x`
-/// and `y` uninitialized; the port reads that as no conversion.
-fn scan2(s: &str) -> (usize, f64, f64) {
+/// C tests the count for truth, so EOF (`-1`: the string is empty or blank) passes with `x`
+/// and `y` uninitialised. Those stack slots hold what `agget` left there: pointers, which
+/// read as doubles are subnormals, so C computes as with 0 (`docs/porting/crashes.md`,
+/// "parseFactor's uninitialised x, y"). The port uses 0; `simpleScale` then returns at its
+/// `ISZERO`, as C does.
+fn scan2(s: &str) -> (i32, f64, f64) {
     let r = sscanf(s, "%lf,%lf");
     let [x, y, ..] = r.values;
     match r.count {
         2 => (2, x, y),
         1 => (1, x, x),
+        -1 => (-1, 0.0, 0.0),
         _ => (0, 0.0, 0.0),
     }
 }
@@ -360,4 +364,31 @@ pub fn remove_overlap_as(g: &mut LGraph<'_>, sub: &Sub, flag: Option<&str>) -> b
 pub fn adjust_nodes(g: &mut LGraph<'_>, sub: &Sub) -> bool {
     let flag = g.gattr("overlap");
     remove_overlap_as(g, sub, flag)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // Issue #372: on a blank `sep`/`esep` C's sscanf returns EOF, which `parseFactor` takes
+    // as success with uninitialised `x`, `y` (subnormal garbage, so 0 in effect). The
+    // values are C 16.1.0's (`dot -v`: `Node separation`, `Edge separation`).
+    #[test]
+    fn parse_factor_reads_a_blank_value_as_zero() {
+        let f = |s, sepfact, dflt| parse_factor(s, sepfact, dflt).map(|e| (e.do_add, e.x, e.y));
+        for blank in ["", " ", "\t"] {
+            assert_eq!(f(blank, 1.0, 0.0), Some((false, 1.0, 1.0)));
+            assert_eq!(f(blank, SEPFACT, DFLT_MARGIN), Some((false, 1.0, 1.0)));
+        }
+        for plus in ["+", " + ", "+\n"] {
+            assert_eq!(f(plus, 1.0, 0.0), Some((true, 0.0, 0.0)));
+            assert_eq!(f(plus, SEPFACT, DFLT_MARGIN), Some((true, 4.0, 4.0)));
+            assert_eq!(
+                f(plus, 1.0 / SEPFACT, SEPFACT * DFLT_MARGIN),
+                Some((true, 0.0, 0.0))
+            );
+        }
+        assert_eq!(f("x", 1.0, 0.0), None);
+        assert_eq!(f("+,1", 1.0, 0.0), None);
+    }
 }

@@ -8505,6 +8505,54 @@ fn issue285_arrow_type_warnings_print_once_per_layout() {
     assert_eq!(err, "Warning: Arrow type \"foo\" unknown - ignoring\n");
 }
 
+/// Issue #372: `parseFactor` (`lib/neatogen/adjust.c:1020`) takes sscanf's EOF on a blank
+/// `sep` or `esep` as success, with `x` and `y` uninitialised. They hold pointers `agget`
+/// left on the stack, subnormal as doubles, so C lays out as with 0 on every run and build
+/// (`docs/porting/crashes.md`). Output is C 16.1.0's.
+#[test]
+fn issue372_blank_sep_is_read_as_zero_like_c() {
+    for (src, want) in [
+        (
+            r#"graph { layout=fdp; sep=""; subgraph cluster_a { a -- b -- c } d -- a; subgraph cluster_b { e -- f } f -- d }"#,
+            r#"graph 1 3.8915 2.0091
+node a 1.4694 0.91312 0.75 0.5 a solid ellipse black lightgrey
+node b 1.3057 1.648 0.75 0.5 b solid ellipse black lightgrey
+node c 0.48611 1.4921 0.75 0.5 c solid ellipse black lightgrey
+node d 2.191 0.25 0.75 0.5 d solid ellipse black lightgrey
+node e 3.4053 1.551 0.75 0.5 e solid ellipse black lightgrey
+node f 3.1825 0.94446 0.75 0.5 f solid ellipse black lightgrey
+edge a b 4 1.4131 1.166 1.3964 1.2408 1.3782 1.3225 1.3616 1.3971 solid black
+edge b c 4 0.93905 1.5783 0.91007 1.5727 0.88079 1.5672 0.85182 1.5617 solid black
+edge d a 4 1.9666 0.45618 1.8789 0.53678 1.7786 0.62897 1.6911 0.70934 solid black
+edge e f 4 3.3147 1.3043 3.3012 1.2676 3.2873 1.2297 3.2738 1.1929 solid black
+edge f d 4 2.922 0.762 2.7774 0.66073 2.5981 0.53511 2.4532 0.43365 solid black
+stop
+"#,
+        ),
+        (
+            r#"graph { layout=neato; overlap=false; sep="+"; esep=""; a -- b; a -- c; a -- d; b -- c; x [width=2]; x -- a }"#,
+            r#"graph 1 5.7419 5.3503
+node a 2.9057 2.9308 0.75 0.5 a solid ellipse black lightgrey
+node b 4.607 0.75 0.75 0.5 b solid ellipse black lightgrey
+node c 2.2252 0.25 0.75 0.5 c solid ellipse black lightgrey
+node d 0.375 4.2175 0.75 0.5 d solid ellipse black lightgrey
+node x 4.7419 5.1003 2 0.5 x solid ellipse black lightgrey
+edge a b 4 3.0814 2.7056 3.4074 2.2877 4.1025 1.3966 4.4297 0.97721 solid black
+edge a c 4 2.8417 2.6786 2.7117 2.1664 2.418 1.0096 2.2885 0.49958 solid black
+edge a d 4 2.6055 3.0834 2.1197 3.3304 1.1668 3.8149 0.67879 4.063 solid black
+edge b c 4 4.2452 0.67406 3.7963 0.57981 3.0352 0.42004 2.5864 0.32583 solid black
+edge x a 4 4.5313 4.8514 4.1696 4.424 3.4361 3.5574 3.0919 3.1508 solid black
+stop
+"#,
+        ),
+    ] {
+        let (out, err, ok) = run(&["-Tplain"], src);
+        assert!(ok, "{err}");
+        assert_eq!(err, "");
+        assert_eq!(out, want, "{src}");
+    }
+}
+
 /// neato ortho obstacles (`makeObstacle` with `isOrtho`) keep `margin = {0}`: a scaling
 /// `sep`/`esep` shrinks each box to its node's centre, so touching boxes are not reported.
 #[test]
