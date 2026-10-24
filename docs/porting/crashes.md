@@ -713,7 +713,12 @@ the note in both cases.
 
 So the port models the garbage as one fixed positive subnormal (`STALE_POINTER` in
 `neatogen/adjust.rs`, `2^32` as bits, about 2.1e-314). It acts as 0 in layouts and gives C's
-answer in that comparison. The port matches C, the packaged build and the one with the
+answer in that comparison. It is a model of undefined behaviour, measured on one build, the
+packaged arm64 one the goldens come from. The layouts agree on both builds, but the note
+does not: on 7 forms of it, the packaged build prints it for 3 (`+`/`+`, `+0`/`+`,
+`+`/blank) and the build from source, which reads different garbage, for none. The port
+follows the packaged build; another compiler or allocator can make C's garbage compare
+otherwise. The port matches C, the packaged build and the one with the
 port's math, on 9 `sep`/`esep` forms of that note in this PR and on 16 more in its review
 (declaration order, `sep` only in a subgraph, `pack`, `"+,"`), each stable over two C runs.
 `simpleScale`'s blank `scale` returns at its `ISZERO`, as C does. Two `f32` roundings of these

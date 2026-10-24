@@ -623,6 +623,7 @@ fn parse_user_spline(
     stype: u32,
     etype: u32,
 ) -> std::result::Result<Vec<Bezier>, SplineError> {
+    debug_assert!(!pos.is_empty(), "user_spline returns before an empty pos");
     let bytes = pos.as_bytes();
     // The byte offset of `rest`, a tail of `pos` (or of `bytes`).
     let offset = |rest: usize| pos.len().saturating_sub(rest);
@@ -1016,14 +1017,13 @@ pub fn neato_layout(graph: &mut Graph) -> Result<()> {
     let outdim = late_int(attrs, "dimen", 2, 2);
     let ndim = late_int(attrs, "dim", outdim, 2).min(MAXDIM as i32) as usize;
 
-    // Deleting nodes keeps the attribute declarations.
-    let decl = PosDecl::of(graph);
     // `Reduce` (`dot -x`) deletes nodes in `scan_graph_mode`, per component once `pccomps`
     // has split the graph: the components are those of the whole graph, and one it empties
     // is still packed.
     let reduced = super::stuff::reduce_set(graph).map(|deleted| {
         let full = graph.clone();
-        let g0 = neato_init_node_edge(&full, ndim, inputscale, decl);
+        // `user_pos` on the whole graph, with what it declares before `Reduce` deletes nodes.
+        let g0 = neato_init_node_edge(&full, ndim, inputscale, PosDecl::of(&full));
         let (ccs, pin) = pccomps(&g0);
         let mut new_index = vec![None; deleted.len()];
         let kept = deleted.iter().enumerate().filter(|(_, d)| !**d);
@@ -1054,6 +1054,9 @@ pub fn neato_layout(graph: &mut Graph) -> Result<()> {
         (comps, pin, kept_pos)
     });
     let src = graph.clone();
+    // What the graph declares after `Reduce`: a graph without attribute dictionaries
+    // declares what its remaining nodes carry.
+    let decl = PosDecl::of(&src);
     let mut g = match &reduced {
         // `user_pos` ran on the whole graph, before `scan_graph_mode` deleted nodes.
         Some((_, _, kept_pos)) => {
@@ -1475,6 +1478,28 @@ mod tests {
         assert!(!e.label_unplaced);
         let lp = e.label_pos.expect("label position");
         assert!(near(lp, 0.94179 * 72.0, 0.36667 * 72.0), "{lp:?}");
+    }
+
+    // A graph built without attribute dictionaries declares what its nodes carry, and after
+    // `Reduce` (`-x`) only what the remaining ones carry: a `z` on a deleted singleton is
+    // not declared for addZ, so no remaining node gets one.
+    #[test]
+    fn reduce_declares_z_from_the_remaining_nodes() {
+        crate::cutil::in_fresh_run(|| {
+            let g = nop_graph(
+                false,
+                &[("dim", "3")],
+                &[("a", &[]), ("b", &[]), ("c", &[]), ("d", &[("z", "5")])],
+                &[(0, 1, &[]), (1, 2, &[]), (2, 0, &[])],
+            );
+            let mut g = g;
+            super::super::stuff::set_reduce(true);
+            let done = graphviz_pure_core::diag::quietly(|| neato_layout(&mut g));
+            super::super::stuff::set_reduce(false);
+            done.unwrap();
+            assert_eq!(g.nodes.len(), 3);
+            assert!(g.nodes.iter().all(|n| !n.attrs.contains_key("z")));
+        });
     }
 
     // Issue #148: spline_edges_ routes `splines=ortho` through orthoEdges: C's edge a--c

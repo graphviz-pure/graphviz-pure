@@ -8553,11 +8553,11 @@ stop
     }
 }
 
-/// Issue #372: C's garbage in `parseFactor` is a stale pointer, a positive subnormal, so
-/// `compoundEdges`' note (`clusteredges.c:243`) compares about `G <= G / 1.25` for
-/// `sep="+"` alone (no note) and `G <= G` with `esep="+"` too (a note); `expand_t` holds
-/// doubles, so `1.00000001` is not rounded to `1`, nor is `neatosplines.c:625`'s margin.
-/// Output is C 16.1.0's.
+/// Issue #372: on a blank `sep`/`esep`, C's `parseFactor` reads stale pointers, positive
+/// subnormals. `compoundEdges`' note (`clusteredges.c:243`) then compares about
+/// `G <= G / 1.25` for `sep="+"` alone, so there is no note, and `G <= G` with `esep="+"`
+/// too, so there is one. `expand_t` holds doubles: the note does not round `1.00000001` to
+/// `1`, and `neatosplines.c:625` prints `0.1250000001` as `0.13`. Output is C 16.1.0's.
 #[test]
 fn issue372_compound_edges_note_compares_cs_stale_margins() {
     for (src, want, want_err) in [
@@ -8613,16 +8613,15 @@ Warning: some nodes with margin (1.00,1.00) touch - falling back to straight lin
         assert_eq!(err, want_err, "{src}");
         assert_eq!(out, want, "{src}");
     }
-    let (_, err, ok) = run(
-        &["-Tplain"],
-        "graph { layout=neato; splines=true; esep=\"+0.1250000001\"; a [pos=\"0,0!\"]; \
-         b [pos=\"0.3,0!\"]; c [pos=\"3,0!\"]; a -- c }",
-    );
-    assert!(ok);
+    let src = "graph { layout=neato; splines=true; esep=\"+0.1250000001\"; \
+               a [pos=\"0,0!\"]; b [pos=\"0.3,0!\"]; c [pos=\"3,0!\"]; a -- c }";
+    let (_, err, ok) = run(&["-Tplain"], src);
+    assert!(ok, "{err}");
     assert_eq!(
         err,
         "Warning: some nodes with margin (0.13,0.13) touch - falling back to straight line \
-         edges\n"
+         edges\n",
+        "{src}"
     );
 }
 
