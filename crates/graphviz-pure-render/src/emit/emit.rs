@@ -678,13 +678,17 @@ impl<'a, E: Engine> Emitter<'a, E> {
     /// `emit_xdot`: draws the `_background` ops `init_xdot` parsed. An op is drawn when its
     /// `bb` overlaps the clip box; outside `neato -n` (`xdotBB`) every `bb` is the zero box.
     fn emit_xdot(&mut self, xd: &graphviz_pure_core::xdot::Background) {
-        use graphviz_pure_core::xdot::{Grad, Op, OpBox};
+        use graphviz_pure_core::xdot::{Grad, Op};
         let pts = |v: &[(f64, f64)]| v.iter().map(|&(x, y)| Point::new(x, y)).collect::<Vec<_>>();
         let mut image_warn = true;
         let mut styled = false;
         let mut filled = FILL;
         for (i, op) in xd.ops.iter().enumerate() {
-            let b = xd.op_bbs.as_ref().map_or(OpBox::default(), |v| v[i]);
+            let b = xd
+                .op_bbs
+                .as_ref()
+                .and_then(|v| v.get(i).copied())
+                .unwrap_or_default();
             let bb = BoundingBox {
                 ll: Point::new(b.ll.0, b.ll.1),
                 ur: Point::new(b.ur.0, b.ur.1),

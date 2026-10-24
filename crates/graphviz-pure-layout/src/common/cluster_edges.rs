@@ -212,6 +212,8 @@ pub fn process_cluster_edges(graph: &Graph, tree: &ClusterTree) -> Option<Cluste
     work.empty_name = graph.empty_name;
     work.anon_subgraph_ids = graph.anon_subgraph_ids.clone();
     work.graph_attrs = graph.graph_attrs.clone();
+    // graph_init's `GD_drawing(g)->xdots`, which the layout and renderers read.
+    work.layout.background = graph.layout.background.clone();
     work.node_defaults = graph.node_defaults.clone();
     work.edge_defaults = graph.edge_defaults.clone();
     let mut node_map = vec![None; graph.nodes.len()];

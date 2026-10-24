@@ -95,7 +95,8 @@ impl P<'_> {
         if n < 0 {
             return None;
         }
-        let mut v = Vec::with_capacity(n as usize);
+        // Not sized from `n`: a count the input doesn't hold points for would overflow.
+        let mut v = Vec::new();
         for _ in 0..n {
             let x = self.real()?;
             let y = self.real()?;

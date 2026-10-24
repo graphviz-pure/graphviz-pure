@@ -8597,6 +8597,204 @@ fn issue315_background_ops_are_drawn_and_an_unparsable_one_warns() {
     );
 }
 
+// #304 in dot's failed-pack projections: `label=A` set after `cluster_b` gives `cluster_b` a
+// local `""` (`unviewsubgraphsattr`), which `agcopyattr` copies to its `_cc_0` clone as well.
+// Output is C 16.1.0's.
+#[test]
+fn issue304_failed_pack_clones_copy_the_childs_empty_value() {
+    let src = "digraph{pack=true splines=ortho nodesep=0 ranksep=0.02\n\
+         subgraph cluster_a { x1; subgraph cluster_b { x2; x3 } x1->x2 label=A }\n\
+         x2->x3 x3->x1\n\
+         node[shape=point width=0.05 height=0.01 fixedsize=true label=\"\"]\n\
+         n3->n2 n10->n7 n1->n11 n10->n4 n8->n2 n5->n3 n6->n4 n3->n10 n6->n3 n6->n0 n3->n6\n\
+         n0->n8 n11->n10 n2->n10 n3->n2 n6->n10 n0->n9 n11->n5}\n";
+    let (out, err, ok) = run(&["-Kdot", "-Tdot"], src);
+    assert!(ok);
+    assert_eq!(
+        err,
+        "trapezoid segment construction failed\nhorizontal trapezoid construction failed\n"
+    );
+    assert_eq!(
+        out,
+        r#"digraph {
+	graph [bb="0,0,100,122",
+		nodesep=0,
+		pack=true,
+		ranksep=0.02,
+		splines=ortho
+	];
+	node [fixedsize=true,
+		height=0.01,
+		label="",
+		shape=point,
+		width=0.05
+	];
+	subgraph cluster_a {
+		graph [label=A];
+		subgraph cluster_b {
+			graph [label=""];
+			x2	[fixedsize="",
+				height=0.5,
+				label="\N",
+				pos="51,122",
+				shape="",
+				width=0.75];
+			x3	[fixedsize="",
+				height=0.5,
+				label="\N",
+				pos="51,78",
+				shape="",
+				width=0.75];
+		}
+		x1	[fixedsize="",
+			height=0.5,
+			label="\N",
+			pos="55,26",
+			shape="",
+			width=0.75];
+		x1 -> x2	[pos="e,78.365,122 82.473,26 91.842,26 100,26 100,26 100,26 100,122 100,122 100,122 89.879,122 89.879,122"];
+	}
+	subgraph _cc_0 {
+		subgraph cluster_a {
+			graph [label=A,
+				nodesep=0,
+				pack=true,
+				ranksep=0.02,
+				splines=ortho
+			];
+			subgraph cluster_b {
+				graph [label="",
+					nodesep=0,
+					pack=true,
+					ranksep=0.02,
+					splines=ortho
+				];
+				x2;
+				x3;
+				x2 -> x3	[pos="e,51,96.473 51,103.59 51,103.59 51,102.88 51,102.88"];
+			}
+			x1;
+			x1 -> x2;
+			x3 -> x1	[pos="e,53,44.265 53,59.813 53,59.813 53,55.778 53,55.778"];
+		}
+	}
+	subgraph _cc_1 {
+		n3	[height=0.02,
+			pos="-2,57.36",
+			width=0.02];
+		n2	[height=0.02,
+			pos="-2,19.6",
+			width=0.02];
+		n3 -> n2;
+		n3 -> n2;
+		n10	[height=0.02,
+			pos="-2,10.16",
+			width=0.02];
+		n3 -> n10;
+		n6	[height=0.02,
+			pos="-6,47.92",
+			width=0.02];
+		n3 -> n6;
+		n2 -> n10;
+		n7	[height=0.02,
+			pos="-2,0.72",
+			width=0.02];
+		n10 -> n7;
+		n4	[height=0.02,
+			pos="-7,0.72",
+			width=0.02];
+		n10 -> n4;
+		n1	[height=0.02,
+			pos="1,85.68",
+			width=0.02];
+		n11	[height=0.02,
+			pos="1,76.24",
+			width=0.02];
+		n1 -> n11;
+		n11 -> n10;
+		n5	[height=0.02,
+			pos="0,66.8",
+			width=0.02];
+		n11 -> n5;
+		n8	[height=0.02,
+			pos="-7,29.04",
+			width=0.02];
+		n8 -> n2;
+		n5 -> n3;
+		n6 -> n3;
+		n6 -> n10;
+		n6 -> n4;
+		n0	[height=0.02,
+			pos="-6,38.48",
+			width=0.02];
+		n6 -> n0;
+		n0 -> n8;
+		n9	[height=0.02,
+			pos="-5,29.04",
+			width=0.02];
+		n0 -> n9;
+	}
+}
+"#
+    );
+}
+
+// #315: a point count the input has no points for is a parse failure, not an allocation; and
+// fdp's cluster-edge work graph keeps the background. Output is C 16.1.0's.
+#[test]
+fn issue315_background_with_a_huge_count_or_fdp_cluster_edges_matches_c() {
+    let (out, err, ok) = run(
+        &["-Tplain"],
+        "digraph G { _background=\"P 9223372036854775807 0 0\"; a }",
+    );
+    assert!(ok);
+    assert_eq!(
+        err,
+        "Warning: Could not parse \"_background\" attribute in graph G\n  \"P 9223372036854775807 0 0\"\n"
+    );
+    assert_eq!(
+        out,
+        "graph 1 0.75 0.5\nnode a 0.375 0.25 0.75 0.5 a solid ellipse black lightgrey\nstop\n"
+    );
+
+    let (out, err, ok) = run(
+        &["-Kfdp", "-Txdot"],
+        "digraph G { _background=\"c 7 -#ff0000 E 0 0 10 10\"; subgraph cluster_x { b } a -> cluster_x }",
+    );
+    assert!(ok);
+    assert_eq!(err, "");
+    assert_eq!(
+        out,
+        r#"digraph G {
+	graph [_background="c 7 -#ff0000 E 0 0 10 10",
+		_draw_="c 9 -#fffffe00 C 7 -#ffffff P 4 0 0 0 54.68 133.46 54.68 133.46 0 c 7 -#ff0000 C 7 -#ffffff E 0 0 10 10 ",
+		bb="0,0,133.46,54.677",
+		xdotversion=1.7
+	];
+	node [label="\N"];
+	subgraph cluster_x {
+		graph [_draw_="c 7 -#000000 p 4 0 2.68 0 54.68 70 54.68 70 2.68 ",
+			bb="3.9968e-15,2.677,70,54.677"
+		];
+		b	[_draw_="c 7 -#000000 e 35 28.68 27 18 ",
+			_ldraw_="F 14 11 -Times-Roman c 7 -#000000 T 35 24.48 0 7 1 -b ",
+			height=0.5,
+			pos="35,28.677",
+			width=0.75];
+	}
+	a	[_draw_="c 7 -#000000 e 106.46 18 27 18 ",
+		_ldraw_="F 14 11 -Times-Roman c 7 -#000000 T 106.46 13.8 0 6.21 1 -a ",
+		height=0.5,
+		pos="106.46,18",
+		width=0.75];
+	a -> cluster_x	[_draw_="c 7 -#000000 B 4 79.85 21.98 79.75 21.99 79.65 22.01 79.55 22.02 ",
+		_hdraw_="S 5 -solid c 7 -#000000 C 7 -#000000 P 3 81 18.27 71.63 23.2 82.03 25.19 ",
+		pos="e,70.13,23.428 79.853,21.976 79.754,21.991 79.654,22.005 79.555,22.02"];
+}
+"#
+    );
+}
+
 /// neato ortho obstacles (`makeObstacle` with `isOrtho`) keep `margin = {0}`: a scaling
 /// `sep`/`esep` shrinks each box to its node's centre, so touching boxes are not reported.
 #[test]

@@ -950,99 +950,103 @@ impl<'a> Parser<'a> {
         false
     }
 
-    /// `bindattrs`: an attribute unknown in scope is declared on the root with default "".
-    /// For a graph attribute, `setattr` then runs `agxset_(g, rsym, "")` on the graph in
-    /// scope, which gives a subgraph its own local symbol holding `""`.
+    /// `bindattrs`: an attribute unknown in scope is declared with `agattr(S->g, kind, name, "")`.
     fn bind_attr(&mut self, kind: DictKind, name: &str) {
         let gi = self.scope_dict();
-        if self.lookup_view(gi, kind, name) {
-            return;
-        }
-        let html = self.html_keys.contains(name);
-        let d = self.dict_mut(0, kind);
-        let id = d.len();
-        d.insert(
-            name.to_string(),
-            graphviz_pure_core::AttrSym {
-                id,
-                html,
-                ..Default::default()
-            },
-        );
-        if gi != 0 && kind == DictKind::Graph {
-            // `agnewsym(g, sym->name, value, is_html, sym->id, …)`: the root symbol's id.
-            self.dict_mut(gi, kind).insert(
-                name.to_string(),
-                graphviz_pure_core::AttrSym {
-                    id,
-                    html,
-                    ..Default::default()
-                },
-            );
+        if !self.lookup_view(gi, kind, name) {
+            self.setattr(gi, kind, name, "", false);
         }
     }
 
-    /// `attrstmt` + `setattr`: a default set in the current scope.
+    /// `attrstmt`: `agattr(S->g, kind, name, value)` for a default set in the current scope.
     fn attr_stmt(&mut self, kind: DictKind, name: &str, value: &str, value_html: bool) {
         self.bind_attr(kind, name);
         let gi = self.scope_dict();
-        // `setattr` warns when it updates a subgraph's own `layout` symbol. A graph
-        // attribute that `bindattrs` declared from a subgraph has one already: `agattr`
-        // gave the subgraph its value through `agxset`.
-        if gi != 0 && name == "layout" && self.dict(gi, kind).contains_key(name) {
-            graphviz_pure_core::diag::agwarningf(
-                "layout attribute is invalid except on the root graph\n",
-            );
+        self.setattr(gi, kind, name, value, value_html);
+        if gi == 0 {
+            self.dict_mut(0, kind).get_mut(name).unwrap().print = true;
         }
-        // `attrstmt` names local symbols with the root symbol's name, flag included.
-        let html = self.dict(0, kind).get(name).is_some_and(|s| s.html);
+    }
+
+    /// `setattr` (`lib/cgraph/attr.c`) on the graph of dictionary `gi`: updates its own
+    /// symbol, makes a local one under a symbol of an enclosing graph, or makes a new
+    /// global one on the root. Every local symbol takes the root symbol's id and name flag.
+    fn setattr(&mut self, gi: usize, kind: DictKind, name: &str, value: &str, value_html: bool) {
         if self.dict(gi, kind).contains_key(name) {
+            // Update old local definition.
+            if gi != 0 && name == "layout" {
+                graphviz_pure_core::diag::agwarningf(
+                    "layout attribute is invalid except on the root graph\n",
+                );
+            }
             if kind == DictKind::Graph {
-                // unviewsubgraphsattr: direct children without a local value keep theirs.
-                let children: Vec<usize> = if gi == 0 {
-                    (0..self.sub_parent.len())
-                        .filter(|&i| self.sub_parent[i].is_none())
-                        .collect()
-                } else {
-                    self.graph.subgraphs[gi - 1]
-                        .subgraphs
-                        .iter()
-                        .map(|c| c.0 as usize)
-                        .collect()
-                };
-                for c in children {
-                    if !self.graph.dicts[c + 1].graph.contains_key(name) {
-                        let attrs = &self.graph.subgraphs[c].graph_attrs;
-                        let v = attrs.get(name).cloned().unwrap_or_default();
-                        let html_defval = attr_is_html(attrs, name);
-                        self.graph.dicts[c + 1].graph.insert(
-                            name.to_string(),
-                            graphviz_pure_core::AttrSym {
-                                defval: v,
-                                html,
-                                html_defval,
-                                ..Default::default()
-                            },
-                        );
-                    }
-                }
+                self.unviewsubgraphsattr(gi, name);
             }
             let sym = self.dict_mut(gi, kind).get_mut(name).unwrap();
             sym.defval = value.to_string();
             sym.html_defval = value_html;
-        } else {
-            self.dict_mut(gi, kind).insert(
-                name.to_string(),
-                graphviz_pure_core::AttrSym {
+            return;
+        }
+        let sym = match self.dict(0, kind).get(name) {
+            // New local definition (the symbol the view path finds is the root's).
+            Some(root) if self.lookup_view(gi, kind, name) => graphviz_pure_core::AttrSym {
+                id: root.id,
+                html: root.html,
+                defval: value.to_string(),
+                html_defval: value_html,
+                ..Default::default()
+            },
+            // New global definition.
+            _ => {
+                let sym = graphviz_pure_core::AttrSym {
+                    id: self.dict(0, kind).len(),
+                    html: self.html_keys.contains(name),
                     defval: value.to_string(),
-                    html,
                     html_defval: value_html,
                     ..Default::default()
-                },
-            );
-        }
-        if gi == 0 {
-            self.dict_mut(0, kind).get_mut(name).unwrap().print = true;
+                };
+                self.dict_mut(0, kind).insert(name.to_string(), sym.clone());
+                // `agxset_(g, rsym, value)` gives a subgraph its own symbol for a graph
+                // attribute.
+                if gi == 0 || kind != DictKind::Graph {
+                    return;
+                }
+                sym
+            }
+        };
+        self.dict_mut(gi, kind).insert(name.to_string(), sym);
+    }
+
+    /// `unviewsubgraphsattr`: each direct child of the graph of dictionary `gi` without a
+    /// local symbol for `name` gets one holding its current value.
+    fn unviewsubgraphsattr(&mut self, gi: usize, name: &str) {
+        let Some(root) = self.dict(0, DictKind::Graph).get(name) else {
+            return;
+        };
+        let (id, html) = (root.id, root.html);
+        let children: Vec<usize> = if gi == 0 {
+            (0..self.sub_parent.len())
+                .filter(|&i| self.sub_parent[i].is_none())
+                .collect()
+        } else {
+            self.graph.subgraphs[gi - 1]
+                .subgraphs
+                .iter()
+                .map(|c| c.0 as usize)
+                .collect()
+        };
+        for c in children {
+            if !self.graph.dicts[c + 1].graph.contains_key(name) {
+                let attrs = &self.graph.subgraphs[c].graph_attrs;
+                let sym = graphviz_pure_core::AttrSym {
+                    id,
+                    html,
+                    defval: attrs.get(name).cloned().unwrap_or_default(),
+                    html_defval: attr_is_html(attrs, name),
+                    ..Default::default()
+                };
+                self.graph.dicts[c + 1].graph.insert(name.to_string(), sym);
+            }
         }
     }
 
