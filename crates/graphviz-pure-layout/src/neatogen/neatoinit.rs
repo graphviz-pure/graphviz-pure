@@ -23,12 +23,12 @@ pub const CL_OFFSET: i64 = 8;
 
 /// `user_pos(posptr, pinptr, np, nG)`: parse a node's `pos`/`pin` (and, with `dim > 2`, its
 /// `z`). `ng` is the graph's node count.
-fn user_pos(nd: &NodeData, node: &mut LNode, ng: usize, inputscale: f64, decl: PosDecl) -> bool {
+fn user_pos(nd: &NodeData, node: &mut LNode, ng: usize, inputscale: f64, decl: PosDecl) {
     if !decl.pos {
-        return false;
+        return;
     }
     let Some(p) = nd.attrs.get("pos").map(String::as_str) else {
-        return false;
+        return;
     };
     let z = if decl.z {
         nd.attrs.get("z").map(String::as_str)
@@ -36,12 +36,8 @@ fn user_pos(nd: &NodeData, node: &mut LNode, ng: usize, inputscale: f64, decl: P
         None
     };
     let pin = mapbool(nd.attrs.get("pin").map(String::as_str));
-    match user_pos_values(p, z, pin, &nd.name, inputscale, ng, &mut node.pos) {
-        Some(pinned) => {
-            node.pinned = pinned;
-            true
-        }
-        None => false,
+    if let Some(pinned) = user_pos_values(p, z, pin, &nd.name, inputscale, ng, &mut node.pos) {
+        node.pinned = pinned;
     }
 }
 
@@ -63,8 +59,12 @@ impl PosDecl {
 
 /// `neato_init_node_edge(g)`: each node's `neato_init_node` then its `user_pos`, so a
 /// node's `pos` error follows its own init diagnostics, then every edge's init.
-fn neato_init_node_edge<'a>(src: &'a Graph, ndim: usize, inputscale: f64) -> LGraph<'a> {
-    let decl = PosDecl::of(src);
+fn neato_init_node_edge<'a>(
+    src: &'a Graph,
+    ndim: usize,
+    inputscale: f64,
+    decl: PosDecl,
+) -> LGraph<'a> {
     let ng = src.nodes.len();
     LGraph::new_with(src, ndim, EdgeType::Line, |nd, node| {
         user_pos(nd, node, ng, inputscale, decl);
@@ -604,8 +604,6 @@ fn scan_point(s: &str) -> Option<(Point, &str)> {
 /// Why [`parse_user_spline`] rejected an edge `pos`.
 #[derive(Debug, PartialEq)]
 enum SplineError {
-    /// An empty `pos`: no warning.
-    Empty,
     /// `doesn't have 3n+1 points`.
     Count,
     /// `syntax error in pos attribute`.
@@ -613,7 +611,8 @@ enum SplineError {
 }
 
 /// The parser of `user_spline`: the beziers of an edge `pos`, with `stype`/`etype` as
-/// the arrow flags of their `s,`/`e,` points.
+/// the arrow flags of their `s,`/`e,` points. `pos` is not empty: `user_spline` returns
+/// before.
 ///
 /// C walks `pos` a byte at a time and skips one byte after a segment, so the next segment can
 /// start inside a multi-byte character. The port keeps a byte offset for the same reason:
@@ -624,9 +623,6 @@ fn parse_user_spline(
     stype: u32,
     etype: u32,
 ) -> std::result::Result<Vec<Bezier>, SplineError> {
-    if pos.is_empty() {
-        return Err(SplineError::Empty);
-    }
     let bytes = pos.as_bytes();
     // The byte offset of `rest`, a tail of `pos` (or of `bytes`).
     let offset = |rest: usize| pos.len().saturating_sub(rest);
@@ -706,7 +702,6 @@ fn user_spline(g: &mut LGraph<'_>, e: usize) -> bool {
     let (stype, etype) = g.arrow_flags(e);
     let spl = match parse_user_spline(pos, stype, etype) {
         Ok(spl) => spl,
-        Err(SplineError::Empty) => return false,
         Err(err) => {
             if !WARNED.swap(true, std::sync::atomic::Ordering::Relaxed) {
                 let (t, h) = g.edges.get(e).map_or(
@@ -941,8 +936,9 @@ fn neato_layout_nop(graph: &mut Graph) {
     // neato_init_graph: user_pos on every node, then addZ, before init_nop's scan_graph
     // applies `Reduce`.
     let full = graph.clone();
-    let g0 = neato_init_node_edge(&full, ndim, inputscale);
-    add_z(&g0, PosDecl::of(&full).z, graph);
+    let decl = PosDecl::of(&full);
+    let g0 = neato_init_node_edge(&full, ndim, inputscale, decl);
+    add_z(&g0, decl.z, graph);
     let reduced;
     let mut g = match super::stuff::reduce_set(graph) {
         None => g0,
@@ -1020,12 +1016,14 @@ pub fn neato_layout(graph: &mut Graph) -> Result<()> {
     let outdim = late_int(attrs, "dimen", 2, 2);
     let ndim = late_int(attrs, "dim", outdim, 2).min(MAXDIM as i32) as usize;
 
+    // Deleting nodes keeps the attribute declarations.
+    let decl = PosDecl::of(graph);
     // `Reduce` (`dot -x`) deletes nodes in `scan_graph_mode`, per component once `pccomps`
     // has split the graph: the components are those of the whole graph, and one it empties
     // is still packed.
     let reduced = super::stuff::reduce_set(graph).map(|deleted| {
         let full = graph.clone();
-        let g0 = neato_init_node_edge(&full, ndim, inputscale);
+        let g0 = neato_init_node_edge(&full, ndim, inputscale, decl);
         let (ccs, pin) = pccomps(&g0);
         let mut new_index = vec![None; deleted.len()];
         let kept = deleted.iter().enumerate().filter(|(_, d)| !**d);
@@ -1067,9 +1065,9 @@ pub fn neato_layout(graph: &mut Graph) -> Result<()> {
             }
             g
         }
-        None => neato_init_node_edge(&src, ndim, inputscale),
+        None => neato_init_node_edge(&src, ndim, inputscale, decl),
     };
-    let z_declared = PosDecl::of(&src).z;
+    let z_declared = decl.z;
     let layout_mode = neato_mode(&g);
     let am = graph_adjust_mode(&g, None);
     let model = neato_model(&g);
@@ -1248,7 +1246,6 @@ mod tests {
         assert_eq!(s[0].sflag, 0);
         assert_eq!(parse("1,1 2,2 3,3").err(), Some(SplineError::Count));
         assert_eq!(parse("1,1 2,2 x,3 4,4").err(), Some(SplineError::Syntax));
-        assert_eq!(parse("").err(), Some(SplineError::Empty));
         // numFields counts a ';' after white space as a field.
         let p = "0,0 10,10 20,20 30,30";
         assert_eq!(parse(&format!("{p} ;{p}")).err(), Some(SplineError::Count));

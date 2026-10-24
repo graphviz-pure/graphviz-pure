@@ -248,7 +248,7 @@ impl<'a> LGraph<'a> {
                 fontsize: l.font_size,
                 fontname: l.font_name.clone(),
             });
-            nodes.push(LNode {
+            let mut node = LNode {
                 pos: vec![0.0; ndim],
                 coord: Point::default(),
                 width: n.width,
@@ -266,10 +266,9 @@ impl<'a> LGraph<'a> {
                 xlabel,
                 clust: None,
                 lim: -1,
-            });
-            if let Some(node) = nodes.last_mut() {
-                node_init(nd, node);
-            }
+            };
+            node_init(nd, &mut node);
+            nodes.push(node);
         }
 
         let mut out = vec![Vec::new(); graph.nodes.len()];

@@ -705,8 +705,15 @@ is a comparison of two garbage values: `compoundEdges`'s `sep value … is small
 note (`fdpgen/clusteredges.c:243`), when both `sep` and `esep` are a bare `+` and nodes
 touch. With 0 the port always prints the note.
 
-Measured on 612 inputs (12 `sep`/`esep` forms × 17 engines and overlap modes × 3 graphs),
-C ran twice on each. C's output varied on 3. Of the other 609, the port matched C on 343
-before and on 605 after. The 4 that still differ are `mode=ipsep` with clusters. There,
-C's layout also changes between spellings of the same value (`sep="0"` and `sep="0,0"`),
-because VPSC breaks ties by heap address (#225).
+Measured on 612 inputs: 12 `sep`/`esep` forms × 17 engines and overlap modes × 3 graphs. C
+ran twice on each, and inputs where its two outputs differed were skipped. Over two
+measurements:
+
+| Measurement | C varied | Port matched C, before | after | Still differ |
+|---|--:|--:|--:|--:|
+| first | 3 | 343 | 605 | 4 |
+| second | 6 | 343 | 604 | 2 |
+
+Every input that still differs is `mode=ipsep` with
+clusters. There C's layout also changes between spellings of the same value (`sep="0"` and
+`sep="0,0"`), because VPSC breaks ties by heap address (#225).
