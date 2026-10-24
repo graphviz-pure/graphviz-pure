@@ -550,6 +550,13 @@ fn cmp_ignore_case(a: &str, b: &str) -> std::cmp::Ordering {
     la.cmp(lb)
 }
 
+#[cfg(test)]
+thread_local! {
+    /// The name of every `set_fillcolor` call, for tests of C's call sequence.
+    pub(crate) static FILLCOLOR_CALLS: std::cell::RefCell<Vec<String>> =
+        const { std::cell::RefCell::new(Vec::new()) };
+}
+
 /// The job together with its renderer: the `gvrender_*` functions.
 pub(crate) struct Emitter<'a, E: Engine> {
     pub job: Job<'a>,
@@ -569,6 +576,8 @@ impl<'a, E: Engine> Emitter<'a, E> {
     }
 
     pub fn set_fillcolor(&mut self, name: &str) {
+        #[cfg(test)]
+        FILLCOLOR_CALLS.with_borrow_mut(|c| c.push(name.to_string()));
         let c = self.resolve_first_of_list(name);
         self.job.obj_mut().fillcolor = c;
     }

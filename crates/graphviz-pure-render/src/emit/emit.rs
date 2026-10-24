@@ -4,7 +4,7 @@
 //! `initObjMapData`, `getObjId`, `parseSegs`, `findStopColor`, `stripedBox`) and of
 //! `emit_label` in `lib/common/labels.c`.
 
-use super::attrs::{Attrs, StyleItem, default_line_style, mapbool, parse_style};
+use super::attrs::{Attrs, PtrStr, StyleItem, default_line_style, mapbool, parse_style};
 use super::job::{
     EMIT_CLUSTERS_LAST, EMIT_EDGE_SORTED, EMIT_SORTED, EmitState, Emitter, Engine, FILL, GRADIENT,
     GVDEVICE_DOES_TRUECOLOR, GVRENDER_DOES_LABELS, GVRENDER_DOES_MAPS, GVRENDER_DOES_TARGETS,
@@ -1246,53 +1246,43 @@ impl<'a, E: Engine> Emitter<'a, E> {
         let a = ed.attrs;
         let penwidth = self.job.obj().penwidth;
         let arrowsize = a.late_double("arrowsize", 1.0, 0.0);
-        let color = a.late_string("color", "");
+        let color = a.ptr_string("color", "");
         let tapered = styles.is_some_and(|s| s.iter().any(|i| i.name == "tapered"));
-        let numc = color.matches(':').count();
-        let numsemi = color.matches(';').count();
+        let numc = color.text.matches(':').count();
+        let numsemi = color.text.matches(';').count();
         let mut color = color;
-        // Whether `color` is still the attribute's string rather than a literal.
-        let mut color_is_attr = a.get("color").is_some();
         if numsemi > 0 && numc > 0 {
-            if self.multicolor(e, styles, color, arrowsize, penwidth) {
-                color = DEFAULT_COLOR;
-                color_is_attr = false;
+            if self.multicolor(e, styles, color.text, arrowsize, penwidth) {
+                color = PtrStr::literal(DEFAULT_COLOR);
             } else {
                 return;
             }
         }
-        let fillcolor = a.late_nnstring("fillcolor", color);
-        let fill_ident = ColorIdent {
-            is_attr: a.nonempty("fillcolor").is_some(),
-            is_html: a.is_html("fillcolor"),
-        };
-        let color_html = a.is_html("color");
-        if fill_ident.differs(fillcolor, color, color_is_attr, color_html) {
-            self.set_fillcolor(fillcolor);
+        // C compares `fillcolor != color` by pointer (`emit.c:2418`, `:2433`).
+        let fillcolor = a.ptr_nnstring("fillcolor", color);
+        if !a.same_ptr(fillcolor, color) {
+            self.set_fillcolor(fillcolor.text);
         }
         if tapered {
-            let color = if color.is_empty() {
-                color_is_attr = false;
-                DEFAULT_COLOR
-            } else {
-                color
+            // A set `fillcolor` is never empty; an unset one is `color`, and both become
+            // the same `DEFAULT_COLOR` literal.
+            let dflt = |c: PtrStr<'a>| {
+                if c.text.is_empty() {
+                    PtrStr::literal(DEFAULT_COLOR)
+                } else {
+                    c
+                }
             };
-            // A set `fillcolor` is never empty; an unset one is `color`, replaced with it by
-            // the same `DEFAULT_COLOR`, one pointer as clang and gcc merge equal literals.
-            let fillcolor = if fillcolor.is_empty() {
-                DEFAULT_COLOR
-            } else {
-                fillcolor
-            };
+            let (color, fillcolor) = (dflt(color), dflt(fillcolor));
             self.set_pencolor("transparent");
-            self.set_fillcolor(color);
+            self.set_fillcolor(color.text);
             let bz = &ed.bz[0];
             let dir = super::geom::taper_dir(a, m.directed);
             let stroke = super::geom::taper(&bz.list, dir, penwidth);
             self.polygon(&stroke, 1);
-            self.set_pencolor(color);
-            if fill_ident.differs(fillcolor, color, color_is_attr, color_html) {
-                self.set_fillcolor(fillcolor);
+            self.set_pencolor(color.text);
+            if !a.same_ptr(fillcolor, color) {
+                self.set_fillcolor(fillcolor.text);
             }
             if bz.sflag != 0 {
                 self.arrow_gen(
@@ -1315,8 +1305,9 @@ impl<'a, E: Engine> Emitter<'a, E> {
                 );
             }
         } else if numc > 0 {
-            self.parallel_colors(e, color, numc, arrowsize, penwidth);
+            self.parallel_colors(e, color.text, numc, arrowsize, penwidth);
         } else {
+            let (color, fillcolor) = (color.text, fillcolor.text);
             if !color.is_empty() {
                 self.set_pencolor(color);
                 self.set_fillcolor(fillcolor);
@@ -1722,28 +1713,6 @@ impl<E: Engine> Emitter<'_, E> {
     }
 }
 
-/// Where `emit_edge_graphics`'s `fillcolor` came from, for C's `fillcolor != color`, which
-/// compares pointers. `late_nnstring` returns `color` itself when `fillcolor` is unset or
-/// empty. cgraph interns attribute values (`agstrdup`, one dictionary per graph), so a set
-/// `fillcolor` is the same pointer as a `color` attribute with the same text and HTML flag,
-/// and never the same as the `DEFAULT_COLOR` literal that replaces `color` after a
-/// successful `multicolor` or, when tapered, an empty `color`.
-#[derive(Clone, Copy)]
-struct ColorIdent {
-    /// `fillcolor` is the attribute's string, not `color`.
-    is_attr: bool,
-    /// That string is an HTML string.
-    is_html: bool,
-}
-
-impl ColorIdent {
-    /// `fillcolor != color` as C's pointers: `color_is_attr` when `color` is the `color`
-    /// attribute's string, `color_html` when that is an HTML string.
-    fn differs(self, fillcolor: &str, color: &str, color_is_attr: bool, color_html: bool) -> bool {
-        self.is_attr && !(color_is_attr && fillcolor == color && self.is_html == color_html)
-    }
-}
-
 /// The tokens `strtok` gives for `s` and `delims`, both C's bytes: a multibyte character
 /// of `delims` is several delimiters, and a token can end inside a character.
 fn strtok<'s>(s: &'s [u8], delims: &'s [u8]) -> impl Iterator<Item = &'s [u8]> {
@@ -1752,27 +1721,67 @@ fn strtok<'s>(s: &'s [u8], delims: &'s [u8]) -> impl Iterator<Item = &'s [u8]> {
 
 #[cfg(test)]
 mod tests {
-    use super::ColorIdent;
+    use super::super::job::FILLCOLOR_CALLS;
+    use graphviz_pure_core::{BezierSegment, BoundingBox, Point, Spline, arrows};
 
+    /// The `set_fillcolor` calls of rendering `a -> b [attrs]` with invisible nodes.
+    fn edge_fillcolor_calls(attrs: &str) -> Vec<String> {
+        let src = format!("digraph {{ node [style=invis]; a -> b [{attrs}] }}");
+        let mut g = graphviz_pure_parser::parse_dot(&src).expect("parse");
+        g.bb = BoundingBox::new(0.0, 0.0, 54.0, 108.0);
+        g.nodes[0].pos = Point::new(27.0, 90.0);
+        g.nodes[1].pos = Point::new(27.0, 18.0);
+        g.edges[0].spline = Spline {
+            segments: vec![BezierSegment {
+                points: vec![
+                    Point::new(27.0, 72.0),
+                    Point::new(27.0, 64.0),
+                    Point::new(27.0, 56.0),
+                    Point::new(27.0, 48.0),
+                ],
+                start_arrow: None,
+                end_arrow: Some(Point::new(27.0, 36.0)),
+                sflag: 0,
+                eflag: arrows::ARR_TYPE_NORM,
+            }],
+        };
+        FILLCOLOR_CALLS.with_borrow_mut(Vec::clear);
+        crate::render_graph(&g, crate::OutputFormat::Svg).expect("render");
+        FILLCOLOR_CALLS.take()
+    }
+
+    // Issue #389: C's `fillcolor != color` compares pointers (`emit.c:2418`, `:2433`). An
+    // equal text is one interned pointer unless the HTML flags differ; the `DEFAULT_COLOR`
+    // literal (a failed `multicolor`, an empty tapered `color`) is never a set `fillcolor`'s.
+    // Each sequence is C's: the early call, then the branch's own (tapered: its fill and
+    // the second test; parallel: each token and the head arrow; single colour: one).
     #[test]
-    fn fillcolor_identity_follows_cgraph_interning() {
-        let unset = ColorIdent {
-            is_attr: false,
-            is_html: false,
-        };
-        let set = ColorIdent {
-            is_attr: true,
-            is_html: false,
-        };
-        // An unset fillcolor is `color` itself.
-        assert!(!unset.differs("red", "red", true, false));
-        assert!(!unset.differs("black", "black", false, false));
-        // Equal text interns to one pointer.
-        assert!(!set.differs("red", "red", true, false));
-        assert!(set.differs("red", "blue", true, false));
-        // The HTML flag is part of the string's identity.
-        assert!(set.differs("red", "red", true, true));
-        // `DEFAULT_COLOR` is a literal, never an attribute's string.
-        assert!(set.differs("black", "black", false, false));
+    fn edge_fillcolor_is_set_when_c_pointers_differ() {
+        for (attrs, calls) in [
+            ("color=red fillcolor=red", &["red"][..]),
+            ("color=<red> fillcolor=red", &["red", "red"]),
+            ("color=red fillcolor=<red>", &["red", "red"]),
+            ("color=red fillcolor=blue", &["blue", "blue"]),
+            ("color=red", &["red"]),
+            ("style=tapered color=red fillcolor=red", &["red"]),
+            (
+                "style=tapered color=\"\" fillcolor=black",
+                &["black", "black", "black"],
+            ),
+            ("style=tapered color=\"\"", &["black"]),
+            (
+                "color=\"red;x:blue\" fillcolor=black",
+                &["black", "black", "black"],
+            ),
+            ("color=\"red;x:blue\"", &["black", "black"]),
+        ] {
+            // The graph's background and page come first.
+            let want: Vec<&str> = ["lightgrey", "white"]
+                .iter()
+                .chain(calls)
+                .copied()
+                .collect();
+            assert_eq!(edge_fillcolor_calls(attrs), want, "{attrs}");
+        }
     }
 }

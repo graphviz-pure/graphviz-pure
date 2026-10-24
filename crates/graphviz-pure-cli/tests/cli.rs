@@ -8507,9 +8507,9 @@ fn issue285_arrow_type_warnings_print_once_per_layout() {
 
 /// Issue #389: `emit_edge_graphics` tests `fillcolor != color` by pointer
 /// (`lib/common/emit.c:2418`, `:2433`). cgraph interns attribute values, so `fillcolor=red`
-/// shares `color=red`'s pointer, but not an HTML `color=<red>`'s, nor the `DEFAULT_COLOR`
-/// literal of a successful `multicolor` or an empty tapered `color`, wherever `color=<red>` was
-/// set. Output is C 16.1.0's.
+/// shares `color=red`'s pointer, but not an HTML `color=<red>`'s, wherever that was set,
+/// nor the `DEFAULT_COLOR` literal of an empty tapered `color`. Output is C 16.1.0's; the
+/// render crate's `edge_fillcolor_is_set_when_c_pointers_differ` checks the calls.
 #[test]
 fn issue389_edge_fillcolor_is_set_when_c_pointers_differ() {
     let nodes = r#"digraph {
@@ -8554,16 +8554,6 @@ fn issue389_edge_fillcolor_is_set_when_c_pointers_differ() {
 		penwidth=4,
 		pos="e,27,36.104 27,71.697 27,65.763 27,58.908 27,52.146",
 		style=tapered];
-"#,
-        ),
-        (
-            "",
-            r#"color="red;0.5:blue" fillcolor=black"#,
-            r#"	a -> b	[_draw_="c 7 -#ff0000 B 4 27 71.7 27 68.05 27 64.06 27 59.95 c 7 -#0000ff B 4 27 59.95 27 55.85 27 51.63 27 47.54 ",
-		_hdraw_="S 5 -solid c 7 -#0000ff C 7 -#0000ff P 3 30.5 47.62 27 37.62 23.5 47.62 ",
-		color="red;0.5:blue",
-		fillcolor=black,
-		pos="e,27,36.104 27,71.697 27,64.407 27,55.726 27,47.536"];
 "#,
         ),
         (
