@@ -683,12 +683,7 @@ impl<'a, E: Engine> Emitter<'a, E> {
         let mut image_warn = true;
         let mut styled = false;
         let mut filled = FILL;
-        for (i, op) in xd.ops.iter().enumerate() {
-            let b = xd
-                .op_bbs
-                .as_ref()
-                .and_then(|v| v.get(i).copied())
-                .unwrap_or_default();
+        for (op, b) in &xd.ops {
             let bb = BoundingBox {
                 ll: Point::new(b.ll.0, b.ll.1),
                 ur: Point::new(b.ur.0, b.ur.1),
@@ -719,13 +714,7 @@ impl<'a, E: Engine> Emitter<'a, E> {
                 Op::Text(x, y, align, _, text) => {
                     // Only `xdotBB` makes the span; without it C passes NULL to
                     // `gvrender_textspan` and crashes. The port draws no text there.
-                    if visible
-                        && let Some(sp) = b.span
-                        && let Some(name) = xd.ops[..i].iter().rev().find_map(|o| match o {
-                            Op::Font(_, n) => Some(n.as_str()),
-                            _ => None,
-                        })
-                    {
+                    if visible && let Some(sp) = &b.span {
                         let span = super::model::TextSpan {
                             str: text.clone(),
                             just: match align.signum() {
@@ -737,7 +726,7 @@ impl<'a, E: Engine> Emitter<'a, E> {
                             height: sp.height,
                             yoffset_centerline: sp.yoffset_centerline,
                             font: super::model::TextFont::new(
-                                name,
+                                &sp.fontname,
                                 sp.fontsize,
                                 sp.fontflags as u8,
                             ),

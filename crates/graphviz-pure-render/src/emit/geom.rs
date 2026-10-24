@@ -137,8 +137,11 @@ pub(crate) fn gradient_points(a: &[Point], angle: f64, flags: i32) -> [Point; 2]
             Point::new(a[0].x + rx, a[0].y + ry),
         )
     } else {
-        let mut min = a[0];
-        let mut max = a[0];
+        // An xdot op can have no points (`P 0`): C reads `A[0]` past the end of the
+        // zero-size `gv_calloc` block, which is zeroed on the reference build.
+        let first = a.first().copied().unwrap_or_default();
+        let mut min = first;
+        let mut max = first;
         for p in a {
             min.x = if p.x < min.x { p.x } else { min.x };
             min.y = if p.y < min.y { p.y } else { min.y };

@@ -843,11 +843,12 @@ impl Engine for SvgEngine {
             self.dbl(-p.y);
             self.put(" ");
         }
-        if let Some(p) = a.first() {
-            self.dbl(p.x);
-            self.put(",");
-            self.dbl(-p.y);
-        }
+        // The closing point is `A[0]`; with no points (an xdot `P 0`) C reads it past the
+        // end of a zero-size `gv_calloc` block, zeroed on the reference build.
+        let p = a.first().copied().unwrap_or_default();
+        self.dbl(p.x);
+        self.put(",");
+        self.dbl(-p.y);
         self.put("\"/>\n");
     }
 

@@ -988,8 +988,9 @@ impl<'a> Parser<'a> {
             return;
         }
         let sym = match self.dict(0, kind).get(name) {
-            // New local definition (the symbol the view path finds is the root's).
-            Some(root) if self.lookup_view(gi, kind, name) => graphviz_pure_core::AttrSym {
+            // New local definition: every symbol on the view path is also in the root's
+            // dictionary, so the view path finds one exactly when the root has it.
+            Some(root) => graphviz_pure_core::AttrSym {
                 id: root.id,
                 html: root.html,
                 defval: value.to_string(),

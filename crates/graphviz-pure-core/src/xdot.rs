@@ -61,27 +61,12 @@ impl P<'_> {
         self.i += n;
         Some(v as i32)
     }
-    /// `parseUInt`: `strtoul` (a `-` negates the magnitude, overflow gives `ULONG_MAX`),
-    /// truncated to C's `unsigned`.
+    /// `parseUInt`: `strtoul`, truncated to C's `unsigned`.
     fn uint(&mut self) -> Option<u32> {
-        let rest = self.rest();
-        let (_, n) = crate::cnum::strtol(rest);
+        let (v, n) = crate::cnum::strtoul(self.rest(), 10);
         if n == 0 {
             return None;
         }
-        let num = rest[..n]
-            .trim_start_matches(|c: char| c.is_ascii() && crate::cnum::is_c_space(c as u8));
-        let (neg, digits) = match num.as_bytes().first() {
-            Some(b'-') => (true, &num[1..]),
-            Some(b'+') => (false, &num[1..]),
-            _ => (false, num),
-        };
-        let v = digits
-            .bytes()
-            .try_fold(0u64, |v, d| {
-                v.checked_mul(10)?.checked_add(u64::from(d - b'0'))
-            })
-            .map_or(u64::MAX, |v| if neg { v.wrapping_neg() } else { v });
         self.i += n;
         Some(v as u32)
     }
@@ -221,29 +206,30 @@ pub fn parse_xdot(s: &str) -> Vec<Op> {
 /// `_draw_`), which `emit_background` draws behind the graph.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct Background {
-    pub ops: Vec<Op>,
-    /// Each op's `bb`, and each text op's span, as `xdotBB` set them. Only `init_nop`
-    /// (`neato -n`) calls `xdotBB`; elsewhere C leaves them zeroed by `parseXDotF`'s calloc.
-    pub op_bbs: Option<Vec<OpBox>>,
+    /// Each op (`exdot_op`) with its `bb` and, for a text op, its span. Only `init_nop`
+    /// (`neato -n`) sets them, with `xdotBB`; elsewhere they stay as `parseXDotF`'s
+    /// `gv_calloc` left them: zero boxes and no spans.
+    pub ops: Vec<(Op, OpBox)>,
 }
 
-/// An `exdot_op`'s `bb` and, for a text op, its span's size (`textspan_size`).
-#[derive(Debug, Clone, Copy, Default, PartialEq, Serialize, Deserialize)]
+/// An `exdot_op`'s `bb` and, for a text op, its span.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct OpBox {
     pub ll: (f64, f64),
     pub ur: (f64, f64),
-    /// A text op's span: width, height, `yoffset_centerline`, font size and flags.
     pub span: Option<SpanSize>,
 }
 
-/// What `textspan_size` gave a text op's span.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Serialize, Deserialize)]
+/// What `xdotBB` gave a text op's span: the font of the last `F` and the flags of the last
+/// `t` before it, and the size `textspan_size` estimated.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct SpanSize {
+    pub fontname: String,
+    pub fontsize: f64,
+    pub fontflags: u64,
     pub width: f64,
     pub height: f64,
     pub yoffset_centerline: f64,
-    pub fontsize: f64,
-    pub fontflags: u64,
 }
 
 /// `init_xdot` (`lib/common/emit.c`), called by `graph_init`: parses the root's
@@ -260,12 +246,13 @@ pub fn init_xdot(g: &crate::Graph) -> Option<Background> {
         crate::diag::agerr_prev(&format!("  \"{p}\"\n"));
         return None;
     }
-    Some(Background { ops, op_bbs: None })
+    Some(Background {
+        ops: ops.into_iter().map(|op| (op, OpBox::default())).collect(),
+    })
 }
 
 /// `xdotBB`: the graph's bounding box `bb` grown to hold every op, setting each op's `bb`
-/// and sizing each text op's span (with the font of the last `F` and the flags of the last
-/// `t` before it). A degenerate `bb` (one point) is not held.
+/// and sizing each text op's span. A degenerate `bb` (one point) is not held.
 pub fn xdot_bb(xd: &mut Background, bb: ((f64, f64), (f64, f64))) -> ((f64, f64), (f64, f64)) {
     let (mut ll, mut ur) = bb;
     if ll == ur {
@@ -279,60 +266,61 @@ pub fn xdot_bb(xd: &mut Background, bb: ((f64, f64), (f64, f64))) -> ((f64, f64)
         ll.1 = ll.1.min(p.1);
     };
     let mut fontsize = 0.0;
-    let mut fontname: Option<&str> = None;
+    let mut fontname: Option<String> = None;
     let mut fontflags = 0;
-    let mut boxes = Vec::with_capacity(xd.ops.len());
-    for op in &xd.ops {
-        let mut b = OpBox::default();
+    for (op, b) in &mut xd.ops {
         match op {
             Op::Ellipse(_, [x, y, w, h]) => {
-                b.ll = (x - w, y - h);
-                b.ur = (x + w, y + h);
+                b.ll = (*x - *w, *y - *h);
+                b.ur = (*x + *w, *y + *h);
                 expand(b.ll);
                 expand(b.ur);
             }
             Op::Polygon(_, pts) | Op::Bezier(_, pts) | Op::Polyline(pts) => {
-                // `ptsBB` reads the first point unchecked (C reads NULL for no points).
-                if let Some((&first, rest)) = pts.split_first() {
-                    b.ll = first;
-                    b.ur = first;
-                    for &(x, y) in rest {
-                        if x < b.ll.0 {
-                            b.ll.0 = x;
-                        } else if x > b.ur.0 {
-                            b.ur.0 = x;
-                        }
-                        if y < b.ll.1 {
-                            b.ll.1 = y;
-                        } else if y > b.ur.1 {
-                            b.ur.1 = y;
-                        }
+                // `ptsBB` reads the first point unchecked: with no points, past the end of a
+                // zero-size `gv_calloc` block, zeroed on the reference build.
+                let (first, rest) = pts
+                    .split_first()
+                    .map_or(((0.0, 0.0), &[][..]), |(&f, r)| (f, r));
+                b.ll = first;
+                b.ur = first;
+                for &(x, y) in rest {
+                    if x < b.ll.0 {
+                        b.ll.0 = x;
+                    } else if x > b.ur.0 {
+                        b.ur.0 = x;
                     }
-                    expand(b.ll);
-                    expand(b.ur);
+                    if y < b.ll.1 {
+                        b.ll.1 = y;
+                    } else if y > b.ur.1 {
+                        b.ur.1 = y;
+                    }
                 }
+                expand(b.ll);
+                expand(b.ur);
             }
             Op::Text(x, y, align, _, text) => {
                 // `textspan_size` asserts a font name: C fails with no `F` op before.
-                if let Some(name) = fontname {
+                if let Some(name) = &fontname {
                     let bold = fontflags & 1 != 0;
                     let italic = fontflags & 2 != 0;
                     let (w, h) =
                         crate::font::estimate_text_size_styled(text, name, fontsize, bold, italic);
                     let (lx, ux) = match align.signum() {
-                        -1 => (*x, x + w),
-                        1 => (x - w, *x),
-                        _ => (x - w / 2.0, x + w / 2.0),
+                        -1 => (*x, *x + w),
+                        1 => (*x - w, *x),
+                        _ => (*x - w / 2.0, *x + w / 2.0),
                     };
                     // yoffset_layout: the font size.
-                    b.ur = (ux, y + fontsize);
+                    b.ur = (ux, *y + fontsize);
                     b.ll = (lx, b.ur.1 - h);
                     b.span = Some(SpanSize {
+                        fontname: name.clone(),
+                        fontsize,
+                        fontflags,
                         width: w,
                         height: h,
                         yoffset_centerline: 0.1 * fontsize,
-                        fontsize,
-                        fontflags,
                     });
                     expand(b.ll);
                     expand(b.ur);
@@ -340,14 +328,12 @@ pub fn xdot_bb(xd: &mut Background, bb: ((f64, f64), (f64, f64))) -> ((f64, f64)
             }
             Op::Font(size, name) => {
                 fontsize = *size;
-                fontname = Some(name);
+                fontname = Some(name.clone());
             }
             Op::FontChar(flags) => fontflags = *flags,
             _ => {}
         }
-        boxes.push(b);
     }
-    xd.op_bbs = Some(boxes);
     (ll, ur)
 }
 

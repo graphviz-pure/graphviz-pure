@@ -8806,6 +8806,197 @@ fn issue315_background_with_a_huge_count_or_fdp_cluster_edges_matches_c() {
     );
 }
 
+// #315: an xdot op with no points (`P 0`, `b 0`) reaches the renderers. C reads its first
+// point past the end of a zero-size `gv_calloc` block, which is zeroed on the reference build:
+// the gradient's points, SVG's closing point and, under `neato -n`, `xdotBB` all see (0,0).
+// Output is C 16.1.0's.
+#[test]
+fn issue315_background_ops_with_no_points_read_the_origin_like_c() {
+    let linear =
+        "digraph G { _background=\"C 39 -[0 0 100 0 2 0 7 -#ff0000 1 7 -#0000ff] P 0\"; a }";
+    let radial = "digraph G { _background=\"C 34 -(0 0 1 0 0 1 2 0 3 -red 1 4 -blue) P 0\"; a }";
+    let nop = "graph G { _background=\"P 0 E 200 200 5 5\"; a [pos=\"100,100\"]; \
+               b [pos=\"150,140\"]; a -- b }";
+    let svg_body = |out: &str| out.split_once("-->\n").unwrap().1.to_string();
+    for (args, src, expected, body_only) in [
+        (
+            &["-Tsvg"][..],
+            linear,
+            r##"<!-- Title: G Pages: 1 -->
+<svg width="62pt" height="44pt"
+ viewBox="0.00 0.00 62.00 44.00" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="graph0" class="graph" transform="scale(1 1) rotate(0) translate(4 40)">
+<title>G</title>
+<polygon fill="white" stroke="none" points="-4,4 -4,-40 58,-40 58,4 -4,4"/>
+<defs>
+<linearGradient id="graph0_l_0" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="0" y2="0" >
+<stop offset="0.999" style="stop-color:#ff0000;stop-opacity:1.;"/>
+<stop offset="1" style="stop-color:#0000ff;stop-opacity:1.;"/>
+</linearGradient>
+</defs>
+<polygon fill="url(#graph0_l_0)" stroke="none" points="0,0"/>
+<!-- a -->
+<g id="node1" class="node">
+<title>a</title>
+<ellipse fill="none" stroke="black" cx="27" cy="-18" rx="27" ry="18"/>
+<text xml:space="preserve" text-anchor="middle" x="27" y="-13.8" font-family="Times,serif" font-size="14.00">a</text>
+</g>
+</g>
+</svg>
+"##,
+            true,
+        ),
+        (
+            &["-Txdot"][..],
+            radial,
+            r##"digraph G {
+	graph [_background="C 34 -(0 0 1 0 0 1 2 0 3 -red 1 4 -blue) P 0",
+		_draw_="c 9 -#fffffe00 C 7 -#ffffff P 4 0 0 0 36 54 36 54 0 c 9 -#fffffe00 C 41 -(0 0 0 0 0 0 2 1 7 -#ff0000 1 7 -#0000ff) P 0 ",
+		bb="0,0,54,36",
+		xdotversion=1.7
+	];
+	node [label="\N"];
+	a	[_draw_="c 7 -#000000 e 27 18 27 18 ",
+		_ldraw_="F 14 11 -Times-Roman c 7 -#000000 T 27 13.8 0 6.21 1 -a ",
+		height=0.5,
+		pos="27,18",
+		width=0.75];
+}
+"##,
+            false,
+        ),
+        (
+            &["-Tjson"][..],
+            radial,
+            r##"{
+  "name": "G",
+  "directed": true,
+  "strict": false,
+  "_background": "C 34 -(0 0 1 0 0 1 2 0 3 -red 1 4 -blue) P 0",
+  "_draw_": 
+  [
+    {
+      "op": "c",
+      "grad": "none",
+      "color": "#fffffe00"
+    },
+    {
+      "op": "C",
+      "grad": "none",
+      "color": "#ffffff"
+    },
+    {
+      "op": "P",
+      "points": [[0.000,0.000],[0.000,36.000],[54.000,36.000],[54.000,0.000]]
+    },
+    {
+      "op": "c",
+      "grad": "none",
+      "color": "#fffffe00"
+    },
+    {
+      "op": "C",
+      "grad": "radial",
+            "p0": [0.000,0.000,0.000],
+      "p1": [0.000,0.000,0.000],
+      "stops": [{"frac": 1.000, "color": "#ff0000"},{"frac": 1.000, "color": "#0000ff"}]
+    },
+    {
+      "op": "P",
+      "points": []
+    }
+  ],
+  "bb": "0,0,54,36",
+  "xdotversion": "1.7",
+  "_subgraph_cnt": 0,
+  "objects": [
+    {
+      "_gvid": 0,
+      "name": "a",
+      "_draw_": 
+      [
+        {
+          "op": "c",
+          "grad": "none",
+          "color": "#000000"
+        },
+        {
+          "op": "e",
+          "rect": [27.000,18.000,27.000,18.000]
+        }
+      ],
+      "_ldraw_": 
+      [
+        {
+          "op": "F",
+          "size": 14.000,
+          "face": "Times-Roman"
+        },
+        {
+          "op": "c",
+          "grad": "none",
+          "color": "#000000"
+        },
+        {
+          "op": "T",
+          "pt": [27.000,13.800],
+          "align": "c",
+          "width": 6.210,
+          "text": "a"
+        }
+      ],
+      "height": "0.5",
+      "label": "\\N",
+      "pos": "27,18",
+      "width": "0.75"
+    }
+  ]
+}
+"##,
+            false,
+        ),
+        (
+            &["-Kneato", "-n", "-Tsvg"][..],
+            nop,
+            r##"<!-- Title: G Pages: 1 -->
+<svg width="213pt" height="213pt"
+ viewBox="0.00 0.00 213.00 213.00" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="graph0" class="graph" transform="scale(1 1) rotate(0) translate(4 209)">
+<title>G</title>
+<polygon fill="white" stroke="none" points="-4,4 -4,-209 209,-209 209,4 -4,4"/>
+<polygon fill="white" stroke="none" points="0,0"/>
+<ellipse fill="white" stroke="none" cx="200" cy="-200" rx="5" ry="5"/>
+<!-- a -->
+<g id="node1" class="node">
+<title>a</title>
+<ellipse fill="none" stroke="black" cx="100" cy="-100" rx="27" ry="18"/>
+<text xml:space="preserve" text-anchor="middle" x="100" y="-95.8" font-family="Times,serif" font-size="14.00">a</text>
+</g>
+<!-- b -->
+<g id="node2" class="node">
+<title>b</title>
+<ellipse fill="none" stroke="black" cx="150" cy="-140" rx="27" ry="18"/>
+<text xml:space="preserve" text-anchor="middle" x="150" y="-135.8" font-family="Times,serif" font-size="14.00">b</text>
+</g>
+<!-- a&#45;&#45;b -->
+<g id="edge1" class="edge">
+<title>a&#45;&#45;b</title>
+<path fill="none" stroke="black" d="M117.49,-113.99C122.33,-117.87 127.59,-122.07 132.44,-125.95"/>
+</g>
+</g>
+</svg>
+"##,
+            true,
+        ),
+    ] {
+        let (out, err, ok) = run(args, src);
+        assert!(ok, "{args:?} {err}");
+        assert_eq!(err, "", "{args:?}");
+        let out = if body_only { svg_body(&out) } else { out };
+        assert_eq!(out, expected, "{args:?}");
+    }
+}
+
 /// neato ortho obstacles (`makeObstacle` with `isOrtho`) keep `margin = {0}`: a scaling
 /// `sep`/`esep` shrinks each box to its node's centre, so touching boxes are not reported.
 #[test]
