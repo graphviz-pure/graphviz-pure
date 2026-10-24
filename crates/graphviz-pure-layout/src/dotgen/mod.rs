@@ -306,14 +306,20 @@ pub fn layout_dot(graph: &mut Graph) -> Result<()> {
                 }
             })?;
         }
-        if (1..=3).contains(&maxphase) {
+        if (1..=2).contains(&maxphase) {
             output::Output::phase(&d, maxphase)
         } else {
             if !d.aborted {
                 d.dotneato_postprocess();
             }
             aborted = d.aborted;
-            output::Output::collect(&d)
+            let mut out = output::Output::collect(&d);
+            if maxphase == 3 {
+                // dotLayout stops after dot_position with attach_phase_attrs(g, 2), and
+                // dot_layout still post-processes the positions (dotinit.c:326, :517).
+                out.phase_attrs = Some(2);
+            }
+            out
         }
     };
     result.apply(graph);
