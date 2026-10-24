@@ -251,6 +251,9 @@ pub struct GraphLayout {
     /// Root only: the image files and epsf shapes the layout found, which the renderers draw.
     #[serde(default)]
     pub usershapes: crate::usershape::UserShapes,
+    /// Root only: `GD_drawing(g)->xdots`, the `_background` ops `graph_init` parsed.
+    #[serde(default)]
+    pub background: Option<crate::xdot::Background>,
 }
 
 /// A cgraph object, as [`Graph::agnameof`] takes it: the root graph, a subgraph (by index)
@@ -371,7 +374,8 @@ pub struct AttrSym {
     pub defval: String,
     pub print: bool,
     /// `sym->id`: declaration order in the root dictionary (cgraph's ProtoGraph
-    /// `label` first). Only meaningful in the root's dictionaries.
+    /// `label` first). A subgraph's local symbol has its root symbol's id, as `agnewsym`
+    /// gives it.
     #[serde(default)]
     pub id: usize,
     /// `aghtmlstr(sym->name)`: the attribute was first named by an HTML string (`<zzz>=1`).

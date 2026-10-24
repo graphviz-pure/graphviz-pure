@@ -34,39 +34,6 @@ fn record_rects(f: &RecordField, c: Point, y_off: f64, out: &mut String) {
     }
 }
 
-/// C's `strtoul(p, NULL, 0)`: an optional sign, then a hexadecimal (`0x`), octal (`0`) or
-/// decimal number; a negative value wraps, as C's does.
-fn strtoul0(s: &str) -> u64 {
-    let s = s.trim_start_matches([' ', '\t', '\n', '\x0b', '\x0c', '\r']);
-    let (neg, s) = match s.as_bytes().first() {
-        Some(b'-') => (true, &s[1..]),
-        Some(b'+') => (false, &s[1..]),
-        _ => (false, s),
-    };
-    let b = s.as_bytes();
-    let (radix, digits) =
-        if b.len() > 2 && b[0] == b'0' && (b[1] | 0x20) == b'x' && b[2].is_ascii_hexdigit() {
-            (16, &s[2..])
-        } else if b.first() == Some(&b'0') {
-            (8, s)
-        } else {
-            (10, s)
-        };
-    let mut v: u64 = 0;
-    for c in digits.chars() {
-        let Some(d) = c.to_digit(radix) else { break };
-        match v
-            .checked_mul(u64::from(radix))
-            .and_then(|v| v.checked_add(u64::from(d)))
-        {
-            Some(n) => v = n,
-            // ULONG_MAX, whatever the sign
-            None => return u64::MAX,
-        }
-    }
-    if neg { v.wrapping_neg() } else { v }
-}
-
 /// The `vertices` of a polygon node (`attach_attrs_and_arrows`, `N_vertices && isPolygon(n)`):
 /// its polygon's first ring in inches, or for an ellipse (`sides < 3`) `samplepoints` points
 /// on it.
@@ -79,10 +46,9 @@ fn vertices(n: &super::model::RNode<'_>, y_off: f64) -> Option<String> {
     let yf = |y: f64| y_dir(y, y_off / 72.0);
     let mut sides = poly.sides;
     if sides < 3 {
-        sides = n
-            .attrs
-            .get("samplepoints")
-            .map_or(8, |p| usize::try_from(strtoul0(p)).unwrap_or(usize::MAX));
+        sides = n.attrs.get("samplepoints").map_or(8, |p| {
+            usize::try_from(graphviz_pure_core::cnum::strtoul(p, 0).0).unwrap_or(usize::MAX)
+        });
         if sides < 3 {
             sides = 8;
         }
@@ -491,22 +457,5 @@ fn port_string(p: &graphviz_pure_core::Port) -> Option<String> {
         (Some(n), None) => Some(n.clone()),
         (None, Some(c)) => Some(c.clone()),
         (None, None) => None,
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::strtoul0;
-
-    #[test]
-    fn strtoul0_reads_like_c() {
-        assert_eq!(strtoul0("12"), 12);
-        assert_eq!(strtoul0(" 0x1f"), 31);
-        assert_eq!(strtoul0("017"), 15);
-        assert_eq!(strtoul0("0x"), 0);
-        assert_eq!(strtoul0("+9z"), 9);
-        assert_eq!(strtoul0("junk"), 0);
-        assert_eq!(strtoul0("-1"), u64::MAX);
-        assert_eq!(strtoul0("99999999999999999999999"), u64::MAX);
     }
 }

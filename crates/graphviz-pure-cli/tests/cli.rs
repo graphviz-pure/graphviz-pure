@@ -8505,6 +8505,498 @@ fn issue285_arrow_type_warnings_print_once_per_layout() {
     assert_eq!(err, "Warning: Arrow type \"foo\" unknown - ignoring\n");
 }
 
+// Issue #315: `graph_init` parses `_background` (or the graph's `_draw_`) with `init_xdot`, and
+// `emit_background` draws its ops behind the graph. Outside `neato -n` every op's `bb` is the
+// zero box, so an op is drawn when the clip box holds the origin; `neato -n`'s `xdotBB` sizes
+// the ops, text included, into the graph's `bb`. Output is C 16.1.0's.
+#[test]
+fn issue315_background_ops_are_drawn_and_an_unparsable_one_warns() {
+    let (out, err, ok) = run(
+        &["-Tsvg"],
+        "digraph G { _background=\"c 7 -#ff0000 E 0 0 10 10\"; a }",
+    );
+    assert!(ok);
+    assert_eq!(err, "");
+    assert_eq!(
+        out.split_once("-->\n").unwrap().1,
+        "\
+         <!-- Title: G Pages: 1 -->\n\
+         <svg width=\"62pt\" height=\"44pt\"\n\
+         \x20viewBox=\"0.00 0.00 62.00 44.00\" xmlns=\"http://www.w3.org/2000/svg\" xmlns:xlink=\"http://www.w3.org/1999/xlink\">\n\
+         <g id=\"graph0\" class=\"graph\" transform=\"scale(1 1) rotate(0) translate(4 40)\">\n\
+         <title>G</title>\n\
+         <polygon fill=\"white\" stroke=\"none\" points=\"-4,4 -4,-40 58,-40 58,4 -4,4\"/>\n\
+         <ellipse fill=\"white\" stroke=\"#ff0000\" cx=\"0\" cy=\"0\" rx=\"10\" ry=\"10\"/>\n\
+         <!-- a -->\n\
+         <g id=\"node1\" class=\"node\">\n\
+         <title>a</title>\n\
+         <ellipse fill=\"none\" stroke=\"black\" cx=\"27\" cy=\"-18\" rx=\"27\" ry=\"18\"/>\n\
+         <text xml:space=\"preserve\" text-anchor=\"middle\" x=\"27\" y=\"-13.8\" font-family=\"Times,serif\" font-size=\"14.00\">a</text>\n\
+         </g>\n\
+         </g>\n\
+         </svg>\n\
+         "
+    );
+
+    let (out, err, ok) = run(&["-Tplain"], "digraph G { _background=\"Z 1 2\"; a -> b }");
+    assert!(ok);
+    assert_eq!(
+        err,
+        "Warning: Could not parse \"_background\" attribute in graph G\n  \"Z 1 2\"\n"
+    );
+    assert!(out.starts_with("graph 1 0.75 1.5\n"), "{out}");
+
+    let (out, err, ok) = run(
+        &["-Kneato", "-n", "-Tsvg"],
+        "graph G { _background=\"F 12 5 -Arial T 20 20 0 30 5 -hello \
+         C 39 -[0 0 100 0 2 0 7 -#ff0000 1 7 -#0000ff] P 3 0 0 30 0 0 30 S 6 -dashed \
+         I 0 0 1 1 3 -a.p I 0 0 1 1 3 -a.p\"; a [pos=\"0,0\"]; b [pos=\"100,40\"]; a -- b }",
+    );
+    assert!(ok);
+    assert_eq!(
+        err,
+        "Warning: Images unsupported in \"background\" attribute\n"
+    );
+    assert_eq!(
+        out.split_once("-->\n").unwrap().1,
+        "\
+         <!-- Title: G Pages: 1 -->\n\
+         <svg width=\"162pt\" height=\"84pt\"\n\
+         \x20viewBox=\"0.00 0.00 162.00 84.00\" xmlns=\"http://www.w3.org/2000/svg\" xmlns:xlink=\"http://www.w3.org/1999/xlink\">\n\
+         <g id=\"graph0\" class=\"graph\" transform=\"scale(1 1) rotate(0) translate(31 62)\">\n\
+         <title>G</title>\n\
+         <polygon fill=\"white\" stroke=\"none\" points=\"-31,22 -31,-62 131,-62 131,22 -31,22\"/>\n\
+         <text xml:space=\"preserve\" text-anchor=\"middle\" x=\"20\" y=\"-21.2\" font-family=\"Arial\" font-size=\"12.00\" fill=\"transparent\">hello</text>\n\
+         <defs>\n\
+         <linearGradient id=\"graph0_l_0\" gradientUnits=\"userSpaceOnUse\" x1=\"0\" y1=\"-15\" x2=\"30\" y2=\"-15\" >\n\
+         <stop offset=\"0.999\" style=\"stop-color:#ff0000;stop-opacity:1.;\"/>\n\
+         <stop offset=\"1\" style=\"stop-color:#0000ff;stop-opacity:1.;\"/>\n\
+         </linearGradient>\n\
+         </defs>\n\
+         <polygon fill=\"url(#graph0_l_0)\" stroke=\"none\" points=\"0,0 30,0 0,-30 0,0\"/>\n\
+         <!-- a -->\n\
+         <g id=\"node1\" class=\"node\">\n\
+         <title>a</title>\n\
+         <ellipse fill=\"none\" stroke=\"black\" cx=\"0\" cy=\"0\" rx=\"27\" ry=\"18\"/>\n\
+         <text xml:space=\"preserve\" text-anchor=\"middle\" x=\"0\" y=\"4.2\" font-family=\"Times,serif\" font-size=\"14.00\">a</text>\n\
+         </g>\n\
+         <!-- b -->\n\
+         <g id=\"node2\" class=\"node\">\n\
+         <title>b</title>\n\
+         <ellipse fill=\"none\" stroke=\"black\" cx=\"100\" cy=\"-40\" rx=\"27\" ry=\"18\"/>\n\
+         <text xml:space=\"preserve\" text-anchor=\"middle\" x=\"100\" y=\"-35.8\" font-family=\"Times,serif\" font-size=\"14.00\">b</text>\n\
+         </g>\n\
+         <!-- a&#45;&#45;b -->\n\
+         <g id=\"edge1\" class=\"edge\">\n\
+         <title>a&#45;&#45;b</title>\n\
+         <path fill=\"none\" stroke=\"black\" d=\"M23.45,-9.38C39.49,-15.8 60.68,-24.27 76.7,-30.68\"/>\n\
+         </g>\n\
+         </g>\n\
+         </svg>\n\
+         "
+    );
+}
+
+// #304 in dot's failed-pack projections: `label=A` set after `cluster_b` gives `cluster_b` a
+// local `""` (`unviewsubgraphsattr`), which `agcopyattr` copies to its `_cc_0` clone as well.
+// Output is C 16.1.0's.
+#[test]
+fn issue304_failed_pack_clones_copy_the_childs_empty_value() {
+    let src = "digraph{pack=true splines=ortho nodesep=0 ranksep=0.02\n\
+         subgraph cluster_a { x1; subgraph cluster_b { x2; x3 } x1->x2 label=A }\n\
+         x2->x3 x3->x1\n\
+         node[shape=point width=0.05 height=0.01 fixedsize=true label=\"\"]\n\
+         n3->n2 n10->n7 n1->n11 n10->n4 n8->n2 n5->n3 n6->n4 n3->n10 n6->n3 n6->n0 n3->n6\n\
+         n0->n8 n11->n10 n2->n10 n3->n2 n6->n10 n0->n9 n11->n5}\n";
+    let (out, err, ok) = run(&["-Kdot", "-Tdot"], src);
+    assert!(ok);
+    assert_eq!(
+        err,
+        "trapezoid segment construction failed\nhorizontal trapezoid construction failed\n"
+    );
+    assert_eq!(
+        out,
+        r#"digraph {
+	graph [bb="0,0,100,122",
+		nodesep=0,
+		pack=true,
+		ranksep=0.02,
+		splines=ortho
+	];
+	node [fixedsize=true,
+		height=0.01,
+		label="",
+		shape=point,
+		width=0.05
+	];
+	subgraph cluster_a {
+		graph [label=A];
+		subgraph cluster_b {
+			graph [label=""];
+			x2	[fixedsize="",
+				height=0.5,
+				label="\N",
+				pos="51,122",
+				shape="",
+				width=0.75];
+			x3	[fixedsize="",
+				height=0.5,
+				label="\N",
+				pos="51,78",
+				shape="",
+				width=0.75];
+		}
+		x1	[fixedsize="",
+			height=0.5,
+			label="\N",
+			pos="55,26",
+			shape="",
+			width=0.75];
+		x1 -> x2	[pos="e,78.365,122 82.473,26 91.842,26 100,26 100,26 100,26 100,122 100,122 100,122 89.879,122 89.879,122"];
+	}
+	subgraph _cc_0 {
+		subgraph cluster_a {
+			graph [label=A,
+				nodesep=0,
+				pack=true,
+				ranksep=0.02,
+				splines=ortho
+			];
+			subgraph cluster_b {
+				graph [label="",
+					nodesep=0,
+					pack=true,
+					ranksep=0.02,
+					splines=ortho
+				];
+				x2;
+				x3;
+				x2 -> x3	[pos="e,51,96.473 51,103.59 51,103.59 51,102.88 51,102.88"];
+			}
+			x1;
+			x1 -> x2;
+			x3 -> x1	[pos="e,53,44.265 53,59.813 53,59.813 53,55.778 53,55.778"];
+		}
+	}
+	subgraph _cc_1 {
+		n3	[height=0.02,
+			pos="-2,57.36",
+			width=0.02];
+		n2	[height=0.02,
+			pos="-2,19.6",
+			width=0.02];
+		n3 -> n2;
+		n3 -> n2;
+		n10	[height=0.02,
+			pos="-2,10.16",
+			width=0.02];
+		n3 -> n10;
+		n6	[height=0.02,
+			pos="-6,47.92",
+			width=0.02];
+		n3 -> n6;
+		n2 -> n10;
+		n7	[height=0.02,
+			pos="-2,0.72",
+			width=0.02];
+		n10 -> n7;
+		n4	[height=0.02,
+			pos="-7,0.72",
+			width=0.02];
+		n10 -> n4;
+		n1	[height=0.02,
+			pos="1,85.68",
+			width=0.02];
+		n11	[height=0.02,
+			pos="1,76.24",
+			width=0.02];
+		n1 -> n11;
+		n11 -> n10;
+		n5	[height=0.02,
+			pos="0,66.8",
+			width=0.02];
+		n11 -> n5;
+		n8	[height=0.02,
+			pos="-7,29.04",
+			width=0.02];
+		n8 -> n2;
+		n5 -> n3;
+		n6 -> n3;
+		n6 -> n10;
+		n6 -> n4;
+		n0	[height=0.02,
+			pos="-6,38.48",
+			width=0.02];
+		n6 -> n0;
+		n0 -> n8;
+		n9	[height=0.02,
+			pos="-5,29.04",
+			width=0.02];
+		n0 -> n9;
+	}
+}
+"#
+    );
+}
+
+// #315: a point count the input has no points for is a parse failure, not an allocation; and
+// fdp's cluster-edge work graph keeps the background. Output is C 16.1.0's.
+#[test]
+fn issue315_background_with_a_huge_count_or_fdp_cluster_edges_matches_c() {
+    let (out, err, ok) = run(
+        &["-Tplain"],
+        "digraph G { _background=\"P 9223372036854775807 0 0\"; a }",
+    );
+    assert!(ok);
+    assert_eq!(
+        err,
+        "Warning: Could not parse \"_background\" attribute in graph G\n  \"P 9223372036854775807 0 0\"\n"
+    );
+    assert_eq!(
+        out,
+        "graph 1 0.75 0.5\nnode a 0.375 0.25 0.75 0.5 a solid ellipse black lightgrey\nstop\n"
+    );
+
+    // `parseXDotColor` rejects a colour starting with `!`, which ends the parse.
+    let (_, err, ok) = run(
+        &["-Tplain"],
+        "digraph G { _background=\"c 3 -!!! P 3 0 0 1 1 2 0\"; a->b }",
+    );
+    assert!(ok);
+    assert_eq!(
+        err,
+        "Warning: Could not parse \"_background\" attribute in graph G\n  \"c 3 -!!! P 3 0 0 1 1 2 0\"\n"
+    );
+
+    let (out, err, ok) = run(
+        &["-Kfdp", "-Txdot"],
+        "digraph G { _background=\"c 7 -#ff0000 E 0 0 10 10\"; subgraph cluster_x { b } a -> cluster_x }",
+    );
+    assert!(ok);
+    assert_eq!(err, "");
+    assert_eq!(
+        out,
+        r#"digraph G {
+	graph [_background="c 7 -#ff0000 E 0 0 10 10",
+		_draw_="c 9 -#fffffe00 C 7 -#ffffff P 4 0 0 0 54.68 133.46 54.68 133.46 0 c 7 -#ff0000 C 7 -#ffffff E 0 0 10 10 ",
+		bb="0,0,133.46,54.677",
+		xdotversion=1.7
+	];
+	node [label="\N"];
+	subgraph cluster_x {
+		graph [_draw_="c 7 -#000000 p 4 0 2.68 0 54.68 70 54.68 70 2.68 ",
+			bb="3.9968e-15,2.677,70,54.677"
+		];
+		b	[_draw_="c 7 -#000000 e 35 28.68 27 18 ",
+			_ldraw_="F 14 11 -Times-Roman c 7 -#000000 T 35 24.48 0 7 1 -b ",
+			height=0.5,
+			pos="35,28.677",
+			width=0.75];
+	}
+	a	[_draw_="c 7 -#000000 e 106.46 18 27 18 ",
+		_ldraw_="F 14 11 -Times-Roman c 7 -#000000 T 106.46 13.8 0 6.21 1 -a ",
+		height=0.5,
+		pos="106.46,18",
+		width=0.75];
+	a -> cluster_x	[_draw_="c 7 -#000000 B 4 79.85 21.98 79.75 21.99 79.65 22.01 79.55 22.02 ",
+		_hdraw_="S 5 -solid c 7 -#000000 C 7 -#000000 P 3 81 18.27 71.63 23.2 82.03 25.19 ",
+		pos="e,70.13,23.428 79.853,21.976 79.754,21.991 79.654,22.005 79.555,22.02"];
+}
+"#
+    );
+}
+
+// #315: an xdot op with no points (`P 0`, `b 0`) reaches the renderers. C reads its first
+// point past the end of a zero-size `gv_calloc` block, which is zeroed on the reference build:
+// the gradient's points, SVG's closing point and, under `neato -n`, `xdotBB` all see (0,0).
+// Output is C 16.1.0's.
+#[test]
+fn issue315_background_ops_with_no_points_read_the_origin_like_c() {
+    let linear =
+        "digraph G { _background=\"C 39 -[0 0 100 0 2 0 7 -#ff0000 1 7 -#0000ff] P 0\"; a }";
+    let radial = "digraph G { _background=\"C 34 -(0 0 1 0 0 1 2 0 3 -red 1 4 -blue) P 0\"; a }";
+    let nop = "graph G { _background=\"P 0 E 200 200 5 5\"; a [pos=\"100,100\"]; \
+               b [pos=\"150,140\"]; a -- b }";
+    let svg_body = |out: &str| out.split_once("-->\n").unwrap().1.to_string();
+    for (args, src, expected, body_only) in [
+        (
+            &["-Tsvg"][..],
+            linear,
+            r##"<!-- Title: G Pages: 1 -->
+<svg width="62pt" height="44pt"
+ viewBox="0.00 0.00 62.00 44.00" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="graph0" class="graph" transform="scale(1 1) rotate(0) translate(4 40)">
+<title>G</title>
+<polygon fill="white" stroke="none" points="-4,4 -4,-40 58,-40 58,4 -4,4"/>
+<defs>
+<linearGradient id="graph0_l_0" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="0" y2="0" >
+<stop offset="0.999" style="stop-color:#ff0000;stop-opacity:1.;"/>
+<stop offset="1" style="stop-color:#0000ff;stop-opacity:1.;"/>
+</linearGradient>
+</defs>
+<polygon fill="url(#graph0_l_0)" stroke="none" points="0,0"/>
+<!-- a -->
+<g id="node1" class="node">
+<title>a</title>
+<ellipse fill="none" stroke="black" cx="27" cy="-18" rx="27" ry="18"/>
+<text xml:space="preserve" text-anchor="middle" x="27" y="-13.8" font-family="Times,serif" font-size="14.00">a</text>
+</g>
+</g>
+</svg>
+"##,
+            true,
+        ),
+        (
+            &["-Txdot"][..],
+            radial,
+            r##"digraph G {
+	graph [_background="C 34 -(0 0 1 0 0 1 2 0 3 -red 1 4 -blue) P 0",
+		_draw_="c 9 -#fffffe00 C 7 -#ffffff P 4 0 0 0 36 54 36 54 0 c 9 -#fffffe00 C 41 -(0 0 0 0 0 0 2 1 7 -#ff0000 1 7 -#0000ff) P 0 ",
+		bb="0,0,54,36",
+		xdotversion=1.7
+	];
+	node [label="\N"];
+	a	[_draw_="c 7 -#000000 e 27 18 27 18 ",
+		_ldraw_="F 14 11 -Times-Roman c 7 -#000000 T 27 13.8 0 6.21 1 -a ",
+		height=0.5,
+		pos="27,18",
+		width=0.75];
+}
+"##,
+            false,
+        ),
+        (
+            &["-Tjson"][..],
+            radial,
+            r##"{
+  "name": "G",
+  "directed": true,
+  "strict": false,
+  "_background": "C 34 -(0 0 1 0 0 1 2 0 3 -red 1 4 -blue) P 0",
+  "_draw_": 
+  [
+    {
+      "op": "c",
+      "grad": "none",
+      "color": "#fffffe00"
+    },
+    {
+      "op": "C",
+      "grad": "none",
+      "color": "#ffffff"
+    },
+    {
+      "op": "P",
+      "points": [[0.000,0.000],[0.000,36.000],[54.000,36.000],[54.000,0.000]]
+    },
+    {
+      "op": "c",
+      "grad": "none",
+      "color": "#fffffe00"
+    },
+    {
+      "op": "C",
+      "grad": "radial",
+            "p0": [0.000,0.000,0.000],
+      "p1": [0.000,0.000,0.000],
+      "stops": [{"frac": 1.000, "color": "#ff0000"},{"frac": 1.000, "color": "#0000ff"}]
+    },
+    {
+      "op": "P",
+      "points": []
+    }
+  ],
+  "bb": "0,0,54,36",
+  "xdotversion": "1.7",
+  "_subgraph_cnt": 0,
+  "objects": [
+    {
+      "_gvid": 0,
+      "name": "a",
+      "_draw_": 
+      [
+        {
+          "op": "c",
+          "grad": "none",
+          "color": "#000000"
+        },
+        {
+          "op": "e",
+          "rect": [27.000,18.000,27.000,18.000]
+        }
+      ],
+      "_ldraw_": 
+      [
+        {
+          "op": "F",
+          "size": 14.000,
+          "face": "Times-Roman"
+        },
+        {
+          "op": "c",
+          "grad": "none",
+          "color": "#000000"
+        },
+        {
+          "op": "T",
+          "pt": [27.000,13.800],
+          "align": "c",
+          "width": 6.210,
+          "text": "a"
+        }
+      ],
+      "height": "0.5",
+      "label": "\\N",
+      "pos": "27,18",
+      "width": "0.75"
+    }
+  ]
+}
+"##,
+            false,
+        ),
+        (
+            &["-Kneato", "-n", "-Tsvg"][..],
+            nop,
+            r##"<!-- Title: G Pages: 1 -->
+<svg width="213pt" height="213pt"
+ viewBox="0.00 0.00 213.00 213.00" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="graph0" class="graph" transform="scale(1 1) rotate(0) translate(4 209)">
+<title>G</title>
+<polygon fill="white" stroke="none" points="-4,4 -4,-209 209,-209 209,4 -4,4"/>
+<polygon fill="white" stroke="none" points="0,0"/>
+<ellipse fill="white" stroke="none" cx="200" cy="-200" rx="5" ry="5"/>
+<!-- a -->
+<g id="node1" class="node">
+<title>a</title>
+<ellipse fill="none" stroke="black" cx="100" cy="-100" rx="27" ry="18"/>
+<text xml:space="preserve" text-anchor="middle" x="100" y="-95.8" font-family="Times,serif" font-size="14.00">a</text>
+</g>
+<!-- b -->
+<g id="node2" class="node">
+<title>b</title>
+<ellipse fill="none" stroke="black" cx="150" cy="-140" rx="27" ry="18"/>
+<text xml:space="preserve" text-anchor="middle" x="150" y="-135.8" font-family="Times,serif" font-size="14.00">b</text>
+</g>
+<!-- a&#45;&#45;b -->
+<g id="edge1" class="edge">
+<title>a&#45;&#45;b</title>
+<path fill="none" stroke="black" d="M117.49,-113.99C122.33,-117.87 127.59,-122.07 132.44,-125.95"/>
+</g>
+</g>
+</svg>
+"##,
+            true,
+        ),
+    ] {
+        let (out, err, ok) = run(args, src);
+        assert!(ok, "{args:?} {err}");
+        assert_eq!(err, "", "{args:?}");
+        let out = if body_only { svg_body(&out) } else { out };
+        assert_eq!(out, expected, "{args:?}");
+    }
+}
+
 /// neato ortho obstacles (`makeObstacle` with `isOrtho`) keep `margin = {0}`: a scaling
 /// `sep`/`esep` shrinks each box to its node's centre, so touching boxes are not reported.
 #[test]

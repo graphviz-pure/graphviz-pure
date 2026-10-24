@@ -128,6 +128,8 @@ fn layout_in_run(graph: &mut Graph, engine: LayoutEngine, options: LayoutOptions
         false,
         &graphviz_pure_geom::NodeSizeEnv::from_graph(graph),
     );
+    // graph_init's `GD_drawing(g)->xdots = init_xdot(g)` (lib/common/input.c:784).
+    graph.layout.background = graphviz_pure_core::xdot::init_xdot(graph);
     let effective_engine = if engine == LayoutEngine::Dot
         && let Some(attr_layout) = graph.graph_attrs.get("layout")
         && let Ok(parsed) = LayoutEngine::parse(attr_layout)

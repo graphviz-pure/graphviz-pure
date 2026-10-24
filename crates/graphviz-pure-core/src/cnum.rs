@@ -155,6 +155,53 @@ pub fn strtol(s: &str) -> (i64, usize) {
     (v, i)
 }
 
+/// C's `strtoul(s, &end, base)` for `base` 10, or 0 (a `0x` prefix reads hexadecimal and a
+/// leading `0` octal): the value and the number of bytes read, or `(0, 0)` when there are no
+/// digits. Leading white space and a sign are skipped; a `-` negates the value modulo 2^64,
+/// and a value beyond `ULONG_MAX` gives `ULONG_MAX`, whatever the sign.
+pub fn strtoul(s: &str, base: u32) -> (u64, usize) {
+    let b = s.as_bytes();
+    let mut i = 0;
+    while i < b.len() && is_c_space(b[i]) {
+        i += 1;
+    }
+    let neg = i < b.len() && b[i] == b'-';
+    if i < b.len() && (b[i] == b'+' || b[i] == b'-') {
+        i += 1;
+    }
+    let mut radix = if base == 0 { 10 } else { base };
+    if base == 0 && b.get(i) == Some(&b'0') {
+        if b.get(i + 1).is_some_and(|c| c | 0x20 == b'x')
+            && b.get(i + 2).is_some_and(u8::is_ascii_hexdigit)
+        {
+            radix = 16;
+            i += 2;
+        } else {
+            radix = 8;
+        }
+    }
+    let start = i;
+    let mut v: u64 = 0;
+    let mut over = false;
+    while let Some(d) = b.get(i).and_then(|&c| char::from(c).to_digit(radix)) {
+        match v
+            .checked_mul(u64::from(radix))
+            .and_then(|m| m.checked_add(u64::from(d)))
+        {
+            Some(m) => v = m,
+            None => over = true,
+        }
+        i += 1;
+    }
+    if i == start {
+        return (0, 0);
+    }
+    if over {
+        return (u64::MAX, i);
+    }
+    (if neg { v.wrapping_neg() } else { v }, i)
+}
+
 /// C's `atoi(s)`, which the macOS libc implements as `(int)strtol(s, NULL, 10)`: the low 32
 /// bits of the saturated `long`. `"2147483648"` reads `INT_MIN`, `"4294967296"` 0, and a
 /// number past `LONG_MAX` -1.
@@ -225,6 +272,23 @@ pub fn fmt_f(v: f64, prec: usize) -> String {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn strtoul_reads_like_c() {
+        assert_eq!(strtoul("12", 0), (12, 2));
+        assert_eq!(strtoul(" 0x1f", 0), (31, 5));
+        assert_eq!(strtoul("017", 0), (15, 3));
+        assert_eq!(strtoul("0x", 0), (0, 1));
+        assert_eq!(strtoul("+9z", 0), (9, 2));
+        assert_eq!(strtoul("junk", 0), (0, 0));
+        assert_eq!(strtoul("-1", 0), (u64::MAX, 2));
+        assert_eq!(strtoul("99999999999999999999999", 0), (u64::MAX, 23));
+        assert_eq!(strtoul("017", 10), (17, 3));
+        assert_eq!(
+            strtoul("-4294967293", 10),
+            (4294967293u64.wrapping_neg(), 11)
+        );
+    }
+
     use super::*;
 
     #[test]

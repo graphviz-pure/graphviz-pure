@@ -872,8 +872,12 @@ fn nop_init_graphs(g: &mut LGraph<'_>) {
 
 /// `init_nop(g, 1)`: keep the nodes where `pos` put them, then add what the input lacks.
 /// Whether `State` became `GVSPLINES`; `Err` after the error for a node without a
-/// position.
-fn init_nop(g: &mut LGraph<'_>, nop: u8) -> std::result::Result<bool, ()> {
+/// position. `xdotBB` sets the boxes of the background's ops in place.
+fn init_nop(
+    g: &mut LGraph<'_>,
+    nop: u8,
+    mut background: Option<&mut graphviz_pure_core::xdot::Background>,
+) -> std::result::Result<bool, ()> {
     let translate = !mapbool(g.gattr("notranslate"));
     // scan_graph (Reduce, edge lengths) ran in neato_layout_nop.
     let src = g.src;
@@ -898,8 +902,11 @@ fn init_nop(g: &mut LGraph<'_>, nop: u8) -> std::result::Result<bool, ()> {
     }
     nop_init_graphs(g);
     let mut pos_edges = nop_init_edges(g, nop);
-    // `_background` (GD_drawing(g)->xdots) is not read by the port: no background.
-    let did_adjust = if nop == 1 {
+    if background.is_some() {
+        // Turn off any aspect change if background present.
+        g.drawing.ratio_kind = RatioKind::None;
+    }
+    let did_adjust = if nop == 1 && background.is_none() {
         let root = g.root_sub();
         super::adjust::adjust_nodes(g, &root)
     } else {
@@ -910,7 +917,14 @@ fn init_nop(g: &mut LGraph<'_>, nop: u8) -> std::result::Result<bool, ()> {
     }
     let mut root = g.root_sub();
     compute_bb(g, &mut root, true);
-    if translate && (g.bb.ll.x != 0.0 || g.bb.ll.y != 0.0) {
+    // Adjust bounding box for any background.
+    if let Some(xd) = background.as_deref_mut() {
+        let bb = ((g.bb.ll.x, g.bb.ll.y), (g.bb.ur.x, g.bb.ur.y));
+        let (ll, ur) = graphviz_pure_core::xdot::xdot_bb(xd, bb);
+        g.bb.ll = Point::new(ll.0, ll.1);
+        g.bb.ur = Point::new(ur.0, ur.1);
+    }
+    if translate && background.is_none() && (g.bb.ll.x != 0.0 || g.bb.ll.y != 0.0) {
         neato_translate(g);
     }
     let root = g.root_sub();
@@ -961,7 +975,10 @@ fn neato_layout_nop(graph: &mut Graph) {
     };
     // The rest of init_nop's scan_graph: its `bad edge len` warnings.
     super::stuff::nop_check_edge_lens(graph);
-    let done = init_nop(&mut g, nop);
+    // `GD_drawing(g)->xdots`, whose op boxes `init_nop`'s `xdotBB` sets.
+    let mut background = graph.layout.background.take();
+    let done = init_nop(&mut g, nop, background.as_mut());
+    graph.layout.background = background;
     let Ok(splines_state) = done else {
         graphviz_pure_core::diag::agerr_prev("as required by the -n flag\n");
         // `neato_layout` returns before any coordinate, spline or cluster is set, and

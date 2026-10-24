@@ -32,10 +32,10 @@ the model's node geometry.
 | `emit/geom.rs` | `dotneato_closest`, `splitBSpline`, `computeoffset_p/qr`, `get_gradient_points` (`utils.c`), `taper` (`taper.c`), `ellipticWedge` (`ellipse.c`) |
 | `emit/output.rs` | `output.c`: `attach_attrs_and_arrows`, `set_record_rects`, `rec_attach_bb`, `write_plain` |
 | `emit/num.rs` | `gvprintdouble`, `gvprintnum`, `agxbuf_trim_zeros`, `%.Ng` |
-| `emit/attrs.rs` | `late_*`, `mapbool`, `parse_style`, `strtol` (`strtod` is `graphviz_pure_core::strtod`) |
+| `emit/attrs.rs` | `late_*`, `mapbool`, `parse_style` (`strtod` is `graphviz_pure_core::strtod`) |
 | `svg_engine.rs` | `plugin/core/gvrender_core_svg.c` (incl. gradients, layers, anchors, `gv_xml_escape`) |
 | `xdot_engine.rs` | xdot half of `plugin/core/gvrender_core_dot.c` (per-state buffers, penwidth/textflags state, gradients) |
-| `json.rs` | `plugin/core/gvrender_core_json.c` and the xdot parser of `lib/xdot/xdot.c` |
+| `json.rs` | `plugin/core/gvrender_core_json.c`; its xdot parser (`lib/xdot/xdot.c`) is `graphviz_pure_core::xdot`, which also has `init_xdot` and `xdotBB` for `_background` (drawn by `emit_xdot` in `emit/emit.rs`) |
 | `agwrite.rs` | `lib/cgraph/write.c` (`-Tdot`, `-Txdot`, `-Tcanon`) over the cgraph dictionaries recorded by the parser (`Graph::dicts`: `bindattrs`, `attrstmt`/`setattr`, `unviewsubgraphsattr`, `sym->print`, ProtoGraph `label`) |
 | `lib.rs` | format dispatch, `safe_dcl`/`agxset` bookkeeping (`sync_dicts`), dot's `mark_lowclusters` edge membership |
 
