@@ -576,11 +576,12 @@ fn read_input(path: Option<&OsStr>) -> io::Result<Decoded> {
 
 /// `FINISH()` in `gvRenderJobs` (`lib/common/emit.c`, at `line`): the `-v` timing.
 fn render_jobs_finish(graph: &graphviz_pure::Graph, line: u32) {
-    let secs = graphviz_pure_core::diag::fmt_f(graphviz_pure_core::diag::elapsed_sec(), 2);
-    graphviz_pure_core::diag::gv_info(
+    graphviz_pure_core::gv_info!(
         "emit.c",
         line,
-        &format!("gvRenderJobs {}: {secs} secs.", graph.root_name()),
+        "gvRenderJobs {}: {} secs.",
+        graph.root_name(),
+        graphviz_pure_core::diag::fmt_f(graphviz_pure_core::diag::elapsed_sec(), 2)
     );
 }
 
@@ -677,6 +678,14 @@ impl Run<'_> {
         if graphviz_pure_core::diag::verbose_on() {
             graphviz_pure_core::diag::start_timer();
         }
+        // FINISH() on every way out
+        struct Finish<'g>(&'g graphviz_pure::Graph);
+        impl Drop for Finish<'_> {
+            fn drop(&mut self) {
+                render_jobs_finish(self.0, 4323);
+            }
+        }
+        let _finish = Finish(graph);
         let mut graph_jobs = GraphJobs::new(graph);
         // the jobs have output files: C's `fprintf(job->output_file, ...)` text goes in them
         graph_jobs.write_output_file_text(true);
@@ -742,7 +751,6 @@ impl Run<'_> {
                 Err(e) => report_error(name, &e),
             }
         }
-        render_jobs_finish(graph, 4323);
         Ok(())
     }
 

@@ -14,9 +14,7 @@ use super::linalg::solve_circuit;
 use super::matrix_ops::*;
 use super::{MODEL_CIRCUIT, MODEL_MDS, MODEL_SUBSET, NeatoParams};
 use crate::common::types::{LGraph, P_FIX};
-use graphviz_pure_core::diag::{
-    elapsed_sec, fmt_f, fprintf_stderr, start_timer, verbose_msg, verbose_on,
-};
+use graphviz_pure_core::diag::{elapsed_sec, fmt_f, fprintf_stderr, start_timer, verbose_on};
 
 pub const TOLERANCE_CG: f64 = 1e-3;
 pub const DFLT_ITERATIONS: i64 = 200;
@@ -135,7 +133,7 @@ pub fn mds_model(graph: &[VtxData], ng: usize) -> Option<Vec<f32>> {
             *slot = we;
         }
     }
-    verbose_msg(&format!("mdsModel: delta = {}\n", fmt_f(delta, 6)));
+    graphviz_pure_core::verbose_msg!("mdsModel: delta = {}\n", fmt_f(delta, 6));
     Some(dij)
 }
 
@@ -230,9 +228,6 @@ pub fn compute_apsp_artificial_weights(graph: &[VtxData], n: usize) -> Vec<Vec<D
     out
 }
 
-/// `stress_majorization_kD_mkernel(graph, n, d_coords, nodes, dim, opts, model, maxi)`.
-/// Returns the iteration count, or `Err` when the solver fails.
-#[allow(clippy::too_many_arguments)]
 /// `compute_stressf(coords, lap, dim, n, exp)`: the layout's stress.
 fn compute_stressf(coords: &[Vec<f32>], lap: &[f32], dim: usize, n: usize, exp: i32) -> f64 {
     let mut sum = 0.0f64;
@@ -250,13 +245,16 @@ fn compute_stressf(coords: &[Vec<f32>], lap: &[f32], dim: usize, n: usize, exp: 
             let dist = dist.sqrt();
             let l = f64::from(lap.next().copied().unwrap_or_default());
             let dij = if exp == 2 { 1.0 / l.sqrt() } else { 1.0 / l };
-            // not fused in C
-            sum += (dij - dist) * (dij - dist) * l;
+            // C (clang) fuses this: fmadd((Dij - dist)^2, lap, sum)
+            sum = ((dij - dist) * (dij - dist)).mul_add(l, sum);
         }
     }
     sum
 }
 
+/// `stress_majorization_kD_mkernel(graph, n, d_coords, nodes, dim, opts, model, maxi)`.
+/// Returns the iteration count, or `Err` when the solver fails.
+#[allow(clippy::too_many_arguments)]
 pub fn stress_majorization_kd_mkernel(
     g: &LGraph<'_>,
     params: &NeatoParams,
@@ -279,7 +277,7 @@ pub fn stress_majorization_kd_mkernel(
     let exp = opts & OPT_EXP_FLAG;
     let mut dij: Option<Vec<f32>> = None;
     if model == MODEL_SUBSET {
-        verbose_msg("Calculating subset model");
+        graphviz_pure_core::verbose_msg!("Calculating subset model");
         dij = Some(compute_apsp_artificial_weights_packed(graph, n));
     } else if model == MODEL_CIRCUIT {
         dij = circuit_model(graph, n);
@@ -292,13 +290,13 @@ pub fn stress_majorization_kd_mkernel(
             );
         }
     } else if model == MODEL_MDS {
-        verbose_msg("Calculating MDS model");
+        graphviz_pure_core::verbose_msg!("Calculating MDS model");
         dij = mds_model(graph, n);
     }
     let mut lap2 = match dij {
         Some(d) => d,
         None => {
-            verbose_msg("Calculating shortest paths");
+            graphviz_pure_core::verbose_msg!("Calculating shortest paths");
             if has_ewgts(graph) {
                 compute_weighted_apsp_packed(graph, n)
             } else {
@@ -307,13 +305,7 @@ pub fn stress_majorization_kd_mkernel(
         }
     };
 
-    if verbose_on() {
-        fprintf_stderr(&format!(
-            ": {} sec\nSetting initial positions",
-            fmt_f(elapsed_sec(), 2)
-        ));
-        start_timer();
-    }
+    graphviz_pure_core::diag::verbose_phase("Setting initial positions");
     let have_pinned;
     if smart_ini && n > 1 {
         have_pinned = false;
@@ -347,17 +339,11 @@ pub fn stress_majorization_kd_mkernel(
     } else {
         have_pinned = init_layout(g, n, dim, d_coords, nodes);
     }
-    verbose_msg(&format!(": {} sec", fmt_f(elapsed_sec(), 2)));
+    graphviz_pure_core::verbose_msg!(": {} sec", fmt_f(elapsed_sec(), 2));
     if n == 1 || maxi == 0 {
         return Ok(0);
     }
-    if verbose_on() {
-        fprintf_stderr(&format!(
-            ": {} sec\nSetting up stress function",
-            fmt_f(elapsed_sec(), 2)
-        ));
-        start_timer();
-    }
+    graphviz_pure_core::diag::verbose_phase("Setting up stress function");
 
     let mut coords: Vec<Vec<f32>> = (0..dim)
         .map(|i| d_coords[i][..n].iter().map(|&v| v as f32).collect())
@@ -395,13 +381,7 @@ pub fn stress_majorization_kd_mkernel(
     let mut dist_accumulator = vec![0.0f32; n];
     let mut lap1 = vec![0.0f32; lap_length];
     let mut old_stress = f64::MAX;
-    if verbose_on() {
-        fprintf_stderr(&format!(
-            ": {} sec\nSolving model: ",
-            fmt_f(elapsed_sec(), 2)
-        ));
-        start_timer();
-    }
+    graphviz_pure_core::diag::verbose_phase("Solving model: ");
     let mut converged = false;
     let mut iterations = 0i64;
     while iterations < maxi && !converged {

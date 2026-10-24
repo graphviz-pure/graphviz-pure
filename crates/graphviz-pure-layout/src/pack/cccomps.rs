@@ -341,13 +341,13 @@ pub fn cccomps(g: &Graph) -> Vec<CComp> {
             user_subgraphs,
         });
     }
-    graphviz_pure_core::diag::verbose_msg(&format!(
+    graphviz_pure_core::verbose_msg!(
         "       {:7} nodes {:7} edges {:7} components {}\n",
         nn,
         g.edges.len(),
         out.len(),
         g.root_name()
-    ));
+    );
     out
 }
 

@@ -98,6 +98,12 @@ parsed input) matches C on 493 of 508 inputs (454 before).
 - The SVG generator comment names graphviz-pure.
 - Gradient and HTML anchor ids are numbered per `render_dot_all` call, like C's
   process-wide statics for a single invocation.
+- `-v` (#416): the layouts' `Verbose`/`GV_INFO` messages are C's, at C's sites. The time in a
+  `[Graphviz] file:line:` line is UTC, since the port reads no time zone, and the timings
+  (`<n> sec`) are wall time where C's `clock()` measures processor time. `printData`'s `-v2`
+  lists (`lib/common/postproc.c`) print a stand-in for each `%p` heap address. On wasm32
+  there is no clock: times and timings read 0. Sites under `DEBUG`, `DEBUG_PRINT` or `TIME`,
+  which a release build of C does not compile, are not ported.
 
 ## Images
 

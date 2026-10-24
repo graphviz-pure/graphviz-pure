@@ -339,21 +339,21 @@ pub fn routesplines_(pp: &mut Path, polyline: bool, real: RealEdge<'_>) -> Optio
         let is_horizontal = is_straight(&ps, |p| p.y);
         let is_vertical = is_straight(&ps, |p| p.x);
         if let (Some(a), Some(b)) = (ps.first(), ps.last()) {
-            use graphviz_pure_core::diag::{fmt_f, gv_info};
+            use graphviz_pure_core::diag::fmt_f;
             let f = |v: f64| fmt_f(v, 3);
             let ends = format!("[{}, {}] -- [{}, {}]", f(a.x), f(a.y), f(b.x), f(b.y));
             if is_horizontal {
-                gv_info(
+                graphviz_pure_core::gv_info!(
                     "routespl.c",
                     520,
-                    &format!("spline {ends} is horizontal; will be trivially bounded"),
+                    "spline {ends} is horizontal; will be trivially bounded"
                 );
             }
             if is_vertical {
-                gv_info(
+                graphviz_pure_core::gv_info!(
                     "routespl.c",
                     534,
-                    &format!("spline {ends} is vertical; will be trivially bounded"),
+                    "spline {ends} is vertical; will be trivially bounded"
                 );
             }
         }
@@ -448,33 +448,40 @@ thread_local! {
 }
 
 /// `routesplinesinit()`: counts the edges and boxes routed until the matching
-/// [`routesplines_term`], and starts the clock (`-v`).
-pub fn routesplines_init() {
+/// `routesplinesterm()`, which dropping the returned guard runs, and starts the clock (`-v`).
+pub fn routesplines_init() -> RouteSplines {
     let depth = ROUTE.with(|r| r.get().0).wrapping_add(1);
     if depth > 1 {
         ROUTE.with(|r| r.set((depth, r.get().1, r.get().2)));
-        return;
+    } else {
+        ROUTE.with(|r| r.set((depth, 0, 0)));
+        if graphviz_pure_core::diag::verbose_on() {
+            graphviz_pure_core::diag::start_timer();
+        }
     }
-    ROUTE.with(|r| r.set((depth, 0, 0)));
-    if graphviz_pure_core::diag::verbose_on() {
-        graphviz_pure_core::diag::start_timer();
-    }
+    RouteSplines(())
 }
 
-/// `routesplinesterm()`: at the outermost level, the `-v` summary.
-pub fn routesplines_term() {
-    let (depth, nedges, nboxes) = ROUTE.with(|r| r.get());
-    let depth = depth.wrapping_sub(1);
-    ROUTE.with(|r| r.set((depth, nedges, nboxes)));
-    if depth > 0 {
-        return;
+/// A [`routesplines_init`] level, closed by `routesplinesterm()` when dropped.
+#[must_use]
+pub struct RouteSplines(());
+
+impl Drop for RouteSplines {
+    /// `routesplinesterm()`: at the outermost level, the `-v` summary.
+    fn drop(&mut self) {
+        let (depth, nedges, nboxes) = ROUTE.with(|r| r.get());
+        let depth = depth.wrapping_sub(1);
+        ROUTE.with(|r| r.set((depth, nedges, nboxes)));
+        if depth > 0 {
+            return;
+        }
+        graphviz_pure_core::gv_info!(
+            "routespl.c",
+            235,
+            "routesplines: {nedges} edges, {nboxes} boxes {} sec",
+            graphviz_pure_core::diag::fmt_f(graphviz_pure_core::diag::elapsed_sec(), 2)
+        );
     }
-    let secs = graphviz_pure_core::diag::fmt_f(graphviz_pure_core::diag::elapsed_sec(), 2);
-    graphviz_pure_core::diag::gv_info(
-        "routespl.c",
-        235,
-        &format!("routesplines: {nedges} edges, {nboxes} boxes {secs} sec"),
-    );
 }
 
 /// `printpath(pp)` (`routespl.c:758-771`): every one of the `nbox` boxes (the caller's
@@ -543,32 +550,30 @@ pub fn checkpath(thepath: &mut Path) -> bool {
     }
     for bi in 0..boxn.saturating_sub(1) {
         let next = bi.wrapping_add(1);
-        if graphviz_pure_core::diag::verbose_on()
-            && let (Some(&a), Some(&b)) = (thepath.boxes.get(bi), thepath.boxes.get(next))
-            && !(b.ll.x > b.ur.x || b.ll.y > b.ur.y)
-            && (a.ur.x < b.ll.x || a.ll.x > b.ur.x || a.ur.y < b.ll.y || a.ll.y > b.ur.y)
-        {
+        let (Some(&a), Some(&b)) = (thepath.boxes.get(bi), thepath.boxes.get(next)) else {
+            break;
+        };
+        if b.ll.x > b.ur.x || b.ll.y > b.ur.y {
+            agerrorf(&format!(
+                "in checkpath, box {next} has LL coord > UR coord\n"
+            ));
+            printpath(thepath);
+            return true;
+        }
+        let mut l = i32::from(a.ur.x < b.ll.x);
+        let mut r = i32::from(a.ll.x > b.ur.x);
+        let mut d = i32::from(a.ur.y < b.ll.y);
+        let mut u = i32::from(a.ll.y > b.ur.y);
+        let errs = l + r + d + u;
+        if errs > 0 && graphviz_pure_core::diag::verbose_on() {
             graphviz_pure_core::diag::fprintf_stderr(&format!(
                 "in checkpath, boxes {bi} and {next} don't touch\n"
             ));
             printpath(thepath);
         }
-        let (lo, hi) = thepath.boxes.split_at_mut(bi + 1);
+        let (lo, hi) = thepath.boxes.split_at_mut(next);
         let ba = &mut lo[bi];
         let bb = &mut hi[0];
-        if bb.ll.x > bb.ur.x || bb.ll.y > bb.ur.y {
-            agerrorf(&format!(
-                "in checkpath, box {} has LL coord > UR coord\n",
-                bi + 1
-            ));
-            printpath(thepath);
-            return true;
-        }
-        let mut l = i32::from(ba.ur.x < bb.ll.x);
-        let mut r = i32::from(ba.ll.x > bb.ur.x);
-        let mut d = i32::from(ba.ur.y < bb.ll.y);
-        let mut u = i32::from(ba.ll.y > bb.ur.y);
-        let errs = l + r + d + u;
         if errs > 0 {
             if l == 1 {
                 std::mem::swap(&mut ba.ur.x, &mut bb.ll.x);
@@ -744,6 +749,27 @@ pub fn make_straight_edges<S: super::splines::SplineGraph + ?Sized>(
 
 #[cfg(test)]
 mod tests {
+
+    /// Issue #416: a dropped guard closes its routesplinesinit level, on any way out.
+    #[test]
+    fn routesplines_levels_close_when_dropped() {
+        let depth = || ROUTE.with(|r| r.get().0);
+        let before = depth();
+        {
+            let _outer = routesplines_init();
+            let inner = routesplines_init();
+            assert_eq!(depth(), before + 2);
+            drop(inner);
+            assert_eq!(depth(), before + 1);
+        }
+        assert_eq!(depth(), before);
+        let failing = || -> Result<(), ()> {
+            let _route = routesplines_init();
+            Err(())
+        };
+        assert!(failing().is_err());
+        assert_eq!(depth(), before);
+    }
     use super::*;
 
     /// #396: C's straightness test is true for a NaN coordinate, on each axis alone.

@@ -391,6 +391,10 @@ fn circo_layout_main(g: &mut LGraph<'_>) {
             copy_posns(&c, g, &cc.nodes, &identity);
             if let Some(dg) = dg.as_mut() {
                 adjust_derived(dg, g, cc);
+            } else if graphviz_pure_core::diag::verbose_on() && cc.nodes.len() >= 2 {
+                // adjustNodes(sg) with no overlap, normalize or scale: getAdjustMode still
+                // reports the mode (none)
+                let _ = get_adjust_mode(g, "");
             }
         }
         pack_derived(g, &d, &c.arena, &mut ccs, &pinfo);

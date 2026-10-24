@@ -277,7 +277,7 @@ fn x_layout(
 /// `fdp_xLayout(g, xpms)`: `overlap` may start with `n:` for `n` tries of
 /// [`x_layout`] before `removeOverlapAs` with the rest.
 pub fn fdp_x_layout(st: &mut TState, dg: &mut DG, comp: &Comp, xpms: &XParams) {
-    graphviz_pure_core::diag::verbose_msg("xLayout ");
+    graphviz_pure_core::verbose_msg!("xLayout ");
     let ovlp = dg
         .attrs
         .get("overlap")
@@ -292,7 +292,7 @@ pub fn fdp_x_layout(st: &mut TState, dg: &mut DG, comp: &Comp, xpms: &XParams) {
         }
         _ => (0, ovlp.clone()),
     };
-    graphviz_pure_core::diag::verbose_msg(&format!("tries = {tries}, mode = {rest}\n"));
+    graphviz_pure_core::verbose_msg!("tries = {tries}, mode = {rest}\n");
     let nodes = comp.nodes.clone();
     if tries > 0 {
         // x_layout's sepFactor

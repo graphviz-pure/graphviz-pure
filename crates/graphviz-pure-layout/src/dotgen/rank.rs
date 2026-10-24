@@ -409,10 +409,7 @@ impl Dot<'_> {
             self.dot1_rank(0)?;
         }
         if let Some(g) = self.graphs.first() {
-            graphviz_pure_core::diag::verbose_msg(&format!(
-                "Maxrank = {}, minrank = {}\n",
-                g.maxrank, g.minrank
-            ));
+            graphviz_pure_core::verbose_msg!("Maxrank = {}, minrank = {}\n", g.maxrank, g.minrank);
         }
         Ok(())
     }

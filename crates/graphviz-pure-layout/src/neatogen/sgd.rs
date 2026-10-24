@@ -6,9 +6,7 @@ use super::stress::is_fixed;
 use super::{INIT_RANDOM, MODEL_SUBSET, NeatoParams};
 use crate::common::types::{LGraph, Sub};
 use crate::cutil::RkState;
-use graphviz_pure_core::diag::{
-    elapsed_sec, fmt_f, fprintf_stderr, start_timer, verbose_msg, verbose_on,
-};
+use graphviz_pure_core::diag::{elapsed_sec, fmt_f, fprintf_stderr, start_timer, verbose_on};
 use graphviz_pure_core::math;
 
 fn extract_adjacency(g: &LGraph<'_>, sub: &Sub, model: i32) -> GraphSgd {
@@ -75,7 +73,6 @@ fn extract_adjacency(g: &LGraph<'_>, sub: &Sub, model: i32) -> GraphSgd {
     }
 }
 
-/// `sgd(G, model)`.
 /// `calculate_stress(pos, terms, n_terms)`.
 fn calculate_stress(pos: &[f64], terms: &[TermSgd]) -> f64 {
     let mut stress = 0.0f64;
@@ -94,6 +91,7 @@ fn calculate_stress(pos: &[f64], terms: &[TermSgd]) -> f64 {
     stress
 }
 
+/// `sgd(G, model)`.
 pub fn sgd(g: &mut LGraph<'_>, sub: &Sub, model: i32, p: &NeatoParams) {
     if model == super::MODEL_CIRCUIT {
         graphviz_pure_core::diag::agwarningf(
@@ -123,12 +121,12 @@ pub fn sgd(g: &mut LGraph<'_>, sub: &Sub, model: i32, p: &NeatoParams) {
         }
     }
     let n_terms = terms.len();
-    verbose_msg(&format!(" {} sec\n", fmt_f(elapsed_sec(), 2)));
-    if n_terms == 0 {
-        return;
-    }
-    let (mut w_min, mut w_max) = (terms[0].w, terms[0].w);
-    for t in &terms[1..] {
+    graphviz_pure_core::verbose_msg!(" {} sec\n", fmt_f(elapsed_sec(), 2));
+    // With no terms (every node fixed, or one node) C reads `terms[0]` of a `calloc(0)`,
+    // zeroed memory in practice, and goes on: the positions, the messages, no moves.
+    let first = terms.first().map_or(0.0, |t| t.w);
+    let (mut w_min, mut w_max) = (first, first);
+    for t in terms.iter().skip(1) {
         w_min = w_min.min(t.w);
         w_max = w_max.max(t.w);
     }
@@ -136,7 +134,7 @@ pub fn sgd(g: &mut LGraph<'_>, sub: &Sub, model: i32, p: &NeatoParams) {
     let eta_min = p.epsilon / f64::from(w_max);
     let lambda = math::ln(eta_max / eta_min) / (p.max_iter - 1) as f64;
     // initial_positions(G, n)
-    verbose_msg("Setting initial positions\n");
+    graphviz_pure_core::verbose_msg!("Setting initial positions\n");
     let init = super::neatoinit::check_start(g, sub, n, INIT_RANDOM, p);
     super::stuff::warn_start_self(init);
     if init != super::INIT_REGULAR {
@@ -163,8 +161,9 @@ pub fn sgd(g: &mut LGraph<'_>, sub: &Sub, model: i32, p: &NeatoParams) {
     }
     let mut rstate = RkState::new(0);
     for t in 0..p.max_iter {
-        let mut i = n_terms - 1;
-        while i >= 1 {
+        // fisheryates_shuffle: `n_terms > 0 && i >= 1`
+        let mut i = n_terms.saturating_sub(1);
+        while n_terms > 0 && i >= 1 {
             let j = rstate.interval(i as u64) as usize;
             terms.swap(i, j);
             i -= 1;
@@ -191,7 +190,7 @@ pub fn sgd(g: &mut LGraph<'_>, sub: &Sub, model: i32, p: &NeatoParams) {
             fprintf_stderr(&format!(" {}", fmt_f(calculate_stress(&pos, &terms), 3)));
         }
     }
-    verbose_msg(&format!("\nfinished in {} sec\n", fmt_f(elapsed_sec(), 2)));
+    graphviz_pure_core::verbose_msg!("\nfinished in {} sec\n", fmt_f(elapsed_sec(), 2));
     for (i, &np) in sub.nodes.iter().enumerate() {
         g.nodes[np].pos[0] = pos[2 * i];
         g.nodes[np].pos[1] = pos[2 * i + 1];

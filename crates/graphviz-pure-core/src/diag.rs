@@ -169,23 +169,36 @@ pub fn verbose_on() -> bool {
     verbose_byte() != 0
 }
 
-/// `fprintf(stderr, ...)` under `if (Verbose)`: the layouts' progress messages.
-pub fn verbose_msg(msg: &str) {
-    if verbose_on() {
-        fprintf_stderr(msg);
-    }
+/// `fprintf(stderr, ...)` under `if (Verbose)`: the layouts' progress messages. The arguments
+/// are `format!`'s, formatted only when `-v` is on.
+#[macro_export]
+macro_rules! verbose_msg {
+    ($($arg:tt)*) => {
+        if $crate::diag::verbose_on() {
+            $crate::diag::fprintf_stderr(&format!($($arg)*));
+        }
+    };
+}
+
+/// `GV_INFO(...)` (`lib/util/debug.h`): `gv_info!(file, line, format...)`, under `-v`
+/// ([`gv_info_line`]); the message is formatted only when `-v` is on.
+#[macro_export]
+macro_rules! gv_info {
+    ($file:expr, $line:expr, $($arg:tt)*) => {
+        if $crate::diag::verbose_on() {
+            $crate::diag::gv_info_line($file, $line, &format!($($arg)*));
+        }
+    };
 }
 
 /// `GV_INFO(...)` (`lib/util/debug.h`): under `-v`, `[Graphviz] <file>:<line>: <time> <msg>`
 /// and a newline, where `file` and `line` are C's (the port names the C site it follows). C
 /// stamps local time; the port, which reads no time zone, stamps UTC.
-pub fn gv_info(file: &str, line: u32, msg: &str) {
-    if verbose_on() {
-        let (y, mo, d, h, mi, sec) = utc_now();
-        fprintf_stderr(&format!(
-            "[Graphviz] {file}:{line}: {y:04}-{mo:02}-{d:02} {h:02}:{mi:02}:{sec:02} {msg}\n"
-        ));
-    }
+pub fn gv_info_line(file: &str, line: u32, msg: &str) {
+    let (y, mo, d, h, mi, sec) = utc_now();
+    fprintf_stderr(&format!(
+        "[Graphviz] {file}:{line}: {y:04}-{mo:02}-{d:02} {h:02}:{mi:02}:{sec:02} {msg}\n"
+    ));
 }
 
 /// The time as UTC calendar fields (year, month, day, hour, minute, second).
@@ -194,7 +207,7 @@ fn utc_now() -> (i64, i64, i64, i64, i64, i64) {
     let secs = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map_or(0, |d| d.as_secs() as i64);
-    // wasm32-unknown-unknown has no clock (`-v` is a command-line option there is no way to set)
+    // wasm32-unknown-unknown has no clock (the wasm bindings never set a verbose level)
     #[cfg(target_arch = "wasm32")]
     let secs = 0i64;
     civil(secs)
@@ -231,6 +244,15 @@ fn clock() -> std::time::Duration {
     #[cfg(target_arch = "wasm32")]
     {
         std::time::Duration::ZERO
+    }
+}
+
+/// The majorization solvers' `-v` step: `: <seconds> sec`, a newline and the next phase's
+/// name, then the clock restarted for it.
+pub fn verbose_phase(next: &str) {
+    if verbose_on() {
+        fprintf_stderr(&format!(": {} sec\n{next}", fmt_f(elapsed_sec(), 2)));
+        start_timer();
     }
 }
 

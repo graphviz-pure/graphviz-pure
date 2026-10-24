@@ -387,8 +387,9 @@ of the audit; a row can cover several lines, such as the two coordinates of one 
 
 The `Verbose` output was ported later (#416). Its fused lines are `computeStep`'s `r1` and
 `r2` (`pack.c:93-94`), `total_e` (`stuff.c:404-408`) and sgd's `calculate_stress`
-(`sgd.c:23`); the port fuses them as C does, and leaves `compute_stressf` (`stress.c`), which C
-does not fuse, unfused.
+(`sgd.c:23`), and `compute_stressf`'s sum (`stress.c`, a site the debug information gives
+line 0); the port fuses them as C does. patchwork's `-v` rectangles (`patchwork.c:181-182`) are
+fused too, by products with 0.5, which are exact either way.
 
 Every `mul_add` in the port is at a site C fuses, except three `(-1.0).mul_add(x, c)` in
 neato's `cola.rs`, `digcola.rs` and `stress.rs`, where C subtracts; they are exact.

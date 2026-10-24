@@ -198,14 +198,14 @@ pub fn spline_edges_route(g: &mut LGraph<'_>, sub: &Sub, pmargin: &Expand, edget
     } else {
         None
     };
-    graphviz_pure_core::diag::verbose_msg(&format!(
+    graphviz_pure_core::verbose_msg!(
         "Creating edges using {}\n",
         match &router {
             Some(_) if edgetype == EdgeType::Spline => "splines",
             Some(_) => "polylines",
             None => "line segments",
         }
-    ));
+    );
     if let Some(r) = &router {
         r.path_pass(g, sub);
     }
@@ -293,14 +293,14 @@ fn ortho_spline_edges(lg: &mut LGraph<'_>, sub: &Sub, pm: &Expand, et: EdgeType)
             "the bounding boxes of some nodes touch - falling back to straight line edges\n",
         );
     }
-    graphviz_pure_core::diag::verbose_msg(&format!(
+    graphviz_pure_core::verbose_msg!(
         "Creating edges using {}\n",
         if legal {
             "orthogonal lines"
         } else {
             "line segments"
         }
-    ));
+    );
     if legal {
         crate::ortho::ortho_edges_of(lg, sub.nodes.clone(), false);
         use_edges = true;

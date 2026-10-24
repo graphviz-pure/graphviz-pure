@@ -303,18 +303,21 @@ fn fdp_flags_and_extra_argument_passes() {
 /// lookups) and the plugin list (`gvplugin_write_status`, `type:package` from `-v2`). The
 /// `Using` lines are C 16.1.0's for these arguments; the list is the port's plugins. A build
 /// with its plugins built in has no plugin library and no configuration file to report.
+/// A `-v` line of the plugins (#298): the version, `Using …`, and the plugin list.
+fn verbose_plugin_line(l: &str) -> bool {
+    ["Using ", "Demand loading", "graphviz-pure - "]
+        .iter()
+        .any(|p| l.starts_with(p))
+        || (l.starts_with("    ") && l.contains('\t'))
+}
+
 #[test]
 fn issue298_verbose_reports_the_plugins_it_uses() {
     // The plugin lines; the layouts' own `-v` lines are #416's
     // (`issue416_verbose_layout_messages_follow_c`).
     let plugin_lines = |err: &str| -> String {
         err.lines()
-            .filter(|l| {
-                ["Using ", "Demand loading", "graphviz-pure - "]
-                    .iter()
-                    .any(|p| l.starts_with(p))
-                    || (l.starts_with("    ") && l.contains('\t'))
-            })
+            .filter(|l| verbose_plugin_line(l))
             .map(|l| format!("{l}\n"))
             .collect()
     };
@@ -410,19 +413,13 @@ fn issue298_verbose_reports_the_plugins_it_uses() {
 /// Issue #416: under `-v` the layouts write C's progress messages (`Verbose`, `GV_INFO`), at C's
 /// sites and in C's order. `tests/data/verbose/<engine>.txt` is C 16.1.0's stderr for the input,
 /// written by `scripts/gen-verbose-data.sh`, which masks what can't match: the time of a
-/// `[Graphviz] file:line:` line, the timings and the uninitialised `value` of a non-prism
-/// `overlap:` line. The plugin lines are #298's (`issue298_verbose_reports_the_plugins_it_uses`).
+/// `[Graphviz] file:line:` line, the timings, the uninitialised `value` of a non-prism
+/// `overlap:` line and `%p` addresses. The plugin lines are #298's (`issue298_verbose_reports_the_plugins_it_uses`).
 #[test]
 fn issue416_verbose_layout_messages_follow_c() {
     fn normalize(err: &str) -> String {
-        let plugin = |l: &str| {
-            ["Using ", "Demand loading", "graphviz-pure - "]
-                .iter()
-                .any(|p| l.starts_with(p))
-                || (l.starts_with("    ") && l.contains('\t'))
-        };
         let mut out = String::new();
-        for l in err.lines().filter(|l| !plugin(l)) {
+        for l in err.lines().filter(|l| !verbose_plugin_line(l)) {
             let mut l = l.to_string();
             // `[Graphviz] file:line: YYYY-MM-DD HH:MM:SS `
             if let Some(rest) = l.strip_prefix("[Graphviz] ")
@@ -437,7 +434,17 @@ fn issue416_verbose_layout_messages_follow_c() {
             for (i, w) in words.iter().enumerate() {
                 let next_sec = words.get(i + 1).is_some_and(|n| n.starts_with("sec"));
                 let number = w.contains('.') && w.trim_start_matches('-').parse::<f64>().is_ok();
-                masked.push(if next_sec && number { "T" } else { w });
+                // `%p`
+                let pointer = w
+                    .strip_prefix("0x")
+                    .is_some_and(|h| !h.is_empty() && h.bytes().all(|b| b.is_ascii_hexdigit()));
+                masked.push(if next_sec && number {
+                    "T"
+                } else if pointer {
+                    "PTR"
+                } else {
+                    w
+                });
             }
             l = masked.join(" ");
             if l.starts_with("overlap: ") && !l.starts_with("overlap: prism") {
@@ -454,15 +461,54 @@ fn issue416_verbose_layout_messages_follow_c() {
         out
     }
     let data = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/data/verbose");
-    for engine in ["dot", "neato", "fdp", "sfdp", "twopi", "osage", "patchwork"] {
-        let want = std::fs::read_to_string(data.join(format!("{engine}.txt")))
+    // scripts/gen-verbose-data.sh's cases
+    let g = "digraph{a->b; b->c; a->c; d}";
+    let cases: [(&str, &[&str], &str); 10] = [
+        ("dot", &["-v", "-Kdot"], g),
+        ("neato", &["-v", "-Kneato"], g),
+        ("fdp", &["-v", "-Kfdp"], g),
+        ("sfdp", &["-v", "-Ksfdp"], g),
+        ("twopi", &["-v", "-Ktwopi"], g),
+        ("circo", &["-v", "-Kcirco"], g),
+        // per-component adjustNodes on circo's derived graph (#398)
+        (
+            "circo-overlap",
+            &["-v", "-Kcirco", "-Goverlap=false"],
+            "digraph{a->b; b->c; c->a; d->e}",
+        ),
+        ("osage", &["-v", "-Kosage"], g),
+        ("patchwork", &["-v", "-Kpatchwork"], g),
+        // level 2: the derived graphs, cluster names, the xlabel placement lists
+        (
+            "fdp-v2",
+            &["-v2", "-Kfdp"],
+            "graph{subgraph cluster_a{a--b} b--c; d [xlabel=\"d-\\N\"]}",
+        ),
+    ];
+    for (name, opts, input) in cases {
+        let want = std::fs::read_to_string(data.join(format!("{name}.txt")))
             .unwrap()
             .replace("\r\n", "\n");
-        let k = format!("-K{engine}");
-        let (_, err, ok) = run(&["-v", &k, "-Tplain"], "digraph{a->b; b->c; a->c; d}");
-        assert!(ok, "{engine}: {err}");
-        assert_eq!(normalize(&err), want, "{engine}");
+        let args: Vec<&str> = ["-v"]
+            .iter()
+            .chain(opts)
+            .chain(&["-Tplain"])
+            .copied()
+            .collect();
+        let (_, err, ok) = run(&args, input);
+        assert!(ok, "{name}: {err}");
+        assert_eq!(normalize(&err), want, "{name}");
     }
+    // routesplinesinit/term pair up per graph; after splines=curved, C never closes its
+    // level, so the next graph reports nothing either (C 16.1.0)
+    let routes = |src: &str| {
+        run(&["-v", "-Tplain"], src)
+            .1
+            .matches("routesplines:")
+            .count()
+    };
+    assert_eq!(routes("digraph{a->b}\ndigraph{c->d}"), 2);
+    assert_eq!(routes("digraph{splines=curved; a->b}\ndigraph{c->d}"), 0);
     // `-v` off: none of them
     let (_, err, ok) = run(&["-Kneato", "-Tplain"], "digraph{a->b; d}");
     assert!(ok && err.is_empty(), "{err}");

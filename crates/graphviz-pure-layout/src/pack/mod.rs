@@ -13,7 +13,7 @@ use crate::common::geom::{add, sub as psub};
 use crate::common::types::{Bezier, LGraph, P_PIN, Sub};
 use crate::common::utils::{compute_bb, coord, scan_d};
 use crate::cutil::qsort_by;
-use graphviz_pure_core::diag::{fmt_f, fprintf_stderr, verbose_byte, verbose_msg, verbose_on};
+use graphviz_pure_core::diag::{fmt_f, fprintf_stderr, verbose_byte, verbose_on};
 
 pub mod cccomps;
 use graphviz_pure_core::{BoundingBox, Point};
@@ -167,7 +167,7 @@ pub fn pack_info(
     pinfo: &mut PackInfo,
 ) -> PackMode {
     pinfo.margin = get_pack(pack, dflt_margin, dflt_margin) as u32;
-    verbose_msg(&format!("  margin {}\n", pinfo.margin));
+    graphviz_pure_core::verbose_msg!("  margin {}\n", pinfo.margin);
     pinfo.do_splines = false;
     pinfo.fixed = None;
     get_pack_mode_info(packmode, dflt, pinfo)
@@ -684,7 +684,6 @@ fn add_rect(ps: &mut PointSet, ll: Point, ur: Point, budget: &mut Budget) -> boo
 }
 
 /// `genBox(bb0, info, ssize, margin, center)`.
-#[allow(clippy::too_many_arguments)]
 fn gen_box(
     bb0: &BoundingBox,
     ssize: i32,
@@ -692,7 +691,6 @@ fn gen_box(
     center: Point,
     index: usize,
     budget: &mut Budget,
-    name: &str,
 ) -> Option<GInfo> {
     let m = f64::from(margin);
     let bb = BoundingBox::new(
@@ -715,15 +713,29 @@ fn gen_box(
     }
     let w = grid(bb0.ur.x - bb0.ll.x + 2.0 * m, ssize);
     let h = grid(bb0.ur.y - bb0.ll.y + 2.0 * m, ssize);
-    let cells: Vec<(i64, i64)> = ps.into_iter().collect();
-    verbose_cells(name, &cells, w, h);
     Some(GInfo {
         // A degenerate box (an empty component's ±DBL_MAX) saturates GRID's
         // double-to-int conversion; C's int sum then wraps.
         perim: w.wrapping_add(h),
-        cells,
+        cells: ps.into_iter().collect(),
         index,
     })
+}
+
+/// genBox's `Verbose > 2` dump of the cells of `info`, made from `bb0`, named `name()`.
+fn verbose_box_cells(
+    name: impl FnOnce() -> String,
+    bb0: &BoundingBox,
+    ssize: i32,
+    margin: u32,
+    info: &GInfo,
+) {
+    if verbose_byte() > 2 {
+        let m = 2.0 * f64::from(margin);
+        let w = grid(bb0.ur.x - bb0.ll.x + m, ssize);
+        let h = grid(bb0.ur.y - bb0.ll.y + m, ssize);
+        verbose_cells(&name(), &info.cells, w, h);
+    }
 }
 
 /// genBox's and genPoly's `Verbose > 2` dump: the cells in the PointSet's (x, y) order.
@@ -1041,7 +1053,7 @@ fn poly_graphs<P: PackGraph + ?Sized>(g: &mut P, pinfo: &PackInfo) -> Option<Vec
     }
     let bbs: Vec<BoundingBox> = (0..ng).map(|i| g.pk_bb(i)).collect();
     let step = compute_step(&bbs, pinfo.margin);
-    verbose_msg(&format!("step size = {step}\n"));
+    graphviz_pure_core::verbose_msg!("step size = {step}\n");
     if step <= 0 {
         return None;
     }
@@ -1056,8 +1068,12 @@ fn poly_graphs<P: PackGraph + ?Sized>(g: &mut P, pinfo: &PackInfo) -> Option<Vec
     let Some(infos) = (0..ng)
         .map(|i| {
             if pinfo.mode == PackMode::Graph {
-                let name = g.pk_name(i);
-                gen_box(&bbs[i], step, pinfo.margin, center, i, &mut budget, &name)
+                let b = &bbs[i];
+                let info = gen_box(b, step, pinfo.margin, center, i, &mut budget);
+                if let Some(gi) = &info {
+                    verbose_box_cells(|| g.pk_name(i), b, step, pinfo.margin, gi);
+                }
+                info
             } else {
                 gen_poly(g, i, step, pinfo, center, i, &mut budget)
             }
@@ -1144,14 +1160,14 @@ pub fn array_rects(gs: &[BoundingBox], pinfo: &PackInfo) -> Vec<Point> {
         };
         nr = ng.div_ceil(nc);
     }
-    verbose_msg(&format!(
+    graphviz_pure_core::verbose_msg!(
         "array packing: {} {nr} rows {nc} columns\n",
         if row_major {
             "row major"
         } else {
             "column major"
         }
-    ));
+    );
     let mut widths = vec![0.0f64; nc + 1];
     let mut heights = vec![0.0f64; nr + 1];
     let m = f64::from(pinfo.margin);
@@ -1326,7 +1342,7 @@ pub fn put_rects(bbs: &[BoundingBox], pinfo: &PackInfo) -> Option<Vec<Point>> {
 /// `polyRects(ng, gs, pinfo)`.
 fn poly_rects(bbs: &[BoundingBox], pinfo: &PackInfo) -> Option<Vec<Point>> {
     let step = compute_step(bbs, pinfo.margin);
-    verbose_msg(&format!("step size = {step}\n"));
+    graphviz_pure_core::verbose_msg!("step size = {step}\n");
     if step <= 0 {
         return None;
     }
@@ -1334,7 +1350,13 @@ fn poly_rects(bbs: &[BoundingBox], pinfo: &PackInfo) -> Option<Vec<Point>> {
     let Some(infos) = bbs
         .iter()
         .enumerate()
-        .map(|(i, b)| gen_box(b, step, pinfo.margin, Point::default(), i, &mut budget, ""))
+        .map(|(i, b)| {
+            let info = gen_box(b, step, pinfo.margin, Point::default(), i, &mut budget);
+            if let Some(gi) = &info {
+                verbose_box_cells(String::new, b, step, pinfo.margin, gi);
+            }
+            info
+        })
         .collect::<Option<Vec<GInfo>>>()
     else {
         warn_too_large();
@@ -1381,9 +1403,9 @@ mod tests {
         let step = compute_step(&[huge, small], 8);
         assert_eq!(step, i32::MAX);
         let mut budget = Budget::for_step(step);
-        assert!(gen_box(&huge, step, 8, Point::default(), 0, &mut budget, "").is_none());
+        assert!(gen_box(&huge, step, 8, Point::default(), 0, &mut budget).is_none());
         let mut budget = Budget::for_step(step);
-        assert!(gen_box(&small, step, 8, Point::default(), 1, &mut budget, "").is_some());
+        assert!(gen_box(&small, step, 8, Point::default(), 1, &mut budget).is_some());
     }
 
     /// Issue #250: C packs the edge of `n1 [pos="-1e12,-1e15!"]`, about 3.4e7 cells at a

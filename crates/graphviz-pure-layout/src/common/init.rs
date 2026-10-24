@@ -256,7 +256,11 @@ impl<'a> LGraph<'a> {
             shape.apply_geometry(&geom);
             let (lw, rw, ht) = geom.nodesize(false);
             let xlabel = geom.xlabel.as_ref().map(|l| TextLabel {
-                text: nd.attrs.get("xlabel").cloned().unwrap_or_default(),
+                // lp->text: what addXLabels' `-v2` trace prints
+                text: graphviz_pure_geom::label_text(
+                    l,
+                    nd.attrs.get("xlabel").map_or("", String::as_str),
+                ),
                 dimen: l.dimen,
                 pos: Point::default(),
                 set: false,

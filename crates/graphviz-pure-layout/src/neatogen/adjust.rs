@@ -8,7 +8,7 @@
 
 use crate::common::types::{LGraph, Sub};
 use crate::common::utils::{map_bool, mapbool};
-use graphviz_pure_core::diag::{fmt_f, verbose_msg};
+use graphviz_pure_core::diag::fmt_f;
 use graphviz_pure_core::math;
 use graphviz_pure_core::strtod::{sscanf, strtod_rest};
 
@@ -147,12 +147,12 @@ pub fn sep_factor(g: &LGraph<'_>) -> Expand {
 
 /// sepFactor's and esepFactor's `-v` line.
 fn verbose_separation(what: &str, e: &Expand) {
-    verbose_msg(&format!(
+    graphviz_pure_core::verbose_msg!(
         "{what} separation: add={} ({},{})\n",
         i32::from(e.do_add),
         fmt_f(e.x, 6),
         fmt_f(e.y, 6)
-    ));
+    );
 }
 
 /// `esepFactor(g)`: edge separation used to grow obstacles for routing.
@@ -212,12 +212,12 @@ pub fn graph_adjust_mode(g: &LGraph<'_>, dflt: Option<&str>) -> AdjustData {
 pub fn get_adjust_mode(g: &LGraph<'_>, s: &str) -> AdjustData {
     let dp = adjust_mode(g, s);
     // dp->value is left uninitialised outside prism; the port prints 0
-    verbose_msg(&format!(
+    graphviz_pure_core::verbose_msg!(
         "overlap: {} value {} scaling {}\n",
         mode_print(dp.mode),
         dp.value,
         fmt_f(dp.scaling, 4)
-    ));
+    );
     dp
 }
 
@@ -367,7 +367,7 @@ fn simple_scale(g: &mut LGraph<'_>, sub: &Sub) -> bool {
     if sy == 1.0 && sx == 1.0 {
         return false;
     }
-    verbose_msg(&format!("scale = ({},{})\n", fmt_f(sx, 3), fmt_f(sy, 3)));
+    graphviz_pure_core::verbose_msg!("scale = ({},{})\n", fmt_f(sx, 3), fmt_f(sy, 3));
     for &n in &sub.nodes {
         g.nodes[n].pos[0] *= sx;
         g.nodes[n].pos[1] *= sy;
@@ -385,11 +385,7 @@ pub fn remove_overlap_with(g: &mut LGraph<'_>, sub: &Sub, am: &AdjustData) -> bo
     if am.mode == AdjustMode::None {
         return nret;
     }
-    verbose_msg(&format!(
-        "Adjusting {} using {}\n",
-        sub.name,
-        mode_print(am.mode)
-    ));
+    graphviz_pure_core::verbose_msg!("Adjusting {} using {}\n", sub.name, mode_print(am.mode));
     let ret = match am.mode {
         AdjustMode::NScale => super::scadjust::sc_adjust(g, sub, 1),
         AdjustMode::ScaleXY => super::scadjust::sc_adjust(g, sub, 0),

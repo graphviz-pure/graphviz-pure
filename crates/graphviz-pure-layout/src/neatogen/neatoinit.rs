@@ -357,25 +357,25 @@ fn majorization(
         };
         let s = g.gattr("diredgeconstraints");
         opt.diredges = if mapbool(s) {
-            graphviz_pure_core::diag::verbose_msg("Generating Edge Constraints...\n");
+            graphviz_pure_core::verbose_msg!("Generating Edge Constraints...\n");
             1
         } else if s.is_some_and(|s| {
             s.as_bytes()
                 .get(..4)
                 .is_some_and(|p| p.eq_ignore_ascii_case(b"hier"))
         }) {
-            graphviz_pure_core::diag::verbose_msg("Generating DiG-CoLa Edge Constraints...\n");
+            graphviz_pure_core::verbose_msg!("Generating DiG-CoLa Edge Constraints...\n");
             2
         } else {
             0
         };
         opt.noverlap = match am.mode {
             super::adjust::AdjustMode::Ipsep => {
-                graphviz_pure_core::diag::verbose_msg("Generating Non-overlap Constraints...\n");
+                graphviz_pure_core::verbose_msg!("Generating Non-overlap Constraints...\n");
                 1
             }
             super::adjust::AdjustMode::Vpsc => {
-                graphviz_pure_core::diag::verbose_msg("Removing overlaps as postprocess...\n");
+                graphviz_pure_core::verbose_msg!("Removing overlaps as postprocess...\n");
                 2
             }
             _ => 0,
@@ -387,11 +387,11 @@ fn majorization(
             let d = 2.0 * (super::adjust::DFLT_MARGIN / 72.0);
             (d, d)
         };
-        graphviz_pure_core::diag::verbose_msg(&format!(
+        graphviz_pure_core::verbose_msg!(
             "gap={},{}\n",
             graphviz_pure_core::diag::fmt_f(opt.gap.0, 6),
             graphviz_pure_core::diag::fmt_f(opt.gap.1, 6)
-        ));
+        );
         super::cola::stress_majorization_cola(
             g,
             p,
@@ -986,6 +986,12 @@ fn neato_layout_nop(graph: &mut Graph) {
     let decl = PosDecl::of(&full);
     let g0 = neato_init_node_edge(&full, ndim, inputscale, decl);
     add_z(&g0, decl.z, graph);
+    // init_nop's scan_graph, before `Reduce` deletes nodes
+    graphviz_pure_core::verbose_msg!(
+        "Scanning graph {}, {} nodes\n",
+        graph.root_name(),
+        graph.nodes.len()
+    );
     let reduced;
     let mut g = match super::stuff::reduce_set(graph) {
         None => g0,

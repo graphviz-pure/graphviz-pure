@@ -1001,9 +1001,9 @@ pub fn multilevel_spring_electrical_embedding(
             || (ctrl.tscheme == QUAD_TREE_HYBRID && ga.m > QUAD_TREE_HYBRID_SIZE)
         {
             if ctrl.tscheme == QUAD_TREE_HYBRID && ga.m > 10 {
-                graphviz_pure_core::diag::verbose_msg(&format!(
+                graphviz_pure_core::verbose_msg!(
                     "QUAD_TREE_HYBRID, size larger than {QUAD_TREE_HYBRID_SIZE}, switch to fast quadtree"
-                ));
+                );
             }
             spring_electrical_embedding_fast(dim, ga, ctrl, &mut xc, flag);
         } else {
@@ -1030,7 +1030,7 @@ pub fn multilevel_spring_electrical_embedding(
     x[..xc.len()].copy_from_slice(&xc);
 
     post_process_smoothing(dim, &mut a, ctrl, x);
-    graphviz_pure_core::diag::verbose_msg(&format!("ctrl->overlap={}\n", ctrl.overlap));
+    graphviz_pure_core::verbose_msg!("ctrl->overlap={}\n", ctrl.overlap);
 
     if dim == 2 {
         pcp_rotate(n, dim, x);

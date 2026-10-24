@@ -92,7 +92,7 @@ fn find_blocks(c: &mut Circ, g: &CGraph) {
     }
     let root = root.unwrap_or_else(|| g.first_node().expect("non-empty component"));
     let name = c.names.get(root).map_or("", String::as_str);
-    graphviz_pure_core::diag::gv_info("blocktree.c", 133, &format!("root = {name}"));
+    graphviz_pure_core::gv_info!("blocktree.c", 133, "root = {name}");
     let mut stk = Vec::new();
     dfs(c, g, root, true, &mut stk);
 }

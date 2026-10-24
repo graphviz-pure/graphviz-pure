@@ -1,0 +1,12 @@
+fontname: "Times-Roman" resolved to: [internal hard-coded]
+  margin 8
+pack info:
+  mode   node
+  size   0
+  flags  0
+[Graphviz] blocktree.c:133: TS root = a
+overlap: none value V scaling 0.0000
+step size = 13
+Edge separation: add=1 (3.200000,3.200000)
+Creating edges using line segments
+[Graphviz] emit.c:4323: TS gvRenderJobs %1: T secs.

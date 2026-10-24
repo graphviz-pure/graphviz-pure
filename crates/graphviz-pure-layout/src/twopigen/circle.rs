@@ -295,10 +295,10 @@ pub fn circle_layout(
         None => find_center_node(g, sg, r)?,
     };
     let max_n_steps_to_center = set_parent_nodes(g, sg, r, center);
-    graphviz_pure_core::diag::verbose_msg(&format!(
+    graphviz_pure_core::verbose_msg!(
         "root = {} max steps to root = {max_n_steps_to_center}\n",
         g.node_agnameof(center).name
-    ));
+    );
     if max_n_steps_to_center == u64::MAX {
         // C leaves the positions untouched.
         graphviz_pure_core::diag::agerrorf(

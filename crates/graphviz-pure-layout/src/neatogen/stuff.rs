@@ -8,9 +8,7 @@ use super::linalg::{solve, solve_circuit};
 use super::stress::has_pos;
 use super::{INIT_RANDOM, INIT_REGULAR, INIT_SELF, MODE_KK, MODE_SGD, NeatoParams};
 use crate::common::types::{LGraph, P_SET, Sub};
-use graphviz_pure_core::diag::{
-    elapsed_sec, fmt_f, fprintf_stderr, start_timer, verbose_msg, verbose_on,
-};
+use graphviz_pure_core::diag::{elapsed_sec, fmt_f, fprintf_stderr, start_timer, verbose_on};
 use graphviz_pure_core::math;
 use graphviz_pure_core::strtod::{atof, scan_lf};
 
@@ -132,7 +130,7 @@ pub fn scan_graph_mode(
     p: &mut NeatoParams,
 ) -> (usize, Option<KkState>) {
     let nv = sub.nodes.len();
-    verbose_msg(&format!("Scanning graph {}, {nv} nodes\n", sub.name));
+    graphviz_pure_core::verbose_msg!("Scanning graph {}, {nv} nodes\n", sub.name);
     let ne = g.nedges(sub);
     let len_declared = g.edge_attr_declared("len");
     let getdouble = |g: &LGraph<'_>, name: &str, v: &mut f64| {
@@ -222,7 +220,7 @@ pub fn nop_check_edge_lens(graph: &graphviz_pure_core::Graph) {
 
 /// `initial_positions(G, nG)` for KK.
 fn initial_positions(g: &mut LGraph<'_>, sub: &Sub, ng: usize, p: &NeatoParams) {
-    verbose_msg("Setting initial positions\n");
+    graphviz_pure_core::verbose_msg!("Setting initial positions\n");
     let init = super::neatoinit::check_start(g, sub, ng, INIT_RANDOM, p);
     if init == INIT_REGULAR {
         return;
@@ -293,7 +291,7 @@ fn diffeq_model(g: &LGraph<'_>, sub: &Sub, kk: &mut KkState, ng: usize) {
             }
         }
     }
-    verbose_msg(&format!("{} sec\n", fmt_f(elapsed_sec(), 2)));
+    graphviz_pure_core::verbose_msg!("{} sec\n", fmt_f(elapsed_sec(), 2));
 }
 
 /// `total_e(G, nG)`: twice the energy of the system.
@@ -513,7 +511,7 @@ pub fn shortest_path(
             }
         }
     }
-    verbose_msg(&format!("{} sec\n", fmt_f(elapsed_sec(), 2)));
+    graphviz_pure_core::verbose_msg!("{} sec\n", fmt_f(elapsed_sec(), 2));
 }
 
 fn heapup(g: &mut LGraph<'_>, heap: &mut [usize], v: usize) {

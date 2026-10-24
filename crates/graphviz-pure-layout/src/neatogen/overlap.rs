@@ -10,7 +10,7 @@ use crate::common::utils::map_bool;
 use crate::cutil::qsort_by;
 use crate::sfdpgen::post_process::{RelativePositionConstraints, StressMajorizationSmoother};
 use crate::sparse::{Format, MACHINEACC, SparseMatrix, distance};
-use graphviz_pure_core::diag::{fmt_f, fmt_g, fprintf_stderr, verbose_msg, verbose_on};
+use graphviz_pure_core::diag::{fmt_f, fmt_g, fprintf_stderr, verbose_on};
 use graphviz_pure_core::math;
 
 /// `call_tri(n, x)`: Delaunay graph plus the diagonal, symmetrized.
@@ -129,7 +129,7 @@ fn get_overlap_graph(
     }
     let mut b = a.from_coordinate_format();
     let c = b.symmetrize(false);
-    verbose_msg(&format!("found {} clashes\n", c.nz));
+    graphviz_pure_core::verbose_msg!("found {} clashes\n", c.nz);
     c
 }
 
@@ -208,7 +208,7 @@ fn overlap_scaling(
     } else {
         scale_coord(&mut x[..n], scale_sta);
         if !has_overlap(dim, m, x, width) {
-            verbose_msg(&format!(" shrinking with {} works\n", fmt_f(scale_sta, 6)));
+            graphviz_pure_core::verbose_msg!(" shrinking with {} works\n", fmt_f(scale_sta, 6));
             return;
         }
         scale_coord(&mut x[..n], 1.0 / scale_sta);
@@ -233,11 +233,11 @@ fn overlap_scaling(
         if !cont {
             break;
         }
-        verbose_msg(&format!(
+        graphviz_pure_core::verbose_msg!(
             "in overlap_scaling iter={iter}, maxiter={maxiter}, scaling bracket: {{{},{}}}\n",
             fmt_f(scale_sta, 6),
             fmt_f(scale_sto, 6)
-        ));
+        );
         let scale = 0.5 * (scale_sta + scale_sto);
         scale_coord(&mut x[..n], scale);
         let overlap = has_overlap(dim, m, x, width);
@@ -284,10 +284,10 @@ fn overlap_smoother_new(
     };
     if *max_overlap < 1.0 && shrink {
         let scale_sta = (*max_overlap * 1.0001).min(1.0);
-        verbose_msg(&format!(
+        graphviz_pure_core::verbose_msg!(
             " no overlap (overlap = {}), rescale to shrink\n",
             fmt_f(*max_overlap - 1.0, 6)
-        ));
+        );
         overlap_scaling(dim, m, x, width, scale_sta, 1.0, 0.0001, 15);
         *max_overlap = 1.0;
         return sm;
@@ -345,11 +345,11 @@ fn average_edge_length(a: &mut SparseMatrix, dim: usize, coord: &[f64]) -> f64 {
 
 /// scale_to_edge_length's `-v` line.
 fn verbose_edge_length(dist: f64, avg_label_size: f64) {
-    verbose_msg(&format!(
+    graphviz_pure_core::verbose_msg!(
         "avg edge len={} avg_label-size= {}\n",
         fmt_f(dist, 6),
         fmt_f(avg_label_size, 6)
-    ));
+    );
 }
 
 /// `print_bounding_box(n, dim, x)`.
@@ -442,12 +442,12 @@ pub fn remove_overlap_el(
     let has_penalty_terms = constraints.is_some();
     let mut i = 0;
     let report = |i: i32, neighborhood_only: bool, max_overlap: f64, min_overlap: f64| {
-        verbose_msg(&format!(
+        graphviz_pure_core::verbose_msg!(
             "overlap removal neighbors only?= {} iter -- {i}, overlap factor = {} underlap factor = {}\n",
             i32::from(neighborhood_only),
             fmt_g(max_overlap - 1.0, 6),
             fmt_g(min_overlap, 6)
-        ));
+        );
     };
     while i < ntry {
         if verbose_on() {
@@ -484,7 +484,7 @@ pub fn remove_overlap_el(
             continue;
         }
         res = sm.smooth_with(dim, x, 1, constraints);
-        verbose_msg(&format!("res = {}\n", fmt_f(res, 6)));
+        graphviz_pure_core::verbose_msg!("res = {}\n", fmt_f(res, 6));
         i += 1;
     }
     report(i, neighborhood_only, max_overlap, min_overlap);

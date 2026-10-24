@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
-# Writes crates/graphviz-pure-cli/tests/data/verbose/<engine>.txt: C Graphviz's `-v` stderr for
-# the input below, with the port's math (scripts/dot-portable-libm.sh), normalised as the
+# Writes crates/graphviz-pure-cli/tests/data/verbose/<case>.txt: C Graphviz's `-v` stderr for
+# the cases below, with the port's math (scripts/dot-portable-libm.sh), normalised as the
 # test `issue416_verbose_layout_messages_follow_c` normalises the port's: the plugin lines
 # (#298's) are dropped, and the timestamps of `[Graphviz] file:line:` lines, the timings
-# (`<n> sec`) and the uninitialised `value` of a non-prism `overlap:` line are masked.
+# (`<n> sec`), the uninitialised `value` of a non-prism `overlap:` line and `%p` addresses
+# are masked.
 #
 #   cargo build --release -p graphviz-pure-portable-libm
 #   GVBINDIR=~/src/gv-ref/lutplugins scripts/gen-verbose-data.sh
@@ -11,9 +12,24 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 OUT="$ROOT/crates/graphviz-pure-cli/tests/data/verbose"
 mkdir -p "$OUT"
-for e in dot neato fdp sfdp twopi osage patchwork; do
-  echo 'digraph{a->b; b->c; a->c; d}' |
-    "$ROOT/scripts/dot-portable-libm.sh" -v -K"$e" -Tplain 2>&1 >/dev/null |
+# name, options (the verbose level among them), input: the test runs the same cases
+cases=(
+  "dot|-v -Kdot|digraph{a->b; b->c; a->c; d}"
+  "neato|-v -Kneato|digraph{a->b; b->c; a->c; d}"
+  "fdp|-v -Kfdp|digraph{a->b; b->c; a->c; d}"
+  "sfdp|-v -Ksfdp|digraph{a->b; b->c; a->c; d}"
+  "twopi|-v -Ktwopi|digraph{a->b; b->c; a->c; d}"
+  "circo|-v -Kcirco|digraph{a->b; b->c; a->c; d}"
+  "circo-overlap|-v -Kcirco -Goverlap=false|digraph{a->b; b->c; c->a; d->e}"
+  "osage|-v -Kosage|digraph{a->b; b->c; a->c; d}"
+  "patchwork|-v -Kpatchwork|digraph{a->b; b->c; a->c; d}"
+  "fdp-v2|-v2 -Kfdp|graph{subgraph cluster_a{a--b} b--c; d [xlabel=\"d-\N\"]}"
+)
+for c in "${cases[@]}"; do
+  IFS='|' read -r name opts input <<<"$c"
+  # shellcheck disable=SC2086
+  echo "$input" |
+    "$ROOT/scripts/dot-portable-libm.sh" $opts -Tplain 2>&1 >/dev/null |
     python3 -I -c '
 import re, sys
 skip = re.compile(r"^(\S+ - graphviz.* version |libdir = |Activated plugin library|Loading /|The plugin configuration file|\t\S|\t\twas successfully|Demand loading of plugins|    (render|layout|textlayout|device|loadimage)\t:|Using (render|device|layout|textlayout|loadimage): )")
@@ -25,6 +41,7 @@ for l in sys.stdin.read().split("\n"):
     m = re.match(r"^overlap: (.*) value (-?\d+) scaling (\S+)$", l)
     if m and not m.group(1).startswith("prism"):
         l = "overlap: %s value V scaling %s" % (m.group(1), m.group(3))
+    l = re.sub(r"\b0x[0-9a-f]+\b", "PTR", l)
     print(l)
-' | sed -e '$ { /^$/d; }' > "$OUT/$e.txt"
+' | sed -e '$ { /^$/d; }' > "$OUT/$name.txt"
 done

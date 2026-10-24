@@ -950,7 +950,7 @@ impl Fdp<'_, '_> {
     }
 
     fn layout(&mut self, g: Option<usize>) -> std::result::Result<(), ()> {
-        graphviz_pure_core::diag::verbose_msg(&format!("layout {}\n", self.gname(g)));
+        graphviz_pure_core::verbose_msg!("layout {}\n", self.gname(g));
         for n in self.members_of(g) {
             self.dnode[n] = None;
         }
@@ -1044,7 +1044,7 @@ impl Fdp<'_, '_> {
         for dn in &dg.nodes {
             self.heap.free(dn.addr);
         }
-        graphviz_pure_core::diag::verbose_msg(&format!("end {}\n", self.gname(g)));
+        graphviz_pure_core::verbose_msg!("end {}\n", self.gname(g));
         Ok(())
     }
 

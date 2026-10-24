@@ -1252,7 +1252,7 @@ pub fn adjust(g: &mut LGraph<'_>, sub: &Sub, mode: AdjustMode) -> bool {
                     break;
                 }
             }
-            graphviz_pure_core::diag::verbose_msg(&format!("Number of iterations = {iter_cnt}\n"));
+            graphviz_pure_core::verbose_msg!("Number of iterations = {iter_cnt}\n");
             true
         }
     } else {
@@ -1287,17 +1287,8 @@ pub fn adjust(g: &mut LGraph<'_>, sub: &Sub, mode: AdjustMode) -> bool {
                     win = [win[0] - xd, win[1] + xd, win[2] - yd, win[3] + yd];
                 }
             }
-            let info = graphviz_pure_core::diag::gv_info;
-            info(
-                "adjust.c",
-                456,
-                &format!("Number of iterations = {iter_cnt}"),
-            );
-            info(
-                "adjust.c",
-                457,
-                &format!("Number of increases = {increase_cnt}"),
-            );
+            graphviz_pure_core::gv_info!("adjust.c", 456, "Number of iterations = {iter_cnt}");
+            graphviz_pure_core::gv_info!("adjust.c", 457, "Number of increases = {increase_cnt}");
             true
         }
     };

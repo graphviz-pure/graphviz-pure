@@ -142,10 +142,7 @@ pub fn sc_adjust(g: &mut LGraph<'_>, sub: &Sub, equal: i32) -> bool {
         if c == 0.0 {
             return false;
         }
-        graphviz_pure_core::diag::verbose_msg(&format!(
-            "compress {} \n",
-            graphviz_pure_core::diag::fmt_g(c, 6)
-        ));
+        graphviz_pure_core::verbose_msg!("compress {} \n", graphviz_pure_core::diag::fmt_g(c, 6));
         Point::new(c, c)
     } else {
         let mut aarr = mk_overlap_set(&nl);
@@ -158,11 +155,11 @@ pub fn sc_adjust(g: &mut LGraph<'_>, sub: &Sub, equal: i32) -> bool {
         } else {
             compute_scale_xy(&mut aarr)
         };
-        graphviz_pure_core::diag::verbose_msg(&format!(
+        graphviz_pure_core::verbose_msg!(
             "scale by {},{} \n",
             graphviz_pure_core::diag::fmt_g(s.x, 6),
             graphviz_pure_core::diag::fmt_g(s.y, 6)
-        ));
+        );
         s
     };
     for p in &nl {
