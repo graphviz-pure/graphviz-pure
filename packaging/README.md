@@ -1,7 +1,9 @@
 # Distribution packages
 
 Recipes for channels that are submitted by hand once a release exists. Nothing here is
-built or published by this repository's workflows. The checksums are placeholders until the
+built or published by this repository's workflows, except [`wasmer/`](wasmer): the manifest and
+README of the Wasmer package, which `release.yml` publishes with each release
+([docs/releasing.md](../docs/releasing.md#wasmer-namespace-graphviz-pure)). The checksums are placeholders until the
 release is out; fill them in only from verified downloads, as described below.
 
 | channel | files | builds from | submitted to |

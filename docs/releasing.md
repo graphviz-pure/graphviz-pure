@@ -79,7 +79,8 @@ every command below.
 `scripts/release-verify.sh X.Y.Z` checks, and prints pass or fail for, each channel: the GitHub
 release's assets against their attestations and `SHA256SUMS`; the eight publishable crates on
 crates.io (`graphviz-pure-wasm`, `-diff` and `-portable-libm` have `publish = false`); JSR's
-`meta.json`; the image's attestation, and `X.Y` and `latest` pointing at it where this version
+`meta.json`; the Wasmer package, which must contain the module of the release's attested WASI
+archive byte for byte; the image's attestation, and `X.Y` and `latest` pointing at it where this version
 should hold them (not for a backport to an older minor line, nor `latest` for anything but the
 newest version); npm's
 `latest` dist-tag and `npm audit signatures`; the tap's formula, the bucket's manifest and
@@ -102,9 +103,11 @@ missing.
 toolchain and `cargo build --locked`:
 
 - it builds `graphviz-pure` for six targets (Linux x86-64 and arm64 as static musl binaries,
-  macOS arm64 and x86-64, Windows x86-64 and arm64) and the npm package;
-- it requires every binary and the npm package to reproduce the gallery samples byte for byte
-  (`scripts/release-smoke.py`, `scripts/release-smoke-wasm.mjs`);
+  macOS arm64 and x86-64, Windows x86-64 and arm64), a WASI module (`wasm32-wasip1`, packaged as
+  `graphviz-pure-X.Y.Z-wasm32-wasip1.tar.gz` holding `graphviz-pure.wasm`) and the npm package;
+- it requires every binary, the WASI module (run by a pinned, checksum-verified Wasmer) and the
+  npm package to reproduce the gallery samples byte for byte (`scripts/release-smoke.py`,
+  `scripts/release-smoke-wasm.mjs`);
 - it packages deterministic archives (`scripts/release-package.py`), writes `SHA256SUMS` and
   attests the build provenance of every file (Sigstore, stored on GitHub);
 - it checks that every archive and the npm tarball (and so the JSR package) carry LICENSE,
@@ -118,9 +121,10 @@ toolchain and `cargo build --locked`:
 - it installs the Windows zips with Scoop on x86-64 and on arm64, from a manifest written like
   the bucket's, checks that each got its own architecture's exe, and runs the same checks
   through Scoop's shim;
-- it dry-runs the JSR and npm publishes.
+- it dry-runs the JSR and npm publishes, and builds and runs the Wasmer package
+  (`scripts/wasmer-package.sh`, `wasmer package build`; `wasmer publish --dry-run` needs a login).
 
-On a tag push, the five publishing jobs then wait together for one approval of the `release`
+On a tag push, the six publishing jobs then wait together for one approval of the `release`
 environment, and each publishes on its own:
 
 - `github-release` creates the GitHub release with all files;
@@ -136,7 +140,14 @@ environment, and each publishes on its own:
   attests its digest (the attestation is stored next to the image in the registry), then points
   `X.Y` and `latest` at it if it is the newest stable `X.Y.*` and the newest stable version among
   the image's tags (the registry's tags, not the GitHub release). A pre-release gets only its own
-  tag.
+  tag;
+- `wasmer` publishes the attested WASI archive's module to the Wasmer registry as
+  `graphviz-pure/graphviz-pure` (`scripts/wasmer-package.sh` adds `packaging/wasmer/wasmer.toml`
+  and its README). Wasmer has no trusted publishing, so this job uses an API token, the
+  `release` environment's `WASMER_TOKEN` secret ([setup](#wasmer-namespace-graphviz-pure)), and no
+  staging: the version is live when the job finishes. Without the secret, and for a pre-release
+  (the registry would show it as the latest version), the job publishes nothing and succeeds,
+  and `verify` leaves the channel out.
 
 Then `verify` checks what they published (`scripts/release-verify.sh --ci`). Within hours,
 `graphviz-pure/homebrew-tap` and `graphviz-pure/scoop-bucket` pull the release, verify each
@@ -153,7 +164,7 @@ push, and the `release` environment accepts only `v*` tags.
 
 Through 0.1.2, the registries' jobs waited for the GitHub release, so a release took two approvals:
 the GitHub release, then the publishing jobs. The owner could look at the published GitHub
-release before anything irreversible went to crates.io or JSR. Now one approval starts all five
+release before anything irreversible went to crates.io or JSR. Now one approval starts all six
 jobs at once, and the checks that the second look stood for run before the approval instead:
 every smoke test of the run, a dry run of the same workflow on the same commit, and the readiness
 checklist. npm still needs its own 2FA approval. What is given up: a registry can publish even if
@@ -175,6 +186,8 @@ again.
   others, in dependency order; if all are there, it publishes nothing.
 - `npm`, `jsr`: a re-run is safe if the job failed before publishing. If the version went up,
   there is nothing to re-run.
+- `wasmer`: safe to re-run. A version already in the registry is left as it is (versions there
+  cannot be replaced), and `release-verify.sh` checks that it holds the attested module.
 - `ghcr`: safe to re-run. Pushing the same image again changes nothing, and `X.Y`/`latest`
   only ever move forward: they follow the highest stable version among the image's tags on
   ghcr.io, so a `v*` tag whose release was rejected never holds them.
@@ -295,6 +308,39 @@ after the first release:
    `graphviz-pure/graphviz-pure` (a publishing repository gets the Admin role automatically), and
    the package should show this repository as its source (the image's
    `org.opencontainers.image.source` label).
+
+### Wasmer (namespace `graphviz-pure`)
+
+Wasmer has no trusted publishing (OIDC), so this is the one channel with a stored token. It is a
+secret of the `release` environment: only the `wasmer` job's publish step reads it, and only
+after the release is approved.
+
+1. Create an account at https://wasmer.io/signup (signing in with GitHub works). A dedicated
+   account for releases is better than a personal one: Wasmer's tokens are not limited to one
+   namespace.
+2. Create the namespace with the Wasmer CLI (`brew install wasmer`, or https://docs.wasmer.io/install):
+   `wasmer login` (opens the browser), then `wasmer namespace create graphviz-pure`, and check it
+   with `wasmer namespace get graphviz-pure`. The package `graphviz-pure/graphviz-pure` is
+   created by the first publish.
+3. https://wasmer.io/settings/access-tokens → create a token named `graphviz-pure release`. Copy
+   it; do not paste it anywhere else.
+4. GitHub: https://github.com/graphviz-pure/graphviz-pure/settings/environments → **release** →
+   **Environment secrets** → **Add environment secret** → name `WASMER_TOKEN`, value the token →
+   **Add secret**. (Or `gh secret set WASMER_TOKEN --env release --repo graphviz-pure/graphviz-pure`,
+   which prompts for the value without echoing it.)
+5. Renew it before it expires, or when a maintainer leaves: create the new token, replace the
+   secret, delete the old token.
+
+Until the secret exists, the `wasmer` job publishes nothing and succeeds with a notice ("Wasmer
+is not set up"), `verify` leaves the channel out, and `scripts/release-verify.sh` reports it as
+not set up for as long as the registry has no `graphviz-pure/graphviz-pure`. Once it is set,
+the next release publishes; to publish a release that already ran, open its run's
+**Publish to Wasmer** job and choose **Re-run this job** (not "Re-run all jobs": the other
+channels are already published). Pre-releases are never published to Wasmer.
+
+Users run `wasmer run graphviz-pure/graphviz-pure -- -Tsvg < graph.gv > graph.svg`; the program
+sees only directories mapped with `--volume` ([`packaging/wasmer/README.md`](../packaging/wasmer/README.md)).
+Other WASI runtimes take the release's `graphviz-pure-X.Y.Z-wasm32-wasip1.tar.gz`.
 
 ### Homebrew and Scoop
 

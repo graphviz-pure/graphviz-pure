@@ -54,7 +54,7 @@ jobs:
           persist-credentials: false
       - name: Install the stable Rust toolchain (rustup is on every runner)
         shell: bash
-        run: rustup toolchain install stable --profile minimal --component rustfmt --component clippy --target wasm32-unknown-unknown && rustup default stable
+        run: rustup toolchain install stable --profile minimal --component rustfmt --component clippy --target wasm32-unknown-unknown --target wasm32-wasip1 && rustup default stable
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
       - name: Check formatting
         run: cargo fmt --all -- --check
@@ -70,6 +70,9 @@ jobs:
         run: cargo test --workspace
       - name: Check WASM Target
         run: cargo check --target wasm32-unknown-unknown -p graphviz-pure-wasm
+      # The command line's WASI build, which releases publish to Wasmer (release.yml's wasi job).
+      - name: Check WASI Target
+        run: cargo check --target wasm32-wasip1 -p graphviz-pure-cli
 
   wasm-e2e:
     name: WASM end-to-end (Node)

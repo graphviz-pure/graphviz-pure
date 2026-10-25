@@ -16,12 +16,14 @@ name: Release
 # - Every artifact gets a signed build-provenance attestation (Sigstore), verifiable with
 #   `gh attestation verify FILE --repo graphviz-pure/graphviz-pure`.
 # - Publishing happens only in jobs bound to the `release` environment, which needs a
-#   maintainer's approval and accepts only v* tags. The five publishing jobs wait on the same
+#   maintainer's approval and accepts only v* tags. The six publishing jobs wait on the same
 #   jobs, so they wait for the environment together and one approval starts them all (see the
 #   crates-io job). The trusted publishers of crates.io and npm are bound to this environment. crates.io, npm and JSR are published with
 #   tokenless OIDC (trusted publishing; JSR's GitHub Actions publishing): no registry token
-#   exists anywhere. The container image goes to ghcr.io with the job's own GITHUB_TOKEN
-#   (packages: write in that job only). Every token these jobs hold lives for one job.
+#   exists for them. The container image goes to ghcr.io with the job's own GITHUB_TOKEN
+#   (packages: write in that job only). Every token these jobs hold lives for one job, except
+#   one: Wasmer has no trusted publishing, so the wasmer job publishes with a Wasmer API token,
+#   a secret of the `release` environment that only that job reads.
 # - The Homebrew tap, the Scoop bucket and the website pull new releases themselves and verify
 #   the attestations before updating; this repository holds no credential for them.
 # - The verify job, with no environment and a read-only token, checks what the publishing jobs
@@ -50,6 +52,11 @@ env:
   DENO_SHA256: c6527f24f4b16031d3ae4fa9f658d5f11534c8d84ce7dc8502420280919c3490
   # Scoop v0.6.0, for the Scoop manifest smoke test.
   SCOOP_COMMIT: e6aa3b366bdee8ed138c1e0f7b85192ebdd35d0f
+  # Wasmer runs the WASI build's smoke test and publishes it. Wasmer publishes no checksums or
+  # attestations: this is the SHA-256 of that release's wasmer-linux-amd64.tar.gz, as downloaded
+  # when it was pinned.
+  WASMER_VERSION: "7.5.0"
+  WASMER_SHA256: 23f99818deaad93859f8bb8292af81f0c39f25aea19eaccfb72fc7c9e8a3fae9
 
 jobs:
   check:
@@ -228,6 +235,70 @@ jobs:
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: npm-package
+          path: dist/
+          if-no-files-found: error
+
+  # The WASI build (wasm32-wasip1), for Wasmer and other WebAssembly runtimes: a release archive
+  # like the binaries', holding graphviz-pure.wasm, smoke-tested under the pinned Wasmer it is
+  # published to. The Wasmer package the wasmer job publishes is built here from that archive,
+  # so a dry run checks its manifest.
+  wasi:
+    name: Build wasm32-wasip1
+    needs: check
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    defaults:
+      run:
+        shell: bash # -eo pipefail: the wasmer runs below are piped
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install Rust ${{ env.RUST_VERSION }}
+        run: |
+          rustup toolchain install "$RUST_VERSION" --profile minimal --target wasm32-wasip1
+          rustup default "$RUST_VERSION"
+      - name: Build
+        run: cargo build --release --locked --target wasm32-wasip1 -p graphviz-pure-cli
+      - name: Install Wasmer ${{ env.WASMER_VERSION }}
+        working-directory: ${{ runner.temp }}
+        run: |
+          curl --fail --silent --show-error --location --proto '=https' --output wasmer.tar.gz \
+            "https://github.com/wasmerio/wasmer/releases/download/v$WASMER_VERSION/wasmer-linux-amd64.tar.gz"
+          echo "$WASMER_SHA256  wasmer.tar.gz" | sha256sum --check --strict
+          mkdir wasmer && tar -xzf wasmer.tar.gz -C wasmer
+          echo "WASMER_DIR=$RUNNER_TEMP/wasmer-home" >> "$GITHUB_ENV"
+      # The checkout is mapped into the sandbox at its own path, so the samples' paths work there.
+      - name: Smoke test (version, byte-identical gallery samples)
+        env:
+          VERSION: ${{ needs.check.outputs.version }}
+        run: |
+          cat > "$RUNNER_TEMP/graphviz-pure" <<EOF
+          #!/bin/sh
+          exec "$RUNNER_TEMP/wasmer/bin/wasmer" run --volume "$PWD:$PWD" "$PWD/target/wasm32-wasip1/release/graphviz-pure.wasm" -- "\$@"
+          EOF
+          chmod +x "$RUNNER_TEMP/graphviz-pure"
+          "$RUNNER_TEMP/graphviz-pure" -V 2>&1 | grep -F "graphviz-pure version $VERSION ("
+          python3 scripts/release-smoke.py "$RUNNER_TEMP/graphviz-pure"
+      - name: Package
+        env:
+          VERSION: ${{ needs.check.outputs.version }}
+        run: |
+          SOURCE_DATE_EPOCH=$(git log -1 --format=%ct)
+          export SOURCE_DATE_EPOCH
+          python3 scripts/release-package.py wasm32-wasip1 "$VERSION" dist
+          python3 scripts/check-package-notices.py dist/graphviz-pure-*
+      # What the wasmer job will publish, built and run from the archive (no token here).
+      - name: Wasmer package
+        env:
+          VERSION: ${{ needs.check.outputs.version }}
+        run: |
+          scripts/wasmer-package.sh "dist/graphviz-pure-$VERSION-wasm32-wasip1.tar.gz" "$RUNNER_TEMP/wasmer-package"
+          "$RUNNER_TEMP/wasmer/bin/wasmer" package build "$RUNNER_TEMP/wasmer-package" -o "$RUNNER_TEMP/graphviz-pure.webc"
+          echo 'digraph { a -> b }' | "$RUNNER_TEMP/wasmer/bin/wasmer" run "$RUNNER_TEMP/graphviz-pure.webc" -- -Tcanon | grep -qF 'a -> b;'
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: bin-wasm32-wasip1
           path: dist/
           if-no-files-found: error
 
@@ -416,7 +487,7 @@ jobs:
 
   attest:
     name: Checksums and provenance
-    needs: [binaries, npm-package]
+    needs: [binaries, npm-package, wasi]
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -486,7 +557,7 @@ jobs:
   # asks for one approval per environment for the jobs waiting on it at that moment, so jobs that
   # waited on github-release would wait for a second approval. The trade-off: the registries no
   # longer wait for the GitHub release to exist, and a failed github-release job no longer holds
-  # them back (each job is re-runnable on its own, see docs/releasing.md). Keep the five `needs:`
+  # them back (each job is re-runnable on its own, see docs/releasing.md). Keep the six `needs:`
   # lists identical, or the approval splits in two again.
   crates-io:
     name: Publish to crates.io
@@ -592,6 +663,86 @@ jobs:
         working-directory: ${{ runner.temp }}/jsr/package
         run: '"$RUNNER_TEMP/deno" publish'
 
+  # The attested wasm32-wasip1 archive, published to the Wasmer registry as
+  # graphviz-pure/graphviz-pure by the pinned, checksum-verified Wasmer. Wasmer has no trusted
+  # publishing: WASMER_TOKEN is an API token of the namespace's owner, a secret of the `release`
+  # environment, so no other job and no run without the approval can read it, and only the
+  # publish step holds it. Wasmer has no staging: the version is live when the job finishes.
+  # The job publishes nothing, and succeeds with `published=false` so that the verify job leaves
+  # the channel out, when the secret is not set up yet (docs/releasing.md) and for a pre-release
+  # (the registry would show it as the latest version).
+  wasmer:
+    name: Publish to Wasmer
+    if: github.event_name == 'push'
+    needs: [check, attest, image-smoke, scoop-smoke]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    environment: release
+    permissions:
+      contents: read
+    defaults:
+      run:
+        shell: bash # -eo pipefail
+    outputs:
+      published: ${{ (steps.todo.outputs.present == 'true' || steps.publish.outcome == 'success') && 'true' || 'false' }}
+    steps:
+      - name: Is there anything to publish?
+        id: todo
+        env:
+          VERSION: ${{ needs.check.outputs.version }}
+          HAS_TOKEN: ${{ secrets.WASMER_TOKEN != '' }}
+        run: |
+          # shellcheck disable=SC2016 # $v is a GraphQL variable
+          query='query($v: String) { getPackageVersion(name: "graphviz-pure/graphviz-pure", version: $v) { version } }'
+          answer=$(jq -nc --arg q "$query" --arg v "$VERSION" '{query: $q, variables: {v: $v}}' |
+            curl -fsS -A "graphviz-pure release (https://github.com/$GITHUB_REPOSITORY)" -H 'content-type: application/json' \
+              --data @- https://registry.wasmer.io/graphql)
+          jq -e '.data != null and (.errors | length // 0) == 0' <<< "$answer" > /dev/null ||
+            { echo "::error::the Wasmer registry did not answer: $answer"; exit 1; }
+          if jq -e '.data.getPackageVersion != null' <<< "$answer" > /dev/null; then
+            echo "graphviz-pure/graphviz-pure $VERSION is already in the registry"
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          elif [ "$HAS_TOKEN" != true ]; then
+            echo "::notice::Wasmer is not set up (no WASMER_TOKEN secret in the release environment, see docs/releasing.md): not published"
+          elif [[ "$VERSION" == *-* ]]; then
+            echo "::notice::$VERSION is a pre-release: not published to Wasmer"
+          else
+            echo "publish=true" >> "$GITHUB_OUTPUT"
+          fi
+      - if: steps.todo.outputs.publish == 'true'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - if: steps.todo.outputs.publish == 'true'
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: release
+          path: dist
+      - name: The package, from the attested archive
+        if: steps.todo.outputs.publish == 'true'
+        env:
+          VERSION: ${{ needs.check.outputs.version }}
+        run: |
+          (cd dist && awk -v f="graphviz-pure-$VERSION-wasm32-wasip1.tar.gz" '$2 == f' SHA256SUMS | sha256sum --check --strict)
+          scripts/wasmer-package.sh "dist/graphviz-pure-$VERSION-wasm32-wasip1.tar.gz" "$RUNNER_TEMP/wasmer-package"
+      - name: Install Wasmer ${{ env.WASMER_VERSION }}
+        if: steps.todo.outputs.publish == 'true'
+        working-directory: ${{ runner.temp }}
+        run: |
+          curl --fail --silent --show-error --location --proto '=https' --output wasmer.tar.gz \
+            "https://github.com/wasmerio/wasmer/releases/download/v$WASMER_VERSION/wasmer-linux-amd64.tar.gz"
+          echo "$WASMER_SHA256  wasmer.tar.gz" | sha256sum --check --strict
+          mkdir wasmer && tar -xzf wasmer.tar.gz -C wasmer
+          echo "WASMER_DIR=$RUNNER_TEMP/wasmer-home" >> "$GITHUB_ENV"
+      # Re-runnable: a version already in the registry is left as it is above (versions are
+      # immutable there, and scripts/release-verify.sh checks that it holds the attested module).
+      - name: wasmer publish
+        id: publish
+        if: steps.todo.outputs.publish == 'true'
+        env:
+          WASMER_TOKEN: ${{ secrets.WASMER_TOKEN }}
+        run: '"$RUNNER_TEMP/wasmer/bin/wasmer" publish --non-interactive --wait=container "$RUNNER_TEMP/wasmer-package"'
+
   ghcr:
     name: Publish the container image
     if: github.event_name == 'push'
@@ -674,7 +825,7 @@ jobs:
         run: docker logout ghcr.io
 
   # Checks what the publishing jobs published: the GitHub release's assets and their attestations,
-  # the crates on crates.io, JSR, and the image's tags and attestation. A channel whose publishing
+  # the crates on crates.io, JSR, Wasmer, and the image's tags and attestation. A channel whose publishing
   # job did not succeed is reported as failing at once, not polled. npm goes live only when a
   # maintainer approves the staged version, and the tap and bucket update afterwards, so those are
   # checked later by `scripts/release-verify.sh VERSION` without --ci (docs/releasing.md). No
@@ -685,8 +836,9 @@ jobs:
     if: >-
       !cancelled() && github.event_name == 'push' && (needs.github-release.result == 'success'
       || needs.crates-io.result == 'success' || needs.npm.result == 'success'
-      || needs.jsr.result == 'success' || needs.ghcr.result == 'success')
-    needs: [check, github-release, crates-io, npm, jsr, ghcr]
+      || needs.jsr.result == 'success' || needs.ghcr.result == 'success'
+      || needs.wasmer.outputs.published == 'true')
+    needs: [check, github-release, crates-io, npm, jsr, ghcr, wasmer]
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     permissions:
@@ -706,10 +858,16 @@ jobs:
           RESULTS: >-
             github=${{ needs.github-release.result }} crates=${{ needs.crates-io.result }}
             npm=${{ needs.npm.result }} jsr=${{ needs.jsr.result }} ghcr=${{ needs.ghcr.result }}
+            wasmer=${{ needs.wasmer.result == 'success' && needs.wasmer.outputs.published != 'true' && 'skipped' || needs.wasmer.result }}
         run: |
           ok="" failed=""
+          # A channel that is not set up yet (its job succeeded without publishing) is left out.
           for kv in $RESULTS; do
-            if [ "${kv#*=}" = success ]; then ok="$ok,${kv%%=*}"; else failed="$failed,${kv%%=*}"; fi
+            case "${kv#*=}" in
+              success) ok="$ok,${kv%%=*}" ;;
+              skipped) ;;
+              *) failed="$failed,${kv%%=*}" ;;
+            esac
           done
           scripts/release-verify.sh "$VERSION" --ci --wait 600 --channels "${ok#,}" --failed "${failed#,}" |
             tee -a "$GITHUB_STEP_SUMMARY"

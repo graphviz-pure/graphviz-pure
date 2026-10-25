@@ -1,0 +1,27 @@
+# The Wasmer package graphviz-pure/graphviz-pure (https://wasmer.io/graphviz-pure/graphviz-pure).
+# scripts/wasmer-package.sh fills in the version and puts this file next to the release's
+# wasm32-wasip1 build; release.yml's wasmer job publishes the result.
+[package]
+name = "graphviz-pure/graphviz-pure"
+version = "@VERSION@"
+description = "Pure-Rust port of Graphviz 16.1.0 (dot command line, all eight layout engines), same output on every platform. Not affiliated with the Graphviz project."
+license = "EPL-2.0 AND OFL-1.1 AND MIT"
+license-file = "LICENSE"
+readme = "README.md"
+repository = "https://github.com/graphviz-pure/graphviz-pure"
+homepage = "https://graphviz-pure.github.io/"
+entrypoint = "graphviz-pure"
+
+[[module]]
+name = "graphviz-pure"
+source = "graphviz-pure.wasm"
+abi = "wasi"
+
+[[command]]
+name = "graphviz-pure"
+module = "graphviz-pure"
+runner = "wasi"
+
+# The release archive's licence files, readable inside the sandbox too.
+[fs]
+"/usr/share/doc/graphviz-pure" = "doc"
