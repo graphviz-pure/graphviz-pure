@@ -1479,16 +1479,20 @@ fn polyline_midpoint(spl: &[Bezier]) -> Point {
             k += 3;
         }
     }
-    // #435: a polyline whose beziers hold no complete segment (the one-point bezier
-    // `clip_and_install` installs when the clipping walks meet, e.g. a labeled back
-    // edge between nodes whose margins touch) never satisfies `seg >= dd`. C falls
+    // #435: a bezier with no complete segment (the one-point bezier `clip_and_install`
+    // installs when the clipping walks meet, e.g. a labeled back edge between nodes
+    // whose margins touch) or NaN segment lengths never satisfy `seg >= dd`. C falls
     // out of the loop into `UNREACHABLE()` at the end of `polylineMidpoint`
-    // (lib/common/splines.c:1277) and aborts. Rounding cannot strand the walk when a
-    // segment exists: before the last segment the remaining half is `d_last -
-    // total / 2 <= d_last` up to O(n * 2^-53) of the total, so the fall-through needs
-    // an empty segment list (or NaN lengths). The midpoint of a one-point polyline is
-    // its only point, so the port returns the spline's first point.
-    spl[0].list[0]
+    // (lib/common/splines.c:1277) and aborts, as it does on an empty spline or an
+    // empty point list; the port answers those with the default point rather than a
+    // panic. Rounding cannot strand the walk when a segment exists: before the last
+    // segment the remaining half is `d_last - total / 2 <= d_last` up to
+    // O(n * 2^-53) of the total. The midpoint of a one-point polyline is its only
+    // point, so the port returns the spline's first point.
+    spl.first()
+        .and_then(|b| b.list.first())
+        .copied()
+        .unwrap_or_default()
 }
 
 /// `dotneato_closest(spl, pt)`.
@@ -1676,7 +1680,8 @@ mod tests {
     /// has no complete stride-3 segment, so the walk never satisfies `seg >= dd`. C
     /// falls out of it into `UNREACHABLE()` at the end of `polylineMidpoint`
     /// (lib/common/splines.c:1277) and aborts; the port returns the only point. With a
-    /// real segment the walk returns the geometric midpoint, as C's does.
+    /// real segment the walk returns the geometric midpoint, as C's does. With no
+    /// points at all C aborts at the same place; the port returns the default point.
     #[test]
     fn polyline_midpoint_of_a_segmentless_bezier_is_its_only_point() {
         let only = Point::new(55.6, 17.9);
@@ -1695,5 +1700,12 @@ mod tests {
             ..Bezier::default()
         };
         assert_eq!(polyline_midpoint(&[segment]), p(5.0));
+
+        assert_eq!(polyline_midpoint(&[]), Point::default(), "no beziers");
+        assert_eq!(
+            polyline_midpoint(&[Bezier::default()]),
+            Point::default(),
+            "a bezier with no points"
+        );
     }
 }

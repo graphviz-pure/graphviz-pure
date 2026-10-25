@@ -4787,7 +4787,8 @@ fn neato_polyline_compass_port_routes_like_c() {
 /// walks off the allocation (SIGBUS; `bezier_bb`'s `size % 3 == 1` assert at
 /// lib/common/emit.c:4082 without a label). The port's `clip_and_install` keeps the one
 /// segment where the walks meet (#359), so the midpoint walk returns normally and the
-/// graph is drawn.
+/// graph is drawn. This test guards that #359 clamp, not the `polyline_midpoint`
+/// fall-through: it passes even with the fallback replaced by a panic.
 #[test]
 fn neato_polyline_label_between_touching_nodes_does_not_crash() {
     let src = "digraph{c [pos=\"0,0\"]; d [pos=\"0.05,0\"]; d->c [label=lab]; c->d}\n";

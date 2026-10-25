@@ -903,14 +903,17 @@ error), and without a label the emit pass's `assert(bz.size % 3 == 1)` in `bezie
 The loop cannot be stranded by rounding when a segment exists: before the last segment
 the remaining half-distance is `d_last - total / 2 <= d_last` in exact arithmetic, and
 the two passes disagree by O(n * 2^-53) of the total, so the last segment always
-satisfies `d >= dist`. The fall-through needs an empty segment list (or NaN lengths).
+satisfies `d >= dist`. The fall-through needs a bezier with no complete segment — a
+one-point list — or NaN lengths.
 
-The port's `clip_and_install` keeps the one segment where the walks meet (#359), so the
-wrapped size never reaches the midpoint walk. The one-point bezier does, as in C: there
-the port returns the spline's first point (`polyline_midpoint` in
-`common/splines.rs`), the only point of the polyline, and draws the graph. That is the
-smallest defensible behaviour: C installs and draws one-point beziers when there is no
-label, and for a one-point polyline every candidate midpoint is that point.
+The port's `clip_and_install` keeps the one segment where the walks meet and installs
+the same one-point bezier as C when they meet one segment apart; both are the #359 fix,
+whose comment there records the choices. The wrapped size therefore never reaches the
+midpoint walk, but the one-point bezier does, as in C: there the port returns the
+spline's first point (`polyline_midpoint` in `common/splines.rs`), the only point of
+the polyline, and draws the graph. That is the smallest defensible behaviour: C installs
+and draws one-point beziers when there is no label, and for a one-point polyline every
+candidate midpoint is that point.
 
 ## circo's derived nodes have no shape
 
