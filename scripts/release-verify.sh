@@ -13,16 +13,18 @@
 #           pre-release or a backport holds neither)
 #   wasmer  graphviz-pure/graphviz-pure VERSION in the Wasmer registry, and its package holds the
 #           module of the release's attested wasm32-wasip1 archive byte for byte
+#   pypi    graphviz-pure VERSION on PyPI: one wheel per release platform, none yanked
+#           (scripts/check-pypi-wheels.py), each with its build-provenance attestation
 #   npm     @graphviz-pure/wasm VERSION is the `latest` dist-tag, and `npm audit signatures`
 #           passes for it (only after the owner approved the staged version)
 #   taps    the Homebrew tap's formula and the Scoop bucket's manifest carry VERSION, and their
 #           newest update.yml run succeeded
 #
-# --ci checks github, crates, binstall, jsr, ghcr and wasmer only: release.yml's verify job runs it before npm is
+# --ci checks github, crates, binstall, jsr, ghcr, wasmer and pypi only: release.yml's verify job runs it before npm is
 # approved and before the tap and bucket update. --channels LIST checks only those channels
 # (comma-separated); --failed LIST reports those as failing at once, without checking (the verify
 # job passes the channels whose publishing job did not succeed). --wait SECONDS retries failing
-# registry checks (crates.io, JSR, ghcr, Wasmer) until they pass or SECONDS have passed in all. Reads only.
+# registry checks (crates.io, JSR, ghcr, Wasmer, PyPI) until they pass or SECONDS have passed in all. Reads only.
 #
 # Usage: scripts/release-verify.sh VERSION [--ci] [--channels LIST] [--failed LIST] [--wait SECONDS]
 set -euo pipefail
@@ -232,6 +234,26 @@ sys.exit(module not in open(sys.argv[2], "rb").read())' "$work/wasi/$asset" "$wo
   fi
 }
 
+pypi_check() { # one attempt, from an empty directory
+  rm -rf "$work/pypi"
+  PYPI_REQUIRED=$ci python3 scripts/check-pypi-wheels.py "$version" "$work/pypi" > "$work/pypi.log" 2>&1
+}
+pypi() {
+  local wheel bad=() line
+  if ! retry pypi_check; then
+    result pypi 0 "$(tail -n 1 "$work/pypi.log")"
+    return
+  fi
+  line=$(tail -n 1 "$work/pypi.log")
+  case "$line" in skipped:*) result pypi 1 "$line"; return ;; esac
+  for wheel in "$work"/pypi/*.whl; do
+    gh attestation verify "$wheel" --repo "$REPO" --signer-workflow "$signer" --source-ref "refs/tags/$tag" > /dev/null 2>&1 ||
+      bad+=("$(basename "$wheel")")
+  done
+  if [ ${#bad[@]} = 0 ]; then result pypi 1 "$line, each attested"
+  else result pypi 0 "not attested: ${bad[*]}"; fi
+}
+
 npm_channel() {
   local latest tarball dir integrity
   latest=$(npm view @graphviz-pure/wasm dist-tags.latest 2> /dev/null || true)
@@ -291,6 +313,7 @@ want binstall && binstall
 want jsr && jsr
 want ghcr && ghcr
 want wasmer && wasmer_channel
+want pypi && pypi
 if [ "$ci" = 0 ]; then
   want npm && npm_channel
   want taps && taps

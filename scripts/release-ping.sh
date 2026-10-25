@@ -60,7 +60,7 @@ case "$step" in
    \`\`\`sh
    git fetch origin master && git tag -s v$version -m v$version <merge sha> && git push origin v$version
    \`\`\`
-3. **Approve the \`release\` deployment** of the release run: one approval starts every publishing job (GitHub release, crates.io, npm, JSR, ghcr). The agent comments the run and the command here when it waits.
+3. **Approve the \`release\` deployment** of the release run: one approval starts every publishing job (GitHub release, crates.io, npm, JSR, Wasmer, PyPI, ghcr). The agent comments the run and the command here when it waits.
 4. **Approve the staged npm version** with 2FA: the agent comments \`npm stage approve <id>\` here once the npm job has staged it.
 
 The agent then checks every channel (\`scripts/release-verify.sh $version\`), starts the Homebrew tap and Scoop bucket updates, and closes this issue.
