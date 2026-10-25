@@ -713,11 +713,15 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ needs.check.outputs.version }}
+          CRATES: ${{ needs.crates-io.result }}
+          GITHUB: ${{ needs.github-release.result }}
           RESULTS: >-
             github=${{ needs.github-release.result }} crates=${{ needs.crates-io.result }}
             npm=${{ needs.npm.result }} jsr=${{ needs.jsr.result }} ghcr=${{ needs.ghcr.result }}
         run: |
           ok="" failed=""
+          # binstall needs both the crate (its metadata) and the GitHub release (its archives).
+          if [ "$CRATES" = success ] && [ "$GITHUB" = success ]; then RESULTS="$RESULTS binstall=success"; else RESULTS="$RESULTS binstall=skipped"; fi
           for kv in $RESULTS; do
             if [ "${kv#*=}" = success ]; then ok="$ok,${kv%%=*}"; else failed="$failed,${kv%%=*}"; fi
           done
