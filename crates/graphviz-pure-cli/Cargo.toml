@@ -16,6 +16,23 @@ path = "src/main.rs"
 # The library crate graphviz-pure owns the rustdoc name.
 doc = false
 
+# `cargo binstall graphviz-pure-cli` installs the release's attested archive for the host instead of
+# compiling (https://github.com/cargo-bins/cargo-binstall). The names are scripts/release-package.py's;
+# release.yml and scripts/release-verify.sh check them against the release's archives
+# (scripts/check-binstall.py). Linux hosts get the static musl build.
+[package.metadata.binstall]
+pkg-url = "{ repo }/releases/download/v{ version }/graphviz-pure-{ version }-{ target }{ archive-suffix }"
+bin-dir = "graphviz-pure-{ version }-{ target }/{ bin }{ binary-ext }"
+pkg-fmt = "tgz"
+# Never third-party builds (cargo-quickinstall); compiling from crates.io stays the fallback.
+disabled-strategies = ["quick-install"]
+
+[package.metadata.binstall.overrides.x86_64-pc-windows-msvc]
+pkg-fmt = "zip"
+
+[package.metadata.binstall.overrides.aarch64-pc-windows-msvc]
+pkg-fmt = "zip"
+
 [dependencies]
 graphviz-pure-core.workspace = true
 graphviz-pure-parser.workspace = true

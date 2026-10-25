@@ -416,7 +416,7 @@ jobs:
 
   attest:
     name: Checksums and provenance
-    needs: [binaries, npm-package]
+    needs: [check, binaries, npm-package]
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -437,6 +437,16 @@ jobs:
       - name: SHA256SUMS
         working-directory: dist
         run: sha256sum -- * > SHA256SUMS && cat SHA256SUMS
+      # The published crate's metadata must lead cargo-binstall to every archive (the checkout
+      # only provides the script and the manifest; nothing from it is attested).
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          path: src
+      - name: cargo-binstall finds every archive
+        env:
+          VERSION: ${{ needs.check.outputs.version }}
+        run: python3 src/scripts/check-binstall.py src/crates/graphviz-pure-cli/Cargo.toml dist "$VERSION"
       - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
           subject-path: dist/*
