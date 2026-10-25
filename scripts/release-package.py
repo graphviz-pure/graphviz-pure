@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Packages one release binary: graphviz-pure-VERSION-TARGET.{tar.gz,zip} in OUT, holding the
-binary, LICENSE, NOTICE, THIRD-PARTY-LICENSES.md (the licences of the Rust crates compiled into
+binary (graphviz-pure.wasm for the WASI build), LICENSE, NOTICE, THIRD-PARTY-LICENSES.md (the licences of the Rust crates compiled into
 it), README.md and LICENSES/ (the MIT licence of the CORE-MATH pow port and the OFL licences of
 the bundled fonts) in a directory of the same name.
 
@@ -19,7 +19,8 @@ import zipfile
 target, version, out = sys.argv[1:4]
 root = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 windows = "windows" in target
-exe = "graphviz-pure.exe" if windows else "graphviz-pure"
+# The WASI build (wasm32-wasip1) is a module for a WebAssembly runtime, not an executable.
+exe = "graphviz-pure.exe" if windows else "graphviz-pure.wasm" if target.startswith("wasm32-") else "graphviz-pure"
 name = f"graphviz-pure-{version}-{target}"
 epoch = int(os.environ.get("SOURCE_DATE_EPOCH", "0"))
 fonts = os.path.join(root, "crates", "graphviz-pure-raster", "fonts")
