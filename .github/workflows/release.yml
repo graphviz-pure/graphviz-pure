@@ -868,12 +868,17 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ needs.check.outputs.version }}
+          CRATES: ${{ needs.crates-io.result }}
+          GITHUB: ${{ needs.github-release.result }}
           RESULTS: >-
             github=${{ needs.github-release.result }} crates=${{ needs.crates-io.result }}
             npm=${{ needs.npm.result }} jsr=${{ needs.jsr.result }} ghcr=${{ needs.ghcr.result }}
             wasmer=${{ needs.wasmer.result == 'success' && needs.wasmer.outputs.published != 'true' && 'skipped' || needs.wasmer.result }}
         run: |
           ok="" failed=""
+          # binstall needs both the crate (its metadata) and the GitHub release (its archives);
+          # when either failed, that job's failure is reported and binstall is left out.
+          if [ "$CRATES" = success ] && [ "$GITHUB" = success ]; then RESULTS="$RESULTS binstall=success"; else RESULTS="$RESULTS binstall=skipped"; fi
           # A channel that is not set up yet (its job succeeded without publishing) is left out.
           for kv in $RESULTS; do
             case "${kv#*=}" in

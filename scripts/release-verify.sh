@@ -4,7 +4,7 @@
 #   github  the GitHub release: every asset's build-provenance attestation (from release.yml) and
 #           SHA256SUMS
 #   crates  every publishable workspace crate at VERSION on crates.io
-#   binstall the cargo-binstall metadata of graphviz-pure-cli VERSION as published on crates.io
+#   binstall  graphviz-pure-cli VERSION's cargo-binstall metadata, as published on crates.io,
 #           names every release archive and the binary in it (scripts/check-binstall.py)
 #   jsr     @graphviz-pure/wasm VERSION in JSR's meta.json, not yanked
 #   ghcr    VERSION's attestation verifies, and X.Y and latest point at VERSION's digest where
@@ -113,7 +113,7 @@ crates_io() {
 # A Python with tomllib (3.11 or later), for scripts/check-binstall.py.
 python_tomllib() {
   local p
-  for p in python3 python3.14 python3.13 python3.12 python3.11; do
+  for p in python3 python3.15 python3.14 python3.13 python3.12 python3.11; do
     command -v "$p" > /dev/null && "$p" -c 'import tomllib' 2> /dev/null && { echo "$p"; return; }
   done
   return 1
@@ -124,12 +124,14 @@ binstall() {
   mkdir -p "$work/binstall/dist"
   if ! retry curl -fsS -A "$ua" -o "$work/binstall/$crate" "https://static.crates.io/crates/graphviz-pure-cli/$crate" 2> /dev/null; then
     result binstall 0 "graphviz-pure-cli $version is not on crates.io"
-  elif ! tar -xzf "$work/binstall/$crate" -C "$work/binstall" "graphviz-pure-cli-$version/Cargo.toml" ||
-    ! gh release download "$tag" --repo "$REPO" --pattern "graphviz-pure-$version-*" --dir "$work/binstall/dist" > /dev/null 2>&1; then
-    result binstall 0 "could not read the published Cargo.toml or the release's archives"
-  elif "$py" scripts/check-binstall.py "$work/binstall/graphviz-pure-cli-$version/Cargo.toml" "$work/binstall/dist" "$version" > "$work/binstall/log" 2>&1; then
+  elif ! tar -xzf "$work/binstall/$crate" -C "$work/binstall" "graphviz-pure-cli-$version/Cargo.toml"; then
+    result binstall 0 "$crate has no graphviz-pure-cli-$version/Cargo.toml"
+  elif ! gh release download "$tag" --repo "$REPO" --pattern "graphviz-pure-$version-*" --dir "$work/binstall/dist" > /dev/null 2>&1; then
+    result binstall 0 "could not download the release's archives"
+  elif (cd "$work/binstall" && "$py" "$OLDPWD/scripts/check-binstall.py" "graphviz-pure-cli-$version/Cargo.toml" dist "$version") > "$work/binstall/log" 2>&1; then
     result binstall 1 "$(tail -n 1 "$work/binstall/log")"
   else
+    # Relative paths only: this text is posted to the release issue.
     result binstall 0 "$(grep -v ' → ' "$work/binstall/log" | tr '\n' ' ')"
   fi
 }

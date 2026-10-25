@@ -7,7 +7,9 @@ path inside it.
 
 The templates are rendered the way cargo-binstall does (SUPPORT.md): `{ repo }`, `{ version }`,
 `{ target }`, `{ archive-suffix }`, `{ bin }` and `{ binary-ext }`, with the target's override
-applied over the package's values.
+applied over the package's values. It is stricter than cargo-binstall, never looser: other
+template keys, other package formats and `cfg(...)` overrides (which it cannot evaluate) fail the
+check, so a change to the metadata that this script does not understand is caught here.
 
 Usage: scripts/check-binstall.py MANIFEST DIST VERSION
 """
@@ -31,6 +33,7 @@ if isinstance(repo, dict):  # repository.workspace = true: the workspace's
         repo = tomllib.load(f)["workspace"]["package"]["repository"]
 bins = [b["name"] for b in cargo.get("bin", [])] or [package["name"]]
 suffixes = {"tgz": ".tar.gz", "zip": ".zip"}
+overrides = meta.get("overrides", {})
 prefix = f"{repo}/releases/download/v{version}/"
 
 archives = sorted(
@@ -39,11 +42,15 @@ archives = sorted(
 )
 if not archives:
     sys.exit(f"no graphviz-pure-{version}-TARGET archive in {dist}")
-bad = []
+targets = {re.fullmatch(rf"graphviz-pure-{re.escape(version)}-(.+)\.(tar\.gz|zip)", a).group(1) for a in archives}
+bad = [f"override {k!r} is not a release target (cfg() overrides are not checked)" for k in overrides if k not in targets]
 for archive in archives:
     target = re.fullmatch(rf"graphviz-pure-{re.escape(version)}-(.+)\.(tar\.gz|zip)", archive).group(1)
-    opts = {**meta, **meta.get("overrides", {}).get(target, {})}
-    fmt = opts["pkg-fmt"]
+    opts = {**meta, **overrides.get(target, {})}
+    fmt = opts.get("pkg-fmt", "tgz")  # binstall's default
+    if fmt not in suffixes:
+        bad.append(f"{target}: pkg-fmt {fmt!r} is not one this check handles ({', '.join(suffixes)})")
+        continue
     values = {
         "repo": repo, "version": version, "target": target, "archive-suffix": suffixes[fmt],
         "binary-ext": ".exe" if "windows" in target else "",
