@@ -1718,6 +1718,35 @@ fn fdp_normalize_with_an_edge_to_a_cluster_rotates_like_c() {
     );
 }
 
+// Issue #426: with `dim=3` C's prism (`overlap=false`) runs on the derived graph's
+// three coordinates (`GD_ndim(dg) = GD_ndim(agroot(g))`), which changes the
+// neighbourhood graph `call_tri` builds. The port built that graph with `ndim: 2`,
+// so its `dim=3` output was its 2D output. Expected values are C 16.1.0's.
+#[test]
+fn fdp_dim3_prism_removes_overlap_in_3d_like_c() {
+    let expected = "graph 1 3.7884 3.1511\n\
+        node a 0.375 2.9011 0.75 0.5 a solid ellipse black lightgrey\n\
+        node b 3.4134 2.8616 0.75 0.5 b solid ellipse black lightgrey\n\
+        node c 1.86 0.25 0.75 0.5 c solid ellipse black lightgrey\n\
+        edge a b 4 0.75367 2.8962 1.3375 2.8886 2.4509 2.8741 3.0347 2.8665 solid black\n\
+        edge b c 4 3.2728 2.6252 2.9778 2.1292 2.2971 0.98484 2.0014 0.48771 solid black\n\
+        edge c a 4 1.7256 0.48994 1.4428 0.99468 0.78954 2.161 0.50803 2.6636 solid black\n\
+        stop\n";
+    let (out, err, ok) = run(
+        &["-Kfdp", "-Tplain"],
+        "graph { dim=3; overlap=false; a -- b -- c -- a }",
+    );
+    assert!(ok, "{err}");
+    assert_eq!(out, expected);
+    // `-G` attributes give the same layout as the in-file ones.
+    let (out, err, ok) = run(
+        &["-Kfdp", "-Gdim=3", "-Goverlap=false", "-Tplain"],
+        "graph { a -- b -- c -- a }",
+    );
+    assert!(ok, "{err}");
+    assert_eq!(out, expected);
+}
+
 // fdp's cluster map compares names as text (`mkClustMap`), so a node `<cluster_x>` is an edge
 // end at the cluster `cluster_x`; `mapN` then makes the plain node `cluster_x` for it.
 #[test]
