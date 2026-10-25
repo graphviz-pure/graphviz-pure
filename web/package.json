@@ -1,6 +1,6 @@
 {
   "name": "@graphviz-pure/wasm",
-  "version": "0.1.2",
+  "version": "0.2.0",
   "description": "A pure-Rust port of Graphviz 16.1.0 (all eight layout engines), compiled to WebAssembly, with the same output in browsers, Node.js, Deno, Bun and Workers. Not affiliated with the Graphviz project.",
   "type": "module",
   "main": "./pkg/graphviz_pure_wasm.js",
