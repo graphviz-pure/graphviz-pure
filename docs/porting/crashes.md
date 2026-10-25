@@ -434,6 +434,43 @@ before `dot_concentrate` rewired it, and it goes wrong in two ways:
 Both change output only where C crashes. (With `splines=line`, C survives the deleted-node
 case because `makeLineEdge` never reads the head; the redirect changes nothing there either.)
 
+## newrank with packmode=array: dot_rank's crash
+
+Closed: #427.
+
+`is_a_cluster(g)` (`lib/common/utils.c:697`) returns true for the cgraph root
+(`g == g->root`), for a subgraph whose name starts with `cluster`, and when `g` has
+`cluster=true`. In an ordinary `newrank=true` layout, `dot2_rank(g)` (`lib/dotgen/rank.c:1095`)
+calls `compile_samerank(g, 0)` on the root, so `is_a_cluster(g)` is true at the top call: the
+root sits at `GD_level(g) = 0` with `GD_parent(g) = NULL`, every top-level cluster gets
+`GD_level = 1` and `GD_parent = g` (`set_parent` registers it in `GD_clust(g)`), and every
+node outside a cluster gets `ND_clust(n) = g`. Every cluster chain and every node's
+`ND_clust` therefore ends at `g`, and `dot_lca(c0, c1)` (`rank.c:708-717`) reads
+`GD_level(c0)` and `GD_level(c1)` without checking for NULL.
+
+When `doDot` (`lib/dotgen/dotinit.c:475-483`) lays out multiple `cccomps` components
+(`pack` or `packmode`, `ncc > 1` and no `ratio`), each component `sg` is a `_cc_<i>`
+subgraph of the root (`sg != sg->root`). Unless the root has `cluster=true`,
+`is_a_cluster(sg)` is false. In `compile_samerank(sg, 0)` (`rank.c:636-670`), `clust` stays
+NULL: each top-level cluster projection (`projectG`) gets `GD_level = 0` and
+`GD_parent = NULL` instead of calling `set_parent`, and nodes outside any cluster keep
+`ND_clust(n) = NULL`. In `compile_edges` (`rank.c:830`), any constraint edge whose ends are
+not in the same cluster or rank-set representative calls `is_internal_to_cluster(e)` →
+`dot_lca(ct, ch)`, which dereferences NULL (`GD_level(c0)` or `GD_level(c1)`) when one end
+is in a cluster and the other is outside (`ct == NULL` or `ch == NULL`), or after one step
+when the ends are in two different top-level clusters (`GD_parent` is NULL at `GD_level == 0`).
+
+The port keeps `is_a_cluster(0) == false` on a pack component (`dotgen/utils.rs`), so when
+C does not reach `dot_lca` (every edge of the component has both ends in the same cluster or
+outside any cluster) the component is laid out just as in C (including `GD_n_cluster(sg) == 0`,
+no cluster box or margin). In `dot_lca` (`dotgen/rank.rs`), the port gives `None` a sentinel
+level of `-1`, below `GD_level == 0`: any `Some(c)` at level `>= 0` steps to its `parent`
+until both reach `None`, returning `None` (`is_internal_to_cluster` is false, so `compile_edges`
+adds the same constraint edge as for an inter-cluster edge). The port keeps this behaviour.
+Measured on 200 generated `pack` / `packmode` + `newrank=true` inputs with disjoint clusters,
+rank sets and `compact=true`: C draws 138 and crashes in `dot_lca` on the other 62; the port
+matches C byte for byte on all 138 and draws all 62 without panicking.
+
 ## dot's pack components
 
 Closed: #100, #226, #312, #335; #101 and #352 are not matched (below).
