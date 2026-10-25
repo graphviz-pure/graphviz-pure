@@ -120,8 +120,8 @@ toolchain and `cargo build --locked`:
 - it repackages each archive's binary as a Python wheel (`scripts/release-wheel.py`: `py3-none`
   wheels whose scripts directory holds the binary byte for byte), installs it with pip into a
   fresh environment on the same runner and runs the smoke test on the installed command, and
-  attests the six wheels (they go to PyPI only, not to the GitHub release). The macOS wheels' tags carry
-the binaries' minimum OS version, read from their Mach-O headers;
+  attests the six wheels (they go to PyPI only, not to the GitHub release). The macOS wheels'
+  tags carry the binaries' minimum OS version, read from their Mach-O headers;
 - it checks that every archive and the npm tarball (and so the JSR package) carry LICENSE,
   NOTICE, THIRD-PARTY-LICENSES.md and LICENSES/, and every crate LICENSE and NOTICE
   (`scripts/check-package-notices.py`, `scripts/check-crate-notices.sh`; CI runs the same
@@ -203,7 +203,9 @@ again.
   crates already have the version (`scripts/crates-to-publish.py`) and publishes only the
   others, in dependency order; if all are there, it publishes nothing.
 - `pypi`: safe to re-run. A re-run uploads the same files (the run's attested artifact), and
-  PyPI ignores a file it already has with the same bytes, so only what is missing goes up.
+  `uv publish --check-url https://pypi.org/simple/` first asks PyPI which files it already has:
+  identical ones are skipped (PyPI itself answers a re-upload with 400), so only what is missing
+  goes up, and a file that differs from PyPI's fails the job.
 - `npm`, `jsr`: a re-run is safe if the job failed before publishing. If the version went up,
   there is nothing to re-run.
 - `wasmer`: safe to re-run. A version already in the registry is left as it is (versions there

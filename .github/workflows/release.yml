@@ -808,7 +808,8 @@ jobs:
   # The attested wheels, published to PyPI as graphviz-pure by a pinned, checksum-verified uv with
   # trusted publishing (OIDC; the PyPI publisher is bound to the `release` environment). PyPI has
   # no staging: the version is live when the job finishes. Re-runnable: a re-run uploads the same
-  # files (this run's artifact), and PyPI ignores a file it already has with the same bytes. Until a maintainer has
+  # files (this run's artifact), and --check-url makes uv skip the ones PyPI already has with the
+  # same bytes (PyPI answers a re-upload with 400). Until a maintainer has
   # set up the trusted publisher (docs/releasing.md), PyPI answers the token exchange with
   # `invalid-publisher` and has no graphviz-pure project: the job then publishes nothing and
   # succeeds with `published=false`, and the verify job leaves the channel out. Any other
@@ -870,7 +871,7 @@ jobs:
             exit 1
           fi
           echo "::add-mask::$token"
-          UV_PUBLISH_TOKEN=$token "$RUNNER_TEMP/uv" publish wheels/*.whl
+          UV_PUBLISH_TOKEN=$token "$RUNNER_TEMP/uv" publish --check-url https://pypi.org/simple/ wheels/*.whl
           echo "published=true" >> "$GITHUB_OUTPUT"
 
   ghcr:
