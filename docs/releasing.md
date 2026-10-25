@@ -311,6 +311,9 @@ writes it, using Scoop v0.6.0 at a pinned commit. If the bucket's manifest forma
 
 ### Later channels
 
+[channels.md](channels.md) surveys and ranks every other channel; [python.md](python.md) covers
+PyPI and Python's Graphviz libraries. The ones closest to ready:
+
 | channel | what it needs |
 | :--- | :--- |
 | winget | a manifest pull request to `microsoft/winget-pkgs` per release, made with komac. The first version is submitted by hand (`komac new`); later ones can be automated with `komac update --submit` from the release workflow. komac needs a **classic** token with the `public_repo` scope (fine-grained tokens can commit but cannot open the pull request, [komac#310](https://github.com/russellbanks/Komac/issues/310)). The plan: a dedicated bot account, not a member of the organization, that owns a fork of `winget-pkgs`, its token stored as a `release`-environment secret. Each Windows zip holds one portable `graphviz-pure.exe`, which komac detects as the nested installer |
