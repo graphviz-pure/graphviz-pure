@@ -78,7 +78,8 @@ every command below.
 
 `scripts/release-verify.sh X.Y.Z` checks, and prints pass or fail for, each channel: the GitHub
 release's assets against their attestations and `SHA256SUMS`; the eight publishable crates on
-crates.io (`graphviz-pure-wasm`, `-diff` and `-portable-libm` have `publish = false`); JSR's
+crates.io (`graphviz-pure-wasm`, `-diff` and `-portable-libm` have `publish = false`), and the
+published `graphviz-pure-cli`'s cargo-binstall metadata against the release's archives; JSR's
 `meta.json`; the Wasmer package, which must contain the module of the release's attested WASI
 archive byte for byte; the image's attestation, and `X.Y` and `latest` pointing at it where this version
 should hold them (not for a backport to an older minor line, nor `latest` for anything but the
@@ -112,6 +113,9 @@ toolchain and `cargo build --locked`:
   `scripts/release-smoke-wasm.mjs`);
 - it packages deterministic archives (`scripts/release-package.py`), writes `SHA256SUMS` and
   attests the build provenance of every file (Sigstore, stored on GitHub);
+- it checks that the command line crate's `[package.metadata.binstall]` leads cargo-binstall to
+  every archive and the binary in it (`scripts/check-binstall.py`), so
+  `cargo binstall graphviz-pure-cli` installs the release's archive instead of compiling;
 - it checks that every archive and the npm tarball (and so the JSR package) carry LICENSE,
   NOTICE, THIRD-PARTY-LICENSES.md and LICENSES/, and every crate LICENSE and NOTICE
   (`scripts/check-package-notices.py`, `scripts/check-crate-notices.sh`; CI runs the same
