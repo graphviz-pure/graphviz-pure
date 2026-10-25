@@ -216,6 +216,10 @@ pub fn process_cluster_edges(graph: &Graph, tree: &ClusterTree) -> Option<Cluste
     work.layout.background = graph.layout.background.clone();
     work.node_defaults = graph.node_defaults.clone();
     work.edge_defaults = graph.edge_defaults.clone();
+    // Its attribute dictionaries stay on it too; in particular the `-G` declarations
+    // (`proto`), which the derived graph's `agopen` inherits as its protograph (`fdp
+    // -Gnormalize` reads `normalize` there, lib/fdpgen/layout.c:854).
+    work.dicts = graph.dicts.clone();
     let mut node_map = vec![None; graph.nodes.len()];
     for (i, nd) in graph.nodes.iter().enumerate() {
         if deleted[i] {
@@ -550,7 +554,7 @@ fn renumber_undone(ce: &ClusterEdges, work: &Graph, graph: &mut Graph, new_id: &
 #[cfg(test)]
 mod tests {
     use super::*;
-    use graphviz_pure_core::{GraphKind, SubgraphData, SubgraphId};
+    use graphviz_pure_core::{AttrDicts, AttrSym, GraphKind, SubgraphData, SubgraphId};
 
     fn subgraph(
         id: u32,
@@ -628,5 +632,43 @@ mod tests {
             let n = s.nodes.iter().filter(|&&m| m == cn).count();
             assert_eq!(n, 1, "{}: {:?}", s.name, s.nodes);
         }
+    }
+
+    /// Issue #431: the work graph is the same cgraph, so it keeps the input's attribute
+    /// dictionaries; `deriveGraph`'s `agopen` inherits the `-G` declarations as its
+    /// protograph, where fdp's `normalize(cg)` reads `normalize`.
+    #[test]
+    fn work_graph_keeps_the_attribute_dictionaries() {
+        let mut g = Graph::new("", GraphKind::Undirected, false);
+        let x = g.ensure_node("x");
+        let y = g.ensure_node("y");
+        let cb = g.ensure_node("cluster_b");
+        let b = g.ensure_node("b");
+        g.add_edge(x, y, AttrMap::new());
+        g.add_edge(x, cb, AttrMap::new());
+        g.subgraphs
+            .push(subgraph(0, "cluster_b", vec![cb, b], Vec::new()));
+        g.dicts = vec![AttrDicts {
+            graph: [(
+                "normalize".to_string(),
+                AttrSym {
+                    defval: "30".to_string(),
+                    proto: true,
+                    ..AttrSym::default()
+                },
+            )]
+            .into_iter()
+            .collect(),
+            ..AttrDicts::default()
+        }];
+        let tree = crate::fdpgen::mk_clusters(&g);
+        let ce = process_cluster_edges(&g, &tree).expect("an edge to a cluster");
+        assert_eq!(
+            ce.work
+                .protograph_attrs()
+                .get("normalize")
+                .map(String::as_str),
+            Some("30")
+        );
     }
 }
