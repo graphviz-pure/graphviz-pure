@@ -126,5 +126,11 @@ sfdp uses libc `rand()` only (`cutil::CRand`, threaded through `LGraph::crand`):
 - `label_scheme=1|3` with prism tries: C crashes; the port skips the missing
   right-hand side instead.
 - `start=random` without a number seeds C from the clock; the port uses 1.
+- `smoothing=avg_dist`, `graph_dist` and `power_dist` with an isolated node
+  (nothing adjacent to it; a self-edge does not count). C's
+  `StressMajorizationSmoother2_new` asserts `nz > 0` (`post_process.c`) and
+  writes nothing. The port keeps that node's unsmoothed position, the same
+  drawing as `smoothing=none`. A component whose nodes all have a neighbour
+  is still smoothed.
 - Verbose (`-v`) diagnostics, `spring_electrical_control_print` included, are C's, except
   those under `DEBUG_PRINT` and `TIME` (not defined in a release build of C either).
