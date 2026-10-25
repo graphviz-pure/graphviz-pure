@@ -31,8 +31,9 @@ not be confirmed from the channel's documentation.
 | JSR `@graphviz-pure/wasm` | `release.yml` | OIDC |
 | ghcr.io image | `release.yml` | job token |
 | Homebrew tap, Scoop bucket | pull repositories | none here |
-| Wasmer `graphviz-pure/graphviz-pure` (from 0.2.1) | `release.yml` (WASI build) | `WASMER_TOKEN`, `release` environment secret: Wasmer has no OIDC |
-| cargo-binstall (from 0.2.1) | metadata in `crates/graphviz-pure-cli/Cargo.toml`, checked by `scripts/check-binstall.py` | none |
+| Wasmer `graphviz-pure/graphviz-pure` (from 0.2.1, #444) | `release.yml` (WASI build) | `WASMER_TOKEN`, `release` environment secret: Wasmer has no OIDC |
+| PyPI `graphviz-pure` (from 0.2.1, #451) | `release.yml`, wheels repacked from the attested archives | OIDC |
+| cargo-binstall (from 0.2.1, #447) | metadata in `crates/graphviz-pure-cli/Cargo.toml`, checked by `scripts/check-binstall.py` | none |
 
 ### Free with what is shipped (document only)
 
@@ -56,17 +57,17 @@ reach or high cost. **X**: not a fit.
 
 | channel | reach | needs | automation | credential | rank |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| aqua registry | medium (aqua; mise's preferred backend for its registry) | one PR to `aquaproj/aqua-registry`, scaffolded with `argd s`, signed commits | none per release: entries are version-agnostic | none; users verify the attestations (`github_artifact_attestations`) | **A** |
-| PyPI `graphviz-pure` | high (`pip`, `uvx`, Python tools that need `dot`) | a PyPI account, a pending trusted publisher | `release.yml`, from the attested archives | OIDC (`release` environment) | **A** ([python.md](python.md)) |
+| aqua registry | medium (aqua; the backend mise recommends for tools without packslips) | one PR to `aquaproj/aqua-registry`, scaffolded with `argd s`, signed commits | none per release: entries are version-agnostic | none; users verify the attestations (`github_artifact_attestations`) | **A** |
 | winget | high on Windows | first manifest by hand (`komac new`), Microsoft's validation and moderation | `komac update --submit`, from a pull repository or `release.yml` | **classic** PAT with `public_repo` (fine-grained tokens cannot open the PR); no OIDC | **A** |
 | nixpkgs | high among Nix users | one PR; `packaging/nixpkgs/` is ready | r-ryantm opens the bumps | none | **A** |
 | conda-forge | high (Python, data science, pixi) | one PR to `staged-recipes`; `packaging/conda-forge/` is ready | autotick bot | none | **A** |
 | AUR `graphviz-pure-bin`, `graphviz-pure` | medium-high on Arch | an AUR account and SSH key; `packaging/aur/` is ready | `packaging/aur/update.sh` per release, or a pull repository holding the key | SSH key (no expiry); no OIDC | **A** |
+| mise packslip | medium (mise's top-ranked backend) | signed release manifests ([packslip](https://mise.jdx.dev/dev-tools/backends/packslip.html), keyless OIDC signing) published with each release | `release.yml` | OIDC (keyless) | **B** |
 | GitHub Action `setup-graphviz-pure` | medium (CI) | a public repository with `action.yml` at its root; the Marketplace developer agreement | none per release: the action downloads the version asked for and runs `gh attestation verify` | none | **B** |
-| homebrew-core | very high on macOS | a from-source formula; notability: 75 stars (or 30 forks or watchers) for a third-party submission, 225 for the author's own; the repository at least 30 days old | autobump every 3 h | none | **B** (not eligible yet) |
+| homebrew-core | very high on macOS | a from-source formula; notability: 75 stars (or 30 forks or watchers) for a third-party submission, 225 stars (or 90 forks or watchers) for the author's own; the repository at least 30 days old | autobump every 3 h | none | **B** (not eligible yet) |
 | Scoop `extras` / `main` | medium on Windows | extras: 100 stars and/or 50 forks, a package-request issue; main: 500 stars and 150 forks | Excavator (`checkver`/`autoupdate`) | none | **B** (not eligible yet) |
 | Cloudsmith (apt, rpm) | medium on Debian, Ubuntu, Fedora | the open-source plan; `.deb`/`.rpm` built from the musl binaries (nfpm) | `release.yml` | OIDC (service account; *unverified* on the open-source plan) | **B** |
-| Docker Hub mirror | medium | a `graphvizpure` namespace (no hyphens allowed) | `release.yml` (`skopeo copy` from ghcr.io) | OIDC only on Team, Business and Docker-Sponsored Open Source plans; otherwise an access token | C |
+| Docker Hub mirror | medium | a `graphvizpure` namespace (no hyphens allowed) | `release.yml` (`skopeo copy` from ghcr.io) | OIDC only on Team, Business, Docker-Sponsored Open Source and Hardened Images subscriptions; otherwise an access token | C |
 | Chocolatey | medium, shrinking | a package and human moderation | AU from a pull repository | API key (lifetime *unverified*); no OIDC | C |
 | Snap Store | medium on Ubuntu | `snapcraft.yaml` | `snapcraft upload` | exported login with `--expires`; no OIDC found | C |
 | Fedora COPR | low-medium | a spec file | webhook builds on tags | API token, 180 days | C |
@@ -122,8 +123,9 @@ packages:
       signer_workflow: graphviz-pure/graphviz-pure/.github/workflows/release.yml
 ```
 
-Once aqua has it, mise's registry (`mise use graphviz-pure`) can point at `aqua:graphviz-pure/graphviz-pure`;
-mise's registry otherwise expects thousands of stars.
+With the aqua entry, `mise use aqua:graphviz-pure/graphviz-pure` works. A `graphviz-pure`
+shorthand in mise's own registry needs its popularity bar (normally thousands of stars), whatever
+the backend.
 
 **winget.** Microsoft's pipeline validates each pull request to `microsoft/winget-pkgs` (schema,
 URL reputation, antivirus scans, a silent install) and a moderator reviews it; there is no
