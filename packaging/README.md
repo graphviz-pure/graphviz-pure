@@ -40,8 +40,9 @@ Users who want `dot` to run graphviz-pure can link it themselves, ahead of any G
 ln -s "$(command -v graphviz-pure)" ~/.local/bin/dot
 ```
 
-The program's name only changes how it names itself in messages. Unlike C Graphviz, a link
-called `neato` (or `fdp`, ...) still uses the `dot` layout engine; use `-Kneato` instead.
+As in C Graphviz, the program's name picks the layout engine when there is no `-K`: a link called
+`neato` (or `fdp`, `sfdp`, `circo`, `twopi`, `osage`, `patchwork`, `nop`, `nop1`, `nop2`) lays out
+with that engine, and any name that is not a layout engine with `dot`.
 
 ## AUR
 
