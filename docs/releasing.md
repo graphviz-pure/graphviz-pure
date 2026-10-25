@@ -83,7 +83,9 @@ crates.io (`graphviz-pure-wasm`, `-diff` and `-portable-libm` have `publish = fa
 archive byte for byte; the image's attestation, and `X.Y` and `latest` pointing at it where this version
 should hold them (not for a backport to an older minor line, nor `latest` for anything but the
 newest version); npm's
-`latest` dist-tag and `npm audit signatures`; the tap's formula, the bucket's manifest and
+`latest` dist-tag, an install pinned to the attested release tarball's integrity (`npm ci`
+against a lockfile the script writes from it), and `npm audit signatures`; the tap's formula,
+the bucket's manifest and
 their newest `update.yml` run. Attestations must come from `release.yml` run for the tag, not a
 dry run. The release workflow's `verify` job runs it with `--ci` (all but npm and the tap and
 bucket) once the publishing jobs finish, and reports a channel whose publishing job failed
