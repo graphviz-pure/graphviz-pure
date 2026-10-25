@@ -340,7 +340,7 @@ pub fn osage_layout(graph: &mut Graph) -> Result<()> {
         }
         spline_edges0(&mut g, &root, true, true);
     } else {
-        let mut et = g.edge_type;
+        let et = g.edge_type;
         if et == EdgeType::Ortho {
             crate::neatogen::neatosplines::spline_edges_by(
                 &mut g,
@@ -352,11 +352,11 @@ pub fn osage_layout(graph: &mut Graph) -> Result<()> {
                 },
             );
         } else if et != EdgeType::None {
-            if et == EdgeType::CompoundEdge {
-                // compoundEdges needs fdp's cluster hierarchy; C's
-                // spline_edges_ routes it like a polyline.
-                et = EdgeType::Pline;
-            }
+            // C's `osage_layout` calls `spline_edges1(g, et)` with the original
+            // type (`osageinit.c`). `makeMultiSpline`'s polyline flag is
+            // `edgetype == EDGETYPE_PLINE` (`neatosplines.c`), false for
+            // `EDGETYPE_COMPOUND`, so a multi-edge is a cubic. A single edge
+            // still falls through to `makePolyline`.
             spline_edges_main(&mut g, &root, et);
         }
     }

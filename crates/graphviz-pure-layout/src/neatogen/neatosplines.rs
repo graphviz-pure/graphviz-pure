@@ -365,17 +365,17 @@ fn use_edge(g: &mut LGraph<'_>, n: usize, e: usize) {
 
 /// `spline_edges0(g, set_aspect)`.
 pub fn spline_edges0(g: &mut LGraph<'_>, sub: &Sub, is_root: bool, set_aspect: bool) {
-    let mut et = g.edge_type;
+    let et = g.edge_type;
     if set_aspect {
         neato_set_aspect(g, sub, is_root);
     }
     if et == EdgeType::None {
         return;
     }
-    if et == EdgeType::CompoundEdge {
-        // spline_edges_ routes compound edges as polylines.
-        et = EdgeType::Pline;
-    }
+    // C's `spline_edges0` passes `et` through (`neatosplines.c`). Compound is
+    // not a polyline: `makeMultiSpline` gets `edgetype == EDGETYPE_PLINE`,
+    // which is false for `EDGETYPE_COMPOUND`, so a multi-edge is a cubic. A
+    // single edge still falls through to `makePolyline`.
     spline_edges_main(g, sub, et);
 }
 
