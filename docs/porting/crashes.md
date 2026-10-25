@@ -860,6 +860,52 @@ Every input that still differs is `mode=ipsep` with clusters. There C's layout a
 between spellings of the same value (`sep="0"` and `sep="0,0"`), because VPSC breaks ties by
 heap address (#225).
 
+## voronoi newpos on an empty cell
+
+Closed: #450.
+
+`newpos` (`lib/neatogen/adjust.c`) places a site at the centroid of its Voronoi
+cell: a fan of triangles from `verts[0]`, divided by their total area. The cell
+is clipped to the window `chkBoundBox` computed before `rmEquality`. Three or
+more nodes pinned on one point overlap, so adjustment runs, and `rmEquality`
+then shifts each later site by half the sum of the polygon widths. That puts
+every site but the first outside the window. `addCorners` (`adjust.c:355`)
+gives a corner only when a site is strictly closer, so the first site takes all
+four corners and the last gets none. The sweep, clipped to the same window,
+records nothing for that site either. Its `n_verts` is 0 and `verts` is NULL.
+
+That empty cell is C's state. The port's `addCorners` uses the same strict `<`
+(`voronoi_pass` in `neatogen/voronoi.rs`); it does not drop a vertex C kept.
+On the reference build, a breakpoint on the compare clang emits for this
+function (inlined in `removeOverlapWith`) shows the first pass: `n_verts` 4, 4
+and 0, the last `verts` pointer NULL, the sites already spread to
+`0`, `0.86111111`, `1.7222222`. The four vertices of the first site are the
+window corners. The second site's four are the sweep's clips of the window.
+The third has no vertex.
+
+C calls `newpos` anyway. The source reads `ip->verts[0]` with no `n_verts`
+check (`adjust.c:331`). On an empty cell, that is a read through a NULL pointer,
+undefined behaviour: `sortSites` (`adjust.c:189`) sets `verts` back to NULL at
+the start of each pass, and a site the sweep never touches stays NULL. The
+loop is `for (i = 1; i + 1 < n_verts; ++i)`, so it does not run for fewer than
+3 vertices, the area stays 0, and the coordinates are `0/0`. The reference
+build gives that NaN layout because clang sinks the `verts[0]` load past the
+zero-trip loop (`cmp` against 3, then the division). An `-O0` or gcc build of
+C would likely crash. The port writes the reference build's output: it loads
+the anchor only when the cell has the three vertices the loop reads, and
+divides the same way. Indexing `verts[0]` first panicked.
+
+The NaN site does not end the adjustment. The first pass still leaves the other
+two overlapping, so the next pass moves every site. Bisectors against the NaN
+site write NaN vertices into those cells (`n_verts` 6, 6 and 4 on that pass),
+and their centroids become NaN too. C exits 0. `-Tdot` is `pos="nan,nan"` and
+`bb="0,0,-4.295e+09,-4.295e+09"` (the sentinel box `INT_MAX` / `-INT_MAX`,
+shifted so its corner is the origin: `-4294967294` prints as `-4.295e+09`).
+`-Tplain` is `nan` nodes on a graph `-5.9652e+07` square. fdp calls the same
+`removeOverlapWith` and writes the same drawing. Two pinned nodes keep a cell
+with area, so both draw them apart. An unpinned `pos` is placed by the model
+before adjustment, and that drawing is finite.
+
 ## sameport's 0/0 direction
 
 Closed: #396.

@@ -1091,17 +1091,28 @@ fn area_of(a: Point, b: Point, c: Point) -> f64 {
         / 2.0
 }
 
+// `newpos` (`lib/neatogen/adjust.c`). The fan from `verts[0]` needs three
+// vertices. `addCorners` uses strict `<`, so a site that `rmEquality` pushed
+// outside the window `chkBoundBox` fixed earlier can have none (`verts` NULL;
+// `sortSites` resets it each pass). C's `ip->verts[0]` on that cell reads
+// through a NULL pointer, which is undefined behaviour. The reference build
+// writes NaN because clang sinks the load past the zero-trip loop; an -O0 or
+// gcc build of C would likely crash. The port writes that build's output.
+// Indexing `verts[0]` here panicked (#450).
 fn newpos(ip: &mut Info) {
-    let anchor = ip.verts[0];
+    let n = ip.verts.len();
     let (mut total, mut cx, mut cy) = (0.0f64, 0.0f64, 0.0f64);
-    for i in 1..ip.verts.len().saturating_sub(1) {
-        let (p, q) = (ip.verts[i], ip.verts[i + 1]);
-        let area = area_of(anchor, p, q);
-        let x = (anchor.x + p.x + q.x) / 3.0;
-        let y = (anchor.y + p.y + q.y) / 3.0;
-        cx = area.mul_add(x, cx);
-        cy = area.mul_add(y, cy);
-        total += area;
+    if n >= 3 {
+        let anchor = ip.verts[0];
+        for i in 1..n.saturating_sub(1) {
+            let (p, q) = (ip.verts[i], ip.verts[i + 1]);
+            let area = area_of(anchor, p, q);
+            let x = (anchor.x + p.x + q.x) / 3.0;
+            let y = (anchor.y + p.y + q.y) / 3.0;
+            cx = area.mul_add(x, cx);
+            cy = area.mul_add(y, cy);
+            total += area;
+        }
     }
     ip.coord = Point::new(cx / total, cy / total);
 }
@@ -1299,4 +1310,46 @@ pub fn adjust(g: &mut LGraph<'_>, sub: &Sub, mode: AdjustMode) -> bool {
         }
     }
     changed
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn cell(verts: &[Point]) -> Info {
+        Info {
+            coord: Point::new(0.0, 0.0),
+            poly: Poly::default(),
+            verts: verts.to_vec(),
+            overlaps: true,
+            node: 0,
+        }
+    }
+
+    // Issue #450. C's `newpos` (`adjust.c`) divides by the fan's area. With
+    // fewer than three vertices the loop does not run, the area stays 0, and
+    // the site is NaN. `verts` may be empty: clang does not load `verts[0]`.
+    #[test]
+    fn newpos_of_a_cell_with_fewer_than_three_vertices_is_nan() {
+        for verts in [
+            &[][..],
+            &[Point::new(1.0, 2.0)][..],
+            &[Point::new(1.0, 2.0), Point::new(3.0, 4.0)][..],
+        ] {
+            let mut ip = cell(verts);
+            newpos(&mut ip);
+            assert!(ip.coord.x.is_nan() && ip.coord.y.is_nan(), "{verts:?}");
+        }
+    }
+
+    #[test]
+    fn newpos_centroid_of_a_triangle_is_unchanged() {
+        let mut ip = cell(&[
+            Point::new(0.0, 0.0),
+            Point::new(1.0, 0.0),
+            Point::new(0.0, 1.0),
+        ]);
+        newpos(&mut ip);
+        assert_eq!(ip.coord, Point::new(1.0 / 3.0, 1.0 / 3.0));
+    }
 }
