@@ -568,6 +568,22 @@ impl Dot<'_> {
         }
     }
 
+    /// `dot_lca(c0, c1)` (`lib/dotgen/rank.c:708-717`).
+    ///
+    /// C reads `GD_level(c0)` and `GD_level(c1)` without checking for NULL, relying on
+    /// the layout root having `is_a_cluster(root) == true` (`g == g->root`) so every node's
+    /// `ND_clust` and every cluster's `GD_parent` chain ends at the layout root at
+    /// `GD_level == 0`. Under `doDot`'s multi-component pack branch, a component `_cc_<i>`
+    /// is a subgraph (`sg != sg->root`), so `is_a_cluster(sg)` is false in C (`compile_samerank`
+    /// leaves `parent_clust == NULL`, top-level clusters get `GD_level == 0` and
+    /// `GD_parent == NULL`, and nodes outside any cluster keep `ND_clust == NULL`), and C's
+    /// `dot_lca` dereferences NULL (`GD_level(NULL)`) on any edge between a cluster and
+    /// outside or between two top-level clusters (#427). Treating `None` as level `-1` is a
+    /// sentinel below `level == 0` so `None` plays the root cluster's role: the walk climbs
+    /// to `None` without crashing, and `is_internal_to_cluster` gives the same answers C
+    /// gives in a normal `newrank` layout where the root is a level-0 cluster (`true` when
+    /// one end is outside any cluster, `false` when the ends are in two different top-level
+    /// clusters).
     fn dot_lca(&self, mut c0: Option<G>, mut c1: Option<G>) -> Option<G> {
         while c0 != c1 {
             let l0 = c0.map_or(-1, |c| self.graphs[c].level);
@@ -930,5 +946,69 @@ impl Dot<'_> {
         self.rank2(xg, 1, maxiter, ssize)?;
         self.readout_levels(g, ncc);
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::{LayoutEngine, layout_graph};
+    use graphviz_pure_core::{AttrMap, Graph, GraphKind, Point, SubgraphData, SubgraphId};
+
+    // Issue #427: `graph G { packmode=array; newrank=true; subgraph cluster_c { {rank=same; a; b;} } f0 -- g0; z -- b; }`.
+    // In a multi-component `pack` layout without `ratio`, C's `doDot` lays out each `_cc_<i>`
+    // subgraph with `dotLayout(sg)`. Because `sg != sg->root`, `is_a_cluster(sg)` is false in C
+    // (`utils.c:697`), so `compile_samerank` leaves `parent_clust == NULL`, top-level clusters
+    // get `GD_level == 0` and `GD_parent == NULL` (never registered in `GD_clust(sg)`), and
+    // nodes outside any cluster keep `ND_clust == NULL`. On `z -- b`, `dot_lca(NULL, cluster_c)`
+    // (`rank.c:708-717`) then dereferences NULL (`GD_level(c0)`). In the port, `None` at level
+    // `-1` in `dot_lca` plays the root cluster's role: `dot_lca(None, Some(cluster_c))` returns
+    // `None == ct` (`is_internal_to_cluster` is true, as in a normal `newrank` layout where the
+    // root is a level-0 cluster) and the graph is drawn without panicking.
+    #[test]
+    fn issue427_newrank_pack_component_edge_into_cluster_does_not_panic() {
+        let mut g = Graph::new("G", GraphKind::Undirected, false);
+        g.graph_attrs.insert("packmode".into(), "array".into());
+        g.graph_attrs.insert("newrank".into(), "true".into());
+        let [a, b, f0, g0, z] = ["a", "b", "f0", "g0", "z"].map(|n| g.ensure_node(n));
+        g.add_edge(f0, g0, AttrMap::new());
+        g.add_edge(z, b, AttrMap::new());
+        g.subgraphs.push(SubgraphData {
+            id: SubgraphId(0),
+            name: "cluster_c".into(),
+            is_cluster: true,
+            graph_attrs: AttrMap::new(),
+            node_defaults: AttrMap::new(),
+            edge_defaults: AttrMap::new(),
+            nodes: vec![a, b],
+            edges: Vec::new(),
+            subgraphs: vec![SubgraphId(1)],
+            bb: Default::default(),
+            html_name: false,
+            empty_name: false,
+            layout: Default::default(),
+        });
+        g.subgraphs.push(SubgraphData {
+            id: SubgraphId(1),
+            name: String::new(),
+            is_cluster: false,
+            graph_attrs: AttrMap::from_plain([("rank".into(), "same".into())]),
+            node_defaults: AttrMap::new(),
+            edge_defaults: AttrMap::new(),
+            nodes: vec![a, b],
+            edges: Vec::new(),
+            subgraphs: Vec::new(),
+            bb: Default::default(),
+            html_name: false,
+            empty_name: true,
+            layout: Default::default(),
+        });
+
+        layout_graph(&mut g, LayoutEngine::Dot).unwrap();
+        // `a` and `b` share rank 1 below `z` (rank 0), and `f0 -- g0` is packed beside them.
+        assert_eq!(g.nodes[a.0 as usize].pos, Point::new(27.0, 18.0));
+        assert_eq!(g.nodes[b.0 as usize].pos, Point::new(99.0, 18.0));
+        assert_eq!(g.nodes[z.0 as usize].pos, Point::new(99.0, 90.0));
+        assert_eq!(g.nodes[f0.0 as usize].pos, Point::new(161.0, 90.0));
+        assert_eq!(g.nodes[g0.0 as usize].pos, Point::new(161.0, 18.0));
     }
 }
