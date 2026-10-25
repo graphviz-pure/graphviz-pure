@@ -61,6 +61,11 @@ env:
   # that release's .sha256 file.
   UV_VERSION: "0.13.5"
   UV_SHA256: f68d291c75783122dad58ab77def0e13f3233f358731db5d6d7e8715603b928f
+  # cargo-binstall installs the published crate's release archives in the verify job (a dry run).
+  # The SHA-256 of cargo-binstall-x86_64-unknown-linux-musl.tgz, as GitHub reports that asset's
+  # digest.
+  BINSTALL_VERSION: "1.26.1"
+  BINSTALL_SHA256: 43d379fef8cb450961a14ff113e7bce7b5e1e52db709c776d186f928d8a20a40
 
 jobs:
   check:
@@ -520,7 +525,8 @@ jobs:
   attest:
     name: Checksums and provenance
     needs: [check, binaries, npm-package, wasi]
-    runs-on: ubuntu-latest
+    # A fixed image, so the Python that runs scripts/check-binstall.py has tomllib (3.12 here).
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     permissions:
       contents: read
@@ -979,6 +985,16 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      # For the binstall channel: cargo-binstall itself installs (as a dry run) the published
+      # crate's archive for every release target, from crates.io and the GitHub release.
+      - name: Install cargo-binstall ${{ env.BINSTALL_VERSION }}
+        working-directory: ${{ runner.temp }}
+        run: |
+          curl --fail --silent --show-error --location --proto '=https' --output binstall.tgz \
+            "https://github.com/cargo-bins/cargo-binstall/releases/download/v$BINSTALL_VERSION/cargo-binstall-x86_64-unknown-linux-musl.tgz"
+          echo "$BINSTALL_SHA256  binstall.tgz" | sha256sum --check --strict
+          mkdir binstall && tar -xzf binstall.tgz -C binstall cargo-binstall
+          echo "$RUNNER_TEMP/binstall" >> "$GITHUB_PATH"
       # The registry checks share one 10-minute deadline, well inside the job's timeout, and the
       # script writes each channel's line as it goes, so the summary always shows what was found.
       - name: Verify every channel but npm and the tap and bucket

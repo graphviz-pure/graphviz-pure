@@ -5,7 +5,9 @@
 #           SHA256SUMS
 #   crates  every publishable workspace crate at VERSION on crates.io
 #   binstall  graphviz-pure-cli VERSION's cargo-binstall metadata, as published on crates.io,
-#           names every release archive and the binary in it (scripts/check-binstall.py)
+#           names every release archive and the binary in it (scripts/check-binstall.py), and,
+#           where cargo-binstall is on PATH, `cargo-binstall --dry-run` fetches and unpacks the
+#           archive for every release target from the published crate
 #   jsr     @graphviz-pure/wasm VERSION in JSR's meta.json, not yanked
 #   ghcr    VERSION's attestation verifies, and X.Y and latest point at VERSION's digest where
 #           VERSION should hold them: X.Y if it is the newest stable X.Y.*, latest if it is the
@@ -130,11 +132,45 @@ binstall() {
     result binstall 0 "$crate has no graphviz-pure-cli-$version/Cargo.toml"
   elif ! gh release download "$tag" --repo "$REPO" --pattern "graphviz-pure-$version-*" --dir "$work/binstall/dist" > /dev/null 2>&1; then
     result binstall 0 "could not download the release's archives"
-  elif (cd "$work/binstall" && "$py" "$OLDPWD/scripts/check-binstall.py" "graphviz-pure-cli-$version/Cargo.toml" dist "$version") > "$work/binstall/log" 2>&1; then
-    result binstall 1 "$(tail -n 1 "$work/binstall/log")"
-  else
+  elif ! (cd "$work/binstall" && "$py" "$OLDPWD/scripts/check-binstall.py" "graphviz-pure-cli-$version/Cargo.toml" dist "$version") > "$work/binstall/log" 2>&1; then
     # Relative paths only: this text is posted to the release issue.
     result binstall 0 "$(grep -v ' → ' "$work/binstall/log" | tr '\n' ' ')"
+  elif ! command -v cargo-binstall > /dev/null; then
+    # release.yml's verify job installs it, so there its absence is a failure.
+    result binstall "$((1 - ci))" "$(tail -n 1 "$work/binstall/log") (templates only: no cargo-binstall on PATH)"
+  else
+    binstall_dry_runs
+  fi
+}
+# cargo-binstall --dry-run for each release target: resolves graphviz-pure-cli VERSION on
+# crates.io, downloads the target's archive from the GitHub release, unpacks it and finds the
+# binary, then stops before installing. Compiling and third-party builds are disabled, so only
+# the release's archives can satisfy it.
+binstall_dry_run() { # binstall_dry_run TARGET: one attempt
+  CARGO_HOME="$work/binstall/home" cargo-binstall --dry-run --no-confirm --no-track \
+    --disable-strategies compile,quick-install --targets "$1" \
+    --install-path "$work/binstall/bin" "graphviz-pure-cli@$version" > "$work/binstall/dry-$1.log" 2>&1 < /dev/null
+}
+binstall_dry_runs() {
+  local archive target bad=() n=0
+  # The archives check-binstall.py checks: .tar.gz and .zip, not the WASI one.
+  for archive in "$work"/binstall/dist/graphviz-pure-"$version"-*.tar.gz "$work"/binstall/dist/graphviz-pure-"$version"-*.zip; do
+    [ -f "$archive" ] || continue
+    case "$archive" in *-wasm32-*) continue ;; esac
+    target=${archive##*/graphviz-pure-"$version"-}
+    target=${target%.tar.gz}
+    target=${target%.zip}
+    n=$((n + 1))
+    if ! retry binstall_dry_run "$target"; then
+      bad+=("$target")
+      # The log goes to stderr (the job's log), not to the summary, with the temporary paths masked.
+      { echo "cargo-binstall --dry-run --targets $target:"; sed "s|$work|…|g" "$work/binstall/dry-$target.log"; } >&2
+    fi
+  done
+  if [ ${#bad[@]} = 0 ]; then
+    result binstall 1 "$(tail -n 1 "$work/binstall/log"); cargo-binstall $(cargo-binstall -V 2> /dev/null) dry-runs $n targets"
+  else
+    result binstall 0 "cargo-binstall --dry-run fails for: ${bad[*]}"
   fi
 }
 
