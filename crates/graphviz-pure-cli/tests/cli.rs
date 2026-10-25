@@ -2461,6 +2461,121 @@ c -- d;
     );
 }
 
+/// Issue #452: neato `splines=compound` passes the original edge type into
+/// `makeMultiSpline` (`lib/neatogen/neatosplines.c`). The polyline flag is
+/// `edgetype == EDGETYPE_PLINE`, false for `EDGETYPE_COMPOUND`, so a two-edge
+/// multi-edge is a 4-point cubic. Rewriting compound to a polyline drew C's
+/// `splines=polyline` curve, or a 7-point polyline with a repeated vertex when
+/// one node is a point. Expected output is C Graphviz 16.1.0.
+#[test]
+fn neato_compound_multi_edge_is_a_cubic_like_c() {
+    let point =
+        "graph G {\n  splines=compound;\n  a [shape=point];\n  b;\n  a -- b;\n  a -- b;\n}\n";
+    let (out, err, ok) = run(&["-Kneato", "-Tdot"], point);
+    assert!(ok, "{err}");
+    assert_eq!(err, "");
+    assert_eq!(
+        out,
+        "graph G {\n\
+         \tgraph [bb=\"0,0,100.01,36\",\n\
+         \t\tsplines=compound\n\
+         \t];\n\
+         \tnode [label=\"\\N\"];\n\
+         \ta\t[height=0.05,\n\
+         \t\tpos=\"1.8,28.639\",\n\
+         \t\tshape=point,\n\
+         \t\twidth=0.05];\n\
+         \tb\t[height=0.5,\n\
+         \t\tpos=\"73.01,18\",\n\
+         \t\twidth=0.75];\n\
+         \ta -- b\t[pos=\"3.0674,30.234 8.7234,33.621 31.908,31.724 50.057,27.915\"];\n\
+         \ta -- b\t[pos=\"2.3659,26.955 6.1529,22.19 27.637,17.312 45.933,15.441\"];\n\
+         }\n"
+    );
+
+    let ellipses = "graph G {\n  splines=compound;\n  a -- b;\n  a -- b;\n}\n";
+    let (out, err, ok) = run(&["-Kneato", "-Tdot"], ellipses);
+    assert!(ok, "{err}");
+    assert_eq!(err, "");
+    assert_eq!(
+        out,
+        "graph G {\n\
+         \tgraph [bb=\"0,0,125.21,46.639\",\n\
+         \t\tsplines=compound\n\
+         \t];\n\
+         \tnode [label=\"\\N\"];\n\
+         \ta\t[height=0.5,\n\
+         \t\tpos=\"27,28.639\",\n\
+         \t\twidth=0.75];\n\
+         \tb\t[height=0.5,\n\
+         \t\tpos=\"98.21,18\",\n\
+         \t\twidth=0.75];\n\
+         \ta -- b\t[pos=\"54.077,31.198 61.111,30.479 68.617,29.315 75.407,27.884\"];\n\
+         \ta -- b\t[pos=\"50.159,18.681 56.879,17.279 64.275,16.139 71.209,15.433\"];\n\
+         }\n"
+    );
+}
+
+/// Issue #452, osage: `osage_layout` (`lib/osage/osageinit.c`) calls
+/// `spline_edges1` with the original type, the same `EDGETYPE_PLINE` test as
+/// neato. A point node makes the port's old polyline rewrite a 7-point edge
+/// with a repeated vertex; C draws a 4-point cubic. Osage also warns when the
+/// default margin boxes touch. Expected output is C Graphviz 16.1.0.
+#[test]
+fn osage_compound_multi_edge_is_a_cubic_like_c() {
+    let point =
+        "graph G {\n  splines=compound;\n  a [shape=point];\n  b;\n  a -- b;\n  a -- b;\n}\n";
+    let (out, err, ok) = run(&["-Kosage", "-Tdot"], point);
+    assert!(ok, "{err}");
+    assert_eq!(
+        err,
+        "Warning: some nodes with margin (3.20,3.20) touch - falling back to straight line edges\n"
+    );
+    assert_eq!(
+        out,
+        "graph G {\n\
+         \tgraph [bb=\"0,0,61.6,36\",\n\
+         \t\tsplines=compound\n\
+         \t];\n\
+         \tnode [label=\"\\N\"];\n\
+         \ta\t[height=0.05,\n\
+         \t\tpos=\"59.8,17.8\",\n\
+         \t\tshape=point,\n\
+         \t\twidth=0.05];\n\
+         \tb\t[height=0.5,\n\
+         \t\tpos=\"27,18\",\n\
+         \t\twidth=0.75];\n\
+         \ta -- b\t[pos=\"59.219,15.859 58.188,14.224 55.868,13.018 52.92,12.236\"];\n\
+         \ta -- b\t[pos=\"59.243,19.748 58.265,21.34 56.079,22.547 53.28,23.365\"];\n\
+         }\n"
+    );
+
+    let ellipses = "graph G {\n  splines=compound;\n  a -- b;\n  a -- b;\n}\n";
+    let (out, err, ok) = run(&["-Kosage", "-Tdot"], ellipses);
+    assert!(ok, "{err}");
+    assert_eq!(
+        err,
+        "Warning: some nodes with margin (3.20,3.20) touch - falling back to straight line edges\n"
+    );
+    assert_eq!(
+        out,
+        "graph G {\n\
+         \tgraph [bb=\"0,0,112,36\",\n\
+         \t\tsplines=compound\n\
+         \t];\n\
+         \tnode [label=\"\\N\"];\n\
+         \ta\t[height=0.5,\n\
+         \t\tpos=\"27,18\",\n\
+         \t\twidth=0.75];\n\
+         \tb\t[height=0.5,\n\
+         \t\tpos=\"85,18\",\n\
+         \t\twidth=0.75];\n\
+         \ta -- b\t[pos=\"52.608,24.709 54.915,24.765 57.25,24.764 59.555,24.705\"];\n\
+         \ta -- b\t[pos=\"52.608,11.291 54.915,11.235 57.25,11.236 59.555,11.295\"];\n\
+         }\n"
+    );
+}
+
 /// Issue #17, circo variant: with the star's obstacle, C's guiding polygon
 /// makes `Pshortestpath` fail in `genroute` (`lib/neatogen/multispline.c`),
 /// which warns and falls back to a straight edge.
