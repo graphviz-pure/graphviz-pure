@@ -158,21 +158,33 @@ ghcr() {
   fi
 }
 
-# The registry's package, downloaded, must contain the attested archive's module: a webc stores
-# its modules as they are.
-wasmer_url() {
-  jq -nc --arg v "$version" '{query: "{ getPackageVersion(name: \"graphviz-pure/graphviz-pure\", version: \"\($v)\") { distribution { webcDownloadUrl } } }"}' |
+# The registry's package (its webc v3 file, as Wasmer 7 publishes it), downloaded and checked
+# against the registry's hash, must contain the attested archive's module: a webc stores its
+# modules as they are.
+wasmer_query() { # wasmer_query QUERY [VERSION]: the registry's GraphQL answer, or failure
+  jq -nc --arg q "$1" --arg v "${2:-}" '{query: $q, variables: {v: $v}}' |
     curl -fsS -A "$ua" -H 'content-type: application/json' --data @- https://registry.wasmer.io/graphql 2> /dev/null |
-    jq -er '.data.getPackageVersion.distribution.webcDownloadUrl // empty'
+    jq -ec 'select(.data != null and (.errors | length // 0) == 0)'
 }
 wasmer_ok() {
-  local url
-  url=$(wasmer_url) && curl -fsS -A "$ua" -o "$work/wasmer.webc" "$url" 2> /dev/null
+  local answer url hash
+  # shellcheck disable=SC2016 # $v is a GraphQL variable
+  answer=$(wasmer_query 'query($v: String) { getPackageVersion(name: "graphviz-pure/graphviz-pure", version: $v) { distribution(version: V3) { webcDownloadUrl webcSha256Hash } } }' "$version") || return 1
+  url=$(jq -r '.data.getPackageVersion.distribution.webcDownloadUrl // empty' <<< "$answer")
+  hash=$(jq -r '.data.getPackageVersion.distribution.webcSha256Hash // empty' <<< "$answer")
+  [ -n "$url" ] && [ -n "$hash" ] && curl -fsS -A "$ua" -o "$work/wasmer.webc" "$url" 2> /dev/null &&
+    [ "$(if command -v sha256sum > /dev/null; then sha256sum "$work/wasmer.webc"; else shasum -a 256 "$work/wasmer.webc"; fi | cut -d' ' -f1)" = "$hash" ]
 }
 wasmer_channel() {
   local asset=graphviz-pure-$version-wasm32-wasip1.tar.gz
+  # release.yml's wasmer job publishes no pre-release, and nothing until the channel is set up.
+  case "$version" in *-*) result wasmer 1 "skipped: $version is a pre-release, not published to Wasmer"; return ;; esac
+  if wasmer_query '{ getPackage(name: "graphviz-pure/graphviz-pure") { name } }' | jq -e '.data.getPackage == null' > /dev/null; then
+    result wasmer 1 "skipped: not set up yet (no graphviz-pure/graphviz-pure in the registry; docs/releasing.md)"
+    return
+  fi
   if ! retry wasmer_ok; then
-    result wasmer 0 "graphviz-pure/graphviz-pure $version is not in the Wasmer registry"
+    result wasmer 0 "graphviz-pure/graphviz-pure $version is not in the Wasmer registry (or its webc does not match the registry's hash)"
     return
   fi
   mkdir -p "$work/wasi"

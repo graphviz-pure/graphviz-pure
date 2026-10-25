@@ -18,6 +18,7 @@ targets = [
     "x86_64-pc-windows-msvc",
     "aarch64-pc-windows-msvc",
     "wasm32-unknown-unknown",
+    "wasm32-wasip1",
 ]
 
 # Build scripts and their dependencies run on the build machine and are not linked into the

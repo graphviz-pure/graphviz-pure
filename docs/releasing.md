@@ -145,7 +145,9 @@ environment, and each publishes on its own:
   `graphviz-pure/graphviz-pure` (`scripts/wasmer-package.sh` adds `packaging/wasmer/wasmer.toml`
   and its README). Wasmer has no trusted publishing, so this job uses an API token, the
   `release` environment's `WASMER_TOKEN` secret ([setup](#wasmer-namespace-graphviz-pure)), and no
-  staging: the version is live when the job finishes.
+  staging: the version is live when the job finishes. Without the secret, and for a pre-release
+  (the registry would show it as the latest version), the job publishes nothing and succeeds,
+  and `verify` leaves the channel out.
 
 Then `verify` checks what they published (`scripts/release-verify.sh --ci`). Within hours,
 `graphviz-pure/homebrew-tap` and `graphviz-pure/scoop-bucket` pull the release, verify each
@@ -310,23 +312,31 @@ after the first release:
 ### Wasmer (namespace `graphviz-pure`)
 
 Wasmer has no trusted publishing (OIDC), so this is the one channel with a stored token. It is a
-secret of the `release` environment: only the `wasmer` job reads it, and only after the release
-is approved.
+secret of the `release` environment: only the `wasmer` job's publish step reads it, and only
+after the release is approved.
 
-1. Sign up at https://wasmer.io with GitHub, and create the namespace `graphviz-pure` (an
-   organization, so other maintainers can be added later). The package name
-   `graphviz-pure/graphviz-pure` is taken by the first publish.
-2. Settings → Access tokens → create a token for publishing (name it `graphviz-pure release`).
-   Do not paste it anywhere else.
-3. In this repository: Settings → Environments → `release` → Environment secrets → add
-   `WASMER_TOKEN` with the token. Or, from a shell where the token is in the clipboard (macOS):
-   `pbpaste | gh secret set WASMER_TOKEN --env release --repo graphviz-pure/graphviz-pure`.
-4. Renew it before it expires, or when a maintainer leaves: create the new token, replace the
+1. Create an account at https://wasmer.io/signup (signing in with GitHub works). A dedicated
+   account for releases is better than a personal one: Wasmer's tokens are not limited to one
+   namespace.
+2. Create the namespace with the Wasmer CLI (`brew install wasmer`, or https://docs.wasmer.io/install):
+   `wasmer login` (opens the browser), then `wasmer namespace create graphviz-pure`, and check it
+   with `wasmer namespace get graphviz-pure`. The package `graphviz-pure/graphviz-pure` is
+   created by the first publish.
+3. https://wasmer.io/settings/access-tokens → create a token named `graphviz-pure release`. Copy
+   it; do not paste it anywhere else.
+4. GitHub: https://github.com/graphviz-pure/graphviz-pure/settings/environments → **release** →
+   **Environment secrets** → **Add environment secret** → name `WASMER_TOKEN`, value the token →
+   **Add secret**. (Or `gh secret set WASMER_TOKEN --env release --repo graphviz-pure/graphviz-pure`,
+   which prompts for the value without echoing it.)
+5. Renew it before it expires, or when a maintainer leaves: create the new token, replace the
    secret, delete the old token.
 
-Until the secret exists, the `wasmer` job fails with "the release environment has no
-WASMER_TOKEN secret" and the other channels publish as usual; once it is set, **Re-run failed
-jobs** on the release run publishes that release to Wasmer.
+Until the secret exists, the `wasmer` job publishes nothing and succeeds with a notice ("Wasmer
+is not set up"), `verify` leaves the channel out, and `scripts/release-verify.sh` reports it as
+not set up for as long as the registry has no `graphviz-pure/graphviz-pure`. Once it is set,
+the next release publishes; to publish a release that already ran, open its run's
+**Publish to Wasmer** job and choose **Re-run this job** (not "Re-run all jobs": the other
+channels are already published). Pre-releases are never published to Wasmer.
 
 Users run `wasmer run graphviz-pure/graphviz-pure -- -Tsvg < graph.gv > graph.svg`; the program
 sees only directories mapped with `--volume` ([`packaging/wasmer/README.md`](../packaging/wasmer/README.md)).

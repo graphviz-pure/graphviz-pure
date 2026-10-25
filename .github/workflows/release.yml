@@ -247,6 +247,9 @@ jobs:
     needs: check
     runs-on: ubuntu-24.04
     timeout-minutes: 45
+    defaults:
+      run:
+        shell: bash # -eo pipefail: the wasmer runs below are piped
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -265,7 +268,7 @@ jobs:
           echo "$WASMER_SHA256  wasmer.tar.gz" | sha256sum --check --strict
           mkdir wasmer && tar -xzf wasmer.tar.gz -C wasmer
           echo "WASMER_DIR=$RUNNER_TEMP/wasmer-home" >> "$GITHUB_ENV"
-      # The checkout is mapped into the sandbox at its own path, read-only for the samples.
+      # The checkout is mapped into the sandbox at its own path, so the samples' paths work there.
       - name: Smoke test (version, byte-identical gallery samples)
         env:
           VERSION: ${{ needs.check.outputs.version }}
@@ -663,8 +666,11 @@ jobs:
   # The attested wasm32-wasip1 archive, published to the Wasmer registry as
   # graphviz-pure/graphviz-pure by the pinned, checksum-verified Wasmer. Wasmer has no trusted
   # publishing: WASMER_TOKEN is an API token of the namespace's owner, a secret of the `release`
-  # environment, so no other job and no run without the approval can read it. Wasmer has no
-  # staging: the version is live when the job finishes.
+  # environment, so no other job and no run without the approval can read it, and only the
+  # publish step holds it. Wasmer has no staging: the version is live when the job finishes.
+  # The job publishes nothing, and succeeds with `published=false` so that the verify job leaves
+  # the channel out, when the secret is not set up yet (docs/releasing.md) and for a pre-release
+  # (the registry would show it as the latest version).
   wasmer:
     name: Publish to Wasmer
     if: github.event_name == 'push'
@@ -674,20 +680,53 @@ jobs:
     environment: release
     permissions:
       contents: read
+    defaults:
+      run:
+        shell: bash # -eo pipefail
+    outputs:
+      published: ${{ (steps.todo.outputs.present == 'true' || steps.publish.outcome == 'success') && 'true' || 'false' }}
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Is there anything to publish?
+        id: todo
+        env:
+          VERSION: ${{ needs.check.outputs.version }}
+          HAS_TOKEN: ${{ secrets.WASMER_TOKEN != '' }}
+        run: |
+          # shellcheck disable=SC2016 # $v is a GraphQL variable
+          query='query($v: String) { getPackageVersion(name: "graphviz-pure/graphviz-pure", version: $v) { version } }'
+          answer=$(jq -nc --arg q "$query" --arg v "$VERSION" '{query: $q, variables: {v: $v}}' |
+            curl -fsS -A "graphviz-pure release (https://github.com/$GITHUB_REPOSITORY)" -H 'content-type: application/json' \
+              --data @- https://registry.wasmer.io/graphql)
+          jq -e '.data != null and (.errors | length // 0) == 0' <<< "$answer" > /dev/null ||
+            { echo "::error::the Wasmer registry did not answer: $answer"; exit 1; }
+          if jq -e '.data.getPackageVersion != null' <<< "$answer" > /dev/null; then
+            echo "graphviz-pure/graphviz-pure $VERSION is already in the registry"
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          elif [ "$HAS_TOKEN" != true ]; then
+            echo "::notice::Wasmer is not set up (no WASMER_TOKEN secret in the release environment, see docs/releasing.md): not published"
+          elif [[ "$VERSION" == *-* ]]; then
+            echo "::notice::$VERSION is a pre-release: not published to Wasmer"
+          else
+            echo "publish=true" >> "$GITHUB_OUTPUT"
+          fi
+      - if: steps.todo.outputs.publish == 'true'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+      - if: steps.todo.outputs.publish == 'true'
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: release
           path: dist
-      - name: The archive is the attested one
+      - name: The package, from the attested archive
+        if: steps.todo.outputs.publish == 'true'
         env:
           VERSION: ${{ needs.check.outputs.version }}
-        working-directory: dist
-        run: awk -v f="graphviz-pure-$VERSION-wasm32-wasip1.tar.gz" '$2 == f' SHA256SUMS | sha256sum --check --strict
+        run: |
+          (cd dist && awk -v f="graphviz-pure-$VERSION-wasm32-wasip1.tar.gz" '$2 == f' SHA256SUMS | sha256sum --check --strict)
+          scripts/wasmer-package.sh "dist/graphviz-pure-$VERSION-wasm32-wasip1.tar.gz" "$RUNNER_TEMP/wasmer-package"
       - name: Install Wasmer ${{ env.WASMER_VERSION }}
+        if: steps.todo.outputs.publish == 'true'
         working-directory: ${{ runner.temp }}
         run: |
           curl --fail --silent --show-error --location --proto '=https' --output wasmer.tar.gz \
@@ -695,22 +734,14 @@ jobs:
           echo "$WASMER_SHA256  wasmer.tar.gz" | sha256sum --check --strict
           mkdir wasmer && tar -xzf wasmer.tar.gz -C wasmer
           echo "WASMER_DIR=$RUNNER_TEMP/wasmer-home" >> "$GITHUB_ENV"
-      # Re-runnable: a version already in the registry is left as it is (versions are immutable
-      # there, and scripts/release-verify.sh checks that it holds the attested module).
+      # Re-runnable: a version already in the registry is left as it is above (versions are
+      # immutable there, and scripts/release-verify.sh checks that it holds the attested module).
       - name: wasmer publish
+        id: publish
+        if: steps.todo.outputs.publish == 'true'
         env:
-          VERSION: ${{ needs.check.outputs.version }}
           WASMER_TOKEN: ${{ secrets.WASMER_TOKEN }}
-        run: |
-          query=$(jq -nc --arg v "$VERSION" '{query: "{ getPackageVersion(name: \"graphviz-pure/graphviz-pure\", version: \"\($v)\") { version } }"}')
-          if curl -fsS https://registry.wasmer.io/graphql -H 'content-type: application/json' -d "$query" |
-            jq -e '.data.getPackageVersion != null' > /dev/null; then
-            echo "graphviz-pure/graphviz-pure $VERSION is already in the registry"
-            exit 0
-          fi
-          test -n "$WASMER_TOKEN" || { echo "::error::the release environment has no WASMER_TOKEN secret (docs/releasing.md, Wasmer)"; exit 1; }
-          scripts/wasmer-package.sh "dist/graphviz-pure-$VERSION-wasm32-wasip1.tar.gz" "$RUNNER_TEMP/wasmer-package"
-          "$RUNNER_TEMP/wasmer/bin/wasmer" publish --non-interactive --wait=container "$RUNNER_TEMP/wasmer-package"
+        run: '"$RUNNER_TEMP/wasmer/bin/wasmer" publish --non-interactive --wait=container "$RUNNER_TEMP/wasmer-package"'
 
   ghcr:
     name: Publish the container image
@@ -806,7 +837,7 @@ jobs:
       !cancelled() && github.event_name == 'push' && (needs.github-release.result == 'success'
       || needs.crates-io.result == 'success' || needs.npm.result == 'success'
       || needs.jsr.result == 'success' || needs.ghcr.result == 'success'
-      || needs.wasmer.result == 'success')
+      || needs.wasmer.outputs.published == 'true')
     needs: [check, github-release, crates-io, npm, jsr, ghcr, wasmer]
     runs-on: ubuntu-24.04
     timeout-minutes: 30
@@ -827,11 +858,16 @@ jobs:
           RESULTS: >-
             github=${{ needs.github-release.result }} crates=${{ needs.crates-io.result }}
             npm=${{ needs.npm.result }} jsr=${{ needs.jsr.result }} ghcr=${{ needs.ghcr.result }}
-            wasmer=${{ needs.wasmer.result }}
+            wasmer=${{ needs.wasmer.result == 'success' && needs.wasmer.outputs.published != 'true' && 'skipped' || needs.wasmer.result }}
         run: |
           ok="" failed=""
+          # A channel that is not set up yet (its job succeeded without publishing) is left out.
           for kv in $RESULTS; do
-            if [ "${kv#*=}" = success ]; then ok="$ok,${kv%%=*}"; else failed="$failed,${kv%%=*}"; fi
+            case "${kv#*=}" in
+              success) ok="$ok,${kv%%=*}" ;;
+              skipped) ;;
+              *) failed="$failed,${kv%%=*}" ;;
+            esac
           done
           scripts/release-verify.sh "$VERSION" --ci --wait 600 --channels "${ok#,}" --failed "${failed#,}" |
             tee -a "$GITHUB_STEP_SUMMARY"
