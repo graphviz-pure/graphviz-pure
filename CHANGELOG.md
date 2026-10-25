@@ -8,7 +8,10 @@ All notable changes are listed here. The format follows
 
 ## [0.2.1] - 2026-10-25
 
-<!-- release-prep: replace this line with the release's intro paragraph -->
+A patch release with three new ways to install the command line: Wasmer, cargo-binstall and
+PyPI. Four kinds of layout now match C Graphviz 16.1.0 where they did not (fdp normalize with
+cluster edges, compound multi-edges, fdp in 3D, packed polylines), and three inputs where C
+crashes or asserts no longer panic or write NaN where C has no output. No breaking changes.
 
 ### Added
 
@@ -30,6 +33,9 @@ All notable changes are listed here. The format follows
 
 ### Fixed
 
+- `overlap=scalexy` with coincident nodes no longer writes `nan` and `inf` positions. C asserts
+  in `computeScaleXY` there; the port skips the scale, keeps the positions computed before it and
+  warns `overlap=scalexy has no finite scale; scaling skipped` (#448).
 - neato and fdp with `overlap=voronoi` no longer panic when three or more nodes are pinned at
   the same point. The layout is C's: `pos="nan,nan"` and the wrapped bounding box (#450).
 - `fdp` ignored `-Gnormalize` whenever the input had an edge to a cluster; the root component is
@@ -39,11 +45,11 @@ All notable changes are listed here. The format follows
   (#469).
 - sfdp with `smoothing=avg_dist`, `graph_dist` or `power_dist` keeps the unsmoothed layout when
   a node has no neighbour, where C asserts and writes nothing (#473).
-- Fixed fdp with `dim=3` and `overlap=false`/`overlap=prism` running prism overlap removal in 2D
-  instead of 3D, which produced the 2D layout instead of C's (#426).
-- **Output.** Packed `splines=polyline` (sfdp and the other neato-family engines) fills a
-  one-point edge through the zero point C's `fillEdge` reads, so `-Tdot`, `-Tplain` and SVG
-  coordinates for those graphs change to match C Graphviz 16.1.0 (#456).
+- fdp with `dim=3` and `overlap=false` or `overlap=prism` removed overlaps in 2D instead of 3D,
+  so it drew the 2D layout instead of C's (#477).
+- Packed `splines=polyline` layouts (sfdp and the other neato-family engines) fill a one-point
+  edge through the zero point C's `fillEdge` reads, so their `-Tdot`, `-Tplain` and SVG
+  coordinates now match C Graphviz 16.1.0 (#478).
 
 ## [0.2.0] - 2026-10-24
 
