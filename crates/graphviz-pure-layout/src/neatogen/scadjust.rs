@@ -66,7 +66,8 @@ fn mk_overlap_set(nl: &[Info]) -> Vec<Point> {
     s
 }
 
-fn compute_scale_xy(aarr: &mut [Point]) -> Point {
+/// `computeScaleXY`. `None` where C asserts (`bestcost < HUGE_VAL` fails).
+fn compute_scale_xy(aarr: &mut [Point]) -> Option<Point> {
     let m = aarr.len();
     aarr[0] = Point::new(1.0, f64::INFINITY);
     crate::cutil::qsort_by(&mut aarr[1..], |p, q| {
@@ -98,7 +99,16 @@ fn compute_scale_xy(aarr: &mut [Point]) -> Point {
             best = k;
         }
     }
-    barr[best]
+    // C asserts `bestcost < HUGE_VAL` (`constraint.c:729`, `computeScaleXY`) and
+    // aborts. Overlapping nodes at the same position, or so close that the
+    // required scale overflows, make every candidate non-finite: scaling about
+    // the origin cannot separate them. There is no output to match. NaN fails
+    // the comparison too, as it fails C's assert.
+    if bestcost < f64::INFINITY {
+        Some(barr[best])
+    } else {
+        None
+    }
 }
 
 fn compute_scale(aarr: &[Point]) -> f64 {
@@ -153,7 +163,16 @@ pub fn sc_adjust(g: &mut LGraph<'_>, sub: &Sub, equal: i32) -> bool {
             let c = compute_scale(&aarr);
             Point::new(c, c)
         } else {
-            compute_scale_xy(&mut aarr)
+            // `scAdjust` returns 0 when it cannot help (no overlapping pair, or
+            // `compress` finds one). C crashes in `computeScaleXY` instead; the
+            // port keeps the positions the layout already computed.
+            let Some(s) = compute_scale_xy(&mut aarr) else {
+                graphviz_pure_core::diag::agwarningf(
+                    "overlap=scalexy has no finite scale; scaling skipped\n",
+                );
+                return false;
+            };
+            s
         };
         graphviz_pure_core::verbose_msg!(
             "scale by {},{} \n",
@@ -211,4 +230,35 @@ pub fn vpsc_adjust(g: &mut LGraph<'_>, sub: &Sub) -> bool {
         }
     }
     false
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // Issue #434: `computeScaleXY` (constraint.c:729) asserts when every
+    // candidate cost is non-finite. A pair at one position is `(inf, inf)`.
+    #[test]
+    fn compute_scale_xy_skips_a_non_finite_scale() {
+        let mut coincident = vec![
+            Point::new(0.0, 0.0),
+            Point::new(f64::INFINITY, f64::INFINITY),
+        ];
+        assert!(compute_scale_xy(&mut coincident).is_none());
+
+        // One coincident pair makes the whole set infeasible, as C's assert does.
+        let mut mixed = vec![
+            Point::new(0.0, 0.0),
+            Point::new(4.0, 3.0),
+            Point::new(f64::INFINITY, f64::INFINITY),
+        ];
+        assert!(compute_scale_xy(&mut mixed).is_none());
+
+        // Same x only: C scales in y (`barr[0] = (1, y)`).
+        let mut same_x = vec![Point::new(0.0, 0.0), Point::new(f64::INFINITY, 2.5)];
+        assert_eq!(compute_scale_xy(&mut same_x), Some(Point::new(1.0, 2.5)));
+        // Same y only: C scales in x.
+        let mut same_y = vec![Point::new(0.0, 0.0), Point::new(5.4, f64::INFINITY)];
+        assert_eq!(compute_scale_xy(&mut same_y), Some(Point::new(5.4, 1.0)));
+    }
 }

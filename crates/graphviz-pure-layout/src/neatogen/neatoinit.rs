@@ -1425,6 +1425,55 @@ mod tests {
         );
     }
 
+    // Issue #434: `computeScaleXY` (constraint.c:729) asserts when overlapping
+    // nodes share a position. `-n` keeps the pins; the scale is not applied.
+    #[test]
+    fn nop1_scalexy_leaves_coincident_nodes_where_nop_put_them() {
+        let nodes = |overlap: &[(&str, &str)]| {
+            nop_graph(
+                false,
+                overlap,
+                &[
+                    ("a", &[("pos", "0,0")]),
+                    ("b", &[("pos", "0,0")]),
+                    ("c", &[("pos", "1,1")]),
+                ],
+                &[],
+            )
+        };
+        let scaled = nop_layout(nodes(&[("overlap", "scalexy")]), 1);
+        let plain = nop_layout(nodes(&[]), 1);
+        assert_eq!(
+            (
+                scaled.nodes[0].pos,
+                scaled.nodes[1].pos,
+                scaled.nodes[2].pos
+            ),
+            (plain.nodes[0].pos, plain.nodes[1].pos, plain.nodes[2].pos)
+        );
+        assert!(scaled.nodes[0].pos.x.is_finite() && scaled.nodes[0].pos.y.is_finite());
+        // Same x, different y: C scales in y. `-Tdot` positions are 27,18 and 27,62.
+        let apart = nop_layout(
+            nop_graph(
+                false,
+                &[("overlap", "scalexy")],
+                &[("a", &[("pos", "0,0")]), ("b", &[("pos", "0,10")])],
+                &[],
+            ),
+            1,
+        );
+        assert!(
+            near(apart.nodes[0].pos, 27.0, 18.0),
+            "{:?}",
+            apart.nodes[0].pos
+        );
+        assert!(
+            near(apart.nodes[1].pos, 27.0, 62.0),
+            "{:?}",
+            apart.nodes[1].pos
+        );
+    }
+
     // Issue #293: setRatio compares `ratio` as it is, so " fill" sets no ratio: C's bb is
     // 0,0,84,66, not the 3in `size`.
     #[test]

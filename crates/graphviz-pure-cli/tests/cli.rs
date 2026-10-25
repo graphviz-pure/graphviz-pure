@@ -2166,6 +2166,67 @@ fn vpsc_overlap_removal_with_extreme_positions_finishes() {
     assert!(out.contains("pos=\"77.499,nan\""), "{out}");
 }
 
+// Issue #434: overlapping nodes at one position. C's `computeScaleXY`
+// (constraint.c:729) asserts `bestcost < HUGE_VAL` and writes nothing. The
+// port keeps the positions (what `-n` or `overlap=true` already computed) and
+// warns. A pair C can separate still matches C 16.1.0.
+#[test]
+fn scalexy_with_coincident_nodes_keeps_finite_positions() {
+    let warn = "Warning: overlap=scalexy has no finite scale; scaling skipped\n";
+    let (out, err, ok) = run(
+        &["-Kneato", "-n", "-Goverlap=scalexy", "-Tplain"],
+        "graph{a [pos=\"0,0\"]; b [pos=\"0,0\"]; c [pos=\"1,1\"]}",
+    );
+    assert!(ok, "{err}");
+    assert_eq!(err, warn);
+    assert_eq!(
+        out,
+        "graph 1 0.76389 0.51389\n\
+         node a 0.375 0.25 0.75 0.5 a solid ellipse black lightgrey\n\
+         node b 0.375 0.25 0.75 0.5 b solid ellipse black lightgrey\n\
+         node c 0.38889 0.26389 0.75 0.5 c solid ellipse black lightgrey\n\
+         stop\n"
+    );
+    // 0.001 points apart: C still scales, by a large finite factor.
+    let (out, err, ok) = run(
+        &["-Kneato", "-n", "-Goverlap=scalexy", "-Tplain"],
+        "graph{a [pos=\"0,0\"]; b [pos=\"0.001,0.001\"]; c [pos=\"1,1\"]}",
+    );
+    assert!(ok && err.is_empty(), "{err}");
+    assert_eq!(
+        out,
+        "graph 1 0.76389 611.61\n\
+         node a 0.375 0.25 0.75 0.5 a solid ellipse black lightgrey\n\
+         node b 0.37501 0.86111 0.75 0.5 b solid ellipse black lightgrey\n\
+         node c 0.38889 611.36 0.75 0.5 c solid ellipse black lightgrey\n\
+         stop\n"
+    );
+    // fdp with `maxiter=0` leaves the pins coincident. C asserts; `overlap=true`
+    // (no removal) is the layout the port keeps.
+    let (out, err, ok) = run(
+        &["-Kfdp", "-Gmaxiter=0", "-Goverlap=scalexy", "-Tplain"],
+        "graph{a [pos=\"0,0\"]; b [pos=\"0,0\"]; a--b}",
+    );
+    assert!(ok, "{err}");
+    assert_eq!(err, warn);
+    assert_eq!(
+        out,
+        "graph 1 0.75 0.5\n\
+         node a 0.375 0.25 0.75 0.5 a solid ellipse black lightgrey\n\
+         node b 0.375 0.25 0.75 0.5 b solid ellipse black lightgrey\n\
+         edge a b 4 0.375 0.25 0.375 0.25 0.375 0.25 0.375 0.25 solid black\n\
+         stop\n"
+    );
+    // circo, the route #398 opens: derived nodes share a position. C asserts.
+    let (out, err, ok) = run(
+        &["-Kcirco", "-Goverlap=scalexy", "-Gsep=+20", "-Tplain"],
+        "digraph { \"G\" -> b; <G> -> c; c -> d; e; f -> g; <f> -> h }",
+    );
+    assert!(ok, "{err}");
+    assert_eq!(err, warn);
+    assert!(!out.contains("nan") && !out.contains("inf"), "{out}");
+}
+
 // Issue #220: C reads `pos` with the C library's sscanf("%lf"), which takes hexadecimal
 // floats and `nan(chars)`. The expected values are C Graphviz 16.1.0's output.
 #[test]
