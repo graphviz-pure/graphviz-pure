@@ -94,8 +94,9 @@ and `pipx` work too.
 - **Size:** about 6 MB per wheel (the release archives are 5.7 to 6.3 MB; the binary is 12 MB
   uncompressed, fonts included). C Graphviz with cairo, pango and their libraries is far larger.
 - **Publishing:** PyPI trusted publishing (OIDC), bound to the `release` environment, by a
-  publishing job with the same `needs` as the others (#451). `uv publish --trusted-publishing
-  always` does the exchange; the organization's action list does not include
+  publishing job with the same `needs` as the others (#451). The job exchanges the run's OIDC
+  token for a short-lived PyPI token itself, so that a publisher not set up yet is told apart from
+  a failure, and uv publishes with it; the organization's action list does not include
   `pypa/gh-action-pypi-publish`, so uv is installed pinned by checksum, like Deno.
 - **The `dot` question.** A wheel that installs only `graphviz-pure` changes nothing for the
   `graphviz` package. A wheel that also installs `dot` (and `neato`, ...) makes

@@ -58,7 +58,7 @@ reach or high cost. **X**: not a fit.
 | channel | reach | needs | automation | credential | rank |
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | aqua registry | medium (aqua; the backend mise recommends for tools without packslips) | one PR to `aquaproj/aqua-registry`, scaffolded with `argd s`, signed commits | none per release: entries are version-agnostic | none; users verify the attestations (`github_artifact_attestations`) | **A** |
-| winget | high on Windows | first manifest by hand (`komac new`), Microsoft's validation and moderation | `komac update --submit`, from a pull repository or `release.yml` | **classic** PAT with `public_repo` (fine-grained tokens cannot open the PR); no OIDC | **A** |
+| winget | high on Windows | first manifest by hand (`komac new`), Microsoft's validation and moderation | `komac update --submit`, from a pull repository (the token stays out of this repository) | **classic** PAT with `public_repo` (fine-grained tokens cannot open the PR); no OIDC | **A** |
 | nixpkgs | high among Nix users | one PR; `packaging/nixpkgs/` is ready | r-ryantm opens the bumps | none | **A** |
 | conda-forge | high (Python, data science, pixi) | one PR to `staged-recipes`; `packaging/conda-forge/` is ready | autotick bot | none | **A** |
 | AUR `graphviz-pure-bin`, `graphviz-pure` | medium-high on Arch | an AUR account and SSH key; `packaging/aur/` is ready | `packaging/aur/update.sh` per release, or a pull repository holding the key | SSH key (no expiry); no OIDC | **A** |

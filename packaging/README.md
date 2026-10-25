@@ -41,8 +41,8 @@ ln -s "$(command -v graphviz-pure)" ~/.local/bin/dot
 ```
 
 As in C Graphviz, the program's name picks the layout engine when there is no `-K`: a link called
-`neato` (or `fdp`, `sfdp`, `circo`, `twopi`, `osage`, `patchwork`) lays out with that engine, and
-any other name with `dot`.
+`neato` (or `fdp`, `sfdp`, `circo`, `twopi`, `osage`, `patchwork`, `nop`, `nop1`, `nop2`) lays out
+with that engine, and any name that is not a layout engine with `dot`.
 
 ## AUR
 
