@@ -332,8 +332,9 @@ after the release is approved.
    secret, delete the old token.
 
 Until the secret exists, the `wasmer` job publishes nothing and succeeds with a notice ("Wasmer
-is not set up"), `verify` leaves the channel out, and `scripts/release-verify.sh` reports it as
-not set up for as long as the registry has no `graphviz-pure/graphviz-pure`. Once it is set,
+is not set up"), and `verify` leaves the channel out; once the registry has the package, a
+missing secret fails the job instead. `scripts/release-verify.sh` reports the channel as not set
+up for as long as the registry has no `graphviz-pure/graphviz-pure`. Once the secret is set,
 the next release publishes; to publish a release that already ran, open its run's
 **Publish to Wasmer** job and choose **Re-run this job** (not "Re-run all jobs": the other
 channels are already published). Pre-releases are never published to Wasmer.

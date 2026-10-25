@@ -693,7 +693,7 @@ jobs:
           HAS_TOKEN: ${{ secrets.WASMER_TOKEN != '' }}
         run: |
           # shellcheck disable=SC2016 # $v is a GraphQL variable
-          query='query($v: String) { getPackageVersion(name: "graphviz-pure/graphviz-pure", version: $v) { version } }'
+          query='query($v: String) { getPackageVersion(name: "graphviz-pure/graphviz-pure", version: $v) { version } getPackage(name: "graphviz-pure/graphviz-pure") { name } }'
           answer=$(jq -nc --arg q "$query" --arg v "$VERSION" '{query: $q, variables: {v: $v}}' |
             curl -fsS -A "graphviz-pure release (https://github.com/$GITHUB_REPOSITORY)" -H 'content-type: application/json' \
               --data @- https://registry.wasmer.io/graphql)
@@ -703,6 +703,9 @@ jobs:
             echo "graphviz-pure/graphviz-pure $VERSION is already in the registry"
             echo "present=true" >> "$GITHUB_OUTPUT"
           elif [ "$HAS_TOKEN" != true ]; then
+            # Not set up yet only while nothing was ever published; a secret lost later fails.
+            jq -e '.data.getPackage == null' <<< "$answer" > /dev/null ||
+              { echo "::error::graphviz-pure/graphviz-pure is in the registry but the release environment has no WASMER_TOKEN"; exit 1; }
             echo "::notice::Wasmer is not set up (no WASMER_TOKEN secret in the release environment, see docs/releasing.md): not published"
           elif [[ "$VERSION" == *-* ]]; then
             echo "::notice::$VERSION is a pre-release: not published to Wasmer"

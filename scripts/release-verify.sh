@@ -179,7 +179,8 @@ wasmer_channel() {
   local asset=graphviz-pure-$version-wasm32-wasip1.tar.gz
   # release.yml's wasmer job publishes no pre-release, and nothing until the channel is set up.
   case "$version" in *-*) result wasmer 1 "skipped: $version is a pre-release, not published to Wasmer"; return ;; esac
-  if wasmer_query '{ getPackage(name: "graphviz-pure/graphviz-pure") { name } }' | jq -e '.data.getPackage == null' > /dev/null; then
+  # Not set up: only outside the verify job, which checks only a channel that published.
+  if [ "$ci" = 0 ] && wasmer_query '{ getPackage(name: "graphviz-pure/graphviz-pure") { name } }' | jq -e '.data.getPackage == null' > /dev/null; then
     result wasmer 1 "skipped: not set up yet (no graphviz-pure/graphviz-pure in the registry; docs/releasing.md)"
     return
   fi
