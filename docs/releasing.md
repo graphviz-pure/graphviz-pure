@@ -79,7 +79,8 @@ every command below.
 `scripts/release-verify.sh X.Y.Z` checks, and prints pass or fail for, each channel: the GitHub
 release's assets against their attestations and `SHA256SUMS`; the eight publishable crates on
 crates.io (`graphviz-pure-wasm`, `-diff` and `-portable-libm` have `publish = false`); JSR's
-`meta.json`; the image's attestation, and `X.Y` and `latest` pointing at it where this version
+`meta.json`; PyPI's wheels, one per archive, each holding the attested archive's binary byte for
+byte (`scripts/check-pypi-wheels.py`); the image's attestation, and `X.Y` and `latest` pointing at it where this version
 should hold them (not for a backport to an older minor line, nor `latest` for anything but the
 newest version); npm's
 `latest` dist-tag and `npm audit signatures`; the tap's formula, the bucket's manifest and
@@ -107,6 +108,10 @@ toolchain and `cargo build --locked`:
   (`scripts/release-smoke.py`, `scripts/release-smoke-wasm.mjs`);
 - it packages deterministic archives (`scripts/release-package.py`), writes `SHA256SUMS` and
   attests the build provenance of every file (Sigstore, stored on GitHub);
+- it repackages each archive's binary as a Python wheel (`scripts/release-wheel.py`: `py3-none`
+  wheels whose scripts directory holds the binary byte for byte), installs it with pip into a
+  fresh environment on the same runner and runs the smoke test on the installed command, and
+  attests the six wheels (they go to PyPI only, not to the GitHub release);
 - it checks that every archive and the npm tarball (and so the JSR package) carry LICENSE,
   NOTICE, THIRD-PARTY-LICENSES.md and LICENSES/, and every crate LICENSE and NOTICE
   (`scripts/check-package-notices.py`, `scripts/check-crate-notices.sh`; CI runs the same
@@ -120,7 +125,7 @@ toolchain and `cargo build --locked`:
   through Scoop's shim;
 - it dry-runs the JSR and npm publishes.
 
-On a tag push, the five publishing jobs then wait together for one approval of the `release`
+On a tag push, the six publishing jobs then wait together for one approval of the `release`
 environment, and each publishes on its own:
 
 - `github-release` creates the GitHub release with all files;
@@ -129,6 +134,9 @@ environment, and each publishes on its own:
 - `npm` stages `@graphviz-pure/wasm` on npm (trusted publishing, with npm provenance). The
   trusted publisher may only stage, so the version goes live only when a maintainer approves it
   with 2FA: the package's **Staged Packages** tab on npmjs.com, or `npm stage approve <stage-id>`;
+- `pypi` publishes the six attested wheels to PyPI as `graphviz-pure` with a pinned uv
+  (`uv publish --trusted-publishing always`, OIDC). PyPI has no staging: the version is live when
+  the job finishes. A pre-release version becomes PEP 440's form (`0.3.0-rc.1` → `0.3.0rc1`);
 - `jsr` publishes the files of the npm tarball (which carries `web/jsr.json`) to JSR with a
   pinned Deno (`deno publish`, OIDC). JSR has no staging: the version is live as soon as the job
   finishes, so the `release` approval is its only gate;
@@ -153,7 +161,7 @@ push, and the `release` environment accepts only `v*` tags.
 
 Through 0.1.2, the registries' jobs waited for the GitHub release, so a release took two approvals:
 the GitHub release, then the publishing jobs. The owner could look at the published GitHub
-release before anything irreversible went to crates.io or JSR. Now one approval starts all five
+release before anything irreversible went to crates.io or JSR. Now one approval starts all six
 jobs at once, and the checks that the second look stood for run before the approval instead:
 every smoke test of the run, a dry run of the same workflow on the same commit, and the readiness
 checklist. npm still needs its own 2FA approval. What is given up: a registry can publish even if
@@ -173,6 +181,8 @@ again.
 - `crates-io`: safe to re-run, also after a partial publish. The job asks crates.io which
   crates already have the version (`scripts/crates-to-publish.py`) and publishes only the
   others, in dependency order; if all are there, it publishes nothing.
+- `pypi`: safe to re-run. The wheels are deterministic and PyPI ignores a file it already has
+  with the same bytes, so a re-run uploads only what is missing.
 - `npm`, `jsr`: a re-run is safe if the job failed before publishing. If the version went up,
   there is nothing to re-run.
 - `ghcr`: safe to re-run. Pushing the same image again changes nothing, and `X.Y`/`latest`
@@ -262,6 +272,20 @@ unless it has published by then; the first successful (staged) publish validates
 ([changelog](https://github.blog/changelog/2026-10-02-unvalidated-npm-trusted-publishing-configurations-now-expire/)).
 If the configuration was created well before the first release, delete it and recreate it with
 the same fields just before pushing the first tag, then release within 48 hours.
+
+### PyPI (project `graphviz-pure`)
+
+1. Create an account on https://pypi.org with two-factor authentication.
+2. Account → Publishing → **Add a new pending publisher** → GitHub: PyPI project name
+   `graphviz-pure`, owner `graphviz-pure`, repository `graphviz-pure`, workflow `release.yml`,
+   environment `release`. The first publish creates the project and turns the pending publisher
+   into a normal one. A pending publisher does not reserve the name: release soon after.
+3. Once the project exists: project settings → add the other maintainers as owners, and keep
+   **no API tokens** for it.
+
+Users run `pip install graphviz-pure` (or `uvx graphviz-pure`, `pipx install graphviz-pure`);
+the wheels install the `graphviz-pure` command, never `dot` ([python.md](python.md)). The wheel
+description is `packaging/pypi/README.md`.
 
 ### JSR (scope `@graphviz-pure`)
 
