@@ -2465,6 +2465,34 @@ n2:w -- n13;
     );
 }
 
+/// Issue #435: when circo's obstacles touch, the straight-line fallback clips a labeled
+/// back edge down to a one-point bezier (`clip_and_install`, `start == end + 3`). The
+/// midpoint walk in `polylineMidpoint` then finds no segment and C aborts at
+/// `UNREACHABLE()` (lib/common/splines.c:1277, "claimed unreachable code was reached").
+/// The port returns the bezier's only point as the midpoint and draws the graph.
+#[test]
+fn circo_polyline_label_on_a_one_point_bezier_does_not_abort() {
+    let src = "digraph{a->b; b->a [label=lab]; c}\n";
+    let (out, err, ok) = run(
+        &[
+            "-Kcirco",
+            "-Goverlap=false",
+            "-Gsplines=polyline",
+            "-Tplain",
+        ],
+        src,
+    );
+    assert!(ok, "{err}");
+    assert_eq!(
+        err,
+        "Warning: some nodes with margin (3.20,3.20) touch - falling back to straight line edges\n"
+    );
+    assert!(
+        out.contains("edge b a 1 0.77248 0.24907 lab 0.89125 0.36573 solid black"),
+        "{out}"
+    );
+}
+
 /// Issue #17, ortho: with `isOrtho`, C's `makeObstacle` gives every `SH_POLY`
 /// node, star and cylinder included, its outline box without the margin
 /// (`lib/neatogen/neatosplines.c:345-376`). Grown star and cylinder outlines
@@ -4809,6 +4837,30 @@ fn neato_polyline_compass_port_routes_like_c() {
     assert!(
         out.contains(
             "pos=\"e,29.16,36.482 29.126,71.526 29.134,63.677 29.142,54.763 29.149,47.889\""
+        ),
+        "{out}"
+    );
+}
+
+/// Issue #435: on the neato route, the clipping walks of the two touching nodes pass
+/// each other (`start = 6`, `end = 0`), so C's `size_t` `end - start + 4` wraps and the
+/// edge gets a bezier with `size == (size_t)-2`; reading it, C's `polylineMidpoint`
+/// walks off the allocation (SIGBUS; `bezier_bb`'s `size % 3 == 1` assert at
+/// lib/common/emit.c:4082 without a label). The port's `clip_and_install` keeps the one
+/// segment where the walks meet (#359), so the midpoint walk returns normally and the
+/// graph is drawn.
+#[test]
+fn neato_polyline_label_between_touching_nodes_does_not_crash() {
+    let src = "digraph{c [pos=\"0,0\"]; d [pos=\"0.05,0\"]; d->c [label=lab]; c->d}\n";
+    let (out, err, ok) = run(&["-Kneato", "-n", "-Gsplines=polyline", "-Tplain"], src);
+    assert!(ok, "{err}");
+    assert_eq!(
+        err,
+        "Warning: some nodes with margin (3.20,3.20) touch - falling back to straight line edges\n"
+    );
+    assert!(
+        out.contains(
+            "edge d c 4 0.37569 0.25 0.37569 0.25 0.37569 0.24988 0.37569 0.24964 lab 0.25692 0.36649 solid black"
         ),
         "{out}"
     );
