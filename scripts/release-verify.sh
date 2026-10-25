@@ -136,7 +136,8 @@ binstall() {
     # Relative paths only: this text is posted to the release issue.
     result binstall 0 "$(grep -v ' → ' "$work/binstall/log" | tr '\n' ' ')"
   elif ! command -v cargo-binstall > /dev/null; then
-    result binstall 1 "$(tail -n 1 "$work/binstall/log") (templates only: no cargo-binstall on PATH)"
+    # release.yml's verify job installs it, so there its absence is a failure.
+    result binstall "$((1 - ci))" "$(tail -n 1 "$work/binstall/log") (templates only: no cargo-binstall on PATH)"
   else
     binstall_dry_runs
   fi
@@ -145,18 +146,26 @@ binstall() {
 # crates.io, downloads the target's archive from the GitHub release, unpacks it and finds the
 # binary, then stops before installing. Compiling and third-party builds are disabled, so only
 # the release's archives can satisfy it.
+binstall_dry_run() { # binstall_dry_run TARGET: one attempt
+  CARGO_HOME="$work/binstall/home" cargo-binstall --dry-run --no-confirm --no-track \
+    --disable-strategies compile,quick-install --targets "$1" \
+    --install-path "$work/binstall/bin" "graphviz-pure-cli@$version" > "$work/binstall/dry-$1.log" 2>&1 < /dev/null
+}
 binstall_dry_runs() {
   local archive target bad=() n=0
-  for archive in "$work"/binstall/dist/graphviz-pure-"$version"-*; do
+  # The archives check-binstall.py checks: .tar.gz and .zip, not the WASI one.
+  for archive in "$work"/binstall/dist/graphviz-pure-"$version"-*.tar.gz "$work"/binstall/dist/graphviz-pure-"$version"-*.zip; do
+    [ -f "$archive" ] || continue
     case "$archive" in *-wasm32-*) continue ;; esac
     target=${archive##*/graphviz-pure-"$version"-}
     target=${target%.tar.gz}
     target=${target%.zip}
     n=$((n + 1))
-    CARGO_HOME="$work/binstall/home" cargo-binstall --dry-run --no-confirm --no-track \
-      --disable-strategies compile,quick-install --targets "$target" \
-      --install-path "$work/binstall/bin" "graphviz-pure-cli@$version" > "$work/binstall/dry-$target.log" 2>&1 ||
+    if ! retry binstall_dry_run "$target"; then
       bad+=("$target")
+      # The log goes to stderr (the job's log), not to the summary, with the temporary paths masked.
+      { echo "cargo-binstall --dry-run --targets $target:"; sed "s|$work|…|g" "$work/binstall/dry-$target.log"; } >&2
+    fi
   done
   if [ ${#bad[@]} = 0 ]; then
     result binstall 1 "$(tail -n 1 "$work/binstall/log"); cargo-binstall $(cargo-binstall -V 2> /dev/null) dry-runs $n targets"
