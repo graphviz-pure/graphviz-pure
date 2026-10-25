@@ -135,8 +135,11 @@ environment, and each publishes on its own:
   trusted publisher may only stage, so the version goes live only when a maintainer approves it
   with 2FA: the package's **Staged Packages** tab on npmjs.com, or `npm stage approve <stage-id>`;
 - `pypi` publishes the six attested wheels to PyPI as `graphviz-pure` with a pinned uv
-  (`uv publish --trusted-publishing always`, OIDC). PyPI has no staging: the version is live when
-  the job finishes. A pre-release version becomes PEP 440's form (`0.3.0-rc.1` → `0.3.0rc1`);
+  (trusted publishing, OIDC: the job exchanges the run's token for a short-lived PyPI token, as
+  PyPI documents, and `uv publish` uses it). PyPI has no staging: the version is live when the
+  job finishes. A pre-release version becomes PEP 440's form (`0.3.0-rc.1` → `0.3.0rc1`). Until
+  the trusted publisher is set up, PyPI answers `invalid-publisher`: the job then publishes
+  nothing and succeeds, and `verify` leaves the channel out;
 - `jsr` publishes the files of the npm tarball (which carries `web/jsr.json`) to JSR with a
   pinned Deno (`deno publish`, OIDC). JSR has no staging: the version is live as soon as the job
   finishes, so the `release` approval is its only gate;
@@ -275,13 +278,22 @@ the same fields just before pushing the first tag, then release within 48 hours.
 
 ### PyPI (project `graphviz-pure`)
 
-1. Create an account on https://pypi.org with two-factor authentication.
-2. Account → Publishing → **Add a new pending publisher** → GitHub: PyPI project name
-   `graphviz-pure`, owner `graphviz-pure`, repository `graphviz-pure`, workflow `release.yml`,
-   environment `release`. The first publish creates the project and turns the pending publisher
-   into a normal one. A pending publisher does not reserve the name: release soon after.
-3. Once the project exists: project settings → add the other maintainers as owners, and keep
-   **no API tokens** for it.
+1. Create an account at https://pypi.org/account/register/, verify the email address, and turn
+   on two-factor authentication (Account settings → **Two factor authentication**; PyPI requires
+   it before publishing).
+2. https://pypi.org/manage/account/publishing/ → **Add a new pending publisher** → **GitHub** tab:
+   PyPI Project Name `graphviz-pure`, Owner `graphviz-pure`, Repository name `graphviz-pure`,
+   Workflow name `release.yml`, Environment name `release` → **Add**. The first publish creates
+   the project and turns the pending publisher into a normal one. A pending publisher does not
+   reserve the name, so release soon after.
+3. Once the project exists: https://pypi.org/manage/project/graphviz-pure/collaboration/ → add
+   the other maintainers as owners. Create no API tokens for it.
+
+Until step 2 is done, the `pypi` job publishes nothing and succeeds with a notice ("PyPI's
+trusted publisher is not set up"), `verify` leaves the channel out, and
+`scripts/release-verify.sh` reports it as not set up while PyPI has no `graphviz-pure` project.
+To publish a release that ran before, open its run's **Publish to PyPI** job and choose **Re-run
+this job** (not "Re-run all jobs": the other channels are already published).
 
 Users run `pip install graphviz-pure` (or `uvx graphviz-pure`, `pipx install graphviz-pure`);
 the wheels install the `graphviz-pure` command, never `dot` ([python.md](python.md)). The wheel

@@ -172,7 +172,7 @@ pypi() {
   done
   if [ ${#bad[@]} != 0 ]; then
     result pypi 0 "release archives not verified: ${bad[*]}"
-  elif retry python3 scripts/check-pypi-wheels.py "$version" "$work/pypi" > "$work/pypi.log" 2>&1; then
+  elif PYPI_REQUIRED=$ci retry python3 scripts/check-pypi-wheels.py "$version" "$work/pypi" > "$work/pypi.log" 2>&1; then
     result pypi 1 "$(tail -n 1 "$work/pypi.log")"
   else
     result pypi 0 "$(tail -n 1 "$work/pypi.log")"
