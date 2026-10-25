@@ -4,6 +4,8 @@
 #   github  the GitHub release: every asset's build-provenance attestation (from release.yml) and
 #           SHA256SUMS
 #   crates  every publishable workspace crate at VERSION on crates.io
+#   binstall the cargo-binstall metadata of graphviz-pure-cli VERSION as published on crates.io
+#           names every release archive and the binary in it (scripts/check-binstall.py)
 #   jsr     @graphviz-pure/wasm VERSION in JSR's meta.json, not yanked
 #   ghcr    VERSION's attestation verifies, and X.Y and latest point at VERSION's digest where
 #           VERSION should hold them: X.Y if it is the newest stable X.Y.*, latest if it is the
@@ -16,7 +18,7 @@
 #   taps    the Homebrew tap's formula and the Scoop bucket's manifest carry VERSION, and their
 #           newest update.yml run succeeded
 #
-# --ci checks github, crates, jsr, ghcr and wasmer only: release.yml's verify job runs it before npm is
+# --ci checks github, crates, binstall, jsr, ghcr and wasmer only: release.yml's verify job runs it before npm is
 # approved and before the tap and bucket update. --channels LIST checks only those channels
 # (comma-separated); --failed LIST reports those as failing at once, without checking (the verify
 # job passes the channels whose publishing job did not succeed). --wait SECONDS retries failing
@@ -106,6 +108,30 @@ crates_io() {
   [ "$n" -gt 0 ] || { result crates 0 "no publishable crate found under crates/"; return; }
   if retry crates_missing; then result crates 1 "$n crates at $version"
   else result crates 0 "not on crates.io: $(tr '\n' ' ' < "$work/crates-missing")"; fi
+}
+
+# A Python with tomllib (3.11 or later), for scripts/check-binstall.py.
+python_tomllib() {
+  local p
+  for p in python3 python3.14 python3.13 python3.12 python3.11; do
+    command -v "$p" > /dev/null && "$p" -c 'import tomllib' 2> /dev/null && { echo "$p"; return; }
+  done
+  return 1
+}
+binstall() {
+  local py crate=graphviz-pure-cli-$version.crate
+  py=$(python_tomllib) || { result binstall 0 "no Python 3.11 or later to run scripts/check-binstall.py"; return; }
+  mkdir -p "$work/binstall/dist"
+  if ! retry curl -fsS -A "$ua" -o "$work/binstall/$crate" "https://static.crates.io/crates/graphviz-pure-cli/$crate" 2> /dev/null; then
+    result binstall 0 "graphviz-pure-cli $version is not on crates.io"
+  elif ! tar -xzf "$work/binstall/$crate" -C "$work/binstall" "graphviz-pure-cli-$version/Cargo.toml" ||
+    ! gh release download "$tag" --repo "$REPO" --pattern "graphviz-pure-$version-*" --dir "$work/binstall/dist" > /dev/null 2>&1; then
+    result binstall 0 "could not read the published Cargo.toml or the release's archives"
+  elif "$py" scripts/check-binstall.py "$work/binstall/graphviz-pure-cli-$version/Cargo.toml" "$work/binstall/dist" "$version" > "$work/binstall/log" 2>&1; then
+    result binstall 1 "$(tail -n 1 "$work/binstall/log")"
+  else
+    result binstall 0 "$(grep -v ' → ' "$work/binstall/log" | tr '\n' ' ')"
+  fi
 }
 
 jsr_ok() {
@@ -245,6 +271,7 @@ want() { # want CHANNEL: is it to be checked?
 }
 want github && github
 want crates && crates_io
+want binstall && binstall
 want jsr && jsr
 want ghcr && ghcr
 want wasmer && wasmer_channel
