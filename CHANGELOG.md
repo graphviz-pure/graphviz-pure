@@ -6,6 +6,8 @@ All notable changes are listed here. The format follows
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-10-25
+
 <!-- release-prep: replace this line with the release's intro paragraph -->
 
 ### Added
@@ -538,7 +540,8 @@ The first release.
   and the OFL licences of the bundled Tinos, Arimo and Cousine fonts.
 - A container image, `ghcr.io/graphviz-pure/graphviz-pure` (linux/amd64 and linux/arm64).
 
-[Unreleased]: https://github.com/graphviz-pure/graphviz-pure/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/graphviz-pure/graphviz-pure/compare/v0.2.1...HEAD
+[0.2.1]: https://github.com/graphviz-pure/graphviz-pure/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/graphviz-pure/graphviz-pure/compare/v0.1.2...v0.2.0
 [0.1.2]: https://github.com/graphviz-pure/graphviz-pure/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/graphviz-pure/graphviz-pure/compare/v0.1.0...v0.1.1
