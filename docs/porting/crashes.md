@@ -929,6 +929,37 @@ to x = 2.5e306 on some inputs. Measured on 3,000 generated inputs with such grou
 for other reasons): the SVG equal to C on 2,938 before and 2,954 after, stderr on 2,869 before
 and 2,954 after, which is all of them.
 
+## polylineMidpoint's unreachable end
+
+Closed: #435.
+
+When nodes touch under `splines=polyline`, neato and circo fall back to straight-line
+edges, and `clip_and_install` (lib/common/splines.c) can clip such an edge past itself:
+the tail walk and the head walk both stop only at the last segment, so `start` passes
+`end`. One segment apart (`start == end + 3`) C installs a one-point bezier; further
+apart the `size_t` in `newspl->size = end - start + 4` (splines.c:312) wraps, and C
+installs a bezier whose size is huge and whose list is never written. An edge label then
+reaches `polylineMidpoint` (splines.c:1245), whose stride-3 segment loops find no
+segment: on the one-point bezier both loops skip and C aborts at `UNREACHABLE()`
+(splines.c:1277); on the wrapped one the length pass reads off the allocation (a bus
+error), and without a label the emit pass's `assert(bz.size % 3 == 1)` in `bezier_bb`
+(emit.c:4082) fails instead.
+
+The loop cannot be stranded by rounding when a segment exists: before the last segment
+the remaining half-distance is `d_last - total / 2 <= d_last` in exact arithmetic, and
+the two passes disagree by O(n * 2^-53) of the total, so the last segment always
+satisfies `d >= dist`. The fall-through needs a bezier with no complete segment — a
+one-point list — or NaN lengths.
+
+The port's `clip_and_install` keeps the one segment where the walks meet and installs
+the same one-point bezier as C when they meet one segment apart; both are the #359 fix,
+whose comment there records the choices. The wrapped size therefore never reaches the
+midpoint walk, but the one-point bezier does, as in C: there the port returns the
+spline's first point (`polyline_midpoint` in `common/splines.rs`), the only point of
+the polyline, and draws the graph. That is the smallest defensible behaviour: C installs
+and draws one-point beziers when there is no label, and for a one-point polyline every
+candidate midpoint is that point.
+
 ## circo's derived nodes have no shape
 
 With several components, circo runs `adjustNodes(sg)` on each component of its derived graph

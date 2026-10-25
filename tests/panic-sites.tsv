@@ -24,7 +24,7 @@ layout/common/ports.rs	0	0	18	3
 layout/common/postproc.rs	0	0	2	0
 layout/common/routespl.rs	0	0	31	20
 layout/common/shapes.rs	0	0	75	38
-layout/common/splines.rs	2	1	96	46
+layout/common/splines.rs	2	1	94	46
 layout/common/types.rs	0	0	13	0
 layout/common/utils.rs	0	0	6	0
 layout/common/xlabels.rs	6	1	103	32

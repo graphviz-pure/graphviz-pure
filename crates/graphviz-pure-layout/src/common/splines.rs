@@ -1479,7 +1479,20 @@ fn polyline_midpoint(spl: &[Bezier]) -> Point {
             k += 3;
         }
     }
-    spl[0].list[0]
+    // #435: a bezier with no complete segment (the one-point bezier `clip_and_install`
+    // installs when the clipping walks meet, e.g. a labeled back edge between nodes
+    // whose margins touch) or NaN segment lengths never satisfy `seg >= dd`. C falls
+    // out of the loop into `UNREACHABLE()` at the end of `polylineMidpoint`
+    // (lib/common/splines.c:1277) and aborts, as it does on an empty spline or an
+    // empty point list; the port answers those with the default point rather than a
+    // panic. Rounding cannot strand the walk when a segment exists: before the last
+    // segment the remaining half is `d_last - total / 2 <= d_last` up to
+    // O(n * 2^-53) of the total. The midpoint of a one-point polyline is its only
+    // point, so the port returns the spline's first point.
+    spl.first()
+        .and_then(|b| b.list.first())
+        .copied()
+        .unwrap_or_default()
 }
 
 /// `dotneato_closest(spl, pt)`.
@@ -1660,5 +1673,39 @@ mod tests {
             );
         }
         reset_bz_split_budget();
+    }
+
+    /// #435: the one-point bezier `clip_and_install` installs when the clipping walks
+    /// meet (`start == end + 3`, as for a back edge between nodes whose margins touch)
+    /// has no complete stride-3 segment, so the walk never satisfies `seg >= dd`. C
+    /// falls out of it into `UNREACHABLE()` at the end of `polylineMidpoint`
+    /// (lib/common/splines.c:1277) and aborts; the port returns the only point. With a
+    /// real segment the walk returns the geometric midpoint, as C's does. With no
+    /// points at all C aborts at the same place; the port returns the default point.
+    #[test]
+    fn polyline_midpoint_of_a_segmentless_bezier_is_its_only_point() {
+        let only = Point::new(55.6, 17.9);
+        let one_point = Bezier {
+            list: vec![only],
+            sflag: 0,
+            eflag: 1,
+            sp: Point::default(),
+            ep: Point::new(54.0, 14.8),
+        };
+        assert_eq!(polyline_midpoint(&[one_point]), only);
+
+        let p = |x: f64| Point::new(x, 0.0);
+        let segment = Bezier {
+            list: vec![p(0.0), p(0.0), p(0.0), p(10.0)],
+            ..Bezier::default()
+        };
+        assert_eq!(polyline_midpoint(&[segment]), p(5.0));
+
+        assert_eq!(polyline_midpoint(&[]), Point::default(), "no beziers");
+        assert_eq!(
+            polyline_midpoint(&[Bezier::default()]),
+            Point::default(),
+            "a bezier with no points"
+        );
     }
 }
