@@ -207,6 +207,9 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      # Vendored resvg crates must keep calling libm, not f32/f64 methods (#339).
+      - name: Vendored raster math stays on the libm crate
+        run: scripts/check-vendor-math.sh
       - name: Install the stable Rust toolchain (rustup is on every runner)
         shell: bash
         run: rustup toolchain install stable --profile minimal && rustup default stable

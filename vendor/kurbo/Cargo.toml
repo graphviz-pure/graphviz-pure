@@ -67,68 +67,6 @@ std = [
 name = "kurbo"
 path = "src/lib.rs"
 
-[[example]]
-name = "arclen_accuracy"
-path = "examples/arclen_accuracy.rs"
-
-[[example]]
-name = "circle"
-path = "examples/circle.rs"
-
-[[example]]
-name = "cubic_arclen"
-path = "examples/cubic_arclen.rs"
-
-[[example]]
-name = "ellipse"
-path = "examples/ellipse.rs"
-
-[[example]]
-name = "fit_poly"
-path = "examples/fit_poly.rs"
-
-[[example]]
-name = "quad_intersect"
-path = "examples/quad_intersect.rs"
-
-[[example]]
-name = "simplify"
-path = "examples/simplify.rs"
-
-[[example]]
-name = "stroke"
-path = "examples/stroke.rs"
-
-[[bench]]
-name = "cubic"
-path = "benches/cubic.rs"
-harness = false
-
-[[bench]]
-name = "cubic_arclen"
-path = "benches/cubic_arclen.rs"
-harness = false
-
-[[bench]]
-name = "nearest"
-path = "benches/nearest.rs"
-harness = false
-
-[[bench]]
-name = "quad_arclen"
-path = "benches/quad_arclen.rs"
-harness = false
-
-[[bench]]
-name = "quartic"
-path = "benches/quartic.rs"
-harness = false
-
-[[bench]]
-name = "rect_expand"
-path = "benches/rect_expand.rs"
-harness = false
-
 [dependencies.arrayvec]
 version = "0.7.6"
 default-features = false
@@ -165,17 +103,6 @@ default-features = false
 [dependencies.smallvec]
 version = "1.15.1"
 features = ["const_new"]
-
-[dev-dependencies.criterion]
-version = "0.7.0"
-features = [
-    "plotters",
-    "cargo_bench_support",
-]
-default-features = false
-
-[dev-dependencies.rand]
-version = "0.9.4"
 
 [target.wasm32-unknown-unknown.dev-dependencies.getrandom]
 version = "0.3.4"

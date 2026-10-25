@@ -27,10 +27,17 @@ Not vendored, because `-Tpng` does not call their transcendental code: resvg's f
 usvg (its marker `atan2` runs only for SVG markers, which the port does not emit),
 read-fonts VARC, harfrust, polycool (`powi` only) and euclid (not linked).
 
-The workspace `[patch.crates-io]` applies to the git checkout, so CI, release binaries
-and the wasm build use these copies. It is not applied when a downstream crate depends
-on graphviz-pure from crates.io. Publishing renamed forks is a separate release change.
+Release binaries, wasm, npm, PyPI, Docker and builds from this repository use the
+portable math for PNG/JPEG; a crates.io source build (`cargo install`) still gets the
+platform libm in raster output until the forks or upstream features land. The `[patch]`
+applies to this checkout only.
 
-Refresh: replace a directory with the same crates.io version unpacked from the
-registry, re-apply `portable_math.rs` and the `libm` dependency, and re-run the call
-rewrite. Licenses are the upstream `LICENSE*` files, picked up by `cargo about`.
+`pow` and `hypot` here are the `libm` crate. `graphviz_pure_core::math` uses CORE-MATH
+for `pow` and its own `hypot`. Both are deterministic; they are two implementations.
+Core's `math` is `f64` only and the crate is the graph model, so these calls stay on
+`libm` (`docs/porting/libm.md`).
+
+`scripts/refresh-vendor.sh` re-downloads the pinned versions, drops the files the build
+does not need, and re-applies `scripts/vendor-patches`. `scripts/check-vendor-math.sh`
+fails if a transcendental call slips off that patch. Licences are the upstream
+`LICENSE*` files, picked up by `cargo about`.
