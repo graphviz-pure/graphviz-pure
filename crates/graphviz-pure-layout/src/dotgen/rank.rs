@@ -579,7 +579,11 @@ impl Dot<'_> {
     /// `GD_parent == NULL`, and nodes outside any cluster keep `ND_clust == NULL`), and C's
     /// `dot_lca` dereferences NULL (`GD_level(NULL)`) on any edge between a cluster and
     /// outside or between two top-level clusters (#427). Treating `None` as level `-1` is a
-    /// sentinel below `level == 0` so the walk climbs to `None` without crashing.
+    /// sentinel below `level == 0` so `None` plays the root cluster's role: the walk climbs
+    /// to `None` without crashing, and `is_internal_to_cluster` gives the same answers C
+    /// gives in a normal `newrank` layout where the root is a level-0 cluster (`true` when
+    /// one end is outside any cluster, `false` when the ends are in two different top-level
+    /// clusters).
     fn dot_lca(&self, mut c0: Option<G>, mut c1: Option<G>) -> Option<G> {
         while c0 != c1 {
             let l0 = c0.map_or(-1, |c| self.graphs[c].level);
@@ -956,9 +960,10 @@ mod tests {
     // (`utils.c:697`), so `compile_samerank` leaves `parent_clust == NULL`, top-level clusters
     // get `GD_level == 0` and `GD_parent == NULL` (never registered in `GD_clust(sg)`), and
     // nodes outside any cluster keep `ND_clust == NULL`. On `z -- b`, `dot_lca(NULL, cluster_c)`
-    // (`rank.c:708-717`) then dereferences NULL (`GD_level(c0)`). The port treats `None` in
-    // `dot_lca` as level `-1` and draws the graph, matching C on the nearest input it handles
-    // (where the component's edges stay inside `cluster_c`).
+    // (`rank.c:708-717`) then dereferences NULL (`GD_level(c0)`). In the port, `None` at level
+    // `-1` in `dot_lca` plays the root cluster's role: `dot_lca(None, Some(cluster_c))` returns
+    // `None == ct` (`is_internal_to_cluster` is true, as in a normal `newrank` layout where the
+    // root is a level-0 cluster) and the graph is drawn without panicking.
     #[test]
     fn issue427_newrank_pack_component_edge_into_cluster_does_not_panic() {
         let mut g = Graph::new("G", GraphKind::Undirected, false);

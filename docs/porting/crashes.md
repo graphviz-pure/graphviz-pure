@@ -459,17 +459,22 @@ not in the same cluster or rank-set representative calls `is_internal_to_cluster
 `dot_lca(ct, ch)`, which dereferences NULL (`GD_level(c0)` or `GD_level(c1)`) when one end
 is in a cluster and the other is outside (`ct == NULL` or `ch == NULL`), or after one step
 when the ends are in two different top-level clusters (`GD_parent` is NULL at `GD_level == 0`).
+(`rank=same` is not needed to trigger it: the minimal form
+`graph{packmode=array; newrank=true; subgraph cluster_c{a}; f0--g0; z--a}` crashes C at the
+same dereference.)
 
 The port keeps `is_a_cluster(0) == false` on a pack component (`dotgen/utils.rs`), so when
 C does not reach `dot_lca` (every edge of the component has both ends in the same cluster or
 outside any cluster) the component is laid out just as in C (including `GD_n_cluster(sg) == 0`,
 no cluster box or margin). In `dot_lca` (`dotgen/rank.rs`), the port gives `None` a sentinel
-level of `-1`, below `GD_level == 0`: any `Some(c)` at level `>= 0` steps to its `parent`
-until both reach `None`, returning `None` (`is_internal_to_cluster` is false, so `compile_edges`
-adds the same constraint edge as for an inter-cluster edge). The port keeps this behaviour.
-Measured on 200 generated `pack` / `packmode` + `newrank=true` inputs with disjoint clusters,
-rank sets and `compact=true`: C draws 138 and crashes in `dot_lca` on the other 62; the port
-matches C byte for byte on all 138 and draws all 62 without panicking.
+level of `-1`, below `GD_level == 0`, so `None` plays the root cluster: any `Some(c)` at
+level `>= 0` steps to its `parent` until both reach `None`, and `is_internal_to_cluster`
+gives the answers C gives when the root is a cluster (normal `newrank` layout, where the
+root is a level-0 cluster: `true` when one end is `None` so `dot_lca` returns `None == ct`
+or `ch`, and `false` when the ends are in two different top-level clusters). The port keeps
+this behaviour. Measured on 200 generated `pack` / `packmode` + `newrank=true` inputs with
+disjoint clusters, rank sets and `compact=true`: C draws 138 and crashes in `dot_lca` on the
+other 62; the port matches C byte for byte on all 138 and draws all 62 without panicking.
 
 ## dot's pack components
 
