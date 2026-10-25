@@ -104,8 +104,9 @@ removed, as in C.
 - C's address-dependent orders are not reproducible run to run on some inputs
   (e.g. many nested clusters with `splines=compound`): two C runs can differ,
   and the port matches one of them or neither. No corpus file is affected.
-- `splines=compound` in osage falls back to polylines (C's `spline_edges_`
-  treats it the same way).
+- `splines=compound` in osage keeps that edge type. C's `spline_edges_`
+  does the same: a multi-edge is a cubic (`edgetype == EDGETYPE_PLINE`
+  is false), and a single edge still falls through to `makePolyline`.
 - With cluster edges and `splines=true`, C warns and draws lines; the port does
   the same. A partial `compoundEdges` failure keeps the routed edges as C's
   `Nop = 2` does, but their boxes may grow the graph box slightly differently.
