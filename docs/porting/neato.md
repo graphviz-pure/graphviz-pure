@@ -333,6 +333,29 @@ Fixed upstream by the dot-splines branch's single rankdir-aware
 `common::ports` (record field sides for dynamic ports); the main corpus file is
 exact and `hw3_ports_b15(_splines)` check the same ports through neato.
 
+### overlap=scalexy with coincident nodes
+
+`overlap=scalexy` is `scAdjust(g, 0)` (`lib/neatogen/constraint.c`).
+`computeScaleXY` sorts each overlapping pair's scale requirements and picks
+the candidate whose product is smallest. A pair at the same position, or so
+close that the ratio overflows, is stored as `(HUGE_VAL, HUGE_VAL)`
+(`mkOverlapSet`), so every candidate's cost is non-finite and C fails
+`assert(bestcost < HUGE_VAL)` (`constraint.c:729`) with no output. neato
+(`-n` through `init_nop`, and a full layout through `removeOverlapWith`),
+fdp (`removeOverlapAs`; `maxiter=0` or a pin the solver does not separate),
+circo and twopi (`adjustNodes`) and sfdp (`removeOverlapWith`, when
+`overlap` is not prism) all reach that function.
+
+The port's `compute_scale_xy` (`neatogen/scadjust.rs`) returned the
+non-finite scale, and the positions became `nan` (`inf * 0`) and `inf`.
+Nodes a hair apart still have a finite scale: `0.001` points apart, C prints
+a graph about 612 inches tall. At exact equality no finite scale separates
+them. `scAdjust` already returns 0 when it cannot help (no overlapping pair,
+or `compress` finds one), and the positions computed before the scale are
+finite. The port does that: it keeps them, warns
+`overlap=scalexy has no finite scale; scaling skipped`, and exits 0. A pair
+that coincides on only one axis still scales, as C does.
+
 ### Full-pipeline (`-Tsvg`) fixes found with `gv-diff e2e`
 
 - Edges whose endpoint is a subgraph (`a -> {B A}`) are created in node
