@@ -79,7 +79,8 @@ every command below.
 `scripts/release-verify.sh X.Y.Z` checks, and prints pass or fail for, each channel: the GitHub
 release's assets against their attestations and `SHA256SUMS`; the eight publishable crates on
 crates.io (`graphviz-pure-wasm`, `-diff` and `-portable-libm` have `publish = false`), and the
-published `graphviz-pure-cli`'s cargo-binstall metadata against the release's archives; JSR's
+published `graphviz-pure-cli`'s cargo-binstall metadata against the release's archives (and, in
+the `verify` job, a pinned cargo-binstall's dry run of every target); JSR's
 `meta.json`; the Wasmer package, which must contain the module of the release's attested WASI
 archive byte for byte; PyPI's wheels, one per release platform, none yanked, each with its
 attestation (`scripts/check-pypi-wheels.py`); the image's attestation, and `X.Y` and `latest` pointing at it where this version
