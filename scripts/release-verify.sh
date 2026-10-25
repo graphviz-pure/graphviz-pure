@@ -9,8 +9,8 @@
 #           VERSION should hold them: X.Y if it is the newest stable X.Y.*, latest if it is the
 #           newest stable version among the image's tags (as the ghcr job moves them; a
 #           pre-release or a backport holds neither)
-#   pypi    graphviz-pure VERSION on PyPI: a wheel per release archive, each holding the attested
-#           archive's binary byte for byte (scripts/check-pypi-wheels.py)
+#   pypi    graphviz-pure VERSION on PyPI: one wheel per release platform, none yanked
+#           (scripts/check-pypi-wheels.py), each with its build-provenance attestation
 #   npm     @graphviz-pure/wasm VERSION is the `latest` dist-tag, and `npm audit signatures`
 #           passes for it (only after the owner approved the staged version)
 #   taps    the Homebrew tap's formula and the Scoop bucket's manifest carry VERSION, and their
@@ -159,24 +159,21 @@ ghcr() {
 }
 
 pypi() {
-  local asset bad=()
-  mkdir -p "$work/pypi"
-  if ! gh release download "$tag" --repo "$REPO" --pattern "graphviz-pure-$version-*" --dir "$work/pypi" > /dev/null 2>&1; then
-    result pypi 0 "could not download the release's archives to compare with"
+  local wheel bad=() n=0 line
+  rm -rf "$work/pypi"
+  if ! PYPI_REQUIRED=$ci retry python3 scripts/check-pypi-wheels.py "$version" "$work/pypi" > "$work/pypi.log" 2>&1; then
+    result pypi 0 "$(tail -n 1 "$work/pypi.log")"
     return
   fi
-  for asset in "$work"/pypi/*; do
-    case "$asset" in *-wasm32-*) continue ;; esac
-    gh attestation verify "$asset" --repo "$REPO" --signer-workflow "$signer" --source-ref "refs/tags/$tag" > /dev/null 2>&1 ||
-      bad+=("$(basename "$asset")")
+  line=$(tail -n 1 "$work/pypi.log")
+  case "$line" in skipped:*) result pypi 1 "$line"; return ;; esac
+  for wheel in "$work"/pypi/*.whl; do
+    n=$((n + 1))
+    gh attestation verify "$wheel" --repo "$REPO" --signer-workflow "$signer" --source-ref "refs/tags/$tag" > /dev/null 2>&1 ||
+      bad+=("$(basename "$wheel")")
   done
-  if [ ${#bad[@]} != 0 ]; then
-    result pypi 0 "release archives not verified: ${bad[*]}"
-  elif PYPI_REQUIRED=$ci retry python3 scripts/check-pypi-wheels.py "$version" "$work/pypi" > "$work/pypi.log" 2>&1; then
-    result pypi 1 "$(tail -n 1 "$work/pypi.log")"
-  else
-    result pypi 0 "$(tail -n 1 "$work/pypi.log")"
-  fi
+  if [ ${#bad[@]} = 0 ]; then result pypi 1 "$line, each attested"
+  else result pypi 0 "not attested: ${bad[*]}"; fi
 }
 
 npm_channel() {
