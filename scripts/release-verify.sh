@@ -9,16 +9,18 @@
 #           VERSION should hold them: X.Y if it is the newest stable X.Y.*, latest if it is the
 #           newest stable version among the image's tags (as the ghcr job moves them; a
 #           pre-release or a backport holds neither)
+#   pypi    graphviz-pure VERSION on PyPI: a wheel per release archive, each holding the attested
+#           archive's binary byte for byte (scripts/check-pypi-wheels.py)
 #   npm     @graphviz-pure/wasm VERSION is the `latest` dist-tag, and `npm audit signatures`
 #           passes for it (only after the owner approved the staged version)
 #   taps    the Homebrew tap's formula and the Scoop bucket's manifest carry VERSION, and their
 #           newest update.yml run succeeded
 #
-# --ci checks github, crates, jsr and ghcr only: release.yml's verify job runs it before npm is
+# --ci checks github, crates, jsr, ghcr and pypi only: release.yml's verify job runs it before npm is
 # approved and before the tap and bucket update. --channels LIST checks only those channels
 # (comma-separated); --failed LIST reports those as failing at once, without checking (the verify
 # job passes the channels whose publishing job did not succeed). --wait SECONDS retries failing
-# registry checks (crates.io, JSR, ghcr) until they pass or SECONDS have passed in all. Reads only.
+# registry checks (crates.io, JSR, ghcr, PyPI) until they pass or SECONDS have passed in all. Reads only.
 #
 # Usage: scripts/release-verify.sh VERSION [--ci] [--channels LIST] [--failed LIST] [--wait SECONDS]
 set -euo pipefail
@@ -156,6 +158,27 @@ ghcr() {
   fi
 }
 
+pypi() {
+  local asset bad=()
+  mkdir -p "$work/pypi"
+  if ! gh release download "$tag" --repo "$REPO" --pattern "graphviz-pure-$version-*" --dir "$work/pypi" > /dev/null 2>&1; then
+    result pypi 0 "could not download the release's archives to compare with"
+    return
+  fi
+  for asset in "$work"/pypi/*; do
+    case "$asset" in *-wasm32-*) continue ;; esac
+    gh attestation verify "$asset" --repo "$REPO" --signer-workflow "$signer" --source-ref "refs/tags/$tag" > /dev/null 2>&1 ||
+      bad+=("$(basename "$asset")")
+  done
+  if [ ${#bad[@]} != 0 ]; then
+    result pypi 0 "release archives not verified: ${bad[*]}"
+  elif retry python3 scripts/check-pypi-wheels.py "$version" "$work/pypi" > "$work/pypi.log" 2>&1; then
+    result pypi 1 "$(tail -n 1 "$work/pypi.log")"
+  else
+    result pypi 0 "$(tail -n 1 "$work/pypi.log")"
+  fi
+}
+
 npm_channel() {
   local latest
   latest=$(npm view @graphviz-pure/wasm dist-tags.latest 2> /dev/null || true)
@@ -199,6 +222,7 @@ want github && github
 want crates && crates_io
 want jsr && jsr
 want ghcr && ghcr
+want pypi && pypi
 if [ "$ci" = 0 ]; then
   want npm && npm_channel
   want taps && taps
