@@ -6,6 +6,9 @@ against their attestations. Prints one summary line; exits 1 on any difference.
 
 Usage: scripts/check-pypi-wheels.py VERSION DIST
 PYPI_URL (default https://pypi.org) names another index with PyPI's JSON API, such as TestPyPI.
+While PyPI has no graphviz-pure project at all, the channel is not set up yet (release.yml's pypi
+job publishes nothing until its trusted publisher exists): that passes with a "skipped" line,
+unless PYPI_REQUIRED=1 (release.yml's verify job, which checks only a channel that published).
 """
 import hashlib
 import io
@@ -14,6 +17,7 @@ import os
 import re
 import sys
 import tarfile
+import urllib.error
 import urllib.request
 import zipfile
 
@@ -38,8 +42,16 @@ platforms = {
     "x86_64-pc-windows-msvc": "win_amd64",
     "aarch64-pc-windows-msvc": "win_arm64",
 }
+index = os.environ.get("PYPI_URL", "https://pypi.org").rstrip("/")
+if os.environ.get("PYPI_REQUIRED") != "1":
+    try:
+        get(f"{index}/pypi/graphviz-pure/json")
+    except urllib.error.HTTPError as e:
+        if e.code == 404:
+            print("skipped: not set up yet (PyPI has no graphviz-pure project; docs/releasing.md)")
+            sys.exit(0)
+        raise
 try:
-    index = os.environ.get("PYPI_URL", "https://pypi.org").rstrip("/")
     release = json.loads(get(f"{index}/pypi/graphviz-pure/{pyversion}/json"))
 except Exception as e:
     sys.exit(f"graphviz-pure {pyversion} is not on PyPI ({e})")
