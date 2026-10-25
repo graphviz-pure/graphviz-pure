@@ -63,11 +63,14 @@ const PALETTE = {
 
 const n = (v: number) => v.toLocaleString('en-US');
 /**
- * A DOT string. Backslash escapes (\\n) are left alone: the labels here use them on purpose.
- * Every argument is a constant from this file or a link path fixed at build time, never user input.
+ * A DOT quoted string: backslashes are escaped first, then the quotes, so nothing in the
+ * argument can end the string early. Every argument is a constant from this file or a link path
+ * fixed at build time, never user input. The labels' line breaks are DOT's `\n`, written by
+ * `lines()` between the escaped parts, never inside one.
  */
-// codeql[js/incomplete-sanitization]
-const q = (s: string) => `"${s.replace(/"/g, '\\"')}"`;
+const esc = (s: string) => s.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+const q = (s: string) => `"${esc(s)}"`;
+const lines = (...parts: readonly string[]) => `"${parts.map(esc).join('\\n')}"`;
 
 /** The ids of the nodes that are controls: link nodes navigate, engine nodes switch -K. */
 export const LINK_NODES: Record<string, LinkId> = {
@@ -90,21 +93,21 @@ export function homeSource(f: Figures, o: SourceOptions): string {
 	// patchwork gives every node `area` square inches; size them so their labels fit.
 	const area = (label: string) => (pw ? `area=${Math.max(0.5, ((label.replace(/\\n/g, '').length * 5.4 + 16) / 72) ** 2 * 1.4).toFixed(2)}` : '');
 	// patchwork draws every node as a plain rectangle, so a record's fields read as one line.
-	const rec = (a: string, b: string) => (pw ? `${a}\\n${b}` : `{${a}|${b}}`);
+	const rec = (a: string, b: string): readonly string[] => (pw ? [a, b] : [`{${a}|${b}}`]);
 	const bold = (name: string) => (pinned.has(name) ? ', penwidth=2' : '');
 	const at = (name: string) => {
 		const xy = o.positions?.[name];
 		return xy ? `, pos="${xy[0].toFixed(2)},${xy[1].toFixed(2)}${pinned.has(name) ? '!' : ''}"` : '';
 	};
-	const nd = (name: string, attrs: string, label?: string) =>
-		`${q(name)} [${[attrs, label ? `label=${q(label)}` : '', area(label ?? name), bold(name), at(name)]
+	const nd = (name: string, attrs: string, label?: readonly string[]) =>
+		`${q(name)} [${[attrs, label ? `label=${lines(...label)}` : '', area(label ? label.join('\\n') : name), bold(name), at(name)]
 			.map((s) => s.replace(/^, /, ''))
 			.filter(Boolean)
 			.join(', ')}]`;
-	const link = (name: string, label: string, id: LinkId) => nd(name, `URL=${q(f.links[id] ?? '')}, tooltip=${q(label)}`, label);
+	const link = (name: string, label: string, id: LinkId) => nd(name, `URL=${q(f.links[id] ?? '')}, tooltip=${q(label)}`, [label]);
 
 	const engines = ENGINES.map((e) =>
-		nd(engineNode(e), e === o.engine ? `style=filled, fillcolor=${p.pick}, fontcolor=${o.theme === 'dark' ? 'black' : p.ink}` : 'style=solid', e),
+		nd(engineNode(e), e === o.engine ? `style=filled, fillcolor=${p.pick}, fontcolor=${o.theme === 'dark' ? 'black' : p.ink}` : 'style=solid', [e]),
 	).join('; ');
 
 	const dragging = !!o.positions;
@@ -115,24 +118,24 @@ export function homeSource(f: Figures, o: SourceOptions): string {
   node [fontname="Times-Roman", fontsize=${pw ? 10 : 14}, height=0.4, color=${q(p.ink)}, fontcolor=${q(p.ink)}]
   edge [len=${o.rankdir === 'TB' ? 1.6 : 2.2}, fontname="Times-Roman", fontsize=11, arrowsize=0.75, color=${q(p.ink)}, fontcolor=${q(p.ink)}]
 
-  ${nd('input', 'shape=note', 'input.gv')}
+  ${nd('input', 'shape=note', ['input.gv'])}
   subgraph cluster_c {
     label="C Graphviz 16.1.0"; style=filled; color=${q(p.cFill)};
     node [style=filled, fillcolor=${q(p.cNode)}, color=${q(p.cNode)}];
-    ${nd('c', '', 'dot -Tsvg')}
+    ${nd('c', '', ['dot -Tsvg'])}
   }
   subgraph cluster_rs {
     label="graphviz-pure"; color=${q(p.rsPen)};
     node [style=filled, fillcolor=${q(p.rsFill)}];
-    ${nd('rs', '', 'graphviz-pure -Tsvg')}
-    ${nd('wasm', '', 'graphviz_pure_wasm, in this tab')}
+    ${nd('rs', '', ['graphviz-pure -Tsvg'])}
+    ${nd('wasm', '', ['graphviz_pure_wasm, in this tab'])}
     subgraph cluster_k {
       label="-K"; style=dashed; color=${q(p.kPen)}; fontsize=11;
       node [fontsize=${pw ? 10 : 12}, height=0.3, width=0.6, margin="0.05,0.02"];
       ${engines}
     }
   }
-  ${nd('same', `shape=diamond, style=filled, fillcolor=${q(p.ask)}`, 'same\\nbytes?')}
+  ${nd('same', `shape=diamond, style=filled, fillcolor=${q(p.ask)}`, ['same', 'bytes?'])}
   ${nd('eq', 'shape=record', rec('C with the same math, every platform', `${n(f.identical)} of ${n(f.total)}`))}
   ${nd('stock', 'shape=record', rec('stock C on macOS', `${n(f.stock)} of ${n(f.stockTotal)}`))}
 
