@@ -174,6 +174,8 @@ pub struct DG {
     /// The command-line graph attributes, and `overlap`, `sep` and `K` copied from the
     /// original graph (`copyAttr`).
     pub attrs: AttrMap,
+    /// `GD_ndim(dg) = GD_ndim(agroot(g))` (`deriveGraph`, layout.c).
+    pub ndim: usize,
     emap: HashMap<(usize, usize), usize>,
 }
 
@@ -301,8 +303,15 @@ pub fn with_lgraph<R>(
         .enumerate()
         .map(|(i, &n)| {
             let d = &dg.nodes[n];
+            // mkDeriveNode allocates GD_ndim(dg) coordinates; fdp's t_layout,
+            // chkPos and copy-back only ever write the first two, so the rest
+            // stay zero (layout.c:187). They still matter: fdpAdjust hands the
+            // full-width array to remove_overlap, where call_tri reads it with
+            // a stride of 2.
+            let mut pos = vec![d.pos[0], d.pos[1]];
+            pos.resize(dg.ndim.max(2), 0.0);
             LNode {
-                pos: vec![d.pos[0], d.pos[1]],
+                pos,
                 coord: Point::default(),
                 width: d.width,
                 height: d.height,
@@ -369,7 +378,7 @@ pub fn with_lgraph<R>(
         edges: ledges,
         out,
         inn,
-        ndim: 2,
+        ndim: dg.ndim.max(2),
         odim: 0,
         nodesep: 18,
         bb: BoundingBox::default(),
@@ -514,6 +523,7 @@ impl Fdp<'_, '_> {
         }
         let mut dg = DG {
             uid: self.next_uid,
+            ndim: self.rg.ndim,
             ..DG::default()
         };
         self.next_uid += 1;
