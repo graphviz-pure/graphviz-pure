@@ -8968,6 +8968,29 @@ fn sfdp_rotation_in_3d_is_skipped_with_a_warning() {
     }
 }
 
+/// Issue #453: sfdp `smoothing=avg_dist`, `graph_dist` and `power_dist` on a
+/// node with no neighbour. C's `StressMajorizationSmoother2_new`
+/// (`lib/sfdpgen/post_process.c`) asserts `nz > 0` and writes nothing. The
+/// port keeps the unsmoothed positions, so `-Tplain` matches `smoothing=none`.
+/// A connected graph is still smoothed.
+#[test]
+fn sfdp_smoothing_with_an_isolated_node_keeps_the_unsmoothed_layout() {
+    for src in ["graph { a -- a }", "graph { a }"] {
+        let (none, err, ok) = run(&["-Ksfdp", "-Tplain", "-Gsmoothing=none"], src);
+        assert!(ok && err.is_empty(), "{src}: {err}");
+        for mode in ["avg_dist", "graph_dist", "power_dist"] {
+            let (out, err, ok) = run(&["-Ksfdp", "-Tplain", &format!("-Gsmoothing={mode}")], src);
+            assert!(ok && err.is_empty(), "{src} {mode}: {err}");
+            assert_eq!(out, none, "{src} {mode}");
+        }
+    }
+    let connected = "graph { b -- c -- d -- b }";
+    let (none, _, _) = run(&["-Ksfdp", "-Tplain", "-Gsmoothing=none"], connected);
+    let (smoothed, err, ok) = run(&["-Ksfdp", "-Tplain", "-Gsmoothing=avg_dist"], connected);
+    assert!(ok && err.is_empty(), "{err}");
+    assert_ne!(smoothed, none);
+}
+
 /// Runs dot on `src` and returns (stdout, stderr, success), failing if it takes more than
 /// 60 s: the inputs of #358 used to hang.
 fn run_dot_with_deadline(name: &str, args: &[&str], src: &str) -> (String, String, bool) {

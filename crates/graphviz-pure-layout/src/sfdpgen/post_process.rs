@@ -381,14 +381,15 @@ fn distance_cropped(x: &[f64], dim: usize, i: usize, j: usize) -> f64 {
 
 /// `StressMajorizationSmoother2_new(A, dim, lambda0, x, ideal_dist_scheme)`:
 /// stress majorization over distance-1 and distance-2 neighbours.
-/// Returns the smoother and its `scaling`.
+/// Returns the smoother and its `scaling`, or `None` when a node has no
+/// neighbour: C asserts there, and the caller keeps `x` unsmoothed.
 pub fn stress_majorization_smoother2_new(
     a: &SparseMatrix,
     dim: usize,
     lambda0: f64,
     x: &[f64],
     ideal_dist_scheme: i32,
-) -> (StressMajorizationSmoother, f64) {
+) -> Option<(StressMajorizationSmoother, f64)> {
     let (ia, ja) = (&a.ia, &a.ja);
     let m = a.m;
     // C computes (and frees) the ideal distance matrix without using it.
@@ -404,6 +405,13 @@ pub fn stress_majorization_smoother2_new(
             }
             avg_dist[i] += distance(x, dim, i, c);
             nz += 1;
+        }
+        // `StressMajorizationSmoother2_new` (`lib/sfdpgen/post_process.c`)
+        // asserts `nz > 0`. A node with no neighbour (a self-edge does not
+        // count) makes C abort with no output. Keep the unsmoothed positions
+        // instead of dividing by zero.
+        if nz == 0 {
+            return None;
         }
         avg_dist[i] /= f64::from(nz);
     }
@@ -481,7 +489,7 @@ pub fn stress_majorization_smoother2_new(
     }
     let lw = SparseMatrix::from_csr(m, m, iw.clone(), jw, Some(w));
     let lwd = SparseMatrix::from_csr(m, m, iw, jd, Some(d));
-    (
+    Some((
         StressMajorizationSmoother {
             lw,
             lwd,
@@ -490,7 +498,7 @@ pub fn stress_majorization_smoother2_new(
             maxit_cg: (m as f64).sqrt().floor(),
         },
         s,
-    )
+    ))
 }
 
 /// `SparseStressMajorizationSmoother_new(A, dim, x)`: stress towards the
@@ -713,7 +721,12 @@ pub fn post_process_smoothing(
                 SMOOTHING_STRESS_MAJORIZATION_AVG_DIST => IDEAL_AVG_DIST,
                 _ => IDEAL_POWER_DIST,
             };
-            let (mut sm, _) = stress_majorization_smoother2_new(a, dim, 0.05, x, scheme);
+            let Some((mut sm, _)) = stress_majorization_smoother2_new(a, dim, 0.05, x, scheme)
+            else {
+                // C asserted in `StressMajorizationSmoother2_new`. `x` is still
+                // the unsmoothed layout.
+                return;
+            };
             sm.smooth(dim, x, 50);
         }
         SMOOTHING_SPRING => {
@@ -721,5 +734,47 @@ pub fn post_process_smoothing(
             sm.smooth(a, dim, x);
         }
         _ => {}
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::super::spring_electrical::{
+        SMOOTHING_STRESS_MAJORIZATION_AVG_DIST, SMOOTHING_STRESS_MAJORIZATION_GRAPH_DIST,
+        SMOOTHING_STRESS_MAJORIZATION_POWER_DIST, SpringElectricalControl,
+    };
+    use super::*;
+
+    fn self_edge() -> SparseMatrix {
+        SparseMatrix::from_csr(1, 1, vec![0, 1], vec![0], Some(vec![1.0]))
+    }
+
+    fn edge() -> SparseMatrix {
+        SparseMatrix::from_csr(2, 2, vec![0, 1, 2], vec![1, 0], Some(vec![1.0, 1.0]))
+    }
+
+    /// Issue #453: `StressMajorizationSmoother2_new` asserts `nz > 0`.
+    #[test]
+    fn an_isolated_node_is_left_unsmoothed() {
+        let x = [3.0, 4.0];
+        for scheme in [IDEAL_GRAPH_DIST, IDEAL_AVG_DIST, IDEAL_POWER_DIST] {
+            assert!(stress_majorization_smoother2_new(&self_edge(), 2, 0.05, &x, scheme).is_none());
+        }
+        let connected = [0.0, 0.0, 1.0, 0.0];
+        assert!(
+            stress_majorization_smoother2_new(&edge(), 2, 0.05, &connected, IDEAL_AVG_DIST)
+                .is_some()
+        );
+        let mut ctrl = SpringElectricalControl::default();
+        for mode in [
+            SMOOTHING_STRESS_MAJORIZATION_GRAPH_DIST,
+            SMOOTHING_STRESS_MAJORIZATION_AVG_DIST,
+            SMOOTHING_STRESS_MAJORIZATION_POWER_DIST,
+        ] {
+            ctrl.smoothing = mode;
+            let mut pos = x;
+            post_process_smoothing(2, &mut self_edge(), &ctrl, &mut pos);
+            assert_eq!(pos, x);
+        }
     }
 }
