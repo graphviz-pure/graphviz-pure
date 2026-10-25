@@ -22,9 +22,13 @@ Sphinx can be pointed at `graphviz-pure` (`prog="graphviz-pure"`, `graphviz_dot 
 "graphviz-pure"`). How far graphviz-pure is from being a drop-in `dot` for them is tracked in
 [docs/python.md](https://github.com/graphviz-pure/graphviz-pure/blob/master/docs/python.md).
 
-The wheels hold the release binaries exactly as built and attested by the release workflow; to
-check one, unpack it and run
-`gh attestation verify graphviz_pure-VERSION.data/scripts/graphviz-pure --repo graphviz-pure/graphviz-pure`.
+The wheels hold the release binaries exactly as built by the release workflow, and each wheel has
+a signed build-provenance attestation. To check one:
+
+```sh
+pip download graphviz-pure==VERSION --no-deps -d wheels
+gh attestation verify wheels/graphviz_pure-*.whl --repo graphviz-pure/graphviz-pure
+```
 
 Licence: EPL-2.0 for the port, OFL-1.1 for the bundled Tinos, Arimo and Cousine fonts, MIT for the
 CORE-MATH `pow` and expat ports; the licences of the Rust crates compiled in are in

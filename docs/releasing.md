@@ -79,8 +79,8 @@ every command below.
 `scripts/release-verify.sh X.Y.Z` checks, and prints pass or fail for, each channel: the GitHub
 release's assets against their attestations and `SHA256SUMS`; the eight publishable crates on
 crates.io (`graphviz-pure-wasm`, `-diff` and `-portable-libm` have `publish = false`); JSR's
-`meta.json`; PyPI's wheels, one per archive, each holding the attested archive's binary byte for
-byte (`scripts/check-pypi-wheels.py`); the image's attestation, and `X.Y` and `latest` pointing at it where this version
+`meta.json`; PyPI's wheels, one per release platform, none yanked, each with its attestation
+(`scripts/check-pypi-wheels.py`); the image's attestation, and `X.Y` and `latest` pointing at it where this version
 should hold them (not for a backport to an older minor line, nor `latest` for anything but the
 newest version); npm's
 `latest` dist-tag and `npm audit signatures`; the tap's formula, the bucket's manifest and
@@ -111,7 +111,8 @@ toolchain and `cargo build --locked`:
 - it repackages each archive's binary as a Python wheel (`scripts/release-wheel.py`: `py3-none`
   wheels whose scripts directory holds the binary byte for byte), installs it with pip into a
   fresh environment on the same runner and runs the smoke test on the installed command, and
-  attests the six wheels (they go to PyPI only, not to the GitHub release);
+  attests the six wheels (they go to PyPI only, not to the GitHub release). The macOS wheels' tags carry
+the binaries' minimum OS version, read from their Mach-O headers;
 - it checks that every archive and the npm tarball (and so the JSR package) carry LICENSE,
   NOTICE, THIRD-PARTY-LICENSES.md and LICENSES/, and every crate LICENSE and NOTICE
   (`scripts/check-package-notices.py`, `scripts/check-crate-notices.sh`; CI runs the same
@@ -169,8 +170,8 @@ jobs at once, and the checks that the second look stood for run before the appro
 every smoke test of the run, a dry run of the same workflow on the same commit, and the readiness
 checklist. npm still needs its own 2FA approval. What is given up: a registry can publish even if
 the GitHub release fails, and nothing is left to stop between the GitHub release and the
-registries. Keep `environment: release` on every publishing job (the crates.io and npm trusted
-publishers are bound to it) and keep its approval manual: JSR has no staging.
+registries. Keep `environment: release` on every publishing job (the crates.io, npm and PyPI
+trusted publishers are bound to it) and keep its approval manual: JSR and PyPI have no staging.
 
 ### If a publishing job fails
 
@@ -184,8 +185,8 @@ again.
 - `crates-io`: safe to re-run, also after a partial publish. The job asks crates.io which
   crates already have the version (`scripts/crates-to-publish.py`) and publishes only the
   others, in dependency order; if all are there, it publishes nothing.
-- `pypi`: safe to re-run. The wheels are deterministic and PyPI ignores a file it already has
-  with the same bytes, so a re-run uploads only what is missing.
+- `pypi`: safe to re-run. A re-run uploads the same files (the run's attested artifact), and
+  PyPI ignores a file it already has with the same bytes, so only what is missing goes up.
 - `npm`, `jsr`: a re-run is safe if the job failed before publishing. If the version went up,
   there is nothing to re-run.
 - `ghcr`: safe to re-run. Pushing the same image again changes nothing, and `X.Y`/`latest`
