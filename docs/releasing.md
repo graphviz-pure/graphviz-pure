@@ -291,7 +291,8 @@ the same fields just before pushing the first tag, then release within 48 hours.
    the other maintainers as owners. Create no API tokens for it.
 
 Until step 2 is done, the `pypi` job publishes nothing and succeeds with a notice ("PyPI's
-trusted publisher is not set up"), `verify` leaves the channel out, and
+trusted publisher is not set up"; once the project exists, a publisher that no longer matches
+fails the job instead), `verify` leaves the channel out, and
 `scripts/release-verify.sh` reports it as not set up while PyPI has no `graphviz-pure` project.
 To publish a release that ran before, open its run's **Publish to PyPI** job and choose **Re-run
 this job** (not "Re-run all jobs": the other channels are already published).

@@ -158,17 +158,19 @@ ghcr() {
   fi
 }
 
-pypi() {
-  local wheel bad=() n=0 line
+pypi_check() { # one attempt, from an empty directory
   rm -rf "$work/pypi"
-  if ! PYPI_REQUIRED=$ci retry python3 scripts/check-pypi-wheels.py "$version" "$work/pypi" > "$work/pypi.log" 2>&1; then
+  PYPI_REQUIRED=$ci python3 scripts/check-pypi-wheels.py "$version" "$work/pypi" > "$work/pypi.log" 2>&1
+}
+pypi() {
+  local wheel bad=() line
+  if ! retry pypi_check; then
     result pypi 0 "$(tail -n 1 "$work/pypi.log")"
     return
   fi
   line=$(tail -n 1 "$work/pypi.log")
   case "$line" in skipped:*) result pypi 1 "$line"; return ;; esac
   for wheel in "$work"/pypi/*.whl; do
-    n=$((n + 1))
     gh attestation verify "$wheel" --repo "$REPO" --signer-workflow "$signer" --source-ref "refs/tags/$tag" > /dev/null 2>&1 ||
       bad+=("$(basename "$wheel")")
   done

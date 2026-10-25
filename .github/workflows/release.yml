@@ -646,8 +646,9 @@ jobs:
   # no staging: the version is live when the job finishes. Re-runnable: a re-run uploads the same
   # files (this run's artifact), and PyPI ignores a file it already has with the same bytes. Until a maintainer has
   # set up the trusted publisher (docs/releasing.md), PyPI answers the token exchange with
-  # `invalid-publisher`: the job then publishes nothing and succeeds with `published=false`, and
-  # the verify job leaves the channel out. Any other failure fails the job.
+  # `invalid-publisher` and has no graphviz-pure project: the job then publishes nothing and
+  # succeeds with `published=false`, and the verify job leaves the channel out. Any other
+  # failure, and invalid-publisher once the project exists, fails the job.
   pypi:
     name: Publish to PyPI
     if: github.event_name == 'push'
@@ -686,13 +687,17 @@ jobs:
         run: |
           audience=$(curl -fsS https://pypi.org/_/oidc/audience | jq -r .audience)
           oidc=$(curl -fsS -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
-            "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=$audience" | jq -r .value)
+            "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=$audience" | jq -er .value)
           echo "::add-mask::$oidc"
           answer=$(jq -nc --arg t "$oidc" '{token: $t}' |
             curl -sS -X POST -H 'content-type: application/json' --data @- https://pypi.org/_/oidc/mint-token)
           token=$(jq -r '.token // empty' <<< "$answer")
           if [ -z "$token" ]; then
-            if jq -e '[.errors[]?.code] == ["invalid-publisher"]' <<< "$answer" > /dev/null; then
+            # invalid-publisher means "not set up yet" only while PyPI has no graphviz-pure project:
+            # once it has, the publisher's claims no longer match (a renamed workflow or
+            # environment), which must fail.
+            if jq -e '[.errors[]?.code] == ["invalid-publisher"]' <<< "$answer" > /dev/null &&
+              [ "$(curl -sS -o /dev/null -w '%{http_code}' https://pypi.org/pypi/graphviz-pure/json)" = 404 ]; then
               echo "::notice::PyPI's trusted publisher is not set up (see docs/releasing.md): not published"
               echo "published=false" >> "$GITHUB_OUTPUT"
               exit 0

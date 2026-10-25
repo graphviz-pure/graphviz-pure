@@ -16,11 +16,11 @@ Usage: scripts/release-wheel.py ARCHIVE OUT
   version PyPI cannot take fails before anything is built)
 """
 import base64
-import struct
 import hashlib
 import io
 import os
 import re
+import struct
 import sys
 import tarfile
 import zipfile
@@ -53,11 +53,14 @@ def macosx_tag(binary, arch):
     """macosx_X_Y_ARCH from the Mach-O's minimum OS version: LC_BUILD_VERSION (arm64) or
     LC_VERSION_MIN_MACOSX (x86_64), so the tag follows the toolchain's deployment target."""
     magic, _, _, _, ncmds, _, _ = struct.unpack_from("<7I", binary, 0)
-    assert magic == 0xFEEDFACF, "not a 64-bit little-endian Mach-O"
+    if magic != 0xFEEDFACF:
+        sys.exit("not a 64-bit little-endian Mach-O")
     off = 32
     for _ in range(ncmds):
         cmd, size = struct.unpack_from("<2I", binary, off)
         if cmd in (0x32, 0x24):  # LC_BUILD_VERSION (platform, minos), LC_VERSION_MIN_MACOSX (version)
+            if cmd == 0x32 and struct.unpack_from("<I", binary, off + 8)[0] != 1:
+                sys.exit("LC_BUILD_VERSION is not for macOS")
             v = struct.unpack_from("<I", binary, off + (12 if cmd == 0x32 else 8))[0]
             major, minor = v >> 16, (v >> 8) & 0xFF
             # From macOS 11, pip matches the major version only.
