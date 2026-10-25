@@ -635,12 +635,23 @@ fn fill_edge<P: PackGraph + ?Sized>(
         if bz.list.is_empty() {
             continue;
         }
-        // A one-point spline (polyline between overlapping nodes) makes C read
-        // bz.list[1] past the end of the list (undefined); take the point itself.
+        // `fillEdge` reads `list[1]` whenever `sflag` is clear, and it does not look at
+        // `size` first (`lib/pack/pack.c`). `clip_and_install` allocates `pn` points with
+        // `gv_calloc` and then sets `size` to the clipped count (`lib/common/splines.c`
+        // `new_spline`): a one-point polyline (`start == end + 3`) still has `list[1]`
+        // inside that allocation, and the slot is the zero `calloc` left. `make_polyline`
+        // of a multi-edge hands over `pn >= 4`, so the read is defined. The port keeps
+        // only the clipped points, so the missing slot is that zero. The port models
+        // that zeroed slot rather than reading the allocation. Repeating `list[0]`
+        // drops the diagonal through the origin cell and the packer places the component
+        // short (#456; measured on the sfdp polyline repro, step 27, edge n217 -> n0,
+        // `malloc_size` 160 = 10 points).
         let (mut pt, mut hpt, mut k) = if bz.sflag != 0 {
             (bz.sp, bz.list[0], 1)
+        } else if let Some(next) = bz.list.get(1) {
+            (bz.list[0], *next, 2)
         } else {
-            (bz.list[0], *bz.list.get(1).unwrap_or(&bz.list[0]), 2)
+            (bz.list[0], Point::new(0.0, 0.0), 2)
         };
         pt = cell(mv(pt), ssize);
         hpt = cell(mv(hpt), ssize);
@@ -1417,5 +1428,85 @@ mod tests {
         assert!(budget.take(cells.ceil() + 1.0));
         let mut budget = Budget::for_step(i32::MAX);
         assert!(!budget.take(MAX_CELLS + 1.0));
+    }
+
+    /// Issue #456: the one-point polyline on sfdp `n217 -> n0` (pack-time coordinates,
+    /// step 27). C's `fillEdge` draws through the calloc'd `list[1] == (0,0)` and covers
+    /// these cells; repeating `list[0]` does not.
+    #[test]
+    fn one_point_polyline_fills_through_the_calloc_zero() {
+        struct OnePoint {
+            spl: Vec<Bezier>,
+        }
+        impl PackGraph for OnePoint {
+            fn pk_ncomps(&self) -> usize {
+                0
+            }
+            fn pk_name(&self, _: usize) -> String {
+                String::new()
+            }
+            fn pk_compute_bb(&mut self, _: usize) {}
+            fn pk_graph_bb(&self, _: PkGraph) -> BoundingBox {
+                BoundingBox::default()
+            }
+            fn pk_nodes(&self, _: usize) -> Vec<usize> {
+                Vec::new()
+            }
+            fn pk_clusters(&self, _: PkGraph) -> Vec<usize> {
+                Vec::new()
+            }
+            fn pk_cluster_nodes(&self, _: usize) -> Vec<usize> {
+                Vec::new()
+            }
+            fn pk_node_clust(&self, _: usize) -> Option<PkClust> {
+                None
+            }
+            fn pk_coord(&self, _: usize) -> Point {
+                Point::default()
+            }
+            fn pk_node_size(&self, _: usize) -> Point {
+                Point::default()
+            }
+            fn pk_root_outs(&self, _: usize) -> Vec<usize> {
+                Vec::new()
+            }
+            fn pk_head(&self, _: usize) -> usize {
+                0
+            }
+            fn pk_spl(&self, _: usize) -> Option<&[Bezier]> {
+                Some(&self.spl)
+            }
+            fn pk_sortv(&self, _: usize) -> Option<&str> {
+                None
+            }
+            fn pk_shift_node(&mut self, _: usize, _: f64, _: f64) {}
+            fn pk_shift_edge(&mut self, _: usize, _: f64, _: f64) {}
+            fn pk_shift_graph_box(&mut self, _: PkGraph, _: f64, _: f64) {}
+        }
+
+        let g = OnePoint {
+            spl: vec![Bezier {
+                list: vec![Point::new(666.2251394528615, 256.1744794455809)],
+                eflag: 1,
+                ep: Point::new(655.173677660827, 258.8186629413117),
+                ..Bezier::default()
+            }],
+        };
+        let mut ps = PointSet::new();
+        let mut budget = Budget::for_step(27);
+        assert!(fill_edge(
+            &g,
+            0,
+            Point::default(),
+            &mut ps,
+            0.0,
+            0.0,
+            27,
+            true,
+            &mut budget
+        ));
+        for cell in [(12, 4), (0, 0), (4, 2), (21, 9), (25, 9), (24, 10)] {
+            assert!(ps.contains(&cell), "missing {cell:?}");
+        }
     }
 }

@@ -1,4 +1,7 @@
 {
+  "_notes": {
+    "pack-filledge-one-point-spline": "Issue #37 was filed as wontfix on the claim that fillEdge reads heap garbage past a one-point spline. list[1] is the zero gv_calloc left, C is deterministic, and both repros match the port after #456. This URL stays so file-issues.py does not open a second issue."
+  },
   "dot-cluster-rank-max-build-skeleton-panic": "https://github.com/graphviz-pure/graphviz-pure/issues/10",
   "dot-flat-adj-labelfloat": "https://github.com/graphviz-pure/graphviz-pure/issues/21",
   "dot-ortho-concentrate-ignored-edge": "https://github.com/graphviz-pure/graphviz-pure/issues/11",
