@@ -9,16 +9,18 @@
 #           VERSION should hold them: X.Y if it is the newest stable X.Y.*, latest if it is the
 #           newest stable version among the image's tags (as the ghcr job moves them; a
 #           pre-release or a backport holds neither)
+#   wasmer  graphviz-pure/graphviz-pure VERSION in the Wasmer registry, and its package holds the
+#           module of the release's attested wasm32-wasip1 archive byte for byte
 #   npm     @graphviz-pure/wasm VERSION is the `latest` dist-tag, and `npm audit signatures`
 #           passes for it (only after the owner approved the staged version)
 #   taps    the Homebrew tap's formula and the Scoop bucket's manifest carry VERSION, and their
 #           newest update.yml run succeeded
 #
-# --ci checks github, crates, jsr and ghcr only: release.yml's verify job runs it before npm is
+# --ci checks github, crates, jsr, ghcr and wasmer only: release.yml's verify job runs it before npm is
 # approved and before the tap and bucket update. --channels LIST checks only those channels
 # (comma-separated); --failed LIST reports those as failing at once, without checking (the verify
 # job passes the channels whose publishing job did not succeed). --wait SECONDS retries failing
-# registry checks (crates.io, JSR, ghcr) until they pass or SECONDS have passed in all. Reads only.
+# registry checks (crates.io, JSR, ghcr, Wasmer) until they pass or SECONDS have passed in all. Reads only.
 #
 # Usage: scripts/release-verify.sh VERSION [--ci] [--channels LIST] [--failed LIST] [--wait SECONDS]
 set -euo pipefail
@@ -156,6 +158,39 @@ ghcr() {
   fi
 }
 
+# The registry's package, downloaded, must contain the attested archive's module: a webc stores
+# its modules as they are.
+wasmer_url() {
+  jq -nc --arg v "$version" '{query: "{ getPackageVersion(name: \"graphviz-pure/graphviz-pure\", version: \"\($v)\") { distribution { webcDownloadUrl } } }"}' |
+    curl -fsS -A "$ua" -H 'content-type: application/json' --data @- https://registry.wasmer.io/graphql 2> /dev/null |
+    jq -er '.data.getPackageVersion.distribution.webcDownloadUrl // empty'
+}
+wasmer_ok() {
+  local url
+  url=$(wasmer_url) && curl -fsS -A "$ua" -o "$work/wasmer.webc" "$url" 2> /dev/null
+}
+wasmer_channel() {
+  local asset=graphviz-pure-$version-wasm32-wasip1.tar.gz
+  if ! retry wasmer_ok; then
+    result wasmer 0 "graphviz-pure/graphviz-pure $version is not in the Wasmer registry"
+    return
+  fi
+  mkdir -p "$work/wasi"
+  if ! gh release download "$tag" --repo "$REPO" --pattern "$asset" --dir "$work/wasi" > /dev/null 2>&1; then
+    result wasmer 0 "$version is in the registry, but the release has no $asset to compare it with"
+  elif ! gh attestation verify "$work/wasi/$asset" --repo "$REPO" --signer-workflow "$signer" --source-ref "refs/tags/$tag" > /dev/null 2>&1; then
+    result wasmer 0 "$asset's attestation does not verify"
+  elif ! python3 -I -c '
+import sys, tarfile
+name = sys.argv[1].rsplit("/", 1)[-1][: -len(".tar.gz")]
+module = tarfile.open(sys.argv[1]).extractfile(name + "/graphviz-pure.wasm").read()
+sys.exit(module not in open(sys.argv[2], "rb").read())' "$work/wasi/$asset" "$work/wasmer.webc"; then
+    result wasmer 0 "graphviz-pure/graphviz-pure $version does not hold the module of $asset"
+  else
+    result wasmer 1 "graphviz-pure/graphviz-pure $version holds the attested module of $asset"
+  fi
+}
+
 npm_channel() {
   local latest
   latest=$(npm view @graphviz-pure/wasm dist-tags.latest 2> /dev/null || true)
@@ -199,6 +234,7 @@ want github && github
 want crates && crates_io
 want jsr && jsr
 want ghcr && ghcr
+want wasmer && wasmer_channel
 if [ "$ci" = 0 ]; then
   want npm && npm_channel
   want taps && taps
