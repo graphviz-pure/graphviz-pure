@@ -125,8 +125,8 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 Used by:
 
-- tiny-skia-path 0.12.0 (Yevhenii Reizner <razrfalcon@gmail.com>)
 - tiny-skia 0.12.0 (Yevhenii Reizner <razrfalcon@gmail.com>)
+- tiny-skia-path 0.12.0 (Yevhenii Reizner <razrfalcon@gmail.com>)
 
 ```text
 Copyright (c) 2011 Google Inc. All rights reserved.
@@ -590,9 +590,9 @@ THE SOFTWARE.
 
 Used by:
 
+- skrifa 0.44.0
 - font-types 0.12.7
 - read-fonts 0.41.0
-- skrifa 0.44.0
 
 ```text
 Copyright (c) 2019 Fontations Developers

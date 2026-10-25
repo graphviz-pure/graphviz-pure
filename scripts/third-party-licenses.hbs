@@ -17,8 +17,9 @@ Graphviz, the bundled fonts and the other third-party material in the repository
 
 | Crate | Version | Declared licence |
 | --- | --- | --- |
+{{! Path-patched crates (vendor/) have no registry source. Workspace crates share this repository; the patched crates do not. }}
 {{#each crates}}
-{{#if package.source}}
+{{#if (or package.source (ne package.repository "https://github.com/graphviz-pure/graphviz-pure"))}}
 | [{{package.name}}](https://crates.io/crates/{{package.name}}) | {{package.version}} | {{license}} |
 {{/if}}
 {{/each}}
@@ -27,14 +28,14 @@ Graphviz, the bundled fonts and the other third-party material in the repository
 {{#each licenses}}
 {{#each used_by}}
 {{#if @last}}
-{{#if crate.source}}
+{{#if (or crate.source (ne crate.repository "https://github.com/graphviz-pure/graphviz-pure"))}}
 
 ### {{{../name}}}
 
 Used by:
 
 {{#each ../used_by}}
-{{#if crate.source}}
+{{#if (or crate.source (ne crate.repository "https://github.com/graphviz-pure/graphviz-pure"))}}
 - {{crate.name}} {{crate.version}}{{#if crate.authors}} ({{#each crate.authors}}{{#unless @first}}, {{/unless}}{{{this}}}{{/each}}){{/if}}
 {{/if}}
 {{/each}}

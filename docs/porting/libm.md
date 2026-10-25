@@ -6,9 +6,11 @@ every target: Linux x86-64 and arm64, Windows, macOS on Apple Silicon and Intel,
 No build calls a platform libm for them, and no feature brings one back: clippy's
 `disallowed-methods` (`clippy.toml`) rejects the `f64` methods everywhere except inside
 `math::portable`. So the same input gives the same bytes everywhere, which
-`.github/workflows/cross-platform.yml` checks on every push. One exception remains outside the
-port's own code: `-Tpng` and `-Tjpeg` rasterize the SVG with resvg and tiny-skia, which call `f32`
-functions directly (#339); the cross-platform check compares their PNGs too, and they agree today.
+`.github/workflows/cross-platform.yml` checks on every push, including PNG on the native
+platforms (the WASM build has no raster output). `-Tpng` and `-Tjpeg` rasterize that SVG with
+resvg. The crates on that path (`tiny-skia`, `tiny-skia-path`, `kurbo`, `svgtypes`, `skrifa`)
+are patched copies under `vendor/` whose transcendental calls go through the `libm` crate
+instead of the platform libm (#339).
 
 C Graphviz, on the other hand, calls its platform's libm, so stock C writes different bytes on
 macOS and on Linux. The port is therefore compared with C computing with the port's own math

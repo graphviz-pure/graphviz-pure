@@ -24,5 +24,10 @@ include = [
 resvg = { version = "0.48.1", default-features = false, features = ["text"] }
 jpeg-encoder = { version = "0.7.1", default-features = false, features = ["std"] }
 
+[dev-dependencies]
+graphviz-pure-core = { workspace = true }
+kurbo = "0.13.1"
+sha2 = "0.10"
+
 [lints]
 workspace = true
