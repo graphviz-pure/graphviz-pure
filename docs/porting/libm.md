@@ -20,7 +20,11 @@ functions (below), and a difference that comes only from a platform's libm is no
 `crates/graphviz-pure-portable-libm` exports the port's math functions under the libm names C
 imports, and `scripts/dot-portable-libm.sh` loads it into the unmodified C `dot`
 (`DYLD_INSERT_LIBRARIES` on macOS, `LD_PRELOAD` on Linux, see `scripts/c-oracle-linux/`). The
-corpus references are made with it:
+wrapper refuses to run unless `GVBINDIR` names the pango-free plugin directory of the reference
+setup — only the core, dot and neato layout plugins, with the config file `dot -c` writes there,
+as `scripts/gen-golden.sh` builds — because with a full installation's directory, or none, a
+pango textlayout plugin measures C's text instead of the built-in font metric tables, and every
+comparison silently differs by millipoints. The corpus references are made with it:
 
 ```sh
 cargo build --release -p graphviz-pure-portable-libm

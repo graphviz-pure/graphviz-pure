@@ -24,6 +24,11 @@ C_DOT = str(ROOT / "scripts" / "dot-portable-libm.sh")
 PORT = str(ROOT / "target" / "release" / "graphviz-pure")
 LIBM = ROOT / "target" / "release" / "libgraphviz_pure_portable_libm.dylib"
 BUMP = ROOT / "target" / "c-bump-malloc.dylib"
+# bump_c() runs dot directly (under lldb), so the pango-free check of scripts/dot-portable-libm.sh
+# cannot guard it; require the same reference setup here.
+GVBINDIR = os.environ.get("GVBINDIR") or sys.exit(
+    "set GVBINDIR to the pango-free C plugin directory (docs/porting/libm.md); with a default"
+    " configuration pango measures C's text")
 # Runs ARGV in a process group of its own and kills the group on timeout (fuzz-crash.py).
 SUPERVISE = r"""
 $t = shift; $p = 0;
@@ -46,7 +51,7 @@ def bump_c(path):
     if sys.platform != "darwin" or not BUMP.exists():
         return None
     with tempfile.NamedTemporaryFile(suffix=".plain") as out:
-        env = f"DYLD_INSERT_LIBRARIES={BUMP}:{LIBM} GVBINDIR={os.environ.get('GVBINDIR', '')}"
+        env = f"DYLD_INSERT_LIBRARIES={BUMP}:{LIBM} GVBINDIR={GVBINDIR}"
         run(["lldb", "-b", "-o", "settings set target.disable-aslr true",
              "-o", f"settings set target.env-vars {env}",
              "-o", f"process launch -o {out.name} -e /dev/null -- -Tplain {path}",
