@@ -157,23 +157,32 @@ ghcr() {
 }
 
 npm_channel() {
-  local latest integrity
+  local latest tarball dir integrity
   latest=$(npm view @graphviz-pure/wasm dist-tags.latest 2> /dev/null || true)
   if [ "$latest" != "$version" ]; then
     result npm 0 "latest is ${latest:-unknown}, not $version (approve the staged version first)"
     return
   fi
-  # The package is installed by version, but pinned by the published tarball's integrity:
-  # resolve it before installing, then require the lockfile to show exactly those bytes.
-  integrity=$(npm view "@graphviz-pure/wasm@$version" dist.integrity 2> /dev/null || true)
-  if (cd "$work" && mkdir npm && cd npm && npm init -y > /dev/null &&
-    [ -n "$integrity" ] &&
-    npm install --ignore-scripts --no-audit --no-fund "@graphviz-pure/wasm@$version" > /dev/null 2>&1 &&
-    [ "$integrity" = "$(jq -r '.packages["node_modules/@graphviz-pure/wasm"].integrity // ""' package-lock.json)" ] &&
+  # The install is pinned to the attested GitHub-release tarball's sha512, not to anything the
+  # registry reports: npm ci must fetch registry bytes that hash to the released bytes.
+  tarball=graphviz-pure-wasm-$version.tgz
+  dir=$work/npm-release
+  if ! gh release download "$tag" --repo "$REPO" --dir "$dir" -p "$tarball" -p SHA256SUMS > /dev/null 2>&1 ||
+    ! (cd "$dir" && if command -v sha256sum > /dev/null; then sha256sum --check --quiet --ignore-missing SHA256SUMS; else shasum -a 256 --check --quiet --ignore-missing SHA256SUMS; fi) > /dev/null 2>&1 ||
+    ! gh attestation verify "$dir/$tarball" --repo "$REPO" --signer-workflow "$signer" --source-ref "refs/tags/$tag" > /dev/null 2>&1; then
+    result npm 0 "the release's $tarball is missing, fails SHA256SUMS, or its attestation does not verify"
+    return
+  fi
+  integrity=sha512-$(openssl dgst -sha512 -binary "$dir/$tarball" | openssl base64 -A)
+  if (cd "$work" && mkdir npm && cd npm &&
+    printf '{"name":"release-verify","version":"0.0.0","dependencies":{"@graphviz-pure/wasm":"%s"}}' "$version" > package.json &&
+    printf '{"name":"release-verify","version":"0.0.0","lockfileVersion":3,"requires":true,"packages":{"":{"name":"release-verify","version":"0.0.0","dependencies":{"@graphviz-pure/wasm":"%s"}},"node_modules/@graphviz-pure/wasm":{"version":"%s","resolved":"https://registry.npmjs.org/@graphviz-pure/wasm/-/wasm-%s.tgz","integrity":"%s"}}}' \
+      "$version" "$version" "$version" "$integrity" > package-lock.json &&
+    npm ci --ignore-scripts --no-audit --no-fund > "$work/npm-ci" 2>&1 &&
     npm audit signatures > "$work/npm-audit" 2>&1); then
-    result npm 1 "latest is $version; tarball ${integrity:0:19}… pinned and installed; $(grep -m1 -i 'verified registry signature' "$work/npm-audit" || echo 'npm audit signatures passed')"
+    result npm 1 "latest is $version; registry bytes pinned to the attested release tarball (${integrity:0:19}…); $(grep -m1 -i 'verified registry signature' "$work/npm-audit" || echo 'npm audit signatures passed')"
   else
-    result npm 0 "install, integrity or signature check failed: $(tail -n 3 "$work/npm-audit" 2> /dev/null | tr '\n' ' ')"
+    result npm 0 "npm ci against the attested integrity, or the signature check, failed: $(tail -n 3 "$work/npm-ci" 2> /dev/null | tr '\n' ' ')$(tail -n 3 "$work/npm-audit" 2> /dev/null | tr '\n' ' ')"
   fi
 }
 
