@@ -882,7 +882,6 @@ such edge, and the polyline fallback could leave boxes unbounded, which moved ev
 to x = 2.5e306 on some inputs. Measured on 3,000 generated inputs with such groups (46 crash C
 for other reasons): the SVG equal to C on 2,938 before and 2,954 after, stderr on 2,869 before
 and 2,954 after, which is all of them.
-||||||| parent of b22b8cbb (#398 review: circo adjusts a minimal derived graph built once; docs and crashes.md)
 
 ## circo's derived nodes have no shape
 
