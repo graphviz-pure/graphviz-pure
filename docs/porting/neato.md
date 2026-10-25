@@ -385,6 +385,22 @@ that coincides on only one axis still scales, as C does.
   move the end point 0.1pt. With C's corner order the port's `tri_path`
   picks C's path, so the tie-break itself matches. See also #35 (face order).
   Tracked by the ignored test `neato_polyline_compass_port_routes_like_c`.
+- A two-way multi-edge pair (`13 -- 24` and `24 -- 13` in
+  `tests/wild/gv16_undirected_ngk10_4_793340.gv`, `-Kneato -Tplain`) is routed
+  from the same end in C and the port (#438). `GVDUMP` instrumentation of
+  `genroute` on both sides shows the same representative edge `(13,24)`, the
+  same corridor vertex sequence (`t=6`, 12 vertices), and coordinates ~1e-4 pt
+  apart from the prism/GTS order above. The failing `Pshortestpath` endpoint
+  sits on the corridor boundary, so "point in triangle" is an exact tie: over
+  10 identical runs of C with the port's math, the input gives three outcomes
+  — fail the first edge (edge `(13,24)`), fail the second (edge `(24,13)`),
+  or no warning at all — with different stdout, and the
+  `source`/`destination point not in any triangle` wording flips
+  independently. The port deterministically prints the second variant, byte
+  for byte one of C's own outputs (stock Apple-libm C prints it on every
+  run), including the fallback after a mid-loop `genroute` failure, which
+  keeps the already-routed first edge's spline and appends the per-edge
+  `makeSpline` spline to it (a 14-point plain line). Closed as the #35 tie.
 - `splines=ortho` in neato is left to the dot-phase3 branch.
 - VPSC/IncVPSC pointer-ordered containers follow creation order; C's output
   follows its allocator and is not reproducible on some `mode=ipsep` inputs
