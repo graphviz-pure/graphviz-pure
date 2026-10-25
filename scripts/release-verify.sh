@@ -157,18 +157,23 @@ ghcr() {
 }
 
 npm_channel() {
-  local latest
+  local latest integrity
   latest=$(npm view @graphviz-pure/wasm dist-tags.latest 2> /dev/null || true)
   if [ "$latest" != "$version" ]; then
     result npm 0 "latest is ${latest:-unknown}, not $version (approve the staged version first)"
     return
   fi
+  # The package is installed by version, but pinned by the published tarball's integrity:
+  # resolve it before installing, then require the lockfile to show exactly those bytes.
+  integrity=$(npm view "@graphviz-pure/wasm@$version" dist.integrity 2> /dev/null || true)
   if (cd "$work" && mkdir npm && cd npm && npm init -y > /dev/null &&
+    [ -n "$integrity" ] &&
     npm install --ignore-scripts --no-audit --no-fund "@graphviz-pure/wasm@$version" > /dev/null 2>&1 &&
+    [ "$integrity" = "$(jq -r '.packages["node_modules/@graphviz-pure/wasm"].integrity // ""' package-lock.json)" ] &&
     npm audit signatures > "$work/npm-audit" 2>&1); then
-    result npm 1 "latest is $version; $(grep -m1 -i 'verified registry signature' "$work/npm-audit" || echo 'npm audit signatures passed')"
+    result npm 1 "latest is $version; tarball ${integrity:0:19}… pinned and installed; $(grep -m1 -i 'verified registry signature' "$work/npm-audit" || echo 'npm audit signatures passed')"
   else
-    result npm 0 "npm audit signatures failed: $(tail -n 3 "$work/npm-audit" 2> /dev/null | tr '\n' ' ')"
+    result npm 0 "install, integrity or signature check failed: $(tail -n 3 "$work/npm-audit" 2> /dev/null | tr '\n' ' ')"
   fi
 }
 
