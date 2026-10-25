@@ -4,17 +4,30 @@ name: Fuzzing
 # (.clusterfuzzlite/): panics, hangs and running out of memory on crafted DOT. No C oracle; the
 # differential fuzzer against C Graphviz is separate (docs/porting/fuzzing.md).
 #
-# - schedule, every 6 hours: a batch run that grows the corpus, then corpus pruning. The corpus,
-#   the crashes and the builds are kept as artifacts of this workflow.
-# Pull requests are not fuzzed here: the job took 25 minutes on every push of every pull request
-# and found one crash in 141 runs, while the agents fixing bugs waited for it. A failed scheduled
-# run opens an issue (scripts/ci-report-failure.sh), labelled `crash` when the run uploaded a
-# crash; the commits merged since the previous run are the suspects.
+# Fuzzing is a pre-release step, run once per release: scripts/release-prep.sh dispatches it on
+# the release branch, which holds everything merged since the last release, and
+# scripts/release-ready.sh requires it to have passed on the commit to be tagged. It does not run
+# on a schedule or on pull requests: a run takes over an hour, and the tests, the C differential
+# corpora and the compiler already gate every change, so fuzzing each pull request (25 minutes
+# a push, one crash in 141 runs) or each day only slowed the agents fixing bugs.
+#
+# - A run fuzzes every target from the corpus of the earlier runs (kept as this workflow's
+#   artifacts, with the crashes and the builds), then prunes the corpus.
+# - A run whose inputs an earlier run already fuzzed is skipped. The inputs are what the fuzz
+#   targets are built from and seeded with (scripts/fuzz-inputs-key.sh): the crates' code, the
+#   fuzz workspace and the test graphs, not the version, docs, scripts or other tests. A run that
+#   passes uploads a `fuzzed-<key>` marker, and the `inputs` job looks for one, so dispatching
+#   again after a changelog-only push takes a minute. Dispatch with `force` to fuzz anyway.
+# - A crash fails the run; the agent driving the release files it as an issue labelled `crash`,
+#   with the minimised reproducer from the run's cifuzz-crashes-<target> artifact.
 
 on:
-  schedule:
-    - cron: "41 */6 * * *"
   workflow_dispatch:
+    inputs:
+      force:
+        description: Fuzz even if these inputs were already fuzzed
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -26,13 +39,51 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  inputs:
+    name: Were these inputs fuzzed?
+    if: github.repository == 'graphviz-pure/graphviz-pure'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read # the markers of earlier runs
+    outputs:
+      key: ${{ steps.key.outputs.key }}
+      fuzzed: ${{ steps.key.outputs.fuzzed }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # Only markers from runs of this repository count. Artifacts expire after 90 days, after
+      # which the same inputs are fuzzed again.
+      - name: Look for a run that fuzzed the same inputs
+        id: key
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          REPO_ID: ${{ github.repository_id }}
+          FORCE: ${{ inputs.force }}
+        run: |
+          key=$(scripts/fuzz-inputs-key.sh)
+          echo "key=$key" >> "$GITHUB_OUTPUT"
+          run=$(gh api "repos/$GH_REPO/actions/artifacts?name=fuzzed-$key&per_page=100" \
+            --jq "[.artifacts[] | select(.expired | not) | select(.workflow_run.head_repository_id == $REPO_ID)]
+                  | first | .workflow_run.id // empty")
+          if [ -n "$run" ] && [ "$FORCE" != true ]; then
+            echo "Inputs $key were fuzzed by run $run: skipping." | tee -a "$GITHUB_STEP_SUMMARY"
+            echo "fuzzed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "Fuzzing inputs $key${run:+ again (force)}." | tee -a "$GITHUB_STEP_SUMMARY"
+            echo "fuzzed=false" >> "$GITHUB_OUTPUT"
+          fi
+
   batch:
     name: Batch fuzzing and corpus pruning
-    if: >-
-      (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
-      && github.repository == 'graphviz-pure/graphviz-pure'
+    needs: inputs
+    if: needs.inputs.outputs.fuzzed != 'true'
     runs-on: ubuntu-24.04
-    timeout-minutes: 120
+    # About 15 minutes to build, 60 to fuzz and up to 50 to prune.
+    timeout-minutes: 150
     permissions:
       contents: read
       actions: read # the corpus kept by earlier runs
@@ -52,44 +103,28 @@ jobs:
           fuzz-seconds: 3600
           minimize-crashes: true
       # Batch runs only add to the corpus; pruning drops the inputs that add no coverage.
-      - name: Prune the corpus
+      # ClusterFuzzLite splits fuzz-seconds across the targets and gives each one's corpus merge
+      # that long: at 600 (60 s each), the merge of render_twopi's corpus after a batch run timed
+      # out (#439). Most merges take far less, and a target that finishes early leaves its time to
+      # the others.
+      - name: Prune the corpus (up to 5 min each)
         if: ${{ !cancelled() }}
         uses: google/clusterfuzzlite/actions/run_fuzzers@884713a6c30a92e5e8544c39945cd7cb630abcd1 # v1
         with:
           github-token: ${{ github.token }}
           mode: prune
           sanitizer: address
-          fuzz-seconds: 600
-
-  report:
-    name: Open an issue for a failed run
-    needs: batch
-    if: ${{ failure() && github.event_name == 'schedule' && github.repository == 'graphviz-pure/graphviz-pure' }}
-    runs-on: ubuntu-24.04
-    permissions:
-      contents: read
-      actions: read # list this run's artifacts, to tell a crash from a broken run
-      issues: write # open the issue that reports the failure
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      # ClusterFuzzLite uploads each target's crashes as cifuzz-crashes-<target>; without one,
-      # the build, the action or the runner failed.
-      - name: Open or update the issue
+          fuzz-seconds: 3000
+      # The marker the inputs job looks for, uploaded only when fuzzing and pruning both passed.
+      - name: Record the inputs as fuzzed
         env:
-          GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
-          RUN_ID: ${{ github.run_id }}
+          KEY: ${{ needs.inputs.outputs.key }}
           COMMIT: ${{ github.sha }}
-          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
-          crashes=$(gh api "repos/$GH_REPO/actions/runs/$RUN_ID/artifacts" \
-            --jq '[.artifacts[].name | select(startswith("cifuzz-crashes-"))] | join(", ")')
-          if [ -n "$crashes" ]; then
-            scripts/ci-report-failure.sh "Fuzzing finds a crash on master" bug,crash \
-              "The scheduled fuzz run at $COMMIT crashed: $RUN_URL. Minimised reproducers: $crashes."
-          else
-            scripts/ci-report-failure.sh "Fuzzing workflow fails on master" bug \
-              "The scheduled fuzz run at $COMMIT failed without a crash (build, action or runner): $RUN_URL."
-          fi
+          mkdir -p "$RUNNER_TEMP/marker"
+          echo "fuzzed $COMMIT, inputs $KEY" > "$RUNNER_TEMP/marker/fuzzed.txt"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: fuzzed-${{ needs.inputs.outputs.key }}
+          path: ${{ runner.temp }}/marker/fuzzed.txt
+          retention-days: 90
