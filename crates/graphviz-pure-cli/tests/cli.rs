@@ -6245,6 +6245,54 @@ fn voronoi_overlap_reports_an_epsf_node_like_c() {
     }
 }
 
+// Issue #450: three nodes pinned at one point. `chkBoundBox` fixes the clipping
+// window, then `rmEquality` spreads the sites and `addCorners` (`adjust.c`,
+// strict `<`) gives every corner to the first. The last cell stays empty.
+// C's `newpos` divides by a zero area and writes NaN (exit 0); the port indexed
+// `verts[0]` and panicked. fdp calls the same adjustment. C 16.1.0.
+#[test]
+fn voronoi_overlap_of_three_coincident_pins_matches_c_nan() {
+    let src = "graph G {\n  overlap=voronoi\n  node [pos=\"0,0\" pin=true]\n  a\n  b\n  c\n}\n";
+    let dot = "\
+graph G {
+	graph [bb=\"0,0,-4.295e+09,-4.295e+09\",
+		overlap=voronoi
+	];
+	node [label=\"\\N\",
+		pin=true,
+		pos=\"0,0\"
+	];
+	a	[height=0.5,
+		pos=\"nan,nan\",
+		width=0.75];
+	b	[height=0.5,
+		pos=\"nan,nan\",
+		width=0.75];
+	c	[height=0.5,
+		pos=\"nan,nan\",
+		width=0.75];
+}
+";
+    let plain = "\
+graph 1 -5.9652e+07 -5.9652e+07
+node a nan nan 0.75 0.5 a solid ellipse black lightgrey
+node b nan nan 0.75 0.5 b solid ellipse black lightgrey
+node c nan nan 0.75 0.5 c solid ellipse black lightgrey
+stop
+";
+    for engine in ["neato", "fdp"] {
+        let flag = format!("-K{engine}");
+        let (out, err, ok) = run(&[&flag, "-Tdot"], src);
+        assert!(ok, "{engine} dot: {err}");
+        assert_eq!(err, "", "{engine}");
+        assert_eq!(out, dot, "{engine}");
+        let (out, err, ok) = run(&[&flag, "-Tplain"], src);
+        assert!(ok, "{engine} plain: {err}");
+        assert_eq!(err, "", "{engine}");
+        assert_eq!(out, plain, "{engine}");
+    }
+}
+
 // Issue #131: expat rejects bytes that are not UTF-8. A character cut off at the end of a
 // `findNext` unit waits for more input (`a`'s is reported with the next unit, `</B>`), and a
 // partial tag is parsed again only once its bytes have doubled (`b`'s waits past `x`).
