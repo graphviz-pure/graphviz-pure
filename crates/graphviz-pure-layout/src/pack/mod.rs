@@ -641,7 +641,8 @@ fn fill_edge<P: PackGraph + ?Sized>(
         // `new_spline`): a one-point polyline (`start == end + 3`) still has `list[1]`
         // inside that allocation, and the slot is the zero `calloc` left. `make_polyline`
         // of a multi-edge hands over `pn >= 4`, so the read is defined. The port keeps
-        // only the clipped points, so the missing slot is that zero. Repeating `list[0]`
+        // only the clipped points, so the missing slot is that zero. The port models
+        // that zeroed slot rather than reading the allocation. Repeating `list[0]`
         // drops the diagonal through the origin cell and the packer places the component
         // short (#456; measured on the sfdp polyline repro, step 27, edge n217 -> n0,
         // `malloc_size` 160 = 10 points).

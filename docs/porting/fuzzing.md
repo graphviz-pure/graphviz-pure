@@ -458,10 +458,14 @@ neato family
   `crates/graphviz-pure-cli/tests/cli.rs` (`xlabel_hilbert_keys_are_ordered_as_signed_int`).
 
 Robustness (debug overflow and panics)
-* pack's perimeter sum wraps like C's int; a one-point spline no longer panics
-  `fillEdge`, and an empty one (on which C crashes) is skipped. The second was open case
-  `003-pack-filledge-zero-point-spline-panic`; with no C output to compare, its repro is kept
-  in `crates/graphviz-pure-cli/tests/cli.rs` (`packed_edges_with_empty_splines_do_not_panic`).
+* pack's perimeter sum wraps like C's int. An empty spline, on which C crashes, is
+  skipped. That was open case `003-pack-filledge-zero-point-spline-panic`; with no C
+  output to compare, its repro is kept in `crates/graphviz-pure-cli/tests/cli.rs`
+  (`packed_edges_with_empty_splines_do_not_panic`). A one-point polyline is not a panic.
+  `clip_and_install` allocates `pn` points with `gv_calloc` and then sets `size`, so
+  `fillEdge`'s `list[1]` is the zero that allocation left. `fill_edge` models that
+  zeroed slot. Issue #456; tested by `sfdp_one_point_polyline_packs_like_c` in the same
+  file. Case `028-pack-filledge-one-point-spline` matches C on both repros.
 * Unknown shapes are boxes for compass ports (`IS_BOX`).
 * A component taller or wider than INT_MAX polyomino steps (`height="1e30"`,
   `quantum="1e40"`) saturates `computeStep`'s step, and C never finishes filling the cells.
@@ -558,9 +562,11 @@ How the triage was done:
 Of the 124 cases, 100 fall into 17 port issues. An 18th port issue, `019`, is a
 separate difference that appeared while minimising one of them. The other 24 fall into 8 upstream-C
 issues: undefined behaviour, crashes, address- or clock-dependent output. These are
-proposed as wontfix, with an explanation of what the port does instead. Further issues
-cover gaps that are not from fuzzing: stderr wording, Linux/WASM
-portable math, the twopi arrows graphs and Latin-1 `-Tplain`. One correction to earlier
+proposed as wontfix, with an explanation of what the port does instead. Case `028` was
+filed in that set as heap garbage. `list[1]` is the zero `gv_calloc` left, C is
+deterministic, and both repros match the port (#456). Further issues cover gaps that
+are not from fuzzing: stderr wording, Linux/WASM portable math, the twopi arrows
+graphs and Latin-1 `-Tplain`. One correction to earlier
 notes: the circo/neato "record port 0.1pt off" difference is the record obstacle being
 1pt taller in the port (it uses `ND_height` instead of the field box), not the port point
 itself. The ortho variant also no longer has a gap: with a longer timeout, C finishes
@@ -575,7 +581,7 @@ itself. The ortho variant also no longer has a gap: with a longer timeout, C fin
 | [`025-fdp-cluster-address-dependent-layout`](../../tests/fuzz-open/025-fdp-cluster-address-dependent-layout) | medium | 3 | upstream C, wontfix |
 | [`026-neato-multispline-face-order`](../../tests/fuzz-open/026-neato-multispline-face-order) | medium | 3 | upstream C, wontfix |
 | [`027-dot-sameport-record-uninit-pathend`](../../tests/fuzz-open/027-dot-sameport-record-uninit-pathend) | medium | 2 | upstream C, wontfix |
-| [`028-pack-filledge-one-point-spline`](../../tests/fuzz-open/028-pack-filledge-one-point-spline) | medium | 2 | upstream C, wontfix |
+| [`028-pack-filledge-one-point-spline`](../../tests/fuzz-open/028-pack-filledge-one-point-spline) | medium | 2 | matches C (#456) |
 | [`029-neato-fdp-start-time-seeded`](../../tests/fuzz-open/029-neato-fdp-start-time-seeded) | low | 11 | upstream C, wontfix |
 | [`030-sfdp-smoothing-rng-c-unstable`](../../tests/fuzz-open/030-sfdp-smoothing-rng-c-unstable) | low | 1 | upstream C, wontfix |
 | [`031-platform-libm-apple`](../../tests/fuzz-open/031-platform-libm-apple) | medium | — | wontfix (platform) |
