@@ -1693,6 +1693,31 @@ fn fdp_derived_graph_has_the_command_line_attributes() {
     );
 }
 
+// Issue #431: an edge to a cluster routes the layout through processClusterEdges' work
+// graph, which is the same cgraph and so keeps the `-G` declarations: the derived graph
+// still sees `-Gnormalize` and rotates the root component (C's `normalize(cg)` picks the
+// first derived edge, `cluster_a -> x`, by node address).
+#[test]
+fn fdp_normalize_with_an_edge_to_a_cluster_rotates_like_c() {
+    let (out, err, ok) = run(
+        &["-Kfdp", "-Gnormalize=30", "-Tplain"],
+        "graph{subgraph cluster_a{a1--a2} x -- cluster_a; x--y}",
+    );
+    assert!(ok, "{err}");
+    assert_eq!(
+        out,
+        "graph 1 3.2643 1.5289\n\
+         node a1 0.48611 0.49695 0.75 0.5 a1 solid ellipse black lightgrey\n\
+         node a2 1.3953 0.36111 0.75 0.5 a2 solid ellipse black lightgrey\n\
+         node x 1.8478 1.2789 0.75 0.5 x solid ellipse black lightgrey\n\
+         node y 2.8893 0.72799 0.75 0.5 y solid ellipse black lightgrey\n\
+         edge a1 a2 4 0.85591 0.4417 0.91097 0.43347 0.96775 0.42499 1.0229 0.41675 solid black\n\
+         edge x y 4 2.1435 1.1225 2.283 1.0487 2.4492 0.96076 2.5893 0.88667 solid black\n\
+         edge x cluster_a 4 1.6282 1.0731 1.5601 1.0093 1.4822 0.93632 1.4039 0.86301 solid black\n\
+         stop\n"
+    );
+}
+
 // fdp's cluster map compares names as text (`mkClustMap`), so a node `<cluster_x>` is an edge
 // end at the cluster `cluster_x`; `mapN` then makes the plain node `cluster_x` for it.
 #[test]

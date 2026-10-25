@@ -97,6 +97,15 @@ layout back. The deleted nodes keep default attributes and carry
 print layout attributes; edges of deleted nodes that were not re-attached are
 removed, as in C.
 
+The work graph is that same cgraph, so it also keeps its attribute dictionaries:
+`deriveGraph`'s `agopen("derived")` inherits cgraph's ProtoGraph — the
+command-line `-G` declarations — as its defaults, and the port reads them
+through `Graph::protograph_attrs`. Issue #431 found the port dropping them (the
+work graph had no dictionaries, so `-Gnormalize` never reached the derived graph
+and `normalize(cg)` did nothing); the fix carries the dictionaries over. C's
+derived-node addresses stay in creation order on those inputs (`GVDBG3` on an
+instrumented C: `nonmono=0`), so the `NodeHeap` model above is unaffected.
+
 ## Gaps and differences
 
 - `start=regular`, `start=self` and `start=random` without a number seed C's
