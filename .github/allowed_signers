@@ -3,4 +3,4 @@
 # Format: see ssh-keygen(1), ALLOWED SIGNERS. Keys are @cloudbring's GitHub signing keys.
 cloudbring namespaces="git" ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAICCLzlLxQ4z+jGybTfkkVlJskZ5NlYXNaGy66RGnzup/
 cloudbring namespaces="git" ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIhq0FZ7+A7pL9y44+Y14+EXaAGbVaQ6OJ2coyiXsuDw
-cloudbring namespaces="git" ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHWWthbRcP9ZPTjKGbPAq/affZlNgwMy2AglBee8kklR
+cloudbring namespaces="git" ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGf/lx8JMJqq61AnG+CfLN8SfhNbBt73vs3gTlXy64f+
