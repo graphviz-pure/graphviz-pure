@@ -31,9 +31,9 @@ not be confirmed from the channel's documentation.
 | JSR `@graphviz-pure/wasm` | `release.yml` | OIDC |
 | ghcr.io image | `release.yml` | job token |
 | Homebrew tap, Scoop bucket | pull repositories | none here |
-| Wasmer `graphviz-pure/graphviz-pure` (from 0.2.1, #444) | `release.yml` (WASI build) | `WASMER_TOKEN`, `release` environment secret: Wasmer has no OIDC |
-| PyPI `graphviz-pure` (from 0.2.1, #451) | `release.yml`, wheels repacked from the attested archives | OIDC |
-| cargo-binstall (from 0.2.1, #447) | metadata in `crates/graphviz-pure-cli/Cargo.toml`, checked by `scripts/check-binstall.py` | none |
+| Wasmer `graphviz-pure/graphviz-pure` (from 0.2.1, #464) | `release.yml` (WASI build) | `WASMER_TOKEN`, `release` environment secret: Wasmer has no OIDC |
+| PyPI `graphviz-pure` (from 0.2.1, #466) | `release.yml`, wheels repacked from the attested archives | OIDC |
+| cargo-binstall (from 0.2.1, #465) | metadata in `crates/graphviz-pure-cli/Cargo.toml`, checked by `scripts/check-binstall.py` | none |
 
 ### Free with what is shipped (document only)
 
