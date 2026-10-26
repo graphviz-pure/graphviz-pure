@@ -44,3 +44,16 @@ libm = "0.2.16"
 
 [workspace.lints.rust]
 unsafe_code = "forbid"
+
+# Raster crates call f32/f64 transcendental methods. Those inherent methods ignore a
+# `libm` feature while `std` is on, and PNG encoding needs `std`, so the crates.io
+# features cannot route `-Tpng` through the portable math. The copies under vendor/
+# rename the call sites onto the `libm` crate. See vendor/README.md.
+# [patch] applies to this workspace (CI, release binaries, wasm). It does not apply
+# when a downstream crate depends on a crates.io release of graphviz-pure.
+[patch.crates-io]
+kurbo = { path = "vendor/kurbo" }
+skrifa = { path = "vendor/skrifa" }
+svgtypes = { path = "vendor/svgtypes" }
+tiny-skia = { path = "vendor/tiny-skia" }
+tiny-skia-path = { path = "vendor/tiny-skia-path" }

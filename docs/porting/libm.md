@@ -6,9 +6,23 @@ every target: Linux x86-64 and arm64, Windows, macOS on Apple Silicon and Intel,
 No build calls a platform libm for them, and no feature brings one back: clippy's
 `disallowed-methods` (`clippy.toml`) rejects the `f64` methods everywhere except inside
 `math::portable`. So the same input gives the same bytes everywhere, which
-`.github/workflows/cross-platform.yml` checks on every push. One exception remains outside the
-port's own code: `-Tpng` and `-Tjpeg` rasterize the SVG with resvg and tiny-skia, which call `f32`
-functions directly (#339); the cross-platform check compares their PNGs too, and they agree today.
+`.github/workflows/cross-platform.yml` checks on every push, including PNG on the native
+platforms (the WASM build has no raster output). `-Tpng` and `-Tjpeg` rasterize that SVG with
+resvg. The crates on that path (`tiny-skia`, `tiny-skia-path`, `kurbo`, `svgtypes`, `skrifa`)
+are patched copies under `vendor/` whose transcendental calls go through the `libm` crate
+instead of the platform libm (#339). Release binaries, wasm, npm, PyPI, Docker and builds
+from this repository use the portable math for PNG/JPEG; a crates.io source build
+(`cargo install`) still gets the platform libm in raster output until the forks or upstream
+features land.
+
+Those vendored calls use the `libm` crate for `pow` and `hypot` too. `graphviz_pure_core::math`
+uses CORE-MATH for `pow` and its own `hypot`, and the `libm` crate for the other functions.
+Both are deterministic. They are two implementations: the raster path does not call
+`graphviz_pure_core::math`. Core does not depend on the raster crates, so a dependency the
+other way would not cycle. It is not a math-only crate (about 19,000 lines: the graph model,
+attributes, fonts and colour tables) and `math` is `f64` only, while the raster crates also
+call `f32`. Routing the `f64` calls through core would still leave `f32` on the `libm` crate
+and would compile the graph model into kurbo, so the vendored calls stay on `libm` directly.
 
 C Graphviz, on the other hand, calls its platform's libm, so stock C writes different bytes on
 macOS and on Linux. The port is therefore compared with C computing with the port's own math

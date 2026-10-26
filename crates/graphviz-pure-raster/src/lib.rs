@@ -245,4 +245,37 @@ mod tests {
         let jpg = rasterize(SVG, RasterFormat::Jpeg, false).unwrap();
         assert_eq!(&jpg[..2], &[0xFF, 0xD8]);
     }
+
+    // #339. `Vec2::atan2` is `y.atan2(x)`. Unpatched on Apple Silicon this input is
+    // `0x3fe4978fa3269ee1` from the platform libm and `0x3fe4978fa3269ee0` from
+    // `libm` 0.2.16, which is what `graphviz_pure_core::math::atan2` calls.
+    #[test]
+    fn issue_339_atan2_matches_the_libm_crate() {
+        let angle = kurbo::Vec2::new(0.4, 0.3).atan2();
+        assert_eq!(
+            angle.to_bits(),
+            graphviz_pure_core::math::atan2(0.3, 0.4).to_bits(),
+        );
+    }
+
+    // Ellipse arcs, rotate, skew and a cubic exercise the patched sin, cos, tan,
+    // acos and powf calls. A one-ulp difference does not move an 8-bit pixel, so
+    // this PNG matches the unpatched render on Apple Silicon. The hash is the
+    // value the patched crates produce, which the other platforms must match.
+    #[test]
+    fn issue_339_png_bytes_cover_ellipse_rotate_and_cubic() {
+        use sha2::{Digest, Sha256};
+        const SHAPES: &str = r#"<svg xmlns="http://www.w3.org/2000/svg" width="90pt" height="70pt" viewBox="0 0 90 70">
+<g transform="rotate(33 40 36) skewX(20)">
+<ellipse cx="40" cy="30" rx="24" ry="14" fill="none" stroke="black"/>
+<path d="M10 60 C 25 8, 70 8, 85 55" fill="none" stroke="black"/>
+<text x="18" y="40" font-family="Times,serif" font-size="16">Été</text>
+</g></svg>"#;
+        let png = rasterize(SHAPES, RasterFormat::Png, false).unwrap();
+        let hash = format!("{:x}", Sha256::digest(&png));
+        assert_eq!(
+            hash,
+            "30c8424e7946b977c41de493bdfd569c9bca183405e95584148b644417995d51"
+        );
+    }
 }

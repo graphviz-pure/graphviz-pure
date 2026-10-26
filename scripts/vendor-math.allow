@@ -1,0 +1,18 @@
+# Calls the raster-math check ignores. A rule is `METHOD PATH` or `METHOD() PATH`.
+# PATH is a repo-relative file, or `*` for every file under vendor/.
+# `METHOD()` matches only a call with no arguments. `f32` and `f64` hypot and atan2
+# take an argument, so a zero-argument call is some other method (kurbo's Vec2).
+# `sqrt` is not listed: clippy.toml allows it (correctly rounded on every platform).
+
+# Exponentiation by squaring in Rust core, the same bits on every platform, not a
+# platform libm. clippy.toml bans powi in this repository's own crates; `math` has
+# no powi wrapper, and the vendored crates keep the upstream calls.
+powi *
+
+# Vec2::hypot is hypot2().sqrt(). Vec2::atan2 is y.p_atan2(x). See kurbo vec2.rs.
+hypot() *
+atan2() *
+
+# f32x8::powf in wide/f32x8_t.rs is a bit-trick approximation. These are its calls
+# (gradient and colour-space stages). A sin or cos in this file still fails the check.
+powf vendor/tiny-skia/src/pipeline/highp.rs
