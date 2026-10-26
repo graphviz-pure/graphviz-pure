@@ -225,6 +225,37 @@ pub struct RelativePositionConstraints {
     pub a_constr: SparseMatrix,
 }
 
+/// One entry of `ja`, or 0 when `at` is past the array. `get_edge_label_matrix`
+/// (`lib/sfdpgen/post_process.c`) reads `ja[ia[ii]]` and `ja[ia[ii] + 1]` with
+/// no check. `ja` is allocated to exactly `nz`, so that past-the-end read is
+/// undefined behaviour in C. C is deterministic only when its allocation has
+/// padding after `ja`. The port chooses 0.
+fn ja_at(ja: &[i32], at: i32) -> i32 {
+    usize::try_from(at)
+        .ok()
+        .and_then(|i| ja.get(i))
+        .copied()
+        .unwrap_or(0)
+}
+
+/// Scheme 1 (`ELSCHEME_PENALTY`) contributes a penalty only when those two
+/// reads differ (`if (jj == ll) continue`). When every label is skipped, C
+/// still calls `StressMajorizationSmoother_smooth` and segfaults on a NULL
+/// `x00` (`SM_SCHEME_NORMAL_ELABEL` in `post_process.c`). The penalty iteration
+/// with no terms diverges to NaN, so this is not a penalty problem.
+pub(crate) fn edge_label_penalty_terms(data: &RelativePositionConstraints) -> bool {
+    use super::spring_electrical::{ELSCHEME_PENALTY, ELSCHEME_STRAIGHTLINE_PENALTY};
+    let scheme = data.edge_labeling_scheme;
+    if scheme != ELSCHEME_PENALTY && scheme != ELSCHEME_STRAIGHTLINE_PENALTY {
+        return !data.constr_nodes.is_empty();
+    }
+    let (ia, ja) = (&data.a_constr.ia, &data.a_constr.ja);
+    data.constr_nodes.iter().any(|&ii| {
+        let start = ia.get(ii).copied().unwrap_or(0);
+        ja_at(ja, start) != ja_at(ja, start.saturating_add(1))
+    })
+}
+
 /// `get_edge_label_matrix(data, m, dim, x, &Lc, &rhs)`.
 fn get_edge_label_matrix(
     data: &RelativePositionConstraints,
@@ -240,10 +271,19 @@ fn get_edge_label_matrix(
     let (ia, ja) = (&data.a_constr.ia, &data.a_constr.ja);
     let cp = data.constr_penalty;
     let (mut irn, mut jcn, mut val) = (Vec::new(), Vec::new(), Vec::new());
+    // `get_edge_label_matrix` (`lib/sfdpgen/post_process.c`) reads two
+    // neighbours with no check. `attach_edge_label_coordinates`
+    // (`spring_electrical.c`) asserts `len >= 2` there, and
+    // `shorting_edge_label_nodes` asserts in `gv_list_get_` when removing
+    // the node leaves no edge. Scheme 2 reaches this read instead. The read
+    // past `ja` is undefined behaviour in C; the port uses 0 (see `ja_at`).
+    // No neighbours makes the scheme-2 right-hand side divide by zero and
+    // write NaN; that node is skipped.
+    let neighbor = |at: i32| ja_at(ja, at) as usize;
     if scheme == ELSCHEME_PENALTY || scheme == ELSCHEME_STRAIGHTLINE_PENALTY {
         for &ii in &data.constr_nodes {
-            let jj = ja[ia[ii] as usize] as usize;
-            let ll = ja[ia[ii] as usize + 1] as usize;
+            let jj = neighbor(ia[ii]);
+            let ll = neighbor(ia[ii].saturating_add(1));
             if jj == ll {
                 continue;
             }
@@ -279,8 +319,15 @@ fn get_edge_label_matrix(
     } else if scheme == ELSCHEME_PENALTY2 || scheme == ELSCHEME_STRAIGHTLINE_PENALTY2 {
         let mut x00 = vec![0.0f64; m * dim];
         for &ii in &data.constr_nodes {
-            let jj = ja[ia[ii] as usize] as usize;
-            let ll = ja[ia[ii] as usize + 1] as usize;
+            let degree = ia[ii + 1] - ia[ii];
+            // Dividing by the neighbour count below is NaN when it is 0.
+            // C asserts before this for schemes 3 and 4, and segfaults for
+            // scheme 2 (`get_edge_label_matrix`, `post_process.c`).
+            if degree <= 0 {
+                continue;
+            }
+            let jj = neighbor(ia[ii]);
+            let ll = neighbor(ia[ii].saturating_add(1));
             let dist = crate::sparse::distance_cropped(x, dim, jj, ll);
             irn.push(ii as i32);
             jcn.push(ii as i32);
@@ -776,5 +823,46 @@ mod tests {
             post_process_smoothing(2, &mut self_edge(), &ctrl, &mut pos);
             assert_eq!(pos, x);
         }
+    }
+
+    /// Issue #492: `get_edge_label_matrix` reads two neighbours. A label node
+    /// with none, or with one at the end of `ja`, must not panic or write NaN.
+    #[test]
+    fn edge_label_matrix_with_too_few_neighbours_is_finite() {
+        use super::super::spring_electrical::{ELSCHEME_PENALTY, ELSCHEME_PENALTY2};
+        let isolated = SparseMatrix::from_csr(1, 1, vec![0, 0], vec![], Some(vec![]));
+        let x0 = [0.0, 0.0];
+        for scheme in [ELSCHEME_PENALTY, ELSCHEME_PENALTY2] {
+            let data = RelativePositionConstraints {
+                constr_penalty: 1.0,
+                edge_labeling_scheme: scheme,
+                constr_nodes: vec![0],
+                a_constr: isolated.clone(),
+            };
+            let (_lc, rhs) = get_edge_label_matrix(&data, 1, 2, &x0);
+            if let Some(rhs) = rhs {
+                assert!(rhs.iter().all(|v| v.is_finite()), "{scheme}: {rhs:?}");
+            }
+        }
+        // The label is the last row, so `ja[ia[ii] + 1]` is past `ja`. The
+        // port reads that as 0. The only real neighbour sits at (4, 5), so
+        // the right-hand side is nonzero.
+        let last = SparseMatrix::from_csr(2, 2, vec![0, 1, 2], vec![1, 0], Some(vec![1.0, 1.0]));
+        let x = [4.0, 5.0, 1.0, 2.0];
+        let data = RelativePositionConstraints {
+            constr_penalty: 1.0,
+            edge_labeling_scheme: ELSCHEME_PENALTY2,
+            constr_nodes: vec![1],
+            a_constr: last,
+        };
+        let (_lc, rhs) = get_edge_label_matrix(&data, 2, 2, &x);
+        let rhs = rhs.unwrap();
+        assert!(rhs.iter().all(|v| v.is_finite()), "{rhs:?}");
+        assert!(rhs.iter().any(|v| *v != 0.0), "{rhs:?}");
+        // Both reads are 0, so scheme 1 has no penalty term. Scheme 2 still does.
+        let mut scheme1 = data.clone();
+        scheme1.edge_labeling_scheme = ELSCHEME_PENALTY;
+        assert!(!edge_label_penalty_terms(&scheme1));
+        assert!(edge_label_penalty_terms(&data));
     }
 }

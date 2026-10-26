@@ -437,8 +437,14 @@ pub fn remove_overlap_el(
     if ntry == 0 {
         return;
     }
-    let constraints =
-        constraints.filter(|c| c.edge_labeling_scheme != 0 && !c.constr_nodes.is_empty());
+    // Scheme 1 with no distinct neighbour pair: `StressMajorizationSmoother_smooth`
+    // (`post_process.c`) segfaults on a NULL `x00`. Dropping the empty penalty
+    // keeps the ordinary overlap removal, which stays finite.
+    let constraints = constraints.filter(|c| {
+        c.edge_labeling_scheme != 0
+            && !c.constr_nodes.is_empty()
+            && crate::sfdpgen::post_process::edge_label_penalty_terms(c)
+    });
     let has_penalty_terms = constraints.is_some();
     let mut i = 0;
     let report = |i: i32, neighborhood_only: bool, max_overlap: f64, min_overlap: f64| {

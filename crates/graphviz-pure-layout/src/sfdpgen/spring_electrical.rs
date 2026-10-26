@@ -857,6 +857,13 @@ fn attach_edge_label_coordinates(
     }
     for &ii in edge_label_nodes {
         let len = f64::from(a.ia[ii + 1] - a.ia[ii]);
+        // Unreachable from the only caller: `multilevel_spring_electrical_embedding`
+        // already requires every label to have degree at least 2. Kept as a
+        // defence for the case C asserts on (`len >= 2`, "should just be 2",
+        // `spring_electrical.c`). Dividing by `len` would write NaN.
+        if len < 2.0 {
+            continue;
+        }
         for k in 0..dim {
             x[ii * dim + k] = 0.0;
         }
@@ -964,17 +971,42 @@ pub fn multilevel_spring_electrical_embedding(
         a0.clone()
     };
 
-    if (ctrl.edge_labeling_scheme == ELSCHEME_STRAIGHTLINE_PENALTY
-        || ctrl.edge_labeling_scheme == ELSCHEME_STRAIGHTLINE_PENALTY2)
-        && !edge_label_nodes.is_empty()
-    {
+    let straightline = ctrl.edge_labeling_scheme == ELSCHEME_STRAIGHTLINE_PENALTY
+        || ctrl.edge_labeling_scheme == ELSCHEME_STRAIGHTLINE_PENALTY2;
+    // A node named `|edgelabel|*` is an edge label only when it has two
+    // neighbours. `shorting_edge_label_nodes` (`spring_electrical.c`) calls
+    // `LIST_FRONT` on the edges that remain after those nodes are removed, and
+    // `gv_list_get_` asserts when the list is empty. `attach_edge_label_coordinates`
+    // asserts `len >= 2` when a label node has fewer. C writes nothing. The
+    // ordinary layout below is what C draws when the node is not an edge label.
+    let labels_have_two_neighbours = {
+        let degree = |i: usize| -> i32 {
+            let start = a.ia.get(i).copied().unwrap_or(0);
+            let end = a.ia.get(i.saturating_add(1)).copied().unwrap_or(0);
+            end.saturating_sub(start)
+        };
+        edge_label_nodes.iter().all(|&i| degree(i) >= 2)
+    };
+    if straightline && !edge_label_nodes.is_empty() && labels_have_two_neighbours {
         let mut x2 = vec![0.0f64; a.m * dim];
         let mut a2 = shorting_edge_label_nodes(&a, edge_label_nodes);
-        multilevel_spring_electrical_embedding(dim, &mut a2, ctrl, None, &mut x2, &[], flag);
-        attach_edge_label_coordinates(dim, &a, edge_label_nodes, x, &x2);
-        remove_overlap_ctrl(dim, &mut a, x, label_sizes, ctrl, edge_label_nodes);
-        return;
+        if a2.nz > 0 {
+            multilevel_spring_electrical_embedding(dim, &mut a2, ctrl, None, &mut x2, &[], flag);
+            attach_edge_label_coordinates(dim, &a, edge_label_nodes, x, &x2);
+            remove_overlap_ctrl(dim, &mut a, x, label_sizes, ctrl, edge_label_nodes);
+            return;
+        }
+        // `shorting_edge_label_nodes`: `LIST_FRONT` of an empty list asserts
+        // in `gv_list_get_` (`list.c`). Fall through.
     }
+    // A straight-line scheme that did not return above is one where C asserts
+    // (`gv_list_get_` or `attach_edge_label_coordinates`). Drop its constraints
+    // so overlap removal does not run `get_edge_label_matrix` on that state.
+    let edge_label_nodes: &[usize] = if straightline && !edge_label_nodes.is_empty() {
+        &[]
+    } else {
+        edge_label_nodes
+    };
 
     let mctrl = MultilevelControl {
         maxlevel: ctrl.multilevels,
@@ -1048,4 +1080,37 @@ pub fn multilevel_spring_electrical_embedding(
     }
     remove_overlap_ctrl(dim, &mut a, x, label_sizes, ctrl, edge_label_nodes);
     *ctrl = ctrl0;
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Issue #492: scheme 4 on a node with no edge. C asserts in
+    /// `shorting_edge_label_nodes` (`gv_list_get_`); the positions stay finite.
+    #[test]
+    fn straightline_edge_label_with_no_edge_stays_finite() {
+        let mut a = SparseMatrix::from_csr(1, 1, vec![0, 0], vec![], Some(vec![]));
+        let mut ctrl = SpringElectricalControl {
+            edge_labeling_scheme: ELSCHEME_STRAIGHTLINE_PENALTY2,
+            overlap: 1000,
+            tscheme: QUAD_TREE_NONE,
+            ..SpringElectricalControl::default()
+        };
+        let mut x = vec![0.0; 2];
+        let mut flag = 0;
+        let sizes = [0.5, 0.25];
+        crate::cutil::with_rand_state(&mut crate::cutil::RandState::default(), || {
+            multilevel_spring_electrical_embedding(
+                2,
+                &mut a,
+                &mut ctrl,
+                Some(&sizes),
+                &mut x,
+                &[0],
+                &mut flag,
+            );
+        });
+        assert!(x.iter().all(|v| v.is_finite()), "{x:?}");
+    }
 }
