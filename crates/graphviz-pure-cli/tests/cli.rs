@@ -4778,6 +4778,105 @@ fn ortho_trapezoid_without_upper_neighbour_does_not_panic() {
     );
 }
 
+// Issue #492. The fuzzer's minimized input (55 bytes, 0xFF after `overlap=`).
+// sfdp `label_scheme` 4 with a node named `|edgelabel|` and no edge: C asserts
+// in `gv_list_get_` (`shorting_edge_label_nodes`) or in
+// `attach_edge_label_coordinates` (`len >= 2`). The port used to panic in
+// `get_edge_label_matrix` or write `nan`.
+fn run_raw(args: &[&str], stdin: &[u8]) -> (String, String, bool) {
+    let mut child = Command::new(env!("CARGO_BIN_EXE_graphviz-pure"))
+        .args(args)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    if let Err(e) = child.stdin.take().unwrap().write_all(stdin) {
+        assert_eq!(e.kind(), std::io::ErrorKind::BrokenPipe, "{e}");
+    }
+    let out = child.wait_with_output().unwrap();
+    (
+        String::from_utf8_lossy(&out.stdout).into_owned(),
+        String::from_utf8_lossy(&out.stderr).into_owned(),
+        out.status.success(),
+    )
+}
+
+#[test]
+fn sfdp_edgelabel_node_without_an_edge_does_not_panic_or_write_nan() {
+    let fuzz: &[u8] = b"graph{layout=sfdp\nlabel_scheme=4overlap=\xff\"|edgelabel|\"}";
+    assert_eq!(fuzz.len(), 55);
+    let (out, err, ok) = run_raw(&["-Tplain"], fuzz);
+    assert!(ok, "{err}");
+    assert!(!err.contains("panicked"), "{err}");
+    assert!(!out.to_ascii_lowercase().contains("nan"), "{out}");
+    assert!(out.contains("node"), "{out}");
+
+    for scheme in 1..=4 {
+        for src in [
+            format!("graph {{ layout=sfdp label_scheme={scheme} \"|edgelabel|\" }}"),
+            format!("graph {{ layout=sfdp label_scheme={scheme} a -- \"|edgelabel|\" }}"),
+            format!("graph {{ layout=sfdp label_scheme={scheme} a -- \"|edgelabel|\" -- b }}"),
+        ] {
+            let (out, err, ok) = run(&["-Tplain"], &src);
+            assert!(ok, "{src}: {err}");
+            assert!(!out.to_ascii_lowercase().contains("nan"), "{src}: {out}");
+        }
+        // No edge: the same drawing as not treating the node as an edge label.
+        // Schemes 3 and 4 are where C asserts; 1 and 2 already drew this.
+        let labeled = format!("graph {{ layout=sfdp label_scheme={scheme} \"|edgelabel|\" }}");
+        let plain = "graph { layout=sfdp label_scheme=0 \"|edgelabel|\" }";
+        let (out, _, _) = run(&["-Tplain"], &labeled);
+        let (ordinary, _, _) = run(&["-Tplain"], plain);
+        if scheme >= 3 {
+            assert_eq!(out, ordinary, "scheme {scheme}");
+        }
+    }
+
+    // Two neighbours: scheme 4 matches C (Graphviz 16.1.0, `-Tplain`).
+    let between = "graph { layout=sfdp label_scheme=4 a -- \"|edgelabel|\" -- b }";
+    let (out, err, ok) = run(&["-Tplain"], between);
+    assert!(ok && err.is_empty(), "{err}");
+    let xy = |out: &str, name: &str| -> (f64, f64) {
+        let line = out
+            .lines()
+            .find(|l| l.starts_with("node ") && l.split_whitespace().nth(1) == Some(name))
+            .unwrap_or_else(|| panic!("missing {name} in {out}"));
+        let mut p = line.split_whitespace().skip(2);
+        (
+            p.next().unwrap().parse().unwrap(),
+            p.next().unwrap().parse().unwrap(),
+        )
+    };
+    let near = |out: &str, got: (f64, f64), exp: (f64, f64)| {
+        assert!(
+            (got.0 - exp.0).abs() < 1e-4 && (got.1 - exp.1).abs() < 1e-4,
+            "{got:?} vs {exp:?}\n{out}"
+        );
+    };
+    near(&out, xy(&out, "a"), (0.375, 0.25));
+    near(&out, xy(&out, "\"|edgelabel|\""), (3.1962, 0.25));
+    near(&out, xy(&out, "b"), (6.0175, 0.25));
+
+    // Scheme 2, label last, overlap removal on. C reads one past `ja` and draws
+    // this; the port used to panic.
+    let last = "graph { layout=sfdp label_scheme=2 overlap=false a -- \"|edgelabel|\" }";
+    let (out, err, ok) = run(&["-Tplain"], last);
+    assert!(ok && err.is_empty(), "{err}");
+    near(&out, xy(&out, "a"), (0.7042, 0.25));
+    near(&out, xy(&out, "\"|edgelabel|\""), (0.72082, 0.86111));
+
+    // Scheme 1, same graph: both neighbour reads are 0, so C's `jj == ll`
+    // skips the penalty and `StressMajorizationSmoother_smooth` segfaults.
+    // The drawing is the ordinary overlap removal, not NaN.
+    let penalty = "graph { layout=sfdp label_scheme=1 overlap=false a -- \"|edgelabel|\" }";
+    let ordinary = "graph { layout=sfdp label_scheme=0 overlap=false a -- \"|edgelabel|\" }";
+    let (out, err, ok) = run(&["-Tplain"], penalty);
+    let (plain, _, plain_ok) = run(&["-Tplain"], ordinary);
+    assert!(ok && plain_ok, "{err}");
+    assert_eq!(out, plain);
+}
+
 // `%.80s` of the string read so far may end inside a UTF-8 sequence: C writes the bytes.
 #[test]
 fn unterminated_string_excerpt_is_cut_at_80_bytes() {
