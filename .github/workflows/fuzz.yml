@@ -120,6 +120,11 @@ jobs:
           mode: prune
           sanitizer: address
           fuzz-seconds: 6000
+      - name: Warn that pruning failed
+        if: steps.prune.outcome == 'failure'
+        run: |
+          echo "::warning::Pruning the corpus failed (see the step above); the corpus is not pruned and these inputs will be fuzzed again (#499)."
+          echo "Pruning the corpus failed; fuzzing passed. The corpus is not pruned (#499)." >> "$GITHUB_STEP_SUMMARY"
       # The marker the inputs job looks for, uploaded only when fuzzing and pruning both passed.
       - name: Record the inputs as fuzzed
         if: success() && steps.prune.outcome == 'success'
