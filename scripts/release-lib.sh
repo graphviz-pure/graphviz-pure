@@ -13,9 +13,13 @@ read -ra GH_CMD <<< "${GH:-gh}"
 
 die() { echo "error: $*" >&2; exit 1; }
 
-# Refuses to write as the owner: the owner approves what these scripts open.
+# Refuses to write as the owner: the owner approves what these scripts open. The GraphQL viewer
+# query also answers for a GitHub App installation token, where GET /user is a 403 (#486).
 require_bot() {
-  [ "$("${GH_CMD[@]}" api user -q .login)" != "$OWNER" ] ||
+  local login
+  login=$("${GH_CMD[@]}" api graphql -f query='{viewer{login}}' -q .data.viewer.login || :)
+  [ -n "$login" ] || die "cannot tell which account GH runs gh as: set GH to the bot account's gh"
+  [ "$login" != "$OWNER" ] ||
     die "GH runs gh as $OWNER, who approves the release: set GH to the bot account's gh"
 }
 
