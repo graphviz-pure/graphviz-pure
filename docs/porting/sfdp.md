@@ -42,12 +42,26 @@ octree, `quadtree=fast` with 12000 nodes, 7 packed components of 143 nodes,
 
 - `splines=ortho`: routed by `lib/ortho` (see `docs/porting/neato.md`);
   `overlap=ortho*` and `overlap=vpsc` are ported (opus5.5/neato-gaps).
-- `label_scheme=4` with `overlap=false`: the penalty iteration is chaotic
-  (C itself runs ~180 tries; scheme 2 diverges to 1e142 in C). C's Delaunay
-  edges come from GTS's pointer-keyed hash tables, so the row order of the
-  triangulation matrix (and therefore summation order in the CG solver)
-  differs from the port by an ulp, which this case amplifies. Non-chaotic
-  overlap removal is unaffected.
+- `label_scheme=4` with `overlap=false` (#494): the penalty iteration is
+  chaotic (C itself runs ~180 tries; scheme 2 diverges to 1e142 in C). C's
+  Delaunay edges come from GTS's pointer-keyed hash tables, so the row order
+  of the triangulation matrix (and therefore summation order in the CG
+  solver) differs from the port by an ulp, which this case amplifies.
+  Non-chaotic overlap removal is unaffected.
+- `label_scheme=2` with `overlap=false` on a two-neighbour label (#493) is
+  the same chaos, and the edge order is the only difference: the port
+  matches C bit for bit for 33 of the ~390 tries, then `call_tri`
+  (`overlap.c`) returns the same entries in another row order (GTS hands
+  `delaunay_tri` the triangle as `2-0 2-1 1-0`; the port's `delaunay_edges`
+  sorts `0-1 0-2 1-2`), which shifts one CG sum by an ulp. The coordinates
+  blow up to 1e141 on both sides of that point; C then recovers and stops
+  after ~390 tries, the port stops at 338 without recovering. Replaying
+  C's GTS edge list call by call makes the port's output byte-identical.
+  The order is still not reproducible: it comes from the face order of
+  GTS's incremental flips plus `gts_surface_foreach_edge`'s pointer-keyed
+  face hash (`src/surface.c`), and within one run GTS returns five
+  different orders or orientations for the same three points. Unlike
+  `smoothing=rng`, C's own result here is stable run to run.
 
 Floating point follows clang's `-ffp-contract=on` on arm64 as in the neato
 port: `a*b + c` is `fma(a, b, c)` (`mul_add`), `c - a*b` is `fma(-a, b, c)`,
