@@ -82,8 +82,8 @@ jobs:
     needs: inputs
     if: needs.inputs.outputs.fuzzed != 'true'
     runs-on: ubuntu-24.04
-    # About 15 minutes to build, 60 to fuzz and up to 50 to prune.
-    timeout-minutes: 150
+    # About 15 minutes to build, 60 to fuzz and up to 100 to prune.
+    timeout-minutes: 200
     permissions:
       contents: read
       actions: read # the corpus kept by earlier runs
@@ -107,23 +107,35 @@ jobs:
       # that long: at 600 (60 s each), the merge of render_twopi's corpus after a batch run timed
       # out (#439). Most merges take far less, and a target that finishes early leaves its time to
       # the others.
-      - name: Prune the corpus (up to 5 min each)
+      # A merge that times out says nothing about the code under test (#439, #499): it doesn't fail
+      # the run, so a release's fuzzing gate is the fuzz step alone. The inputs are recorded as
+      # fuzzed only when pruning passed too, so the next run prunes again.
+      - name: Prune the corpus (up to 10 min each)
+        id: prune
         if: ${{ !cancelled() }}
+        continue-on-error: true
         uses: google/clusterfuzzlite/actions/run_fuzzers@884713a6c30a92e5e8544c39945cd7cb630abcd1 # v1
         with:
           github-token: ${{ github.token }}
           mode: prune
           sanitizer: address
-          fuzz-seconds: 3000
+          fuzz-seconds: 6000
+      - name: Warn that pruning failed
+        if: steps.prune.outcome == 'failure'
+        run: |
+          echo "::warning::Pruning the corpus failed (see the step above); the corpus is not pruned and these inputs will be fuzzed again (#499)."
+          echo "Pruning the corpus failed; fuzzing passed. The corpus is not pruned (#499)." >> "$GITHUB_STEP_SUMMARY"
       # The marker the inputs job looks for, uploaded only when fuzzing and pruning both passed.
       - name: Record the inputs as fuzzed
+        if: success() && steps.prune.outcome == 'success'
         env:
           KEY: ${{ needs.inputs.outputs.key }}
           COMMIT: ${{ github.sha }}
         run: |
           mkdir -p "$RUNNER_TEMP/marker"
           echo "fuzzed $COMMIT, inputs $KEY" > "$RUNNER_TEMP/marker/fuzzed.txt"
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+      - if: success() && steps.prune.outcome == 'success'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: fuzzed-${{ needs.inputs.outputs.key }}
           path: ${{ runner.temp }}/marker/fuzzed.txt
