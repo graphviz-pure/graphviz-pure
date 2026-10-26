@@ -857,9 +857,10 @@ fn attach_edge_label_coordinates(
     }
     for &ii in edge_label_nodes {
         let len = f64::from(a.ia[ii + 1] - a.ia[ii]);
-        // `attach_edge_label_coordinates` (`lib/sfdpgen/spring_electrical.c`)
-        // asserts `len >= 2` ("should just be 2"). Fewer neighbours abort C
-        // with no output; dividing by `len` writes NaN.
+        // Unreachable from the only caller: `multilevel_spring_electrical_embedding`
+        // already requires every label to have degree at least 2. Kept as a
+        // defence for the case C asserts on (`len >= 2`, "should just be 2",
+        // `spring_electrical.c`). Dividing by `len` would write NaN.
         if len < 2.0 {
             continue;
         }

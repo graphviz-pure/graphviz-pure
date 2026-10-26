@@ -227,7 +227,9 @@ pub struct RelativePositionConstraints {
 
 /// One entry of `ja`, or 0 when `at` is past the array. `get_edge_label_matrix`
 /// (`lib/sfdpgen/post_process.c`) reads `ja[ia[ii]]` and `ja[ia[ii] + 1]` with
-/// no check. The word past a `gv_calloc`'d `ja` is 0 on the drawings C finishes.
+/// no check. `ja` is allocated to exactly `nz`, so that past-the-end read is
+/// undefined behaviour in C. C is deterministic only when its allocation has
+/// padding after `ja`. The port chooses 0.
 fn ja_at(ja: &[i32], at: i32) -> i32 {
     usize::try_from(at)
         .ok()
@@ -270,10 +272,11 @@ fn get_edge_label_matrix(
     let cp = data.constr_penalty;
     let (mut irn, mut jcn, mut val) = (Vec::new(), Vec::new(), Vec::new());
     // `get_edge_label_matrix` (`lib/sfdpgen/post_process.c`) reads two
-    // neighbours. `attach_edge_label_coordinates` (`spring_electrical.c`)
-    // asserts `len >= 2` there, and `shorting_edge_label_nodes` asserts in
-    // `gv_list_get_` when removing the node leaves no edge. Scheme 2 reaches
-    // this read instead and segfaults. An index past `ja` is 0 (see `ja_at`).
+    // neighbours with no check. `attach_edge_label_coordinates`
+    // (`spring_electrical.c`) asserts `len >= 2` there, and
+    // `shorting_edge_label_nodes` asserts in `gv_list_get_` when removing
+    // the node leaves no edge. Scheme 2 reaches this read instead. The read
+    // past `ja` is undefined behaviour in C; the port uses 0 (see `ja_at`).
     // No neighbours makes the scheme-2 right-hand side divide by zero and
     // write NaN; that node is skipped.
     let neighbor = |at: i32| ja_at(ja, at) as usize;
@@ -841,8 +844,9 @@ mod tests {
                 assert!(rhs.iter().all(|v| v.is_finite()), "{scheme}: {rhs:?}");
             }
         }
-        // The label is the last row, so `ja[ia[ii] + 1]` is past `ja`. Its
-        // only real neighbour sits at (4, 5), so the right-hand side is nonzero.
+        // The label is the last row, so `ja[ia[ii] + 1]` is past `ja`. The
+        // port reads that as 0. The only real neighbour sits at (4, 5), so
+        // the right-hand side is nonzero.
         let last = SparseMatrix::from_csr(2, 2, vec![0, 1, 2], vec![1, 0], Some(vec![1.0, 1.0]));
         let x = [4.0, 5.0, 1.0, 2.0];
         let data = RelativePositionConstraints {

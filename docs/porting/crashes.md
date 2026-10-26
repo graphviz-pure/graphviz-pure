@@ -1025,15 +1025,24 @@ has no edge, or every node is an edge label), the list is empty and `gv_list_get
 (`list.c`). When an edge does remain but the label node itself has fewer than two neighbours,
 `attach_edge_label_coordinates` asserts `len >= 2` and writes nothing. Schemes 1 and 2 do not
 short. They reach `get_edge_label_matrix` (`lib/sfdpgen/post_process.c`), which reads `ja[ia[ii]]`
-and `ja[ia[ii] + 1]` with no check. A label that is the last row and has one neighbour makes that
-read run off the array; with no neighbours the scheme-2 right-hand side is divided by zero.
+and `ja[ia[ii] + 1]` with no check. `ja` has exactly `nz` entries, so a last-row label with one
+neighbour reads past the array. That read is undefined behaviour in C. C is deterministic only
+when its allocation has padding after `ja`. With eight `ja` entries (`a--b; a--c; b--c; c--L`,
+the label last) C writes coordinates around 1e140 and segfaults one run in three. With four
+(`a--b; b--L`) the positions differ from run to run. The port chooses 0.
 
-The port does not assert. A straight-line scheme whose label nodes do not all have two neighbours,
-or whose shortened graph has no edge, is laid out as an ordinary sfdp graph: those nodes are not
-edge labels, which is what C draws for the same graph with `label_scheme=0`. Where the read in
-`get_edge_label_matrix` is merely past `ja`, it is 0, the value of the zeroed word C reads on the
-scheme-2 drawings it finishes. A node with no neighbours is skipped there, so the division does not
-write NaN. Scheme 1 skips a label whose two reads are equal (`if (jj == ll) continue`). When that
-is every label, C still enters `StressMajorizationSmoother_smooth` and segfaults on a NULL `x00`;
-the port runs ordinary overlap removal instead, because the empty penalty diverges to NaN. A label
-node that does have two neighbours, and a shortened graph that still has an edge, is unchanged.
+Scheme 1 skips a label whose two reads are equal (`if (jj == ll) continue`). When that is every
+label, both reads are the port's 0, C still enters `StressMajorizationSmoother_smooth`, and C
+segfaults on a NULL `x00`. The empty penalty diverges to NaN, so the port runs ordinary overlap
+removal instead.
+
+Scheme 2 always builds the right-hand side and divides by the neighbour count. A node with no
+neighbours is skipped, so that division does not write NaN. The past-the-end read is 0, by the
+choice above. On `overlap=false` with `a -- "|edgelabel|"` (the label last) that choice matches
+the drawing C produced for that specific graph.
+
+Schemes 3 and 4 do not reach `get_edge_label_matrix` on the graphs where C asserts. A
+straight-line scheme whose label nodes do not all have two neighbours, or whose shortened graph
+has no edge, is laid out as an ordinary sfdp graph: those nodes are not edge labels, which is
+what C draws for the same graph with `label_scheme=0`. A label that does have two neighbours,
+and a shortened graph that still has an edge, is unchanged.

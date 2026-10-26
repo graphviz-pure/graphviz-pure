@@ -83,6 +83,7 @@ sfdp uses libc `rand()` only (`cutil::CRand`, threaded through `LGraph::crand`):
 - Excluded: `smoothing=rng` (C output changes run to run: `UG_graph` walks a
   GTS hash table keyed by pointers); `label_scheme=1|3` with `overlap=false`
   (C 16.1.0 segfaults: `x00` is NULL in `StressMajorizationSmoother_smooth`).
+  Scheme 1 with no distinct neighbour pair now uses ordinary overlap removal.
 - Instrumentable C copy: `~/src/gv-ref/build-sfdp` (`run.sh`; rebuild with
   `make -C src/lib/neatogen && make -C src/plugin/neato_layout` and copy the
   dylib into `plugins/`). Shared libraries come from `build-neato/inst`.
@@ -124,7 +125,8 @@ sfdp uses libc `rand()` only (`cutil::CRand`, threaded through `LGraph::crand`):
 - GTS edge order (see Fidelity) cannot be reproduced; it only shows in
   chaotic cases and in `smoothing=rng`, which is not reproducible in C either.
 - `label_scheme=1|3` with prism tries: C crashes; the port skips the missing
-  right-hand side instead.
+  right-hand side instead. Scheme 1 with no distinct neighbour pair now uses
+  ordinary overlap removal.
 - `start=random` without a number seeds C from the clock; the port uses 1.
 - `smoothing=avg_dist`, `graph_dist` and `power_dist` with an isolated node
   (nothing adjacent to it; a self-edge does not count). C's

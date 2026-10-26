@@ -4783,25 +4783,6 @@ fn ortho_trapezoid_without_upper_neighbour_does_not_panic() {
 // in `gv_list_get_` (`shorting_edge_label_nodes`) or in
 // `attach_edge_label_coordinates` (`len >= 2`). The port used to panic in
 // `get_edge_label_matrix` or write `nan`.
-fn run_raw(args: &[&str], stdin: &[u8]) -> (String, String, bool) {
-    let mut child = Command::new(env!("CARGO_BIN_EXE_graphviz-pure"))
-        .args(args)
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .unwrap();
-    if let Err(e) = child.stdin.take().unwrap().write_all(stdin) {
-        assert_eq!(e.kind(), std::io::ErrorKind::BrokenPipe, "{e}");
-    }
-    let out = child.wait_with_output().unwrap();
-    (
-        String::from_utf8_lossy(&out.stdout).into_owned(),
-        String::from_utf8_lossy(&out.stderr).into_owned(),
-        out.status.success(),
-    )
-}
-
 #[test]
 fn sfdp_edgelabel_node_without_an_edge_does_not_panic_or_write_nan() {
     let fuzz: &[u8] = b"graph{layout=sfdp\nlabel_scheme=4overlap=\xff\"|edgelabel|\"}";
@@ -4858,8 +4839,10 @@ fn sfdp_edgelabel_node_without_an_edge_does_not_panic_or_write_nan() {
     near(&out, xy(&out, "\"|edgelabel|\""), (3.1962, 0.25));
     near(&out, xy(&out, "b"), (6.0175, 0.25));
 
-    // Scheme 2, label last, overlap removal on. C reads one past `ja` and draws
-    // this; the port used to panic.
+    // Scheme 2, overlap=false, label last. C's result for this specific graph,
+    // where the allocation had padding after `ja` and that word was 0. The
+    // same read is undefined behaviour on other graphs. The port chooses 0;
+    // it used to panic here.
     let last = "graph { layout=sfdp label_scheme=2 overlap=false a -- \"|edgelabel|\" }";
     let (out, err, ok) = run(&["-Tplain"], last);
     assert!(ok && err.is_empty(), "{err}");
@@ -4875,6 +4858,27 @@ fn sfdp_edgelabel_node_without_an_edge_does_not_panic_or_write_nan() {
     let (plain, _, plain_ok) = run(&["-Tplain"], ordinary);
     assert!(ok && plain_ok, "{err}");
     assert_eq!(out, plain);
+}
+
+/// Byte stdin. `run` takes `&str`. `run_bytes` takes non-UTF-8 arguments and a
+/// `&str` stdin, and is `#[cfg(unix)]`. Neither can feed the 0xFF fuzz.
+fn run_raw(args: &[&str], stdin: &[u8]) -> (String, String, bool) {
+    let mut child = Command::new(env!("CARGO_BIN_EXE_graphviz-pure"))
+        .args(args)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    if let Err(e) = child.stdin.take().unwrap().write_all(stdin) {
+        assert_eq!(e.kind(), std::io::ErrorKind::BrokenPipe, "{e}");
+    }
+    let out = child.wait_with_output().unwrap();
+    (
+        String::from_utf8_lossy(&out.stdout).into_owned(),
+        String::from_utf8_lossy(&out.stderr).into_owned(),
+        out.status.success(),
+    )
 }
 
 // `%.80s` of the string read so far may end inside a UTF-8 sequence: C writes the bytes.
