@@ -93,9 +93,31 @@ def fetch_prs(numbers):
     return prs
 
 
+def strip_comments(body):
+    """The body without its whole-line HTML comments, outside fenced code blocks: a line whose
+    first text is `<!--` opens one, dropped through the line containing `-->`. A `<!--` quoted in
+    prose, a code span or a fenced block is not a comment and stays (#479), while bot footers
+    (`<!-- codesmith:footer -->` … `<!-- /codesmith:footer -->`) are whole-line and still go."""
+    out, fence, comment = [], False, False
+    for line in body.split("\n"):
+        if fence:
+            out.append(line)
+            fence = not line.lstrip().startswith("```")
+        elif comment:
+            comment = "-->" not in line
+        elif line.lstrip().startswith("```"):
+            out.append(line)
+            fence = True
+        elif line.lstrip().startswith("<!--"):
+            comment = "-->" not in line
+        else:
+            out.append(line)
+    return "\n".join(out)
+
+
 def section(body):
     """The text under `## Changelog entry`, or None if the body has no such heading."""
-    body = re.sub(r"<!--.*?-->", "", body.replace("\r\n", "\n"), flags=re.S)
+    body = strip_comments(body.replace("\r\n", "\n"))
     lines, out, inside, fence = body.split("\n"), [], False, False
     for line in lines:
         if not fence and re.match(r"^##\s+Changelog entry\s*$", line, re.I):
