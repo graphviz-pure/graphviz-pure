@@ -6,6 +6,20 @@ All notable changes are listed here. The format follows
 
 ## [Unreleased]
 
+A patch release: PNG and JPEG output from the release binaries, Homebrew, Scoop, PyPI and the
+container image now uses the same portable math library as the rest of graphviz-pure, so a graph
+rasterizes to the same bytes on every platform, and sfdp no longer panics on a node named like an
+edge label that has no edge. No breaking changes.
+
+### Fixed
+
+- PNG and JPEG output computes with the portable math library instead of the platform libm in
+  every build made from this repository: the release binaries, PyPI, the container image and
+  `cargo install --git`. A `cargo install` from crates.io still uses the platform libm for
+  raster output (#339, `docs/porting/libm.md`).
+- sfdp with `label_scheme` no longer panics, or writes NaN, when a node is named like an edge
+  label but has no edge (C asserts there) (#495).
+
 ## [0.2.1] - 2026-10-25
 
 A patch release with three new ways to install the command line: Wasmer, cargo-binstall and
