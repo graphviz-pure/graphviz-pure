@@ -6,6 +6,14 @@ All notable changes are listed here. The format follows
 
 ## [Unreleased]
 
+A patch release: PNG and JPEG output from the release binaries, wasm, npm, PyPI and Docker images now uses the same portable math library as the rest of graphviz-pure, so a graph rasterizes to the same bytes on every platform. No breaking changes.
+
+### Fixed
+
+- Release binaries, wasm, npm, PyPI, Docker and builds from this repository use the portable
+  math for PNG/JPEG; a crates.io source build (`cargo install`) still gets the platform libm in
+  raster output until the forks or upstream features land (#339).
+
 ## [0.2.1] - 2026-10-25
 
 A patch release with three new ways to install the command line: Wasmer, cargo-binstall and
