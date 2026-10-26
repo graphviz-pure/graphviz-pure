@@ -17,6 +17,22 @@
 # GV_PORTABLE_LIBM overrides the library's path.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+
+# C must also measure text as the port does, with its built-in font metric tables rather than a
+# pango textlayout plugin, so GVBINDIR has to name the pango-free plugin directory of the
+# reference setup: one holding only the core, dot and neato layout plugins, with the config file
+# `dot -c` writes there and no textlayout entry in it (docs/porting/libm.md; the directory
+# scripts/gen-golden.sh builds). Unset — or a full installation's plugin directory — and pango
+# measures C's text, so every comparison silently differs by millipoints (hidden #455).
+GV_CONFIG="$(find "${GVBINDIR:-/no-such-dir}" -maxdepth 1 -name 'config[0-9]' -print 2>/dev/null | head -n 1 || true)"
+if [ -z "$GV_CONFIG" ] || grep -q textlayout "$GV_CONFIG"; then
+  echo "GVBINDIR='${GVBINDIR:-unset}' is not the pango-free C plugin directory of the reference" \
+    "setup (only the core, dot and neato layout plugins, with the config file dot -c writes and no" \
+    "textlayout plugin in it; docs/porting/libm.md): with a default configuration pango measures" \
+    "C's text, and every comparison silently differs by millipoints" >&2
+  exit 2
+fi
+
 TARGET="${CARGO_TARGET_DIR:-$ROOT/target}"
 case "$(uname -s)" in
   Darwin) LIB="${GV_PORTABLE_LIBM:-$TARGET/release/libgraphviz_pure_portable_libm.dylib}"; VAR=DYLD_INSERT_LIBRARIES ;;
