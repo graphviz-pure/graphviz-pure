@@ -4958,9 +4958,38 @@ fn portho_separation_above_0xffff_draws_where_c_asserts() {
         "digraph { layout=fdp overlap=portho sep=1000 a -> b }",
     ] {
         let out = plain_where_c_asserts(src);
-        let a = plain_xy(&out, "a");
-        let b = plain_xy(&out, "b");
-        assert!(a != b, "{src}: {out}");
+        // `node name x y width height`: no two boxes overlap.
+        let boxes: Vec<[f64; 4]> = out
+            .lines()
+            .filter(|l| l.starts_with("node "))
+            .map(|l| {
+                let v: Vec<f64> = l
+                    .split_whitespace()
+                    .skip(2)
+                    .take(4)
+                    .map(|v| v.parse().unwrap())
+                    .collect();
+                [v[0], v[1], v[2], v[3]]
+            })
+            .collect();
+        for (i, p) in boxes.iter().enumerate() {
+            for q in &boxes[i + 1..] {
+                assert!(
+                    (p[0] - q[0]).abs() >= (p[2] + q[2]) / 2.0 - 1e-2
+                        || (p[1] - q[1]).abs() >= (p[3] + q[3]) / 2.0 - 1e-2,
+                    "{src}: {out}"
+                );
+            }
+        }
+        // fdp separates these in y by more than 0xFFFF tenths of a point (91.02 inches); a
+        // separation cut to 16 bits leaves the largest gap at 91.02.
+        if src.contains("layout=fdp") {
+            let gap = boxes
+                .iter()
+                .flat_map(|p| boxes.iter().map(move |q| (p[1] - q[1]).abs()))
+                .fold(0.0, f64::max);
+            assert!(gap > f64::from(0xFFFF) / 720.0 + 0.1, "{src}: {out}");
+        }
     }
 }
 
