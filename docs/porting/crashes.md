@@ -494,7 +494,7 @@ other 62; the port matches C byte for byte on all 138 and draws all 62 without p
 
 ## dot's pack components
 
-Closed: #100, #226, #312, #335; #101 and #352 are not matched (below).
+Closed: #100, #226, #312, #335, #475; #101 and #352 are not matched (below).
 
 With `pack` or `packmode`, `doDot` (`lib/dotgen/dotinit.c`) splits the graph with `cccomps`
 into subgraphs `_cc_<i>` of the root, each with clones of the root's clusters (`projectG`),
@@ -517,7 +517,15 @@ subgraphs, the port now does too:
   same. A node of that subgraph outside the component is in two components, which share
   its C record, as with #101 below, and is not matched. A cluster in it makes C fail an
   assertion in `mapClust` (`ccomps.c:366`); the port lays it out as a cluster of the
-  component.
+  component. With `newrank` and `cluster=true` on that subgraph, even an empty one, C aborts in
+  `feasible_tree` (`ns.c:669`, #475; one component or a lone node is enough): there
+  `is_a_cluster(sg)` is true, so `compile_samerank` makes the component a level-0 cluster,
+  and network simplex finds no spanning tight tree. The step that breaks was not traced; it
+  is not a shared field, since `ND_clust`, `ND_rep` and `ND_set` are separate members of
+  `Agnodeinfo_t` (`lib/common/types.h`). The port draws. On the issue's inputs, and with
+  `packmode=array`, `_cc_1`, a lone node or a `digraph`, its drawing is C's drawing of the
+  same graph without `newrank`. If the subgraph already holds the nodes of the only component,
+  C segfaults with or without `newrank`; the port draws that too.
 - **A failed component.** When `dotLayout(sg)` fails (ortho cannot build its maze), `doDot`
   returns before `attachPos` and `agdelete`. The earlier components keep their positions, the
   `_cc_<i>` subgraphs and their clones stay in the output, and the root's box is what each
@@ -1062,3 +1070,31 @@ straight-line scheme whose label nodes do not all have two neighbours, or whose 
 has no edge, is laid out as an ordinary sfdp graph: those nodes are not edge labels, which is
 what C draws for the same graph with `label_scheme=0`. A label that does have two neighbours,
 and a shortened graph that still has an edge, is unchanged.
+
+## neato mode=sgd: pins with no path between them
+
+Closed: #488.
+
+`pccomps` (`lib/pack/ccomps.c`) puts every pinned node into one component, whether or not
+there is a path between them. `sgd` (`lib/neatogen/sgd.c`) sizes its term array as if every
+search from an unfixed node reached every node, and `dijkstra_sgd` (`dijkstra.c`) stops at
+the first node still at `FLT_MAX`, so a pin with no path to the unfixed nodes gets no term
+and C fails `assert(offset == n_terms)` (`sgd.c:175`). Without the assertion, the unwritten
+terms would read as zeros (`gv_calloc`): `w_min` would be 0, so the annealing schedule has an
+infinite first step, and each zero term pairs node 0 with itself at distance 0, a 0/0 that
+writes NaN when node 0 is unfixed. The port keeps the terms the searches made, which is what
+the sizing assumes, and the pins stay where they were put. One pin, or pins with no unfixed
+node, draw as in C.
+
+## fdp/sfdp overlap=portho: a separation above 0xFFFF
+
+Closed: #489.
+
+For two boxes that overlap in x, `mkNConstraintG` (`lib/neatogen/constraint.c`) stores the sum
+of their half heights, in tenths of a point, as `ED_minlen`, after `assert(delta <= 0xFFFF)`
+(`constraint.c:242`). The bound is 16 bits, but `ED_minlen` is an `int` (`lib/common/types.h`),
+and this is the only `0xFFFF` check in the 16.1.0 sources. A node 182 inches tall next to a
+default node is 65,700, and C aborts (`overlap=portho`, `porthoxy`, `porthoyx`, in fdp and
+sfdp; also a large `sep`). `mkConstraintG`, which the `ortho` modes use, has no such check. The port
+stores the full value, as the assignment under the assertion does. Past about 3e6 inches
+`initItem`'s integer boxes wrap ([Extreme coordinates](#extreme-coordinates)).
