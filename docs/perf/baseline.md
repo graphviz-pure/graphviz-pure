@@ -15,8 +15,9 @@ for `master` at 0.2.2 (`f9c2fd1d`). The raw data is in [`data/`](data/), and
   compiler-builtins' software `fma`/`fmaf`, because the x86-64 baseline target has no FMA
   instruction. Building with `-C target-feature=+fma` makes neato 4.9× faster (to C's speed),
   sfdp 2.3×, fdp 2.0–2.1× and spline routing 2.1×, and the SVG output stays byte-identical on all
-  2,603 corpus inputs it was checked on (every input but the six slow `badvoro` copies). This is hotspot 1 below. aarch64 (Apple Silicon, Linux arm64)
-  has FMA in its baseline, so this applies to x86-64 only, which includes the WASM build.
+  2,603 corpus inputs it was checked on (every input but the six slow `badvoro` copies). This
+  is hotspot 1 below. aarch64 (Apple Silicon, Linux arm64) has FMA in its baseline, so this
+  applies to x86-64 only, which includes the WASM build.
 - **`-Tplain` is quadratic in graph size**: `root_holds_plain` scans the whole graph for every
   label it writes. osage on 20,000 nodes takes 8.9 s with `-Tplain` and 0.44 s with `-Tsvg`;
   C takes 0.2 s for both. This is the worst scaling found.
