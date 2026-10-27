@@ -192,7 +192,11 @@ impl<'a> Dot<'a> {
                 if in_boxf(bez.list[0], &bb) {
                     if in_boxf(tc, &bb) {
                         warn("tail is inside head cluster", "lhead");
-                    } else if !in_boxf(bez.sp, &bb) {
+                    } else if bez.sflag != 0 && !in_boxf(bez.sp, &bb) {
+                        // C asserts `bez->sflag` here (`compound.c:324`) and aborts when the
+                        // spline has no tail arrow (`splines=curved` routing a back edge,
+                        // #490); `sp` is then unset. The port tests the flag first, as C's
+                        // tail-cluster branch does below, and keeps the original head.
                         let p = box_intersectf(bez.list[0], bez.sp, &bb);
                         bez.list[3] = p;
                         bez.list[1] = mid(p, bez.sp);
@@ -228,7 +232,11 @@ impl<'a> Dot<'a> {
                         endi += 3;
                     }
                     if endi == size - 1 {
-                        nbez.ep = box_intersectf(bez.ep, bez.list[endi], &bb);
+                        // C asserts `bez->eflag` here (`compound.c:342`, #490); with no head
+                        // arrow there is no `ep` to move, as in the tail branch's `sflag` test.
+                        if bez.eflag != 0 {
+                            nbez.ep = box_intersectf(bez.ep, bez.list[endi], &bb);
+                        }
                     } else {
                         if bez.eflag != 0 {
                             endi = arrow_end_clip(

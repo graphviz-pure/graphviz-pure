@@ -113,6 +113,11 @@ instrumented C: `nonmono=0`), so the `NodeHeap` model above is unaffected.
 - C's address-dependent orders are not reproducible run to run on some inputs
   (e.g. many nested clusters with `splines=compound`): two C runs can differ,
   and the port matches one of them or neither. No corpus file is affected.
+  An overlap mode with no try count (`overlap=compress`) runs `removeOverlapAs`,
+  and so `normalize`, on every cluster's derived graph (`fdp_xLayout`). With
+  `normalize`, that rotates the cluster by the angle of its first derived edge,
+  whose direction is the `hd > tl` address order: the cluster comes out turned
+  by 180 degrees on some runs (#476, the same cause as #34).
 - `splines=compound` in osage keeps that edge type. C's `spline_edges_`
   does the same: a multi-edge is a cubic (`edgetype == EDGETYPE_PLINE`
   is false), and a single edge still falls through to `makePolyline`.
