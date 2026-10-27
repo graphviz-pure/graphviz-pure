@@ -6,6 +6,24 @@ All notable changes are listed here. The format follows
 
 ## [Unreleased]
 
+<!-- release-prep: replace this line with the release's intro paragraph -->
+
+### Changed
+
+- sfdp is about 2.7–3.7× faster with its default repulsive exponent: `pow(x, 2)` and `pow(x, 1)`
+  take an exact shortcut, and the repulsive force computes it once per node pair. The output is
+  unchanged (#543).
+- The command line binary is stripped (13.4 MB to 12.4 MB), and `cargo install
+  graphviz-pure-cli` from crates.io now builds with the release profile of the release binaries
+  (thin LTO, one codegen unit), about 5% fewer instructions than before (#540).
+- sfdp makes about 90% fewer heap allocations and runs about 8% faster (up to 36% faster on musl
+  builds) (#534).
+
+### Fixed
+
+- dot with `compound=true` and `splines=curved` no longer bends an `lhead` edge with no tail
+  arrow toward the origin. It keeps the edge's spline (C aborts there) (#515).
+
 ## [0.2.2] - 2026-10-26
 
 A patch release: PNG and JPEG output from the release binaries, Homebrew, Scoop, PyPI and the
