@@ -1076,9 +1076,9 @@ Closed: #489.
 
 For two boxes that overlap in x, `mkNConstraintG` (`lib/neatogen/constraint.c`) stores the sum
 of their half heights, in tenths of a point, as `ED_minlen`, after `assert(delta <= 0xFFFF)`
-(`constraint.c:242`). The bound is 16 bits, but `ED_minlen` is an `int`
-(`lib/common/types.h`), and this is the only `0xFFFF` check in the 16.1.0 sources. A node 182 inches tall next to a default node is
-65,700, and C aborts (`overlap=portho`, `porthoxy`, `porthoyx`, in fdp and sfdp; also a
-large `sep`). `mkConstraintG`, which the `ortho` modes use, has no such check. The port
+(`constraint.c:242`). The bound is 16 bits, but `ED_minlen` is an `int` (`lib/common/types.h`),
+and this is the only `0xFFFF` check in the 16.1.0 sources. A node 182 inches tall next to a
+default node is 65,700, and C aborts (`overlap=portho`, `porthoxy`, `porthoyx`, in fdp and
+sfdp; also a large `sep`). `mkConstraintG`, which the `ortho` modes use, has no such check. The port
 stores the full value, as the assignment under the assertion does. Past about 3e6 inches
 `initItem`'s integer boxes wrap ([Extreme coordinates](#extreme-coordinates)).
