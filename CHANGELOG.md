@@ -6,6 +6,29 @@ All notable changes are listed here. The format follows
 
 ## [Unreleased]
 
+## [0.2.3] - 2026-10-27
+
+A patch release, the first of the post-1.0 performance work: sfdp is about 4–5× faster on large
+graphs and makes about 90% fewer heap allocations, the command line binary is smaller, and a
+`cargo install` from crates.io builds with the release profile. Every layout's output is
+byte-identical to 0.2.2's. No breaking changes.
+
+### Changed
+
+- sfdp is about 4–5× faster on large graphs (1.8× on deep trees) and makes about 90% fewer heap
+  allocations: with its default repulsive exponent, `pow(x, 2)` and `pow(x, 1)` take an exact
+  shortcut computed once per node pair, and the quadtree reuses its storage between iterations.
+  It is now faster than C Graphviz on three of the four measured sfdp inputs. The output is
+  unchanged (#543, #548).
+- The command line binary is stripped (13.4 MB to 12.4 MB), and `cargo install
+  graphviz-pure-cli` from crates.io now builds with the release profile of the release binaries
+  (thin LTO, one codegen unit), about 5% fewer instructions than before (#540).
+
+### Fixed
+
+- dot with `compound=true` and `splines=curved` no longer bends an `lhead` edge with no tail
+  arrow toward the origin. It keeps the edge's spline (C aborts there) (#515).
+
 ## [0.2.2] - 2026-10-26
 
 A patch release: PNG and JPEG output from the release binaries, Homebrew, Scoop, PyPI and the
@@ -562,7 +585,8 @@ The first release.
   and the OFL licences of the bundled Tinos, Arimo and Cousine fonts.
 - A container image, `ghcr.io/graphviz-pure/graphviz-pure` (linux/amd64 and linux/arm64).
 
-[Unreleased]: https://github.com/graphviz-pure/graphviz-pure/compare/v0.2.2...HEAD
+[Unreleased]: https://github.com/graphviz-pure/graphviz-pure/compare/v0.2.3...HEAD
+[0.2.3]: https://github.com/graphviz-pure/graphviz-pure/compare/v0.2.2...v0.2.3
 [0.2.2]: https://github.com/graphviz-pure/graphviz-pure/compare/v0.2.1...v0.2.2
 [0.2.1]: https://github.com/graphviz-pure/graphviz-pure/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/graphviz-pure/graphviz-pure/compare/v0.1.2...v0.2.0
