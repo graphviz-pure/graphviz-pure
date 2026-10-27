@@ -1,0 +1,67 @@
+# The baseline set of docs/perf/baseline.md: per engine, the slowest corpus inputs (from
+# `bench.py survey`), a typical small one, and synthetic scaling graphs (scripts/bench/synth.py).
+# input                                                       formats         runs
+# dot
+tests/fixtures/unix.gv                                        svg,plain,png
+tests/wild/gv16_graphs_b29_d1e4db.gv                          svg,plain,png
+tests/wild/gv16_graphs_b143_5416de.gv                         svg,plain,png
+tests/wild/gv16_graphs_b106_471493.gv                         svg
+tests/wild/gv16_graphs_badvoro_2e8cb8.gv                      svg
+tests/wild/gv16_graphs_b124_4440e1.gv                         svg
+synth/dot_dag_1000.gv                                         svg,plain
+synth/dot_dag_5000.gv                                         svg,plain
+synth/dot_dag_20000.gv                                        svg             1
+# neato
+tests/neato/wild_gv16_graphs_badvoro_2e8cb8.gv                svg             1
+tests/neato/hw3_vpsc_random200.gv                             svg,plain,png
+tests/neato/hw2_random_120.gv                                 svg
+tests/neato/fx_NaN.gv                                         svg
+tests/neato/wild_gv16_graphs_b69_4b5b48.gv                    svg
+synth/neato_sparse_250.gv                                     svg
+synth/neato_sparse_500.gv                                     svg
+synth/neato_sparse_1000.gv                                    svg             3
+synth/neato_sparse_2000.gv                                    svg             1
+# fdp
+tests/fdp/wild_gv16_graphs_badvoro_2e8cb8.gv                  svg             1
+tests/fdp/wild_gv16_graphs_viewport_651d5b.gv                 svg,plain
+tests/fdp/wild_gv16_undirected_ngk10_4_793340.gv              svg
+tests/fdp/wild_gv16_graphs_b69_4b5b48.gv                      svg
+synth/fdp_sparse_250.gv                                       svg
+synth/fdp_sparse_500.gv                                       svg             3
+synth/fdp_sparse_1000.gv                                      svg             1
+# sfdp
+tests/sfdp/gen_rnd2000.gv                                     svg,plain,png
+tests/sfdp/gen_tree9.gv                                       svg
+tests/sfdp/gen_powerlaw1000.gv                                svg
+tests/sfdp/attr_quadtree_none.gv                              svg
+tests/sfdp/gen_grid20x20.gv                                   svg
+synth/sfdp_sparse_1000.gv                                     svg
+synth/sfdp_sparse_5000.gv                                     svg             3
+synth/sfdp_sparse_20000.gv                                    svg             1
+# circo
+tests/circo/wild_gv16_graphs_badvoro_2e8cb8.gv                svg             1
+tests/circo/wild_gv16_linux_x86_dotsplines_dot1_3910e3.gv     svg
+tests/circo/wild_gv16_linux_x86_neatosplines_neato_c2c6f6.gv  svg
+tests/circo/wild_gv16_directed_sdh_29b016.gv                  svg
+synth/circo_sparse_100.gv                                     svg
+synth/circo_sparse_200.gv                                     svg
+synth/circo_sparse_400.gv                                     svg             1
+# twopi
+tests/twopi/wild_gv16_undirected_ngk10_4_793340.gv            svg
+tests/twopi/fx_arrows.gv                                      svg
+tests/twopi/wild_gv16_linux_x86_arrows_dot_1ce23f.gv          svg
+synth/twopi_tree_1000.gv                                      svg
+synth/twopi_tree_5000.gv                                      svg
+synth/twopi_tree_20000.gv                                     svg,plain
+# osage
+tests/osage/wild_gv16_graphs_b51_33bcb0.gv                    svg
+tests/osage/wild_gv16_graphs_b15_8c212e.gv                    svg
+synth/osage_clustered_1000.gv                                 svg
+synth/osage_clustered_5000.gv                                 svg
+synth/osage_clustered_20000.gv                                svg,plain
+# patchwork
+tests/patchwork/wild_gv16_graphs_b51_33bcb0.gv                svg
+tests/patchwork/wild_gv16_infosrc_plugins_1a797f.gv           svg
+synth/patchwork_clustered_1000.gv                             svg
+synth/patchwork_clustered_5000.gv                             svg
+synth/patchwork_clustered_20000.gv                            svg,plain
