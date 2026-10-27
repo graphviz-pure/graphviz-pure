@@ -67,7 +67,7 @@ Each constraint is either kept, or proposed for change under [Decisions](#decisi
 | :--- | :--- | :--- |
 | Byte-identical output (fidelity ratchets) | Required | **Kept.** Relaxation is [decision 1](#decisions). |
 | `#![forbid(unsafe_code)]` workspace-wide (`Cargo.toml` `[workspace.lints.rust]`) | Required in own crates; dependencies (serde, libm, wasm-bindgen, resvg) contain `unsafe` | **Kept** ([decision 3](#decisions)). Nothing in the top-ranked techniques needs `unsafe`. |
-| Panic-site ratchet (`scripts/panic-sites.sh`) | 7,570 index, 2,120 arithmetic, 256 unwrap and 42 expect sites in layout and geom | **Kept**, and it becomes a goal: iterator rewrites remove index sites. |
+| Panic-site ratchet (`scripts/panic-sites.sh`) | 7,568 index, 2,119 arithmetic, 256 unwrap and 42 expect sites in layout and geom at 0.2.2 (9,985; `tests/panic-sites.tsv` allows 9,988) | **Kept**, and it becomes a goal: iterator rewrites remove index sites. |
 | Determinism across Linux, Windows, macOS and WASM, with one math library (`graphviz_pure_core::math`) | Required; checked by `cross-platform.yml` | **Kept.** CPU-specific codegen is allowed only where IEEE-754 gives the same bits (FMA, `roundsd`), never a different algorithm per target. |
 | WASM is first-class: size matters, no threads by default | `opt-level=z`, fat LTO, `wasm-opt -Oz` | **Kept.** Parallelism is a native-only feature ([decision 5](#decisions)). |
 | MSRV | Edition 2024; let-chains used in 33 files (#512's count) | #512's D4: at most current stable minus two releases, kept accurate (#504). Nothing here needs a newer compiler. |
@@ -94,12 +94,12 @@ section differ:
   differently). Use the baseline's numbers. Its malloc uprobe puts 85% of them in
   `QuadTree::add_internal`, whose cells hold `Vec<f64>` fields, more than in
   `get_supernodes_internal`.
-- **`pow`.** The baseline says special-casing the exponent is impossible because the default
-  `p` is `-1.0001234`. That is the `AUTOP` sentinel (`sfdpinit.rs:130`), which
-  `multilevel_spring_electrical_embedding` replaces with `-1.0` (`spring_electrical.rs:1022`).
-  An instrumented build counted more than 8.4 M `powf` calls with `y == 2.0` and 12 others on
-  rnd2000, so T2 stands. The baseline's own fix, calling `pow` once per pair instead of once per
-  dimension, applies too (#532).
+- **`pow`.** The two agree (hotspot 5): the default `p = -1.0001234` is only the `AUTOP`
+  sentinel (`sfdpinit.rs:130`), which `multilevel_spring_electrical_embedding` replaces with
+  `-1.0` (`spring_electrical.rs:1022`), so the default exponent is exactly 2. An instrumented
+  build counted more than 8.4 M `powf` calls with `y == 2.0` and 12 others on rnd2000, so T2
+  stands, together with the baseline's fix of calling `pow` once per pair instead of once per
+  dimension (#532).
 - **Memory.** The parse-only 12× below is the worst case. End to end, the baseline's peak RSS is
   1.0–3.1× C's, and the ratio grows with node count.
 - **Release profile.** The profile lives in `.cargo/config.toml`, which `cargo install` from
@@ -207,11 +207,12 @@ columns are core / parser / geom / layout / render.
 6. **C sentinels instead of `Option`.** In layout: 48 `usize::MAX`, 39 `i32::MAX`, 24 `f64::MAX`
    and 22 `== -1`. Many are faithful to C's `-1` returns and flags.
 7. **Index loops.** 516 `for i in 0..` loops in layout (26 in geom). Together with the
-   panic-site counts (7,570 index sites) this is where bounds checks live. Example:
+   panic-site counts (7,568 index sites) this is where bounds checks live. Example:
    `right_mult_with_vector_ff` (`neatogen/matrix_ops.rs:39`) indexes `packed`, `vector` and
    `result` in its inner loop.
 8. **Small temporaries.** 434 `vec![` and 221 `Vec::new()` in layout. The sfdp run makes 4 M
-   allocations, mostly per-node supernode lists in `QuadTree::get_supernodes_internal`.
+   allocations, 85% of them the quadtree cells' `Vec<f64>` fields in `QuadTree::add_internal`
+   (the baseline's malloc uprobe).
 9. **Hash maps.** `HashMap` (std SipHash) appears 22 times in layout, `HashSet` 7, `BTreeMap` 9
    and `BTreeSet` 22. None shows up in a profile. Swapping the hasher is a small, low-value
    change, and an *ordering* risk wherever a map is iterated.
@@ -232,12 +233,13 @@ columns are core / parser / geom / layout / render.
       `fdp_parms`, `PSinputscale`, and others.
     - This state is faithful, and it is **the main obstacle to parallelism**. Components and
       graphs in one file draw from one RNG stream in C's order.
-14. **Public API.** Every module of layout is `pub` (113 modules; #512 counts 716 public items in
-    layout and 128 public fields on `Graph`). Today any field change is a semver break.
+14. **Public API.** Every module of layout is `pub` (113 modules; #512's draft counted 716 public
+    items in layout, and `Graph` has 18 public fields of its own, which reach 128 public fields
+    of core structs). Today any field change is a semver break.
 
 ### API stability is what frees the internals
 
-The plan depends on #512's **D1 (b)**:
+The plan depends on #512's **D1**:
 
 - Only the facade (`graphviz-pure`) and `graphviz-pure-raster` are stable.
 - core, parser, geom, layout and render are implementation crates, pinned with `=`.
@@ -261,7 +263,7 @@ have to sit behind the public API:
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
 | T1 | **Inline FMA on x86-64**: release binaries built with `-C target-cpu=x86-64-v3`, with a `v1` compatibility build | every `mul_add` (389 sites) | **Measured: neato 4.5–5.0×, sfdp 2.3×, fdp 2.0–2.1×, spline routing 2.1–2.8×**, bytes identical (full fidelity ratchet; 2,603 SVGs in #518); dot 1.0–1.1× | none (FMA is exactly rounded, so fused in hardware and in software give the same bits) | S | none | n/a (see T1b) |
 | T1b | Faster software FMA for wasm32 | `core::math` | Unknown; WASM pays T1's cost permanently (#518: under node, fdp is 4.9× and sfdp 3.5× slower than native) | none if exact (must equal IEEE `fma` bit for bit) | M | none | **the** WASM perf item |
-| T2 | **`pow` fast paths for exact results**: `y == 2.0` gives `x*x`, `y == 1.0` gives `x`; and one `pow` per pair instead of per dimension | `math::portable::pow`; `spring_electrical.rs:471,526` | sfdp: `pow` is 38–44% of samples; most of it goes | none (CORE-MATH `pow` is correctly rounded, and so is `x*x`) | S | none | same gain |
+| T2 | **`pow` fast paths for exact results**: `y == 2.0` gives `x*x`, `y == 1.0` gives `x`; and one `pow` per pair instead of per dimension | `math::portable::pow`; `spring_electrical.rs:471,513,526` | sfdp: `pow` is 38–44% of samples; most of it goes | none (CORE-MATH `pow` is correctly rounded, and so is `x*x`) | S | none | same gain |
 | T3 | **Streaming tokens**: lookahead buffer instead of `Vec<Token>`; token text as `&str` or `Cow` into the input | parser `lexer.rs`, `parser.rs` | Large part of the 12× RSS; fewer allocations | none (error messages keep `yytext`) | M | none | less memory |
 | T4 | **Attribute interning and typed attributes**: per-graph symbol table; values as `AttrId → Sym` | core `AttrMap`, `AttrDicts`, all `agget`/`late_*` | Memory (strings shared, as cgraph's refstr does); lookups by id; numbers parsed once | ordering (writers that walk attributes by name must keep sorted-by-name order) | L | none, or `rustc-hash` for the interner map | less memory, smaller heap |
 | T5 | **Typed index newtypes** (`NodeIx`, `EdgeIx`, `GraphIx`, `LabelIx`), `u32`, with an `IndexVec<I, T>` | dotgen `N`, `E`, `G`, `L` aliases; core ids | Clarity; `Option<NodeIx>` can be 4 B with a `NonMaxU32`-style niche (safe, via `NonZeroU32` of `ix+1`) | none | M, mechanical | none (write our own ~100 lines; `index_vec` or `typed-index-collections` are optional) | smaller structs |
@@ -470,7 +472,7 @@ depends on it.
 
 **Phase 0: prerequisites (can start before 1.0).**
 
-- #512 D1 (b) lands: internal crates carry no semver promise, and `Graph` is opaque.
+- #512 D1 lands: internal crates carry no semver promise, and `Graph` is opaque.
 - The sibling harness lands (`scripts/bench/`, `docs/perf/baseline.md`), and the perf ratchet is
   added to CI.
 - The [follow-the-C replacement](#decisions) is decided and written into
@@ -512,7 +514,7 @@ reassociated or SIMD reductions, kept out of every default and every ratchet.
 
 **Unlock graph:**
 
-- D1 (b) unlocks T4, T6 and T7.
+- D1 unlocks T4, T6 and T7.
 - T5 makes T6 and T7 mechanical.
 - T4 unlocks typed attributes and lower memory.
 - T6 unlocks T10 and the mincross work.
