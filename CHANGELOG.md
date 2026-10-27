@@ -8,18 +8,21 @@ All notable changes are listed here. The format follows
 
 ## [0.2.3] - 2026-10-27
 
-<!-- release-prep: replace this line with the release's intro paragraph -->
+A patch release, the first of the post-1.0 performance work: sfdp is about 4–5× faster on large
+graphs and makes about 90% fewer heap allocations, the command line binary is smaller, and a
+`cargo install` from crates.io builds with the release profile. Every layout's output is
+byte-identical to 0.2.2's. No breaking changes.
 
 ### Changed
 
-- sfdp is about 2.7–3.7× faster with its default repulsive exponent: `pow(x, 2)` and `pow(x, 1)`
-  take an exact shortcut, and the repulsive force computes it once per node pair. The output is
-  unchanged (#543).
+- sfdp is about 4–5× faster on large graphs (1.8× on deep trees) and makes about 90% fewer heap
+  allocations: with its default repulsive exponent, `pow(x, 2)` and `pow(x, 1)` take an exact
+  shortcut computed once per node pair, and the quadtree reuses its storage between iterations.
+  It is now faster than C Graphviz on three of the four measured sfdp inputs. The output is
+  unchanged (#543, #548).
 - The command line binary is stripped (13.4 MB to 12.4 MB), and `cargo install
   graphviz-pure-cli` from crates.io now builds with the release profile of the release binaries
   (thin LTO, one codegen unit), about 5% fewer instructions than before (#540).
-- sfdp makes about 90% fewer heap allocations and runs about 8% faster (up to 36% faster on musl
-  builds) (#534).
 
 ### Fixed
 
