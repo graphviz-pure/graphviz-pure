@@ -57,3 +57,23 @@ skrifa = { path = "vendor/skrifa" }
 svgtypes = { path = "vendor/svgtypes" }
 tiny-skia = { path = "vendor/tiny-skia" }
 tiny-skia-path = { path = "vendor/tiny-skia-path" }
+
+# Profiles apply only to the workspace being built: here they hold for CI, the release binaries
+# and the source-tarball packages. A crates.io install builds graphviz-pure-cli as its own
+# workspace, so that crate's manifest repeats the release profile (keep the two in step).
+[profile.dev]
+opt-level = 1
+debug = 1
+
+[profile.test]
+opt-level = 1
+debug = 1
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 1
+
+# Without its symbol table the CLI is 0.95 MB smaller; panic backtraces lose function names (#540).
+[profile.release.package.graphviz-pure-cli]
+strip = true
