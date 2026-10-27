@@ -98,13 +98,13 @@ layout/patchwork/patchwork.rs	0	0	22	2
 layout/patchwork/patchworkinit.rs	0	0	11	0
 layout/patchwork/tree_map.rs	0	0	20	3
 layout/sfdpgen/multilevel.rs	0	3	35	18
-layout/sfdpgen/post_process.rs	8	3	167	71
+layout/sfdpgen/post_process.rs	8	3	165	70
 layout/sfdpgen/sfdpinit.rs	0	0	6	2
-layout/sfdpgen/spring_electrical.rs	0	3	154	103
+layout/sfdpgen/spring_electrical.rs	0	3	153	101
 layout/sfdpgen/stress_model.rs	0	0	0	1
 layout/sparse/matrix_ext.rs	0	0	82	26
 layout/sparse/mod.rs	7	0	106	43
-layout/sparse/quad_tree.rs	10	0	100	16
+layout/sparse/quad_tree.rs	0	0	93	13
 layout/twopigen/circle.rs	0	0	59	9
 layout/twopigen/twopiinit.rs	0	0	5	0
 layout/vpsc.rs	1	0	203	7

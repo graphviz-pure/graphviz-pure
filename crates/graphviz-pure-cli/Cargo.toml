@@ -46,3 +46,12 @@ dhat = "0.3"
 
 [lints]
 workspace = true
+
+# `cargo install graphviz-pure-cli` from crates.io builds this crate as its own workspace, which
+# reads only this manifest's profiles; a build in this repository reads the workspace Cargo.toml's
+# instead (Cargo warns that this one is ignored there). Keep the two in step (#540).
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 1
+strip = true

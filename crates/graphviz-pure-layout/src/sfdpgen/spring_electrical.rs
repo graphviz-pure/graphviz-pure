@@ -396,20 +396,19 @@ fn spring_electrical_embedding_fast(
     let mut fnorm = 0.0f64;
     let mut iter = 0;
     let mut counts = [0.0f64; 4];
+    let mut qt = QuadTree::default();
     loop {
         iter += 1;
         let fnorm0 = fnorm;
         fnorm = 0.0;
         max_qtree_level = opt.get();
-        let mut qt = QuadTree::new_from_point_list(dim, n, max_qtree_level, x);
+        qt.rebuild_from_point_list(dim, n, max_qtree_level, x);
         qt.get_repulsive_force(&mut force, x, BH, p, kp, &mut counts);
         for i in 0..n {
             attractive(&a, dim, x, i, crk, &mut force[i * dim..i * dim + dim]);
         }
         for i in 0..n {
-            let mut f = force[i * dim..i * dim + dim].to_vec();
-            fnorm += move_node(dim, x, i, &mut f, step);
-            force[i * dim..i * dim + dim].copy_from_slice(&f);
+            fnorm += move_node(dim, x, i, &mut force[i * dim..i * dim + dim], step);
         }
         opt.train(3.3f64.mul_add(counts[2], 0.85f64.mul_add(counts[1], counts[0])));
         step = update_step(adaptive_cooling, step, fnorm, fnorm0);
@@ -467,8 +466,9 @@ fn spring_electrical_embedding_slow(
                     continue;
                 }
                 let dist = distance_cropped(x, dim, i, j);
+                let denom = math::powf(dist, 1.0 - p);
                 for k in 0..dim {
-                    f[k] += kp * (x[i * dim + k] - x[j * dim + k]) / math::powf(dist, 1.0 - p);
+                    f[k] += kp * (x[i * dim + k] - x[j * dim + k]) / denom;
                 }
             }
             for k in 0..dim {
@@ -508,9 +508,9 @@ fn repulsive_supernodes(
 ) {
     for j in 0..sn.len() {
         let dist = c_max(sn.distances[j], MINDIST);
+        let denom = math::powf(dist, 1.0 - p);
         for k in 0..dim {
-            f[k] += sn.wgts[j] * kp * (x[i * dim + k] - sn.center[j * dim + k])
-                / math::powf(dist, 1.0 - p);
+            f[k] += sn.wgts[j] * kp * (x[i * dim + k] - sn.center[j * dim + k]) / denom;
         }
     }
 }
@@ -522,8 +522,9 @@ fn repulsive_all(n: usize, dim: usize, x: &[f64], i: usize, kp: f64, p: f64, f: 
             continue;
         }
         let dist = distance_cropped(x, dim, i, j);
+        let denom = math::powf(dist, 1.0 - p);
         for k in 0..dim {
-            f[k] += kp * (x[i * dim + k] - x[j * dim + k]) / math::powf(dist, 1.0 - p);
+            f[k] += kp * (x[i * dim + k] - x[j * dim + k]) / denom;
         }
     }
 }
@@ -565,6 +566,7 @@ fn spring_electrical_embedding(
     let p = ctrl.p;
     let mut f = vec![0.0f64; dim];
     let mut sn = Supernodes::default();
+    let mut tree = QuadTree::default();
     let mut fnorm = 0.0f64;
     let mut iter = 0;
     loop {
@@ -575,14 +577,15 @@ fn spring_electrical_embedding(
         let mut counts_avg = 0.0f64;
         let qt = if use_qt {
             max_qtree_level = opt.get();
-            Some(QuadTree::new_from_point_list(dim, n, max_qtree_level, x))
+            tree.rebuild_from_point_list(dim, n, max_qtree_level, x);
+            Some(&tree)
         } else {
             None
         };
         for i in 0..n {
             f.iter_mut().for_each(|v| *v = 0.0);
             attractive(&a, dim, x, i, crk, &mut f);
-            if let Some(qt) = &qt {
+            if let Some(qt) = qt {
                 let counts = qt.get_supernodes(BH, &x[dim * i..dim * i + dim], i, &mut sn);
                 counts_avg += counts;
                 nsuper_avg += sn.len() as f64;
@@ -637,13 +640,17 @@ pub fn spring_electrical_spring_embedding(
     let dv = d.a.as_ref().expect("real matrix");
     let mut f = vec![0.0f64; dim];
     let mut sn = Supernodes::default();
+    let mut tree = QuadTree::default();
     let mut fnorm = 0.0f64;
     let mut iter = 0;
     loop {
         iter += 1;
         let fnorm0 = fnorm;
         fnorm = 0.0;
-        let qt = use_qt.then(|| QuadTree::new_from_point_list(dim, n, max_qtree_level, x));
+        let qt = use_qt.then(|| {
+            tree.rebuild_from_point_list(dim, n, max_qtree_level, x);
+            &tree
+        });
         for i in 0..n {
             f.iter_mut().for_each(|v| *v = 0.0);
             attractive(&a, dim, x, i, crk, &mut f);
