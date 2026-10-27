@@ -1,9 +1,10 @@
 # After 1.0: faster, smaller, idiomatic (a plan for hill-climbing)
 
-Status: **proposal**, not approved. Nothing here is filed as issues yet; the draft list is at the
-end. It assumes 1.0 as the 1.0 roadmap defines it (#512, in review; it adds
-`docs/roadmap/1.0.md`). The benchmark harness and the measured baseline are a sibling effort
-(`docs/perf/baseline.md` and `scripts/bench/`, not on `master` yet). This document reuses them
+Status: **decided** on 2026-10-27 (see [Decisions](#decisions)). The draft issues are filed in the
+[`post-1.0` milestone](https://github.com/graphviz-pure/graphviz-pure/milestone/8) as #530–#540.
+It assumes 1.0 as the 1.0 roadmap defines it (#512; it adds `docs/roadmap/1.0.md`), which has no
+performance target of its own. The benchmark harness and the measured baseline are a sibling
+effort (`docs/perf/baseline.md` and `scripts/bench/`, #518). This document reuses them
 and doesn't define a second harness.
 
 Up to 1.0 the port is a line-by-line translation of Graphviz 16.1.0, held byte-identical to C by
@@ -19,7 +20,7 @@ in memory, or more idiomatic Rust, and each step keeps the bytes.
 5. [Technique catalogue](#technique-catalogue) (table, then a section per high-value item)
 6. [The hill-climbing process](#the-hill-climbing-process)
 7. [Phased plan](#phased-plan)
-8. [Open decisions](#open-decisions)
+8. [Decisions](#decisions)
 9. [Draft issues](#draft-issues)
 10. [Sources](#sources)
 
@@ -36,7 +37,7 @@ So every technique below is classed by its **fidelity risk**:
 | :--- | :--- | :--- |
 | **none** | No floating-point operation changes order, operands or rounding, and no tie-break or iteration order that reaches output changes. | Ratchets pass, so nothing more is needed. |
 | **ordering** | The floats are untouched, but an iteration order, a sort's tie order, a hash-map walk, or the order of RNG draws could change. | Ratchets, plus an argument in the PR that the order is preserved (for example: "the map is never iterated", or "a stable sort over the same key"). |
-| **float-order** | Changes the order or fusion of floating-point operations: reassociated sums, SIMD reductions, multiple accumulators, fast-math, parallel reductions. | **Not allowed under the current policy.** These are listed separately under [Open decision 1](#1-bit-identity-policy). |
+| **float-order** | Changes the order or fusion of floating-point operations: reassociated sums, SIMD reductions, multiple accumulators, fast-math, parallel reductions. | **Not allowed under the current policy.** These are listed separately under [decision 1](#decisions). |
 
 A technique classed *none* or *ordering* still has to pass every ratchet. The class is about how
 much reasoning the review needs, not a waiver.
@@ -49,8 +50,8 @@ document are one-off measurements from this research, listed under
 
 | goal | metric | target for the post-1.0 effort |
 | :--- | :--- | :--- |
-| Faster | Instruction count (primary) and wall time (secondary) per corpus input, per engine | No engine slower than stock C 16.1.0 on any baseline input. Geometric-mean 2× faster than 1.0 on the benchmark set. |
-| Smaller | Peak RSS and bytes allocated per input. WASM `.wasm` size. | Parser and graph model within 2× of C's peak RSS (today 12×). WASM size no larger than 1.0. |
+| Faster | Instruction count (primary) and wall time (secondary) per corpus input, per engine | Headline against stock C 16.1.0: no engine slower than C on any baseline input, and the geometric-mean speed-up over C reported. Also tracked against 1.0: geometric-mean 2× faster on the benchmark set. |
+| Smaller | Peak RSS and bytes allocated per input. WASM `.wasm` size. | Against C: parser and graph model within 2× of C's peak RSS (today 12×). Against 1.0: WASM size no larger. |
 | Idiomatic | Panic-site counts ([the ratchet](../porting/crashes.md#the-panic-site-ratchet)); `clippy::pedantic` warnings; public items of the internal crates | Panic sites ↓ 50% in layout and geom. No C-style sentinels in new code. |
 | Safe to change | The three ratchets (fidelity, panic, perf) on every PR | No regressions, enforced by CI. |
 
@@ -58,19 +59,19 @@ Non-goals: new layout algorithms, output that differs from C, or a C-compatible 
 
 ## Constraints
 
-Each constraint is either kept, or proposed for change under [Open decisions](#open-decisions).
+Each constraint is either kept, or proposed for change under [Decisions](#decisions).
 
 | constraint | today | post-1.0 proposal |
 | :--- | :--- | :--- |
-| Byte-identical output (fidelity ratchets) | Required | **Kept.** Relaxation is [Open decision 1](#1-bit-identity-policy). |
-| `#![forbid(unsafe_code)]` workspace-wide (`Cargo.toml` `[workspace.lints.rust]`) | Required in own crates; dependencies (serde, libm, wasm-bindgen, resvg) contain `unsafe` | **Kept** ([Open decision 3](#3-unsafe-policy)). Nothing in the top-ranked techniques needs `unsafe`. |
+| Byte-identical output (fidelity ratchets) | Required | **Kept.** Relaxation is [decision 1](#decisions). |
+| `#![forbid(unsafe_code)]` workspace-wide (`Cargo.toml` `[workspace.lints.rust]`) | Required in own crates; dependencies (serde, libm, wasm-bindgen, resvg) contain `unsafe` | **Kept** ([decision 3](#decisions)). Nothing in the top-ranked techniques needs `unsafe`. |
 | Panic-site ratchet (`scripts/panic-sites.sh`) | 7,570 index, 2,120 arithmetic, 256 unwrap and 42 expect sites in layout and geom | **Kept**, and it becomes a goal: iterator rewrites remove index sites. |
 | Determinism across Linux, Windows, macOS and WASM, with one math library (`graphviz_pure_core::math`) | Required; checked by `cross-platform.yml` | **Kept.** CPU-specific codegen is allowed only where IEEE-754 gives the same bits (FMA, `roundsd`), never a different algorithm per target. |
-| WASM is first-class: size matters, no threads by default | `opt-level=z`, fat LTO, `wasm-opt -Oz` | **Kept.** Parallelism is a native-only feature ([Open decision 5](#5-threads-and-wasm)). |
-| MSRV (`rust-version = "1.85"`) | Edition 2024; let-chains used in 33 files (#512's count) | Follow #512's D4. Nothing here needs a newer compiler. |
-| Minimal dependencies under `cargo deny` | Small tree; raster pulls in resvg | Each new dependency is justified with a measurement ([Open decision 4](#4-dependency-appetite)). |
-| CONTRIBUTING.md: "Follow the C … keep the structure recognisable" | Required | **Conflicts directly** with idiomatic refactoring. A replacement is proposed in [Open decision 2](#2-replacing-follow-the-c). |
-| Public API from 1.0 | #512 D1 recommends (b): only the facade and raster are semver-stable | **A prerequisite for this plan.** See [below](#api-stability-is-what-frees-the-internals). |
+| WASM is first-class: size matters, no threads by default | `opt-level=z`, fat LTO, `wasm-opt -Oz` | **Kept.** Parallelism is a native-only feature ([decision 5](#decisions)). |
+| MSRV | Edition 2024; let-chains used in 33 files (#512's count) | #512's D4: at most current stable minus two releases, kept accurate (#504). Nothing here needs a newer compiler. |
+| Minimal dependencies under `cargo deny` | Small tree; raster pulls in resvg | Each new dependency is justified with a measurement ([decision 4](#decisions)). |
+| CONTRIBUTING.md: "Follow the C … keep the structure recognisable" | Was required | **Replaced** by provenance tags and a C-mirror list ([decision 2](#decisions)). |
+| Public API from 1.0 | #512 D1 (decided): only the facade and raster are semver-stable; `Graph` is opaque with no accessors | **A prerequisite for this plan.** See [below](#api-stability-is-what-frees-the-internals). |
 
 ## What the code does today
 
@@ -88,8 +89,10 @@ object.
 
 | input | engine / phase | Rust 0.2.2 | Rust with `-C target-cpu=x86-64-v3` | stock C 16.1.0 |
 | :--- | :--- | ---: | ---: | ---: |
-| rnd2000 | neato `-Tsvg` | **76.99 s** | **15.54 s** (bytes identical) | 14.44 s |
-| rnd2000 | sfdp `-Tsvg` | 1.82 s | **0.81 s** (bytes identical) | 0.67 s |
+| rnd2000 | neato `-Tsvg` | **76.99 s** (70.19 s quiet) | **15.54 s** (15.51 s quiet; bytes identical) | 14.44 s |
+| rnd2000 | sfdp `-Tsvg` | 1.82 s (1.80 s quiet) | **0.81 s** (0.79 s quiet; bytes identical) | 0.67 s |
+| rnd2000 | neato `-Tsvg`, `x86_64-unknown-linux-musl` (the shipped Linux target) | 70.16 s | 15.55 s | — |
+| rnd2000 | sfdp `-Tsvg`, `x86_64-unknown-linux-musl` | **7.36 s** | 1.19 s | — |
 | rnd2000 | dot `-Tsvg` | 380.9 s | — | 791.3 s |
 | `tests/wild/gv16_graphs_b29_d1e4db.gv` | dot `-Tsvg` | 0.89–0.98 s | 0.89–1.00 s | 1.63 s |
 | big | parse only (C: `gc`) | 2.85 s, **982 MB RSS** | — | 1.14 s, **82 MB** |
@@ -128,7 +131,7 @@ data.
 Counts come from `grep` over `crates/*/src` (tests included where they live in `src`). The
 columns are core / parser / geom / layout / render.
 
-1. **Out-of-line FMA.** The port calls `f64::mul_add` and `f32::mul_add` (389 sites, 44 files) to
+1. **Out-of-line FMA.** The port calls `f64::mul_add` and `f32::mul_add` (389 sites in 61 files, 44 of them in layout) to
    reproduce clang's fused contraction. On the default `x86_64-unknown-linux-gnu` target, LLVM
    lowers `llvm.fma` without the `fma` target feature to a library call. That call is
    compiler-builtins' `fma`, which dispatches at run time to `fma_with_fma`: correct, but one
@@ -194,7 +197,7 @@ columns are core / parser / geom / layout / render.
     whole before it is written. Render was under 1% of the b29 profile. Measure it on
     render-heavy inputs with the baseline harness before ranking it higher.
 13. **Process-wide C state.**
-    - 20 files use `thread_local!` for C globals and statics: `drand48` and `rand` state
+    - 18 files use `thread_local!` for C globals and statics: `drand48` and `rand` state
       (`cutil.rs:130`), `choose_node`'s per-process counter (`neatogen/stuff.rs:320`),
       `fdp_parms`, `PSinputscale`, and others.
     - This state is faithful, and it is **the main obstacle to parallelism**. Components and
@@ -208,14 +211,14 @@ The plan depends on #512's **D1 (b)**:
 
 - Only the facade (`graphviz-pure`) and `graphviz-pure-raster` are stable.
 - core, parser, geom, layout and render are implementation crates, pinned with `=`.
-- `Graph` becomes opaque, with accessors.
+- `Graph` becomes opaque, with no public fields and no accessors (#520).
 
 Without that, the data-model refactor (Phase 2) is a major version bump. Before 1.0, three things
 have to sit behind the public API:
 
 1. `Graph`'s fields, so the attribute and adjacency representation can change.
-2. The layout entry points, which take `&mut Graph` today. Results should come through accessors,
-   so `NodeData` and `EdgeData` can split into hot and cold parts.
+2. The layout entry points, which take `&mut Graph` today. Results come out only through rendering
+   (`-Tjson` for structure), so `NodeData` and `EdgeData` can split into hot and cold parts.
 3. Output. `render_*` returns `String` today. A later `render_to(&mut impl io::Write)` is
    additive, but the `String` functions must not promise how they are implemented.
 
@@ -226,7 +229,7 @@ have to sit behind the public API:
 
 | # | technique | where in this code | expected gain | fidelity | effort | unsafe / deps | WASM |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| T1 | **Inline FMA on x86-64**: release binaries built with `-C target-cpu=x86-64-v3`, with a `v1` compatibility build | every `mul_add` (389 sites) | **Measured: neato 5.0×, sfdp 2.2×** on rnd2000, bytes identical; dot unchanged | none (FMA is exactly rounded, so fused in hardware and in software give the same bits) | S | none | n/a (see T1b) |
+| T1 | **Inline FMA on x86-64**: release binaries built with `-C target-cpu=x86-64-v3`, with a `v1` compatibility build | every `mul_add` (389 sites) | **Measured: neato 4.5×, sfdp 2.3×** on rnd2000 (quiet machine), bytes identical, full fidelity ratchet unchanged; dot unchanged | none (FMA is exactly rounded, so fused in hardware and in software give the same bits) | S | none | n/a (see T1b) |
 | T1b | Faster software FMA for wasm32 | `core::math` | Unknown; WASM pays T1's cost permanently | none if exact (must equal IEEE `fma` bit for bit) | M | none | **the** WASM perf item |
 | T2 | **`pow` fast paths for exact results**: `y == 2.0` gives `x*x`, `y == 1.0` gives `x` | `math::portable::pow` | sfdp: `pow` is 38–42% of samples; most of it goes | none (CORE-MATH `pow` is correctly rounded, and so is `x*x`) | S | none | same gain |
 | T3 | **Streaming tokens**: lookahead buffer instead of `Vec<Token>`; token text as `&str` or `Cow` into the input | parser `lexer.rs`, `parser.rs` | Large part of the 12× RSS; fewer allocations | none (error messages keep `yytext`) | M | none | less memory |
@@ -265,12 +268,12 @@ Building with `+fma` alone, or with `x86-64-v2` (which adds SSE4.1 `roundsd`, re
 Caveats:
 
 - **Binaries built this way don't run on x86 CPUs without AVX2/FMA** (before about 2013 Intel and
-  2015 AMD), so a `v1` artifact stays available ([Open decision 6](#6-x86-64-baseline-of-release-binaries)).
+  2015 AMD), so a `v1` artifact stays available ([decision 6](#decisions)).
 - `-C target-cpu` is a compiler flag, not a profile setting. `cargo install graphviz-pure-cli`
   users get v1 unless they set `RUSTFLAGS`, so the README should say so.
 - Runtime dispatch inside one binary (`#[target_feature(enable = "fma")]` plus
   `is_x86_feature_detected!`) needs an `unsafe` call, so it is excluded by
-  [Open decision 3](#3-unsafe-policy) unless that changes.
+  [decision 3](#decisions) unless that changes.
 - Check the result with the full fidelity ratchet built with the same flags, and add a
   cross-platform job that compares a v3 build's bytes with v1's.
 
@@ -363,7 +366,7 @@ Parallelism is safe only where **each output's computation is unchanged and inde
   over `i`, computed by one thread.
 - **Several `-T` outputs of one layout, and raster encoding:** independent by construction.
 - **Not safe without more work:** laying out pack components or several graphs concurrently.
-  They share `drand48`, `rand` and per-process counters (`thread_local!` in 20 files) in C's
+  They share `drand48`, `rand` and per-process counters (`thread_local!` in 18 files) in C's
   order. A component's RNG start state is known only after the previous component finishes.
 
 #### T14: build configuration
@@ -437,7 +440,7 @@ depends on it.
 - #512 D1 (b) lands: internal crates carry no semver promise, and `Graph` is opaque.
 - The sibling harness lands (`scripts/bench/`, `docs/perf/baseline.md`), and the perf ratchet is
   added to CI.
-- The [follow-the-C replacement](#2-replacing-follow-the-c) is decided and written into
+- The [follow-the-C replacement](#decisions) is decided and written into
   CONTRIBUTING.md.
 
 **Phase 1: quick wins (fidelity: none).**
@@ -449,7 +452,7 @@ depends on it.
 - T8: neato mat-vec row-blocking and slice iteration.
 - T3: streaming tokens in the parser.
 
-Expected result: neato and sfdp at or below C on x86, and parser memory reduced by a large factor.
+Expected result: neato and sfdp at or below C on x86 (T1 alone leaves neato about 7% and sfdp about 18% slower than C), and parser memory reduced by a large factor.
 
 **Phase 2: the data model (fidelity: none or ordering).**
 
@@ -471,7 +474,7 @@ Each module moves on its own, behind the opaque `Graph`.
 - T13 and T18: writer streaming and the `render_to` API.
 - T1b: WASM FMA.
 
-**Phase 4: only if [Open decision 1](#1-bit-identity-policy) allows.** An opt-in "fast" mode with
+**Phase 4: only if [decision 1](#decisions) allows.** An opt-in "fast" mode with
 reassociated or SIMD reductions, kept out of every default and every ratchet.
 
 **Unlock graph:**
@@ -483,127 +486,29 @@ reassociated or SIMD reductions, kept out of every default and every ratchet.
 - T8 makes T11 straightforward (the column-gather form).
 - The perf ratchet gates everything.
 
-## Open decisions
+## Decisions
 
-### 1. Bit-identity policy
+Made by the maintainer on 2026-10-27, after the 1.0 decisions in #512.
 
-The ratchet is the project's safety net. Relaxing it gives up the ability to prove a refactor
-correct mechanically.
-
-Techniques that are possible **only** with relaxation, with estimated gains:
-
-| technique | where | estimated gain |
+| # | Decision | Rationale |
 | :--- | :--- | :--- |
-| Multi-accumulator or SIMD reductions (AVX2: 8 `f32` lanes) | neato `right_mult_with_vector_ff` and inner products | Several× beyond T8 on neato's 88% kernel |
-| Reassociated force sums, or `f32` where C uses `f64` | sfdp and fdp force loops | ~2× on those loops |
-| Fast-math `pow`/`exp` approximations | sfdp `p ≠ -1` | Large; `pow` is 38% |
-| Parallel reductions (the sum of a parallel map) | stress, sfdp energy | ≈ cores × |
-| Algorithm substitutions (for example a faster network-simplex pivot rule) | dot | Large on big graphs, but changes layouts |
+| 1 | **Strict byte-identity now** (option (a)). An opt-in fast mode (b) is reconsidered after Phase 1, once T1, T2 and T8 are measured. The default output stays C's. | The ratchet is what makes aggressive refactoring provably safe, and bit-identical wins already bring neato and sfdp near C. |
+| 2 | **Tiered** (option (c)). Every item carries a provenance tag (`/// C: lib/dotgen/position.c:make_lrvn`); structure is free whenever the ratchets pass; a C-mirror list stays function-for-function: `core::math`, `cdt.rs`, the network-simplex and mincross tie-breaking cores, and `pathplan`. Written into CONTRIBUTING.md; the tag-coverage script is #539. | Freedom where it pays, and cheap upstream ports where order is the product. |
+| 3 | **`forbid(unsafe_code)` stays in every own crate** (option (a)). Dependencies may contain `unsafe`. | Speed comes from build flags and safe idioms; nothing planned needs `unsafe`. |
+| 4 | **Small pure-Rust dependencies, each with a measured gain over std; no C dependencies; CI-only tools are fine.** svg2pdf is allowed behind the `pdf` feature (#528). Prefer `tinyvec` to `smallvec`. The slow musl allocator of the Linux artifacts is addressed by removing allocations in safe Rust (T9, T3, T7); the allocator is revisited only if a gap remains (#530 tracks the musl artifact). | The allocator is C in every build; fewer allocations help every platform, wasm included. |
+| 5 | **rayon behind a `parallel` feature**, on for the native CLI, off for the library and wasm, used only for order-preserving work (T11, T12). The fidelity ratchet runs with 1 and N threads. | Threaded wasm needs nightly and isolated pages; revisit when stable. |
+| 6 | **x86-64 artifacts are built with `x86-64-v3`, plus a `-compat` v1 archive; PyPI wheels ship both binaries behind a safe launcher** (`is_x86_feature_detected!` and exec). A CI job proves v1 and v3 bytes equal (#531). | Measured 4.5× on neato with identical bytes; the launcher keeps old CPUs working without `unsafe`. |
+| 7 | **MSRV: #512's D4** (at most current stable minus two releases). Consistent: nothing here needs a newer compiler. | — |
 
-Options:
-
-- **(a)** Strict forever.
-- **(b) Strict by default, with an opt-in fast mode** (a facade option or CLI flag such as
-  `-Gfast=true`, outside the ratchets, documented as "not identical to C"). It is tested for
-  determinism (the same bytes across platforms *within* fast mode) and for layout sanity, not
-  against C.
-- **(c)** Relax the default.
-
-**Recommendation: (a) now. Revisit (b) after Phase 1**, when T1, T2 and T8 have shown how much is
-left. Measured today, the bit-identical wins already bring neato and sfdp to near C. (c) is not
-recommended: identity with C is the product.
-
-### 2. Replacing "follow the C"
-
-CONTRIBUTING.md's rule makes reviews easy and upstream fixes portable. It also forbids most of
-this plan.
-
-Options:
-
-- **(a)** Keep the rule. Refactors happen only inside functions.
-- **(b) Provenance, not structure.**
-  - Every item keeps a provenance doc line naming the C function(s) it implements
-    (`/// C: lib/dotgen/position.c:make_lrvn`), even after merging, splitting or renaming.
-  - Structure is free whenever the ratchets pass.
-  - A script lists C functions with no provenance tag, so coverage of the C stays auditable.
-- **(c) Tiered.** Like (b), but some modules are declared **C-mirror**: they stay
-  function-for-function because their exact operation order *is* the product, or because
-  upstream changes them often. Candidates: `core::math`, `cdt.rs` (the splay-tree order), the
-  network-simplex and mincross tie-breaking cores, and `pathplan`. Everything else is free.
-
-**Recommendation: (c).**
-
-- Upstream Graphviz releases are a major bump per [versioning.md](../versioning.md). Porting an
-  upstream diff into a freely restructured module costs more, and provenance tags plus the frozen
-  1.0 tag as a reference implementation keep that cost manageable.
-- Write the C-mirror list into CONTRIBUTING.md.
-- Revise the list when an upstream bump shows where the pain is.
-
-### 3. Unsafe policy
-
-Options:
-
-- **(a)** Keep `forbid(unsafe_code)` in every own crate. Dependencies may contain `unsafe` (they
-  already do).
-- **(b)** Allow `unsafe` in one small audited crate (`graphviz-pure-kernels`) for runtime CPU
-  dispatch (`#[target_feature]` + `is_x86_feature_detected!`), unchecked indexing in proven
-  kernels, or `std::arch` SIMD. It would need Miri in CI and a SAFETY comment on each block.
-- **(c)** Lift the policy.
-
-**Recommendation: (a).** Nothing in Phases 1–3 needs `unsafe`. T1 is achieved with build flags;
-bounds checks go with iterator rewrites. Reconsider (b) only for runtime FMA dispatch, if the
-maintainer wants one universal x86 binary instead of v1 and v3 artifacts.
-
-### 4. Dependency appetite
-
-| candidate | use | licence | unsafe inside | verdict |
-| :--- | :--- | :--- | :--- | :--- |
-| `rustc-hash` (FxHash) or `foldhash` | interner and lookup maps | MIT/Apache; Zlib | small | Fine if a profile shows hashing. foldhash documents no stability across versions or platforms, so never let its output order reach bytes. |
-| `smallvec` or `tinyvec` | inline adjacency and attribute lists | MIT/Apache; Zlib/MIT/Apache | yes; **no** (tinyvec is 100% safe) | Prefer `tinyvec`, or `Vec` with reuse |
-| `bumpalo` | per-phase arenas | MIT/Apache | yes | Not needed: index arenas (`Vec`) plus buffer reuse cover it |
-| `rayon` | T11, T12 | MIT/Apache | yes | Behind a `parallel` feature, native CLI only |
-| `mimalloc` or `tikv-jemallocator` | CLI allocator | MIT; BSD-2 | C code | **No**: it makes the "pure" binaries depend on C, and malloc isn't the bottleneck |
-| `gungraun` | perf ratchet | MIT/Apache | — | dev-dependency or bench-only; needs Valgrind on the runner |
-
-**Recommendation:** small pure-Rust dependencies are allowed when a PR shows a measured gain over
-the std-only alternative. No C dependencies. Build and test tools (`cargo-pgo`, `gungraun`) are
-fine in CI.
-
-### 5. Threads and WASM
-
-Options:
-
-- **(a)** No threads.
-- **(b) A `parallel` cargo feature** (rayon), on for the native CLI and off by default for the
-  library and WASM, used only for order-preserving work (T11, T12). CI runs the fidelity ratchet
-  with `RAYON_NUM_THREADS=1` and with N threads, and compares bytes.
-- **(c)** Also ship a threaded WASM build. That needs nightly, `+atomics,+bulk-memory`, and a
-  cross-origin-isolated page (COOP/COEP) for `SharedArrayBuffer` (wasm-bindgen-rayon's
-  requirements).
-
-**Recommendation: (b).** (c) is not worth a nightly toolchain and a hosting requirement while the
-WASM API is first-class. Revisit when wasm threads reach stable Rust.
-
-### 6. x86-64 baseline of release binaries
-
-This decision is new: it follows from T1.
-
-Options:
-
-- **(a)** Keep v1 (5× slower neato).
-- **(b) v3 as the default artifact, plus a `-compat` v1 artifact** for old CPUs. Docker, PyPI
-  wheels and Homebrew pick v3.
-- **(c)** Runtime dispatch in one binary (needs Open decision 3 (b)).
-
-**Recommendation: (b)**, with a cross-platform job that proves the v1 and v3 bytes are equal.
-
-### 7. MSRV
-
-Defer to #512's D4. Nothing in this plan needs a newer compiler.
+Effects of the 1.0 decisions on this plan: `Graph` has no accessors (D1), so even its read API
+is free; serde leaves the graph types (D3), which unblocks T4; diagnostics are returned as
+values (D14), which removes one process-wide global in the way of T11 and T12; `ps` and `pdf`
+come in 1.x (D6, #528).
 
 ## Draft issues
 
-To file once this plan is approved. Each is one PR unless noted.
+Filed on 2026-10-27 in the `post-1.0` milestone, in this order, as #530–#540 (1 is #530, 11 is
+#540). Each is one PR unless noted.
 
 1. **perf: add a perf ratchet to CI.** Callgrind instruction counts and peak heap on the sibling's
    benchmark set; 2% and 5% gates; a `perf-regression-accepted` label. This depends on
@@ -626,7 +531,8 @@ To file once this plan is approved. Each is one PR unless noted.
 9. **dotgen: split `NodeInfo` (832 B) into network-simplex, mincross and cold parts** (T6;
    profile-driven, NS first).
 10. **docs: replace "Follow the C" in CONTRIBUTING.md with provenance tags and a C-mirror module
-    list** (Open decision 2), plus a script that reports C functions without a provenance tag.
+    list** plus a script that reports C functions without a provenance tag
+    (decision 2; the CONTRIBUTING.md text landed with #514, the script is #539).
 11. **release: evaluate PGO (`cargo-pgo`) and CLI `strip`/`panic=abort`** (T14). Report the
     gains and the exit-status change.
 
