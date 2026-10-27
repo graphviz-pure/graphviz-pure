@@ -1,7 +1,7 @@
 # After 1.0: faster, smaller, idiomatic (a plan for hill-climbing)
 
 Status: **decided** on 2026-10-27 (see [Decisions](#decisions)). The draft issues are filed in the
-[`post-1.0` milestone](https://github.com/graphviz-pure/graphviz-pure/milestone/8) as #530–#540.
+[`post-1.0` milestone](https://github.com/graphviz-pure/graphviz-pure/milestone/8) as #530–#540; the `-Tplain` item is #541, in the `1.0` milestone.
 It assumes 1.0 as the 1.0 roadmap defines it (#512; it adds `docs/roadmap/1.0.md`), which has no
 performance target of its own. The benchmark harness and the measured baseline are a sibling
 effort (`docs/perf/baseline.md` and `scripts/bench/`, #518). This document reuses them
@@ -44,14 +44,16 @@ much reasoning the review needs, not a waiver.
 
 ## Goals and success metrics
 
-All metrics are measured with the sibling harness (`scripts/bench/`). The numbers in this
-document are one-off measurements from this research, listed under
-[measurements](#measurements).
+All metrics are measured with the harness of #518 (`scripts/bench/`). Its
+[performance and memory baseline](../perf/baseline.md) (`docs/perf/baseline.md`, 0.2.2) is the
+reference for every number here; its hotspot table ranks the work. The numbers in this document
+are one-off measurements from this research, listed under [measurements](#measurements), and
+reconciled with the baseline there.
 
 | goal | metric | target for the post-1.0 effort |
 | :--- | :--- | :--- |
 | Faster | Instruction count (primary) and wall time (secondary) per corpus input, per engine | Headline against stock C 16.1.0: no engine slower than C on any baseline input, and the geometric-mean speed-up over C reported. Also tracked against 1.0: geometric-mean 2× faster on the benchmark set. |
-| Smaller | Peak RSS and bytes allocated per input. WASM `.wasm` size. | Against C: parser and graph model within 2× of C's peak RSS (today 12×). Against 1.0: WASM size no larger. |
+| Smaller | Peak RSS and bytes allocated per input. WASM `.wasm` size. | Against C: parser and graph model within 2× of C's peak RSS (today 12× when parsing a 12 MB graph; 1.0–3.1× end to end on the baseline set). Against 1.0: WASM size no larger. |
 | Idiomatic | Panic-site counts ([the ratchet](../porting/crashes.md#the-panic-site-ratchet)); `clippy::pedantic` warnings; public items of the internal crates | Panic sites ↓ 50% in layout and geom. No C-style sentinels in new code. |
 | Safe to change | The three ratchets (fidelity, panic, perf) on every PR | No regressions, enforced by CI. |
 
@@ -76,6 +78,34 @@ Each constraint is either kept, or proposed for change under [Decisions](#decisi
 ## What the code does today
 
 ### Measurements
+
+The full measurements are in [docs/perf/baseline.md](../perf/baseline.md) (#518): every corpus
+input against C, scaling, allocations, WASM and a ranked hotspot table. Where it and this
+section differ:
+
+- **T1.** The baseline measured `-C target-feature=+fma` over its whole set: neato 4.8–5.0×,
+  sfdp 2.3×, fdp 2.0–2.1×, twopi spline routing 2.1×, circo with splines 2.8×, dot 1.0–1.1×,
+  with the SVG of 2,603 corpus inputs identical (all but the six slow `badvoro` copies). This
+  plan's `x86-64-v3` build passes the full fidelity ratchet unchanged, and measured neato 4.5×
+  and sfdp 2.3× on a quiet machine. `+fma` alone gives the same gain and also runs on AMD
+  Piledriver (2012) and later, where v3 needs Excavator (2015).
+- **Allocation counts.** The baseline's counter gives 4,032,213 allocations and 215 MB for sfdp
+  on rnd2000, against 4,054,086 and 272 MB here (another counter, which counts reallocations
+  differently). Use the baseline's numbers. Its malloc uprobe puts 85% of them in
+  `QuadTree::add_internal`, whose cells hold `Vec<f64>` fields, more than in
+  `get_supernodes_internal`.
+- **`pow`.** The baseline says special-casing the exponent is impossible because the default
+  `p` is `-1.0001234`. That is the `AUTOP` sentinel (`sfdpinit.rs:130`), which
+  `multilevel_spring_electrical_embedding` replaces with `-1.0` (`spring_electrical.rs:1022`).
+  An instrumented build counted more than 8.4 M `powf` calls with `y == 2.0` and 12 others on
+  rnd2000, so T2 stands. The baseline's own fix, calling `pow` once per pair instead of once per
+  dimension, applies too (#532).
+- **Memory.** The parse-only 12× below is the worst case. End to end, the baseline's peak RSS is
+  1.0–3.1× C's, and the ratio grows with node count.
+- **Release profile.** The profile lives in `.cargo/config.toml`, which `cargo install` from
+  crates.io does not read, so those builds get Cargo's defaults (no LTO, 16 codegen units; #540).
+- **`-Tplain` is quadratic** (the baseline's hotspot 2), which this plan had missed. It is
+  fixed before 1.0 (#541).
 
 Machine: AMD Ryzen 9 5900XT (28 threads, FMA and AVX2), shared with other agents (load ~5).
 Each wall time is from one run, so treat it as ±10%. The Rust build is `cargo build --release
@@ -229,16 +259,16 @@ have to sit behind the public API:
 
 | # | technique | where in this code | expected gain | fidelity | effort | unsafe / deps | WASM |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| T1 | **Inline FMA on x86-64**: release binaries built with `-C target-cpu=x86-64-v3`, with a `v1` compatibility build | every `mul_add` (389 sites) | **Measured: neato 4.5×, sfdp 2.3×** on rnd2000 (quiet machine), bytes identical, full fidelity ratchet unchanged; dot unchanged | none (FMA is exactly rounded, so fused in hardware and in software give the same bits) | S | none | n/a (see T1b) |
-| T1b | Faster software FMA for wasm32 | `core::math` | Unknown; WASM pays T1's cost permanently | none if exact (must equal IEEE `fma` bit for bit) | M | none | **the** WASM perf item |
-| T2 | **`pow` fast paths for exact results**: `y == 2.0` gives `x*x`, `y == 1.0` gives `x` | `math::portable::pow` | sfdp: `pow` is 38–42% of samples; most of it goes | none (CORE-MATH `pow` is correctly rounded, and so is `x*x`) | S | none | same gain |
+| T1 | **Inline FMA on x86-64**: release binaries built with `-C target-cpu=x86-64-v3`, with a `v1` compatibility build | every `mul_add` (389 sites) | **Measured: neato 4.5–5.0×, sfdp 2.3×, fdp 2.0–2.1×, spline routing 2.1–2.8×**, bytes identical (full fidelity ratchet; 2,603 SVGs in #518); dot 1.0–1.1× | none (FMA is exactly rounded, so fused in hardware and in software give the same bits) | S | none | n/a (see T1b) |
+| T1b | Faster software FMA for wasm32 | `core::math` | Unknown; WASM pays T1's cost permanently (#518: under node, fdp is 4.9× and sfdp 3.5× slower than native) | none if exact (must equal IEEE `fma` bit for bit) | M | none | **the** WASM perf item |
+| T2 | **`pow` fast paths for exact results**: `y == 2.0` gives `x*x`, `y == 1.0` gives `x`; and one `pow` per pair instead of per dimension | `math::portable::pow`; `spring_electrical.rs:471,526` | sfdp: `pow` is 38–44% of samples; most of it goes | none (CORE-MATH `pow` is correctly rounded, and so is `x*x`) | S | none | same gain |
 | T3 | **Streaming tokens**: lookahead buffer instead of `Vec<Token>`; token text as `&str` or `Cow` into the input | parser `lexer.rs`, `parser.rs` | Large part of the 12× RSS; fewer allocations | none (error messages keep `yytext`) | M | none | less memory |
 | T4 | **Attribute interning and typed attributes**: per-graph symbol table; values as `AttrId → Sym` | core `AttrMap`, `AttrDicts`, all `agget`/`late_*` | Memory (strings shared, as cgraph's refstr does); lookups by id; numbers parsed once | ordering (writers that walk attributes by name must keep sorted-by-name order) | L | none, or `rustc-hash` for the interner map | less memory, smaller heap |
 | T5 | **Typed index newtypes** (`NodeIx`, `EdgeIx`, `GraphIx`, `LabelIx`), `u32`, with an `IndexVec<I, T>` | dotgen `N`, `E`, `G`, `L` aliases; core ids | Clarity; `Option<NodeIx>` can be 4 B with a `NonMaxU32`-style niche (safe, via `NonZeroU32` of `ix+1`) | none | M, mechanical | none (write our own ~100 lines; `index_vec` or `typed-index-collections` are optional) | smaller structs |
 | T6 | **Hot/cold split and struct-of-arrays** for dot's `NodeInfo` and `EdgeInfo` | `dotgen/types.rs`, network simplex, mincross | Cache misses in NS (56% of dot b29) and mincross (20%); 832 B per node today | none | L | none | — |
 | T7 | **Compact adjacency**: CSR or `SmallVec`-like inline lists for `in_`/`out`/`flat_*`/`other`/`tree_*` | dotgen, neato `VtxData`, fdp | Fewer allocations (10 `Vec`s per node) | ordering (edge order within a list must stay C's insertion order) | L | none, or `smallvec` (contains unsafe) / `tinyvec` (safe) | smaller |
 | T8 | **Bit-identical kernel restructuring**: row-blocking independent reductions; splitting a loop's serial chain from its independent scatter; slices in place of indexing | `right_mult_with_vector_ff` (88% of neato with v3), `vectors_inner_product*`, sfdp force loops | Estimated 2–4× on the neato kernel: the per-row FMA chain is latency-bound, and interleaving k rows gives k independent chains | none if every output's op sequence is unchanged (provable per kernel) | M | none | same gain |
-| T9 | **Allocation reuse**: scratch buffers passed in or kept on the engine struct; `clear()` instead of a new `Vec` | sfdp quadtree supernodes (4 M allocations), dot per-phase vectors, pathplan | 5–10% where malloc and free show up (sfdp: 5%) | none | S–M each | none (no `bumpalo` needed) | less memory churn |
+| T9 | **Allocation reuse**: scratch buffers passed in or kept on the engine struct; `clear()` instead of a new `Vec` | sfdp quadtree cells (`add_internal`, 85% of its 4 M allocations; `[f64; 2]` inline) and supernodes, circo `count_all_crossings` (98% of circo's), twopi `set_n_steps_to_leaf`, pathplan `pt_vis` | 5–10% where malloc and free show up (sfdp: 5%) | none | S–M each | none (no `bumpalo` needed) | less memory churn |
 | T10 | **Network-simplex engineering**: SoA fields, an iterative `dfs_range` that touches only the changed subtree (already C's approach in 16.x; verify), and no bounds checks in `enter_edge` | `common/ns.rs` | dot: NS is 56% of b29 | none if the same entering and leaving edges are chosen (ties!) | M | none | same gain |
 | T11 | **Order-preserving parallelism**: per-node force evaluation where every node reads a frozen tree; column-gather mat-vec | sfdp quadtree repulsion (27% with v3), neato stress mat-vec | ≈ cores × on those kernels (native only) | ordering: safe only where each output's op sequence and RNG use are unchanged. Must confirm per kernel (shared counters, in-place updates). | M | `rayon` | none: sequential fallback |
 | T12 | **Parallel independent work**: several `-T` outputs of one layout; PNG/JPEG encoding; graphs in one file (blocked: shared RNG and counters) | CLI, raster | Proportional to the number of outputs | ordering: none for renders of one finished layout; blocked for layouts | S–M | `rayon` or `std::thread::scope` (no dependency) | n/a |
@@ -391,22 +421,25 @@ Every step is one PR that is proved by three ratchets:
 1. **Fidelity ratchet** (exists): no file that matched C stops matching. This is the hard gate.
 2. **Panic-site ratchet** (exists): no module gains a site. Refactors are expected to lower
    counts, and the PR runs `scripts/panic-sites.sh --update` to lock them in.
-3. **Perf ratchet** (new, built on the sibling harness):
-   - **Primary metric: instruction counts**, which are deterministic to well under 1% and
+3. **Perf ratchet** (new, built on #518's harness; decided 2026-10-27: both counts below):
+   - **Allocation counts**, through `dhat` as a dev-only dependency. They do not vary at all
+     between runs (#518), so this gate is exact: any increase fails. They are blind to CPU work,
+     though: the FMA libcalls, `pow` and network simplex would regress without a single new
+     allocation.
+   - **Instruction counts** for CPU work, which are deterministic to well under 1% and
      comparable across runs on a noisy shared runner. rustc's own perf CI uses instruction
      counts as its primary metric for the same reason (rustc-perf).
    - On GitHub-hosted runners, hardware counters (`perf stat -e instructions:u`) are generally
      not reliably available, so use **Callgrind** through
      [gungraun](https://docs.rs/gungraun) (formerly iai-callgrind). It runs each benchmark once,
      under simulation.
-   - **Secondary metrics:** peak heap and total bytes allocated, through gungraun's DHAT mode or a
-     counting allocator in the bench binary, and WASM size.
+   - **Also:** peak heap and total bytes allocated, and WASM size.
    - **Wall time** on a quiet self-hosted machine, nightly, for trend only, never as a gate.
-   - **Gate:** fail when any benchmark's instruction count rises more than 2%, or its peak memory
-     more than 5%, unless the PR carries a `perf-regression-accepted` label and a justification.
+   - **Gate:** fail when any allocation count rises, any benchmark's instruction count rises more
+     than 2%, or its peak memory more than 5%, unless the PR carries a `perf-regression-accepted` label and a justification.
      Improvements are reported in the PR comment, and the baseline file is updated on merge
      (like `scripts/update-baselines.sh`).
-   - **Benchmark set:** the sibling's set, which should include, per engine, one small input
+   - **Benchmark set:** #518's `scripts/bench/sets/quick.tsv`, plus the shipped musl artifact, which should include, per engine, one small input
      (start-up cost), one realistic corpus file (b29-like) and one large synthetic input
      (rnd2000, big, chain), plus parse-only and render-only cases.
 
@@ -510,18 +543,18 @@ come in 1.x (D6, #528).
 Filed on 2026-10-27 in the `post-1.0` milestone, in this order, as #530–#540 (1 is #530, 11 is
 #540). Each is one PR unless noted.
 
-1. **perf: add a perf ratchet to CI.** Callgrind instruction counts and peak heap on the sibling's
-   benchmark set; 2% and 5% gates; a `perf-regression-accepted` label. This depends on
-   `scripts/bench/`.
+1. **perf: add a perf ratchet to CI.** Exact allocation counts (`dhat`), Callgrind instruction
+   counts and peak heap on #518's quick set; exact, 2% and 5% gates; a `perf-regression-accepted`
+   label. This depends on `scripts/bench/`.
 2. **release: build x86-64 artifacts with `-C target-cpu=x86-64-v3`, plus a v1 compat artifact.**
-   Add a ratchet job built with v3, and a byte-equality check between v1 and v3 (T1; measured 5×
-   neato, 2.2× sfdp).
+   Add a ratchet job built with v3, and a byte-equality check between v1 and v3 (T1; measured
+   4.5–5.0× neato, 2.3× sfdp, 2× fdp).
 3. **math: bit-exact fast paths in `pow` for `y == 2` and `y == 1`.** Include a differential test
-   against the general path (T2; sfdp `pow` is 38–42% of samples).
+   against the general path, and call `pow` once per pair (T2; sfdp `pow` is 38–44% of samples).
 4. **neatogen: restructure `right_mult_with_vector_ff` without reordering any sum.** Row-blocking,
    a split scatter loop, slice iteration (T8; 88% of neato).
-5. **sfdp: reuse supernode buffers in `QuadTree::get_supernodes_internal`** (T9; 4 M allocations
-   per rnd2000 run).
+5. **sfdp: inline the quadtree cells' vectors and reuse supernode buffers** (T9; 4 M allocations
+   per rnd2000 run, 85% in `add_internal`).
 6. **parser: stop retaining every token; borrow token text from the input** (T3; 982 MB against
    C's 82 MB on a 12 MB file).
 7. **core: design note and prototype for interned, id-indexed attributes** (T4). Covers how
@@ -533,8 +566,19 @@ Filed on 2026-10-27 in the `post-1.0` milestone, in this order, as #530–#540 (
 10. **docs: replace "Follow the C" in CONTRIBUTING.md with provenance tags and a C-mirror module
     list** plus a script that reports C functions without a provenance tag
     (decision 2; the CONTRIBUTING.md text landed with #514, the script is #539).
-11. **release: evaluate PGO (`cargo-pgo`) and CLI `strip`/`panic=abort`** (T14). Report the
-    gains and the exit-status change.
+11. **release: evaluate PGO (`cargo-pgo`) and CLI `strip`/`panic=abort`** (T14), and move the
+    release profile into `Cargo.toml` so crates.io builds get it. Report the gains and the
+    exit-status change.
+12. **render: `-Tplain` is quadratic** (the baseline's hotspot 2): `root_holds_plain`
+    (`render/src/emit/output.rs:277`) scans the whole graph for every label, so osage on 20,000
+    nodes takes 7.6–8.9 s with `-Tplain` against C's 0.2 s. Building the set of plain strings
+    once per output fixes it without touching a float. The maintainer decided it blocks 1.0, so
+    it is filed in the `1.0` milestone (#541), not here.
+
+The baseline's other hotspots without an issue yet are candidates for the next round, each
+classed *none*: circo's `count_all_crossings` (hotspot 7), twopi's `set_n_steps_to_leaf` (11),
+`fmt_f` writing into the output buffer (13, part of T13), and osage formatting its trace
+messages when `-v` is off (14).
 
 ## Sources
 
