@@ -84,4 +84,5 @@ CI artifact, or locally) and committing the baseline in the same pull request, a
 `perf-regression-accepted` label and says why in its description; the job then reports the
 regressions and passes, and the pull request refreshes the baseline with `--update`.
 
-The job takes about N minutes on a GitHub-hosted runner, most of it the two release builds.
+The measurement itself takes about 75 seconds with 4 jobs on a 5900XT; on a 4-core GitHub-hosted
+runner, the two release builds (musl CLI and example, and wasm) come first.
