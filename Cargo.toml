@@ -17,7 +17,7 @@ members = [
 exclude = ["fuzz"]
 
 [workspace.package]
-version = "0.2.2"
+version = "0.2.3"
 edition = "2024"
 license = "EPL-2.0"
 repository = "https://github.com/graphviz-pure/graphviz-pure"
@@ -29,13 +29,13 @@ categories = ["visualization", "rendering", "graphics", "wasm"]
 rust-version = "1.85"
 
 [workspace.dependencies]
-graphviz-pure-core = { path = "crates/graphviz-pure-core", version = "0.2.2" }
-graphviz-pure-parser = { path = "crates/graphviz-pure-parser", version = "0.2.2" }
-graphviz-pure-geom = { path = "crates/graphviz-pure-geom", version = "0.2.2" }
-graphviz-pure-layout = { path = "crates/graphviz-pure-layout", version = "0.2.2" }
-graphviz-pure-render = { path = "crates/graphviz-pure-render", version = "0.2.2" }
-graphviz-pure = { path = "crates/graphviz-pure", version = "0.2.2" }
-graphviz-pure-raster = { path = "crates/graphviz-pure-raster", version = "0.2.2" }
+graphviz-pure-core = { path = "crates/graphviz-pure-core", version = "0.2.3" }
+graphviz-pure-parser = { path = "crates/graphviz-pure-parser", version = "0.2.3" }
+graphviz-pure-geom = { path = "crates/graphviz-pure-geom", version = "0.2.3" }
+graphviz-pure-layout = { path = "crates/graphviz-pure-layout", version = "0.2.3" }
+graphviz-pure-render = { path = "crates/graphviz-pure-render", version = "0.2.3" }
+graphviz-pure = { path = "crates/graphviz-pure", version = "0.2.3" }
+graphviz-pure-raster = { path = "crates/graphviz-pure-raster", version = "0.2.3" }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 thiserror = "2.0"
