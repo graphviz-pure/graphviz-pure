@@ -3,7 +3,8 @@
 # built-in font tables; scripts/gen-golden.sh): clang, LLVM's libc++ for the C++ parts, and
 # GTS, which neato and sfdp use for triangulation (overlap removal, multispline routing).
 # Used to measure how far C on Linux is from C on macOS, and how far the port's portable build
-# is from C on Linux (docs/porting/libm.md).
+# is from C on Linux (docs/porting/libm.md). On x86-64, with the port's math and Apple's libc
+# (run.sh's apple-libc run), it reproduces the macOS references on all but 7 of 2595 inputs.
 #
 #   docker build -t gv-c-linux -f scripts/c-oracle-linux/Dockerfile <dir holding graphviz-16.1.0.tar.xz>
 #   scripts/c-oracle-linux/run.sh
@@ -16,11 +17,15 @@ COPY graphviz-16.1.0.tar.xz /src/
 # APPLE_LONG_DOUBLE=1 makes neato's stress majorization accumulate in double, as it does on
 # Apple arm64, where long double is double (on Linux aarch64 it is a 128-bit quad).
 ARG APPLE_LONG_DOUBLE=0
+# On x86-64, -mfma: clang contracts a*b+c into a fused multiply-add (-ffp-contract=on, its
+# default) only for a target with an FMA instruction, which arm64 has and baseline x86-64 lacks.
+# Without it C on x86-64 fuses nothing and differs from the macOS reference on about 500 inputs.
 RUN cd /src && tar xf graphviz-16.1.0.tar.xz && cd graphviz-16.1.0 \
     && if [ "$APPLE_LONG_DOUBLE" = 1 ]; then \
          sed -i 's/^#define DegType long double$/#define DegType double/' lib/neatogen/stress.c \
          && grep -q '^#define DegType double$' lib/neatogen/stress.c; fi \
-    && CC=clang CXX="clang++ -stdlib=libc++" CFLAGS=-O2 CXXFLAGS=-O2 ./configure --prefix=/opt/gv \
+    && FLAGS=-O2 && if [ "$(uname -m)" = x86_64 ]; then FLAGS="-O2 -mfma"; fi \
+    && CC=clang CXX="clang++ -stdlib=libc++" CFLAGS="$FLAGS" CXXFLAGS="$FLAGS" ./configure --prefix=/opt/gv \
          --with-gts --without-pangocairo --without-gdk --without-gdk-pixbuf --without-gtk \
          --without-x --without-gd --without-rsvg --without-ghostscript --without-poppler \
          --without-webp --without-lasi --without-qt --disable-swig --disable-tcl \
