@@ -16,7 +16,7 @@ release is out; fill them in only from verified downloads, as described below.
 | conda-forge | [`conda-forge/graphviz-pure/`](conda-forge/graphviz-pure) | the GitHub source tarball of the tag, with cargo (rattler-build v1 recipe) | a pull request to `conda-forge/staged-recipes` |
 
 All three source builds use the GitHub tarball of the tag rather than the crates.io crate: it
-holds the workspace `Cargo.lock`, the release profile in `.cargo/config.toml` (thin LTO, one
+holds the workspace `Cargo.lock`, the workspace release profile (thin LTO, one
 codegen unit) and the test inputs that the command line's tests read. They build and test only
 the `graphviz-pure-cli` package; the workspace's other binary, `gv-diff`, is the project's
 differential test harness.
