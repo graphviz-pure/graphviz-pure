@@ -434,6 +434,22 @@ before `dot_concentrate` rewired it, and it goes wrong in two ways:
 Both change output only where C crashes. (With `splines=line`, C survives the deleted-node
 case because `makeLineEdge` never reads the head; the redirect changes nothing there either.)
 
+## dot compound edges: an lhead clip with no arrow
+
+Closed: #490.
+
+`makeCompoundEdge` (`lib/dotgen/compound.c`) clips an `lhead` spline at the head cluster's box.
+When the spline's first control point is already inside the box (`splines=curved` routing a
+back edge, in a graph that also has the edge in the other direction), it rebuilds the spline from the tail
+arrow's tip `bez->sp` and asserts `bez->sflag` (`compound.c:324`); with no tail arrow, `sp`
+was never set. When the spline does not cross the box at all, it moves the head arrow's tip
+and asserts `bez->eflag` (`compound.c:342`, `dir=back`). C aborts on both. The `ltail` branch
+of the same function tests the flags instead: with no arrow it leaves the end as it was
+(`if (!fixed)`, "something went wrong, use original tail"). The port does the same at the
+head, so the edge is C's drawing of the same graph without `lhead`. Before, it bent the
+spline toward (0, 0), the unset `sp`, so it began away from its tail node. `dir=both` is
+unchanged and matches C.
+
 ## newrank with packmode=array: dot_rank's crash
 
 Closed: #427.
