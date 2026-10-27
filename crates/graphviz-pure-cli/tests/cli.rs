@@ -4860,6 +4860,67 @@ fn sfdp_edgelabel_node_without_an_edge_does_not_panic_or_write_nan() {
     assert_eq!(out, plain);
 }
 
+// Issues #494 and #496. A label with three or more neighbours: a 4-node graph,
+// which coarsens in `multilevel_spring_electrical_embedding`. C (Graphviz
+// 16.1.0, built with fused multiply-adds like the macOS arm64 reference, with
+// the port's math functions and Apple's `rand`) writes these bytes on every
+// run. #496's own input, with `overlap=false`, ends in the chaotic scheme-2
+// penalty iteration, where C's output changes from run to run (GTS edge order,
+// `docs/porting/sfdp.md`); `overlap=prism0` is the same spring embedding
+// without it.
+#[test]
+fn sfdp_edgelabel_with_three_neighbours_matches_c() {
+    let cases = [
+        (
+            "graph { layout=sfdp label_scheme=4 a -- \"|edgelabel|\" -- b; \"|edgelabel|\" -- c }",
+            "graph 1 6.7896 6.127
+node a 0.375 5.0807 0.75 0.5 a solid ellipse black lightgrey
+node \"|edgelabel|\" 3.6248 3.7359 1.4416 0.5 \"|edgelabel|\" solid ellipse black lightgrey
+node b 4.0847 0.25 0.75 0.5 b solid ellipse black lightgrey
+node c 6.4146 5.877 0.75 0.5 c solid ellipse black lightgrey
+edge a \"|edgelabel|\" 4 0.69848 4.9468 1.2764 4.7076 2.4884 4.2061 3.157 3.9295 solid black
+edge \"|edgelabel|\" b 4 3.6586 3.4796 3.7438 2.8333 3.9668 1.1435 4.0514 0.502 solid black
+edge \"|edgelabel|\" c 4 3.9286 3.9691 4.4836 4.3951 5.6513 5.2912 6.1641 5.6848 solid black
+stop
+",
+        ),
+        (
+            "graph { layout=sfdp label_scheme=2 overlap=prism0 a -- \"|edgelabel|\" -- b; a -- c; c -- \"|edgelabel|\" }",
+            "graph 1 6.906 3.091
+node a 0.40937 0.25 0.75 0.5 a solid ellipse black lightgrey
+node \"|edgelabel|\" 3.1599 1.5492 1.4416 0.5 \"|edgelabel|\" solid ellipse black lightgrey
+node b 6.531 1.5564 0.75 0.5 b solid ellipse black lightgrey
+node c 0.375 2.841 0.75 0.5 c solid ellipse black lightgrey
+edge a \"|edgelabel|\" 4 0.71954 0.39651 1.2099 0.62811 2.1656 1.0796 2.7244 1.3435 solid black
+edge a c 4 0.40601 0.50315 0.39944 0.9985 0.38495 2.0907 0.37837 2.5868 solid black
+edge \"|edgelabel|\" b 4 3.8872 1.5507 4.5821 1.5522 5.6023 1.5544 6.15 1.5556 solid black
+edge c \"|edgelabel|\" 4 0.68905 2.6953 1.1869 2.4644 2.1587 2.0136 2.7239 1.7515 solid black
+stop
+",
+        ),
+        (
+            "graph { layout=sfdp label_scheme=4 a -- \"|edgelabel|\" -- b; \"|edgelabel|\" -- c; \"|edgelabel|\" -- d }",
+            "graph 1 8.1176 7.8549
+node a 0.375 4.1746 0.75 0.5 a solid ellipse black lightgrey
+node \"|edgelabel|\" 4.0721 3.9448 1.4416 0.5 \"|edgelabel|\" solid ellipse black lightgrey
+node b 7.7426 3.7497 0.75 0.5 b solid ellipse black lightgrey
+node c 4.2984 7.6049 0.75 0.5 c solid ellipse black lightgrey
+node d 3.8726 0.25 0.75 0.5 d solid ellipse black lightgrey
+edge a \"|edgelabel|\" 4 0.74985 4.1513 1.3602 4.1133 2.579 4.0376 3.3585 3.9892 solid black
+edge \"|edgelabel|\" b 4 4.7886 3.9067 5.5605 3.8657 6.7594 3.802 7.3651 3.7698 solid black
+edge \"|edgelabel|\" c 4 4.0877 4.1964 4.129 4.865 4.2413 6.681 4.2827 7.3516 solid black
+edge \"|edgelabel|\" d 4 4.0584 3.6909 4.022 3.0159 3.923 1.1827 3.8864 0.50574 solid black
+stop
+",
+        ),
+    ];
+    for (src, c) in cases {
+        let (out, err, ok) = run(&["-Tplain"], src);
+        assert!(ok && err.is_empty(), "{src}: {err}");
+        assert_eq!(out, c, "{src}");
+    }
+}
+
 /// `-Tplain` of `src`: exit 0, no panic, and no `nan` or `inf` in the drawing. For inputs where
 /// C 16.1.0 aborts or crashes, so there is no C output to compare with.
 fn plain_where_c_asserts(src: &str) -> String {
