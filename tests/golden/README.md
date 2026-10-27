@@ -25,6 +25,19 @@ library, so one set serves every platform. The C references (`*.dot`, `<engine>/
 informational comparison with stock C on macOS (`gv-diff e2e --stock`). See
 `docs/porting/libm.md`.
 
+The references come from C built on macOS arm64. C built on Linux x86-64 by
+`scripts/c-oracle-linux/Dockerfile` (clang with `-mfma`) and run with
+`graphviz-pure-portable-libm --features apple-libc` (`GV_PORTABLE_LIBM`) reproduces them:
+2588 of the 2595 stable `e2e.libm-matched.json` inputs and 2575 of the 2585 `*.dot` files.
+The exceptions are fdp inputs whose layout depends on heap addresses, two inputs where C
+prints a NaN or converts one to `int`, and inputs unstable in C or slower than `gv-diff`'s
+60 s limit (docs/porting/libm.md, "Linux x86-64"). So a new input can get its references on
+Linux, unless it is an fdp input or involves a NaN. The stock-C
+files (`e2e.json`, `e2e-baseline.portable.json`, `structure.json`) need macOS. For
+`scripts/gen-golden.sh` on Linux, pass the plugin directory (`/opt/gv/lib/graphviz` in the
+image) and set `GVBINDIR` to the pango-free one (`/opt/gv/lutplugins`) for its version
+check.
+
 ## The render corpus is compressed
 
 `render/` holds C's layout of each main-corpus graph (`render/laid/`) and C's rendering of that

@@ -4860,6 +4860,200 @@ fn sfdp_edgelabel_node_without_an_edge_does_not_panic_or_write_nan() {
     assert_eq!(out, plain);
 }
 
+// Issues #494 and #496. A label with three or more neighbours: a 4-node graph,
+// which coarsens in `multilevel_spring_electrical_embedding`. C (Graphviz
+// 16.1.0, built with fused multiply-adds like the macOS arm64 reference, with
+// the port's math functions and Apple's `rand`) writes these bytes on every
+// run. #496's own input, with `overlap=false`, ends in the chaotic scheme-2
+// penalty iteration, where C's output changes from run to run (GTS edge order,
+// `docs/porting/sfdp.md`); `overlap=prism0` is the same spring embedding
+// without it.
+#[test]
+fn sfdp_edgelabel_with_three_neighbours_matches_c() {
+    let cases = [
+        (
+            "graph { layout=sfdp label_scheme=4 a -- \"|edgelabel|\" -- b; \"|edgelabel|\" -- c }",
+            "graph 1 6.7896 6.127
+node a 0.375 5.0807 0.75 0.5 a solid ellipse black lightgrey
+node \"|edgelabel|\" 3.6248 3.7359 1.4416 0.5 \"|edgelabel|\" solid ellipse black lightgrey
+node b 4.0847 0.25 0.75 0.5 b solid ellipse black lightgrey
+node c 6.4146 5.877 0.75 0.5 c solid ellipse black lightgrey
+edge a \"|edgelabel|\" 4 0.69848 4.9468 1.2764 4.7076 2.4884 4.2061 3.157 3.9295 solid black
+edge \"|edgelabel|\" b 4 3.6586 3.4796 3.7438 2.8333 3.9668 1.1435 4.0514 0.502 solid black
+edge \"|edgelabel|\" c 4 3.9286 3.9691 4.4836 4.3951 5.6513 5.2912 6.1641 5.6848 solid black
+stop
+",
+        ),
+        (
+            "graph { layout=sfdp label_scheme=2 overlap=prism0 a -- \"|edgelabel|\" -- b; a -- c; c -- \"|edgelabel|\" }",
+            "graph 1 6.906 3.091
+node a 0.40937 0.25 0.75 0.5 a solid ellipse black lightgrey
+node \"|edgelabel|\" 3.1599 1.5492 1.4416 0.5 \"|edgelabel|\" solid ellipse black lightgrey
+node b 6.531 1.5564 0.75 0.5 b solid ellipse black lightgrey
+node c 0.375 2.841 0.75 0.5 c solid ellipse black lightgrey
+edge a \"|edgelabel|\" 4 0.71954 0.39651 1.2099 0.62811 2.1656 1.0796 2.7244 1.3435 solid black
+edge a c 4 0.40601 0.50315 0.39944 0.9985 0.38495 2.0907 0.37837 2.5868 solid black
+edge \"|edgelabel|\" b 4 3.8872 1.5507 4.5821 1.5522 5.6023 1.5544 6.15 1.5556 solid black
+edge c \"|edgelabel|\" 4 0.68905 2.6953 1.1869 2.4644 2.1587 2.0136 2.7239 1.7515 solid black
+stop
+",
+        ),
+        (
+            "graph { layout=sfdp label_scheme=4 a -- \"|edgelabel|\" -- b; \"|edgelabel|\" -- c; \"|edgelabel|\" -- d }",
+            "graph 1 8.1176 7.8549
+node a 0.375 4.1746 0.75 0.5 a solid ellipse black lightgrey
+node \"|edgelabel|\" 4.0721 3.9448 1.4416 0.5 \"|edgelabel|\" solid ellipse black lightgrey
+node b 7.7426 3.7497 0.75 0.5 b solid ellipse black lightgrey
+node c 4.2984 7.6049 0.75 0.5 c solid ellipse black lightgrey
+node d 3.8726 0.25 0.75 0.5 d solid ellipse black lightgrey
+edge a \"|edgelabel|\" 4 0.74985 4.1513 1.3602 4.1133 2.579 4.0376 3.3585 3.9892 solid black
+edge \"|edgelabel|\" b 4 4.7886 3.9067 5.5605 3.8657 6.7594 3.802 7.3651 3.7698 solid black
+edge \"|edgelabel|\" c 4 4.0877 4.1964 4.129 4.865 4.2413 6.681 4.2827 7.3516 solid black
+edge \"|edgelabel|\" d 4 4.0584 3.6909 4.022 3.0159 3.923 1.1827 3.8864 0.50574 solid black
+stop
+",
+        ),
+    ];
+    for (src, c) in cases {
+        let (out, err, ok) = run(&["-Tplain"], src);
+        assert!(ok && err.is_empty(), "{src}: {err}");
+        assert_eq!(out, c, "{src}");
+    }
+}
+
+/// `-Tplain` of `src`: exit 0, no panic, and no `nan` or `inf` in the drawing. For inputs where
+/// C 16.1.0 aborts or crashes, so there is no C output to compare with.
+fn plain_where_c_asserts(src: &str) -> String {
+    let (out, err, ok) = run(&["-Tplain"], src);
+    assert!(ok, "{src}: {err}");
+    assert!(!err.contains("panicked"), "{src}: {err}");
+    let lower = out.to_ascii_lowercase();
+    assert!(
+        !lower.contains("nan") && !lower.contains("inf"),
+        "{src}: {out}"
+    );
+    assert!(
+        out.contains("node ") && out.ends_with("stop\n"),
+        "{src}: {out}"
+    );
+    out
+}
+
+/// `-Tplain` position of node `name`.
+fn plain_xy(out: &str, name: &str) -> (f64, f64) {
+    let line = out
+        .lines()
+        .find(|l| l.starts_with("node ") && l.split_whitespace().nth(1) == Some(name))
+        .unwrap_or_else(|| panic!("missing {name} in {out}"));
+    let mut p = line
+        .split_whitespace()
+        .skip(2)
+        .map(|v| v.parse::<f64>().unwrap());
+    (p.next().unwrap(), p.next().unwrap())
+}
+
+// Issue #475. With `pack` and `newrank`, a user subgraph `_cc_<i>` with `cluster=true` is the
+// component `cccomps` makes, and a cluster under `compile_samerank`; C aborts in
+// `feasible_tree` (`ns.c:669`). The port draws what C draws for the same graph without
+// `newrank`.
+#[test]
+fn pack_newrank_cluster_named_cc_draws_where_c_asserts() {
+    for src in [
+        "graph G { pack=true; NR subgraph _cc_0 { cluster=true; } a -- z; c -- d; }",
+        "graph G { pack=true; NR subgraph _cc_1 { cluster=true; } a -- z; c -- d; }",
+        "graph G { pack=true; NR subgraph _cc_0 { cluster=true; } a -- z; }",
+        "graph G { packmode=array; NR subgraph _cc_0 { cluster=true; } a -- z; c -- d; e; }",
+        "digraph G { pack=true; NR subgraph _cc_0 { cluster=true; } a -> z -> y; c -> d; }",
+        "graph G { pack=true; NR subgraph _cc_0 { cluster=true; } a; }",
+    ] {
+        let out = plain_where_c_asserts(&src.replace("NR", "newrank=true;"));
+        let (without, _, _) = run(&["-Tplain"], &src.replace("NR", ""));
+        assert_eq!(out, without, "{src}");
+    }
+    // The subgraph already holds the only component's nodes: C segfaults, with or without
+    // `newrank`.
+    for src in [
+        "graph G { pack=true; newrank=true; subgraph _cc_0 { cluster=true; a; z } a -- z; }",
+        "graph G { pack=true; subgraph _cc_0 { cluster=true; z } a -- z; }",
+    ] {
+        plain_where_c_asserts(src);
+    }
+}
+
+// Issue #488. neato `mode=sgd` with two pins in one pack component and no path between them:
+// `dijkstra_sgd` returns fewer terms than `sgd` counted, and C asserts `offset == n_terms`
+// (`sgd.c:175`). The port keeps the terms the search produced; the pins stay where they are.
+#[test]
+fn sgd_unconnected_pins_in_one_component_draw_where_c_asserts() {
+    for src in [
+        "graph { layout=neato mode=sgd p [pos=\"0,0!\"] f [pos=\"1,0!\"] a -- f }",
+        "graph { layout=neato mode=sgd p [pos=\"0,0\" pin=true] f [pos=\"1,0!\"] a -- f }",
+        "graph { layout=neato mode=sgd p [pos=\"0,0!\"] f [pos=\"1,0!\"] a -- f; p -- x -- y }",
+        "graph { layout=neato mode=sgd pack=false p [pos=\"0,0!\"] f [pos=\"1,0!\"] a -- f }",
+        "graph { layout=neato mode=sgd p [pos=\"0,0!\"] f [pos=\"0,0!\"] a -- f }",
+    ] {
+        let out = plain_where_c_asserts(src);
+        let (p, f) = (plain_xy(&out, "p"), plain_xy(&out, "f"));
+        let dx = if src.contains("f [pos=\"1,0!\"]") {
+            1.0
+        } else {
+            0.0
+        };
+        assert!(
+            (f.0 - p.0 - dx).abs() < 1e-4 && (f.1 - p.1).abs() < 1e-4,
+            "{src}: {out}"
+        );
+    }
+}
+
+// Issue #489. fdp `overlap=portho` with a node about 182 inches tall: the Y separation of two
+// overlapping boxes passes 0xFFFF tenths of a point, and C asserts `delta <= 0xFFFF` in
+// `mkNConstraintG` (`constraint.c:242`). `ED_minlen` is an `int`; the port stores it.
+#[test]
+fn portho_separation_above_0xffff_draws_where_c_asserts() {
+    for src in [
+        "digraph { layout=fdp overlap=portho a [height=182] a -> b }",
+        "digraph { layout=fdp overlap=portho a [height=182] b [height=182] a -> b }",
+        "digraph { layout=fdp overlap=porthoyx a [height=1000] a -> b; a -> c; c -> d }",
+        "digraph { layout=sfdp overlap=portho a [height=182] a -> b }",
+        "digraph { layout=fdp overlap=portho sep=1000 a -> b }",
+    ] {
+        let out = plain_where_c_asserts(src);
+        // `node name x y width height`: no two boxes overlap.
+        let boxes: Vec<[f64; 4]> = out
+            .lines()
+            .filter(|l| l.starts_with("node "))
+            .map(|l| {
+                let v: Vec<f64> = l
+                    .split_whitespace()
+                    .skip(2)
+                    .take(4)
+                    .map(|v| v.parse().unwrap())
+                    .collect();
+                [v[0], v[1], v[2], v[3]]
+            })
+            .collect();
+        for (i, p) in boxes.iter().enumerate() {
+            for q in &boxes[i + 1..] {
+                assert!(
+                    (p[0] - q[0]).abs() >= (p[2] + q[2]) / 2.0 - 1e-2
+                        || (p[1] - q[1]).abs() >= (p[3] + q[3]) / 2.0 - 1e-2,
+                    "{src}: {out}"
+                );
+            }
+        }
+        // fdp separates these in y by more than 0xFFFF tenths of a point (91.02 inches); a
+        // separation cut to 16 bits leaves the largest gap at 91.02.
+        if src.contains("layout=fdp") {
+            let gap = boxes
+                .iter()
+                .flat_map(|p| boxes.iter().map(move |q| (p[1] - q[1]).abs()))
+                .fold(0.0, f64::max);
+            assert!(gap > f64::from(0xFFFF) / 720.0 + 0.1, "{src}: {out}");
+        }
+    }
+}
+
 /// Byte stdin. `run` takes `&str`. `run_bytes` takes non-UTF-8 arguments and a
 /// `&str` stdin, and is `#[cfg(unix)]`. Neither can feed the 0xFF fuzz.
 fn run_raw(args: &[&str], stdin: &[u8]) -> (String, String, bool) {
@@ -8417,6 +8611,28 @@ a -- m1; b -- m2; c -- m3; d -- c }
         out.contains("m3 -- m1\t[pos=\"83.797,51.424 80.429,48.095 76.858,44.566 73.484,41.231\"]"),
         "m3 -- m1 falls back to a straight line:\n{out}"
     );
+}
+
+/// Issue #490. dot `compound=true splines=curved`: the `lhead` spline of a back edge starts in
+/// the head cluster with no tail arrow, and C asserts `bez->sflag` (`compound.c:324`); with
+/// `dir=back`, `bez->eflag` (`compound.c:342`). Like C's own tail-cluster branch, the port
+/// keeps the original spline: C's drawing of the same graph without `lhead`. It used to draw
+/// the edge from (0, 0), the unset `sp`.
+#[test]
+fn compound_curved_lhead_without_arrow_keeps_the_spline_where_c_asserts() {
+    for dir in ["", "dir=back", "dir=none", "arrowhead=none"] {
+        for rankdir in ["", "rankdir=LR"] {
+            let src = format!(
+                "digraph {{ {rankdir} splines=curved compound=true subgraph cluster0 {{ n1 }} \
+                 n0 -> n1 [lhead=cluster0 {dir}] n1 -> n0 }}"
+            );
+            let (out, err, ok) = run(&["-Tplain"], &src);
+            assert!(ok && err.is_empty(), "{src}: {err}");
+            assert!(!out.to_ascii_lowercase().contains("nan"), "{src}: {out}");
+            let (without, _, _) = run(&["-Tplain"], &src.replace("lhead=cluster0", ""));
+            assert_eq!(out, without, "{src}");
+        }
+    }
 }
 
 /// A root graph label is made by `graph_init` (`lib/common/input.c:711`), before the

@@ -86,3 +86,119 @@ fn special_values() {
         );
     }
 }
+
+/// SplitMix64, a fixed-seed generator for the differential samples.
+struct SplitMix64(u64);
+
+impl SplitMix64 {
+    fn next(&mut self) -> u64 {
+        self.0 = self.0.wrapping_add(0x9e37_79b9_7f4a_7c15);
+        let mut z = self.0;
+        z = (z ^ (z >> 30)).wrapping_mul(0xbf58_476d_1ce4_e5b9);
+        z = (z ^ (z >> 27)).wrapping_mul(0x94d0_49bb_1331_11eb);
+        z ^ (z >> 31)
+    }
+}
+
+fn assert_fast_path(x: f64, y: f64) {
+    let got = pow(x, y);
+    let want = super::pow_general(x, y);
+    assert_eq!(
+        got.to_bits(),
+        want.to_bits(),
+        "pow({x:e} = {:#018x}, {y:e}) = {got:e}, general path {want:e}",
+        x.to_bits()
+    );
+}
+
+/// `x` for the differential samples: uniformly random bits, and the two regions where `x * x`
+/// overflows or underflows (`|x|` near `2^512` and `2^-537`), where the rounding is subtle.
+fn sample(rng: &mut SplitMix64) -> f64 {
+    let r = rng.next();
+    match r % 4 {
+        0 | 1 => f64::from_bits(rng.next()),
+        2 => f64::from_bits((rng.next() & 0x801f_ffff_ffff_ffff) | (0x5f0u64 << 52)),
+        _ => f64::from_bits((rng.next() & 0x801f_ffff_ffff_ffff) | (0x1d0u64 << 52)),
+    }
+}
+
+fn check_fast_paths(n: u64) {
+    let mut edge = vec![
+        0.0,
+        -0.0,
+        f64::INFINITY,
+        f64::NEG_INFINITY,
+        1.0,
+        -1.0,
+        2.0,
+        -2.0,
+        0.5,
+        f64::MAX,
+        -f64::MAX,
+        f64::MIN_POSITIVE,
+        -f64::MIN_POSITIVE,
+        f64::from_bits(1),
+        -f64::from_bits(1),
+        f64::from_bits(0x000f_ffff_ffff_ffff),
+        f64::EPSILON,
+        1.0 + f64::EPSILON,
+        1.0 - f64::EPSILON / 2.0,
+        // |x| = 2^512 and its neighbours: x * x overflows from 2^512 on.
+        f64::from_bits(0x5ff0_0000_0000_0000),
+        f64::from_bits(0x5fef_ffff_ffff_ffff),
+        f64::from_bits(0x5fe6_a09e_667f_3bcc),
+        f64::from_bits(0x5fe6_a09e_667f_3bcd),
+        // 2^-537 squares to 2^-1074, the smallest subnormal; 2^-538 squares to its half.
+        f64::from_bits(0x1e60_0000_0000_0000),
+        f64::from_bits(0x1e50_0000_0000_0000),
+        f64::from_bits(0x1e5f_ffff_ffff_ffff),
+        f64::from_bits(0x1e56_a09e_667f_3bcd),
+        f64::from_bits(0x1ff0_0000_0000_0000),
+        f64::from_bits(0x1fef_ffff_ffff_ffff),
+    ];
+    edge.extend(edge.clone().iter().map(|x| -x));
+    for &x in &edge {
+        for y in [1.0, 2.0] {
+            assert_fast_path(x, y);
+        }
+    }
+    let mut rng = SplitMix64(0x0532_0532_0532_0532);
+    for _ in 0..n {
+        let x = sample(&mut rng);
+        if x.is_nan() {
+            continue;
+        }
+        assert_fast_path(x, 2.0);
+        assert_fast_path(x, 1.0);
+    }
+}
+
+#[test]
+fn fast_paths_match_general() {
+    check_fast_paths(20_000);
+}
+
+/// The same with 100 million samples per exponent:
+/// `cargo test --release -p graphviz-pure-core -- --ignored fast_paths_match_general`.
+#[test]
+#[ignore = "slow; run in release"]
+fn fast_paths_match_general_many() {
+    check_fast_paths(100_000_000);
+}
+
+/// NaN `x` keeps the general path; the bits of a NaN result are left to the platform, so only
+/// NaN-ness is compared.
+#[test]
+fn nan_takes_general_path() {
+    for bits in [
+        0x7ff8_0000_0000_0000u64,
+        0xfff8_0000_0000_0001,
+        0x7ff0_0000_0000_0001,
+    ] {
+        let x = f64::from_bits(bits);
+        for y in [1.0, 2.0] {
+            assert!(pow(x, y).is_nan());
+            assert!(super::pow_general(x, y).is_nan());
+        }
+    }
+}

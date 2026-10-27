@@ -742,8 +742,30 @@ fn is_exact(x: f64, y: f64) -> bool {
 }
 
 /// Correctly rounded `x^y` (C `pow`), rounding to nearest.
+///
+/// Not in the C: `y == 2` and `y == 1` return before the general path, which gives the same
+/// bits. `x * x` is the correctly rounded square (one IEEE multiplication, overflow and the
+/// subnormal range included) and `x` is exactly `x^1`; CORE-MATH's `pow`, which C Graphviz runs
+/// too, is correctly rounded, so both agree with it, and its phase 1 already returns `x * x` and
+/// `s * x` for these exponents when it cannot decide the rounding. NaN `x` stays on the general
+/// path, which returns `x + x` (quieting a signaling NaN). sfdp's default `p = -1` makes every
+/// repulsive force a `pow(dist, 2)`. `tests::fast_paths_match_general` checks the bits.
+#[inline]
 #[must_use]
 pub fn pow(x: f64, y: f64) -> f64 {
+    if !x.is_nan() {
+        if y == 2.0 {
+            return x * x;
+        }
+        if y == 1.0 {
+            return x;
+        }
+    }
+    pow_general(x, y)
+}
+
+/// CORE-MATH's `cr_pow`: [`pow`] without its fast paths.
+fn pow_general(x: f64, y: f64) -> f64 {
     let mut s = 1.0;
     let x0 = x;
     let mut x = x;

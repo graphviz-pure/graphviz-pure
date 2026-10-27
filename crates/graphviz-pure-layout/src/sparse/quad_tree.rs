@@ -350,13 +350,14 @@ impl QuadTree {
             counts[0] += 1.0;
             let w1 = self.cells[q1].total_weight;
             let w2 = self.cells[q2].total_weight;
+            let denom = if p == -1.0 {
+                dist * dist
+            } else {
+                math::powf(dist, 1.0 - p)
+            };
             for (k1, k2) in s1.zip(s2) {
                 let d = self.average[k1] - self.average[k2];
-                let f = if p == -1.0 {
-                    w1 * w2 * kp * d / (dist * dist)
-                } else {
-                    w1 * w2 * kp * d / math::powf(dist, 1.0 - p)
-                };
+                let f = w1 * w2 * kp * d / denom;
                 self.force[k1] += f;
                 self.force[k2] -= f;
             }
@@ -386,13 +387,14 @@ impl QuadTree {
                     counts[1] += 1.0;
                     let dist = distance_cropped(x, dim, i1, i2);
                     let (c1, c2) = (&self.coords[span(pa, dim)], &self.coords[span(pb, dim)]);
+                    let denom = if p == -1.0 {
+                        dist * dist
+                    } else {
+                        math::powf(dist, 1.0 - p)
+                    };
                     for k in 0..dim {
                         let d = c1[k] - c2[k];
-                        let f = if p == -1.0 {
-                            wgt1 * wgt2 * kp * d / (dist * dist)
-                        } else {
-                            wgt1 * wgt2 * kp * d / math::powf(dist, 1.0 - p)
-                        };
+                        let f = wgt1 * wgt2 * kp * d / denom;
                         force[i1 * dim + k] += f;
                         force[i2 * dim + k] -= f;
                     }

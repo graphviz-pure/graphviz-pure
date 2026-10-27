@@ -1,0 +1,191 @@
+{
+ "version": "graphviz-pure - graphviz-pure version 0.2.2 (Rust port of Graphviz 16.1.0)",
+ "machine": {
+  "cpu": "AMD Ryzen 9 5900XT 16-Core Processor",
+  "cpus": 28,
+  "platform": "Linux-6.12.113+deb13-cloud-amd64-x86_64-with-glibc2.41",
+  "python": "3.13.5"
+ },
+ "runs": 5,
+ "c_dot": null,
+ "c_gvbindir": null,
+ "date": "2026-10-27T01:49:10+0000",
+ "results": [
+  {
+   "input": "tests/neato/hw3_vpsc_random200.gv",
+   "format": "svg",
+   "bytes": 3331,
+   "runs": 5,
+   "load_start": "2.85",
+   "port": {
+    "wall_median": 0.08637522099888884,
+    "wall_min": 0.08564469497650862,
+    "wall_max": 0.08828476199414581,
+    "cpu_median": 0.085712,
+    "rss_kib_max": 8064,
+    "exit": 0
+   },
+   "load_end": "2.85"
+  },
+  {
+   "input": "synth/neato_sparse_500.gv",
+   "format": "svg",
+   "bytes": 10033,
+   "runs": 5,
+   "load_start": "2.85",
+   "port": {
+    "wall_median": 0.7613026520120911,
+    "wall_min": 0.7533519270073157,
+    "wall_max": 0.7706723590090405,
+    "cpu_median": 0.7610469999999999,
+    "rss_kib_max": 10944,
+    "exit": 0
+   },
+   "load_end": "2.86"
+  },
+  {
+   "input": "synth/neato_sparse_1000.gv",
+   "format": "svg",
+   "bytes": 20430,
+   "runs": 3,
+   "load_start": "2.86",
+   "port": {
+    "wall_median": 3.4742985669872724,
+    "wall_min": 3.4678515309933573,
+    "wall_max": 3.481565682013752,
+    "cpu_median": 3.474021,
+    "rss_kib_max": 14364,
+    "exit": 0
+   },
+   "load_end": "2.96"
+  },
+  {
+   "input": "tests/fdp/wild_gv16_graphs_viewport_651d5b.gv",
+   "format": "svg",
+   "bytes": 37305,
+   "runs": 5,
+   "load_start": "2.96",
+   "port": {
+    "wall_median": 0.46101874599116854,
+    "wall_min": 0.4604376630159095,
+    "wall_max": 0.46401137197972275,
+    "cpu_median": 0.460344,
+    "rss_kib_max": 8924,
+    "exit": 0
+   },
+   "load_end": "2.96"
+  },
+  {
+   "input": "synth/fdp_sparse_500.gv",
+   "format": "svg",
+   "bytes": 10021,
+   "runs": 3,
+   "load_start": "2.96",
+   "port": {
+    "wall_median": 3.718382497987477,
+    "wall_min": 3.7075551059970167,
+    "wall_max": 3.7245355990016833,
+    "cpu_median": 3.718053,
+    "rss_kib_max": 12212,
+    "exit": 0
+   },
+   "load_end": "2.97"
+  },
+  {
+   "input": "tests/sfdp/gen_rnd2000.gv",
+   "format": "svg",
+   "bytes": 37714,
+   "runs": 5,
+   "load_start": "2.97",
+   "port": {
+    "wall_median": 0.8001140050182585,
+    "wall_min": 0.7874035089917015,
+    "wall_max": 0.8200653929961845,
+    "cpu_median": 0.799722,
+    "rss_kib_max": 21332,
+    "exit": 0
+   },
+   "load_end": "2.97"
+  },
+  {
+   "input": "synth/sfdp_sparse_5000.gv",
+   "format": "svg",
+   "bytes": 114688,
+   "runs": 3,
+   "load_start": "2.97",
+   "port": {
+    "wall_median": 2.321904024021933,
+    "wall_min": 2.299720056995284,
+    "wall_max": 2.3869081209995784,
+    "cpu_median": 2.32114,
+    "rss_kib_max": 46888,
+    "exit": 0
+   },
+   "load_end": "2.97"
+  },
+  {
+   "input": "tests/twopi/wild_gv16_undirected_ngk10_4_793340.gv",
+   "format": "svg",
+   "bytes": 1769,
+   "runs": 5,
+   "load_start": "2.97",
+   "port": {
+    "wall_median": 0.10829954000655562,
+    "wall_min": 0.10713095299433917,
+    "wall_max": 0.10986102098831907,
+    "cpu_median": 0.108013,
+    "rss_kib_max": 8356,
+    "exit": 0
+   },
+   "load_end": "2.97"
+  },
+  {
+   "input": "tests/circo/wild_gv16_linux_x86_dotsplines_dot1_3910e3.gv",
+   "format": "svg",
+   "bytes": 9221,
+   "runs": 5,
+   "load_start": "2.97",
+   "port": {
+    "wall_median": 0.08450437101419084,
+    "wall_min": 0.0825628989841789,
+    "wall_max": 0.08550471000489779,
+    "cpu_median": 0.084248,
+    "rss_kib_max": 7284,
+    "exit": 0
+   },
+   "load_end": "2.97"
+  },
+  {
+   "input": "tests/wild/gv16_graphs_b29_d1e4db.gv",
+   "format": "svg",
+   "bytes": 62931,
+   "runs": 5,
+   "load_start": "2.97",
+   "port": {
+    "wall_median": 0.9572444999939762,
+    "wall_min": 0.9277582979993895,
+    "wall_max": 0.9946902930096257,
+    "cpu_median": 0.956676,
+    "rss_kib_max": 20824,
+    "exit": 0
+   },
+   "load_end": "2.98"
+  },
+  {
+   "input": "synth/dot_dag_5000.gv",
+   "format": "svg",
+   "bytes": 136527,
+   "runs": 3,
+   "load_start": "2.98",
+   "port": {
+    "wall_median": 3.984067746991059,
+    "wall_min": 3.976255158020649,
+    "wall_max": 4.005540004000068,
+    "cpu_median": 3.983198,
+    "rss_kib_max": 74772,
+    "exit": 0
+   },
+   "load_end": "2.98"
+  }
+ ]
+}
