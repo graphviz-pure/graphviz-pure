@@ -362,6 +362,64 @@ only use, neato's `stress_majorization_kD_mkernel` accumulator, makes no differe
 corpus). The first Linux build lacked GTS, which changes neato's and sfdp's overlap removal; the
 Dockerfile now checks that GTS is configured.
 
+### Linux x86-64: the reference corpus reproduces with `-mfma`
+
+On x86-64 the same Dockerfile builds with `CFLAGS='-O2 -mfma'`. clang (14 in the image, 19
+natively) defaults to `-ffp-contract=on` on x86-64 as on arm64, but fuses only for a target with
+an FMA instruction, so without `-mfma` C on x86-64 fuses nothing (see "Fused multiply-adds"
+below). With it, the port's math and Apple's `qsort`, `rand` and `srand` (`apple-libc`), C's
+`-Tsvg` (`gv-diff e2e --generate --runs 5`) equals `e2e.libm-matched.json` on 2588 of its 2595
+stable inputs, against 2093 without `-mfma`:
+
+| corpus | stable inputs | without `-mfma` | with `-mfma` |
+|---|---:|---:|---:|
+| main | 566 | 557 | 565 |
+| neato | 442 | 284 | **442** |
+| sfdp | 296 | 137 | 295 |
+| fdp | 386 | 216 | 383 |
+| circo | 282 | 279 | 281 |
+| twopi | 281 | 281 | **281** |
+| osage | 180 | 178 | 179 |
+| patchwork | 141 | 141 | **141** |
+| render | 21 | 20 | **21** |
+| **total** | **2595** | **2093** | **2588** |
+
+The `-Tdot` references (`scripts/gen-golden.sh`) are identical for 2575 of 2585 files, all of
+them apart from the 6 inputs unstable on macOS too and 4 of the 7 below. In the render corpus
+(`scripts/gen-render-golden.sh`) `laid/`, `dot/` and `json0/` are identical; `svg/`, `xdot/`
+and `json/` differ only on the NaN input below, and `plain/` and `plain-ext/` also on 12
+Latin-1 or `Symbol` inputs whose label C prints from freed memory (`canon` in
+`lib/common/output.c`). The render ratchet already skips 10 of those as unstable; on Linux
+`gv16_graphs_Latin1_cd0c3d` and `gv16_graphs_b60_bf5b3a` print garbage too.
+
+The 7 `-Tsvg` inputs that still differ:
+
+- **heap addresses** (3, fdp: `wild_gv16_graphs_b15_8c212e`, `b51_33bcb0`, `badvoro_2e8cb8`):
+  fdp orients each edge of its derived graph by comparing node addresses
+  (`lib/fdpgen/layout.c:466`, #34), and glibc's `malloc` returns them in another order than
+  macOS's, which the port models (`NodeHeap`). On `badvoro` C applies the attraction of
+  `washdc80 -- washdc82` from the other end in the first iteration, so `xdelta` changes sign
+  and the fused `DISP += xdelta * force` rounds differently. C's result changes with
+  `GLIBC_TUNABLES=glibc.malloc.tcache_count=0`.
+- **NaN sign** (1, `main/fuzz_cylinder_diagonals_nan`): x86-64's default NaN has the sign bit
+  set, arm64's does not, and glibc prints it (`-nan`, Apple's libc `nan`).
+- **NaN to `int`** (1, `osage/fuzz_pack_degenerate_box`): `computeStep` (`lib/pack/pack.c`)
+  converts a NaN root with `(int)`, which is undefined. x86-64 gives `INT_MIN`, so `putRects`
+  returns NULL and osage dereferences it (segfault); arm64, like Rust's `as`, gives 0.
+- **C run to run** (1, `sfdp/wild_gv16_linux_x86_neatosplines_neato_c2c6f6`): GTS's edge
+  order, 1 run in 10 differs (`docs/porting/sfdp.md`); the other runs equal the reference.
+- **time** (1, `circo/wild_gv16_graphs_badvoro_2e8cb8`): C takes 79 s on the x86-64 machine
+  measured, over `gv-diff`'s 60 s limit; it gave the reference's output in 10 of 10 runs.
+
+`long double` makes no difference here either: building with `APPLE_LONG_DOUBLE=1` or without
+gives the same neato results (x86-64's `long double` is 80-bit).
+
+So C on Linux x86-64 can make the references of a new corpus input, with three exceptions that
+still need the macOS set-up: fdp inputs (heap order, 3 of 386 differ), an input whose output
+prints a NaN or whose C converts a NaN to an integer, and the stock-C files (`e2e.json`,
+`e2e-baseline.portable.json`, `structure.json`), which need Apple's libm.
+`scripts/fma-sites.sh` needs Homebrew's dylibs.
+
 ## Fused multiply-adds: the reference build decides
 
 The math library is not the only place where two builds of the same C compute different bits.
@@ -426,12 +484,14 @@ GTS and the port use only the sign of `orient2d` and `incircle`, and the predica
 sign exact however the fast stage rounds.
 
 **Other C builds disagree with the reference.** C on x86-64 Linux has no fused operations at
-all. The Linux C oracle in `scripts/c-oracle-linux/` (Debian arm64) builds Graphviz with clang,
-which contracts the same expressions as on macOS: contraction is decided per expression by the
-compiler's front end, not by the optimisation level. It links Debian's GTS, which is compiled
-differently (in `libgts-0.7.so.5` of Debian bookworm arm64, `orient2d` has no fused
-instruction, 8 in Homebrew's, and `incircle` has 7, 134 in Homebrew's), but since only the
-predicates' signs are used, that cannot explain the Linux differences above. None of these
+all unless it is built with `-mfma`, as `scripts/c-oracle-linux/` now does on x86-64 (see "Linux
+x86-64" above; for sfdp, `docs/porting/sfdp.md`, "Comparing on Linux x86-64"). On Debian arm64
+the same oracle builds Graphviz with clang, which contracts the same expressions as on macOS:
+contraction is decided per expression by the compiler's front end, not by the optimisation
+level. It links Debian's GTS, which is compiled differently (in `libgts-0.7.so.5` of Debian
+bookworm arm64, `orient2d` has no fused instruction, 8 in Homebrew's, and `incircle` has 7, 134
+in Homebrew's), but since only the predicates' signs are used, that cannot explain the Linux
+differences above. None of these
 builds is the reference; the port follows the macOS arm64 build.
 
 ## Provenance and licences

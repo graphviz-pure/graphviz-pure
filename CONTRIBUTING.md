@@ -37,9 +37,15 @@ fails if the layout or geom crates gain an `unwrap`, `expect`, index or integer-
 
 ## Making a change
 
-- **Follow the C.** The port mirrors Graphviz's C sources function by function. Name the C
-  function and file you are porting or fixing (`lib/dotgen/position.c:make_lrvn`) in comments
-  and in the pull request, and keep the structure recognisable.
+- **Name the C, then restructure freely.** Every function, type or module that implements C
+  carries a provenance line naming the C function(s) and file, such as
+  `/// C: lib/dotgen/position.c:make_lrvn`, and keeps it through merges, splits and renames.
+  Name them in the pull request too. Beyond that, the structure is free whenever every ratchet
+  passes (docs/roadmap/post-1.0.md).
+- **Except the C-mirror modules**, which stay function for function with C because their exact
+  operation order is the output, or because upstream changes them often: `core::math`, `cdt.rs`
+  (the splay-tree order), the network-simplex and mincross tie-breaking cores, and `pathplan`.
+  The list is revised when an upstream Graphviz release shows where porting hurts.
 - **Prove it.** A fix for a difference from C comes with the input that showed it, ideally added
   to a corpus under `tests/`, and the ratchet baselines refreshed if more files now match
   (`scripts/update-baselines.sh`). A change must not
