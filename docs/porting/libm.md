@@ -485,9 +485,9 @@ sign exact however the fast stage rounds.
 
 **Other C builds disagree with the reference.** C on x86-64 Linux has no fused operations at
 all unless it is built with `-mfma`, as `scripts/c-oracle-linux/` now does on x86-64 (see "Linux
-x86-64" above). The Linux C oracle in `scripts/c-oracle-linux/` (Debian arm64) builds Graphviz with clang,
-which contracts the same expressions as on macOS: contraction is decided per expression by the
-compiler's front end, not by the optimisation level. It links Debian's GTS, which is compiled
+x86-64" above). On Debian arm64 the same oracle builds Graphviz with clang, which contracts the
+same expressions as on macOS: contraction is decided per expression by the compiler's front
+end, not by the optimisation level. It links Debian's GTS, which is compiled
 differently (in `libgts-0.7.so.5` of Debian bookworm arm64, `orient2d` has no fused
 instruction, 8 in Homebrew's, and `incircle` has 7, 134 in Homebrew's), but since only the
 predicates' signs are used, that cannot explain the Linux differences above. None of these
