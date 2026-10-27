@@ -1,0 +1,7 @@
+# The perf ratchet's cases beyond sets/quick.tsv (scripts/bench/ratchet.py): one line per case,
+# `input format flags...`. laid/PATH is PATH laid out by the build under test (-Tdot), so the
+# -Knop2 cases parse that layout and write it without laying it out again.
+# input                                                       format  flags
+tests/wild/gv16_graphs_b143_5416de.gv                         plain
+laid/tests/wild/gv16_graphs_b29_d1e4db.gv                     canon   -Knop2
+laid/tests/wild/gv16_graphs_b29_d1e4db.gv                     svg     -Knop2

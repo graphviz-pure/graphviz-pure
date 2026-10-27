@@ -39,5 +39,10 @@ graphviz-pure-parser.workspace = true
 graphviz-pure.workspace = true
 graphviz-pure-raster.workspace = true
 
+# The perf ratchet's heap counts (examples/heap_counts.rs, scripts/bench/ratchet.py). Only the
+# example uses it: the shipped binary keeps the system allocator.
+[dev-dependencies]
+dhat = "0.3"
+
 [lints]
 workspace = true
