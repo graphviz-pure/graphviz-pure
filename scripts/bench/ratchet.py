@@ -40,8 +40,10 @@ SETS = ["scripts/bench/sets/quick.tsv", "scripts/bench/sets/ratchet-extra.tsv"]
 # (and the allocations that hold them) are the same on every machine.
 SYNTH_DIR = "target/bench/synth"
 LAID_DIR = f"{TARGET_DIR}/laid"
-# The release profile of .cargo/config.toml, pinned so that a change to the shipped profile
-# moves the ratchet only when it is copied here (with --update).
+# The workspace release profile (Cargo.toml), pinned so that a change to the shipped profile
+# moves the ratchet only when it is copied here (with --update). These variables do not reach
+# `[profile.release.package.*]` sections; the CLI's `strip = true` there changes no executed
+# instruction and no allocation.
 PROFILE = {
     "CARGO_PROFILE_RELEASE_OPT_LEVEL": "3",
     "CARGO_PROFILE_RELEASE_LTO": "thin",
@@ -174,9 +176,14 @@ def pct(new, old):
     return f"{(new - old) / old * 100:+.2f}%" if old else ""
 
 
-def check(base, new, accept):
-    """The Markdown report and the list of regressions."""
-    failures, improved = [], []
+def check(base, new, accept, partial=False):
+    """The Markdown report, the regressions (`--accept` passes them) and the hard failures.
+
+    `partial` (a `--only` run) does not count the baseline's other cases as missing.
+    """
+    # `hard` failures (a crash, a case missing from either side) are not regressions that
+    # `--accept` can let through.
+    failures, hard, improved = [], [], []
     rows = []
     bcases = base.get("cases", {})
     ref = base.get("reference", {})
@@ -184,13 +191,15 @@ def check(base, new, accept):
     for cid, n in new["cases"].items():
         b = bcases.get(cid)
         if b is None:
+            hard.append(f"`{cid}`: not in the baseline (run `--update` and commit it)")
             if n.get("exit", 0) != 0:
-                failures.append(f"`{cid}`: exit status {n['exit']}")
+                hard.append(f"`{cid}`: exit status {n['exit']}")
             rows.append(f"| `{cid}` | {n['instructions']:,} | new | {n['heap_blocks']:,} | new | "
                         f"{n['heap_peak_bytes']:,} | new | {n['heap_bytes']:,} | | |")
             continue
         notes = []
         if n.get("exit", 0) != 0:
+            hard.append(f"`{cid}`: exit status {n['exit']}")
             notes.append(f"exit status {n['exit']}")
         if n["heap_blocks"] > b["heap_blocks"]:
             notes.append("allocations")
@@ -215,11 +224,17 @@ def check(base, new, accept):
             f"| {n['heap_peak_bytes']:,} | {pct(n['heap_peak_bytes'], b['heap_peak_bytes'])} "
             f"| {n['heap_bytes']:,} | {vs_c} | {vs_ref} |")
     missing = sorted(set(bcases) - set(new["cases"]))
+    if not partial:
+        hard += [f"`{m}`: in the baseline but not measured (run `--update` and commit it)"
+                 for m in missing]
     out = ["## Perf ratchet", ""]
+    if hard:
+        out += ["Failed, not acceptable with `perf-regression-accepted`:", ""]
+        out += [f"- {f}" for f in hard] + [""]
     if failures:
         verdict = "accepted (`perf-regression-accepted`)" if accept else "**failed**"
         out += [f"Regressions, {verdict}:", ""] + [f"- {f}" for f in failures] + [""]
-    else:
+    elif not hard:
         out += ["No regression.", ""]
     if improved:
         out += [f"Improved: {len(improved)} case(s). Lock them in: `python3 -I "
@@ -238,7 +253,7 @@ def check(base, new, accept):
         w, bw = new["wasm_bytes"], base.get("wasm_bytes")
         out += ["", f"graphviz_pure_wasm.wasm (release, before wasm-bindgen): {w:,} B"
                 + (f" ({pct(w, bw)} against the baseline's {bw:,} B)" if bw else "")]
-    return "\n".join(out) + "\n", failures
+    return "\n".join(out) + "\n", failures, hard
 
 
 def c_reference(args, base):
@@ -303,13 +318,16 @@ def main():
         out = pathlib.Path(args.out)
         out.parent.mkdir(parents=True, exist_ok=True)
         out.write_text(json.dumps(new, indent=1, sort_keys=True) + "\n")
-    report, failures = check(base, new, args.accept)
+    report, failures, hard = check(base, new, args.accept, partial=bool(args.only))
     print(report)
     summary = os.environ.get("GITHUB_STEP_SUMMARY")
     if summary:
         with open(summary, "a") as f:
             f.write(report)
+    crashed = [cid for cid, row in new["cases"].items() if row.get("exit", 0) != 0]
     if args.update:
+        if crashed:
+            sys.exit(f"ratchet: not updating the baseline, a case failed: {', '.join(crashed)}")
         keep = {"heap_blocks", "heap_bytes", "heap_peak_bytes", "instructions"}
         rows = {cid: {k: v for k, v in row.items() if k in keep}
                 for cid, row in new["cases"].items()}
@@ -324,7 +342,7 @@ def main():
         bpath.write_text(json.dumps(base, indent=1, sort_keys=True) + "\n")
         print(f"wrote {bpath}", file=sys.stderr)
         return
-    if failures and not args.accept:
+    if hard or (failures and not args.accept):
         sys.exit(1)
 
 

@@ -24,7 +24,9 @@ on:
 permissions:
   contents: read
 
-# A newer push to the same pull request cancels the older run; master runs all complete. Adding
+# A newer push to the same pull request cancels the older run. Master runs are not cancelled
+# once they start, but GitHub keeps one pending run per group, so a third push while one runs
+# and one waits replaces the waiting one (that commit is not measured; the next one is). Adding
 # or removing another label starts a run that skips its job: it gets a group of its own, so it
 # does not cancel the measurement in progress.
 concurrency:
@@ -43,8 +45,13 @@ env:
 
 jobs:
   ratchet:
-    name: Instructions, allocations and peak heap
-    # Another label being added or removed changes nothing here.
+    # Another label being added or removed changes nothing here. Its skipped job gets another
+    # name: GitHub shows the newest check of each name, and a skipped check named like the
+    # measurement would hide a failed one.
+    name: >-
+      ${{ ((github.event.action != 'labeled' && github.event.action != 'unlabeled')
+      || github.event.label.name == 'perf-regression-accepted')
+      && 'Instructions, allocations and peak heap' || 'Perf ratchet (label change, not measured)' }}
     if: >-
       (github.event.action != 'labeled' && github.event.action != 'unlabeled')
       || github.event.label.name == 'perf-regression-accepted'

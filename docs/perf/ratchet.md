@@ -78,9 +78,13 @@ hotspot 1 of the baseline). The ×C ratios are a headline, not a gate, and they 
 ratios: dot is faster than C in wall time on the baseline's gnu build but executes more
 instructions here.
 
-A case that gets better passes; lock the gain in by running `--update` (from the pull request's
-CI artifact, or locally) and committing the baseline in the same pull request, as with
-`scripts/panic-sites.sh --update`. A pull request that has to make a case worse carries the
+A case that gets better passes; lock the gain in by running `--update --from` the pull request's
+CI artifact (`perf-ratchet`) and committing the baseline in the same pull request, as with
+`scripts/panic-sites.sh --update`. Take instruction counts from CI only: allocations and peak
+heap are the same on every machine, but a local Valgrind and CPU count up to 3% differently
+from the runner's on the dot cases, enough to fail the 2% gate there. A case missing from the
+baseline, a baseline case that was not measured, and a case whose command fails are failures
+that the label below does not accept. A pull request that has to make a case worse carries the
 `perf-regression-accepted` label and says why in its description; the job then reports the
 regressions and passes, and the pull request refreshes the baseline with `--update`.
 
