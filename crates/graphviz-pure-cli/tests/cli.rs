@@ -8419,6 +8419,28 @@ a -- m1; b -- m2; c -- m3; d -- c }
     );
 }
 
+/// Issue #490. dot `compound=true splines=curved`: the `lhead` spline of a back edge starts in
+/// the head cluster with no tail arrow, and C asserts `bez->sflag` (`compound.c:324`); with
+/// `dir=back`, `bez->eflag` (`compound.c:342`). Like C's own tail-cluster branch, the port
+/// keeps the original spline: C's drawing of the same graph without `lhead`. It used to draw
+/// the edge from (0, 0), the unset `sp`.
+#[test]
+fn compound_curved_lhead_without_arrow_keeps_the_spline_where_c_asserts() {
+    for dir in ["", "dir=back", "dir=none", "arrowhead=none"] {
+        for rankdir in ["", "rankdir=LR"] {
+            let src = format!(
+                "digraph {{ {rankdir} splines=curved compound=true subgraph cluster0 {{ n1 }} \
+                 n0 -> n1 [lhead=cluster0 {dir}] n1 -> n0 }}"
+            );
+            let (out, err, ok) = run(&["-Tplain"], &src);
+            assert!(ok && err.is_empty(), "{src}: {err}");
+            assert!(!out.to_ascii_lowercase().contains("nan"), "{src}: {out}");
+            let (without, _, _) = run(&["-Tplain"], &src.replace("lhead=cluster0", ""));
+            assert_eq!(out, without, "{src}");
+        }
+    }
+}
+
 /// A root graph label is made by `graph_init` (`lib/common/input.c:711`), before the
 /// engine's node and edge labels, so its diagnostics come first.
 #[test]
