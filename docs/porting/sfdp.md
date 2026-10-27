@@ -90,12 +90,14 @@ on x86-64 Linux reproduces it for sfdp only with all three of:
 - Apple's `rand`, `srand` and `qsort`: `graphviz-pure-portable-libm` built
   with `--features apple-libc` (glibc's `rand` is another generator).
 
-With all three, C matches 296 of the 297 `tests/golden/sfdp` goldens
-(the stock x86-64 build with the port's math and Apple's libc matches 44
-of the first 120). The other is
-`wild_gv16_linux_x86_neatosplines_neato1_448ced`. GTS's edge order still
-varies from run to run on Linux, so the chaotic penalty cases above
-cannot be compared there.
+With all three, C's `-Tdot` reproduces all 297 `tests/golden/sfdp`
+goldens (the stock x86-64 build with the port's math and Apple's libc:
+136), two of them only in some runs:
+`wild_gv16_linux_x86_neatosplines_neato1_448ced` and
+`wild_gv16_linux_x86_neatosplines_neato_c2c6f6` equal their golden in 6
+and 7 of 10 runs, so one run matches 295 to 297. GTS's edge order varies
+from run to run on Linux, which is also why the chaotic penalty cases
+above cannot be compared there.
 
 Floating point follows clang's `-ffp-contract=on` on arm64 as in the neato
 port: `a*b + c` is `fma(a, b, c)` (`mul_add`), `c - a*b` is `fma(-a, b, c)`,
