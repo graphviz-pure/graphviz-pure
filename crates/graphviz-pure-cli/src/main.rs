@@ -13,12 +13,13 @@ use std::fs;
 use std::io::{self, Read, Write};
 use std::process::ExitCode;
 
-/// `gvc->common.info`: `"<name> version <version> (<build>)"`.
+/// `gvc->common.info`: `"<name> version <version> (<build>)"`. The path to `env!` keeps it
+/// apart from the `std::env` import when examples/heap_counts.rs includes this file.
 macro_rules! version_info {
     () => {
         concat!(
             "graphviz-pure version ",
-            env!("CARGO_PKG_VERSION"),
+            ::core::env!("CARGO_PKG_VERSION"),
             " (Rust port of Graphviz 16.1.0)"
         )
     };

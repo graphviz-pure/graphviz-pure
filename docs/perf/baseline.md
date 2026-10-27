@@ -382,8 +382,9 @@ fn main() -> std::process::ExitCode {
 
 ## A CI perf ratchet (proposal)
 
-Not added: it would be a workflow change, which is maintainer-only. Options, from most to least
-robust on shared GitHub runners:
+Since added as [ratchet.md](ratchet.md) (#530): options 1 and 2 below, with Callgrind for the
+instruction counts and dhat for the allocations. The proposal as written, with options from most
+to least robust on shared GitHub runners:
 
 1. **Allocation counts** for `sets/quick.tsv`. They are deterministic, so the ratchet can be
    exact: fail when any count goes up, and refresh the committed counts when they go down.
