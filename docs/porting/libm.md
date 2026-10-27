@@ -426,7 +426,9 @@ GTS and the port use only the sign of `orient2d` and `incircle`, and the predica
 sign exact however the fast stage rounds.
 
 **Other C builds disagree with the reference.** C on x86-64 Linux has no fused operations at
-all. The Linux C oracle in `scripts/c-oracle-linux/` (Debian arm64) builds Graphviz with clang,
+all, unless it is built with `-mfma`, which makes clang contract as it does on arm64. Such a
+build, with the port's math functions and Apple's libc, reproduces the sfdp goldens
+(`docs/porting/sfdp.md`, "Comparing on Linux x86-64"). The Linux C oracle in `scripts/c-oracle-linux/` (Debian arm64) builds Graphviz with clang,
 which contracts the same expressions as on macOS: contraction is decided per expression by the
 compiler's front end, not by the optimisation level. It links Debian's GTS, which is compiled
 differently (in `libgts-0.7.so.5` of Debian bookworm arm64, `orient2d` has no fused

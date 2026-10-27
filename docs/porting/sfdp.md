@@ -42,7 +42,7 @@ octree, `quadtree=fast` with 12000 nodes, 7 packed components of 143 nodes,
 
 - `splines=ortho`: routed by `lib/ortho` (see `docs/porting/neato.md`);
   `overlap=ortho*` and `overlap=vpsc` are ported (opus5.5/neato-gaps).
-- `label_scheme=4` with `overlap=false` (#494): the penalty iteration is
+- `label_scheme=4` with `overlap=false`: the penalty iteration is
   chaotic (C itself runs ~180 tries; scheme 2 diverges to 1e142 in C). C's
   Delaunay edges come from GTS's pointer-keyed hash tables, so the row order
   of the triangulation matrix (and therefore summation order in the CG
@@ -62,6 +62,40 @@ octree, `quadtree=fast` with 12000 nodes, 7 packed components of 143 nodes,
   face hash (`src/surface.c`), and within one run GTS returns five
   different orders or orientations for the same three points. Unlike
   `smoothing=rng`, C's own result here is stable run to run.
+- A label with three or more neighbours (#494, #496) is not a separate
+  gap. Without the penalty iteration (default `overlap`, `prism0`) the port
+  is byte-identical to C, multilevel coarsening of the 4-node graph
+  included, and with `overlap=false` it enters the first overlap-removal
+  try with C's exact coordinates. The ulp drift and the scheme-4 offset
+  reported there came from C builds that are not the reference (x86-64
+  without fused multiply-adds, stock libm; see "Comparing on Linux x86-64"
+  below). From try 1 on, C's own result changes from run to run: on Linux
+  `delaunay_tri` returns 4 different edge orders for the same 4 points
+  across 40 runs, and each order gives a different try-1 smoothing. Replaying C's
+  edge lists, the port matches C bit for bit for tries 0–174. At try 175
+  the coordinates are about 1e76, the in-circle determinant against GTS's
+  enclosing triangle (100 times wider) overflows, and GTS's flip-based
+  insertion and the port's Bowyer–Watson then disagree on the edge set
+  (5 and 6 edges). Like #493, the result depends on GTS's internal order
+  and is not reproducible from the points.
+
+### Comparing on Linux x86-64
+
+The reference build is macOS arm64 (`docs/porting/libm.md`). A C build
+on x86-64 Linux reproduces it for sfdp only with all three of:
+
+- fused multiply-adds: `CFLAGS='-O2 -mfma'`. clang contracts the same
+  expressions as on arm64, while the baseline x86-64 build fuses nothing;
+- the port's math functions: `scripts/dot-portable-libm.sh`;
+- Apple's `rand`, `srand` and `qsort`: `graphviz-pure-portable-libm` built
+  with `--features apple-libc` (glibc's `rand` is another generator).
+
+With all three, C matches 296 of the 297 `tests/golden/sfdp` goldens
+(the stock x86-64 build with the port's math and Apple's libc matches 44
+of the first 120). The other is
+`wild_gv16_linux_x86_neatosplines_neato1_448ced`. GTS's edge order still
+varies from run to run on Linux, so the chaotic penalty cases above
+cannot be compared there.
 
 Floating point follows clang's `-ffp-contract=on` on arm64 as in the neato
 port: `a*b + c` is `fma(a, b, c)` (`mul_add`), `c - a*b` is `fma(-a, b, c)`,
