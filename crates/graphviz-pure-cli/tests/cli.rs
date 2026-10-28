@@ -1540,6 +1540,57 @@ fn plain_label_field_is_empty_where_c_reads_freed_memory() {
     );
 }
 
+// Issue #541: C's output.c:canon uses the root string dictionary. Looking up every
+// label by scanning the graph makes plain and plain-ext quadratic. Keep a generous
+// budget for the linear writer on 20,000 labelled nodes in small osage clusters.
+#[test]
+fn plain_many_labels_finish_within_budget() {
+    const NODES: usize = 20_000;
+    const BUDGET: std::time::Duration = std::time::Duration::from_secs(5);
+    let dir = tmp("issue541-plain");
+    std::fs::create_dir_all(&dir).unwrap();
+    let input = dir.join("nodes.gv");
+    let output = dir.join("nodes.plain");
+    let mut src = String::from("graph { layout=osage;\n");
+    for cluster in 0..NODES / 20 {
+        src.push_str(&format!("subgraph cluster_{cluster} {{\n"));
+        for node in cluster * 20..(cluster + 1) * 20 {
+            src.push_str(&format!("n{node} [width=0.5];\n"));
+        }
+        src.push_str("}\n");
+    }
+    src.push_str("}\n");
+    std::fs::write(&input, src).unwrap();
+    for format in ["-Tplain", "-Tplain-ext"] {
+        // A file avoids filling a pipe while waiting for the child to finish.
+        let mut child = Command::new(env!("CARGO_BIN_EXE_graphviz-pure"))
+            .arg(format)
+            .arg(&input)
+            .stdout(std::fs::File::create(&output).unwrap())
+            .stderr(Stdio::piped())
+            .spawn()
+            .unwrap();
+        let deadline = std::time::Instant::now() + BUDGET;
+        while child.try_wait().unwrap().is_none() {
+            if std::time::Instant::now() > deadline {
+                child.kill().unwrap();
+                child.wait().unwrap();
+                panic!("{format} exceeded {BUDGET:?} for {NODES} labels (#541)");
+            }
+            std::thread::sleep(std::time::Duration::from_millis(20));
+        }
+        let result = child.wait_with_output().unwrap();
+        assert!(result.status.success(), "{:?}", result.stderr);
+        let text = std::fs::read_to_string(&output).unwrap();
+        assert_eq!(
+            text.lines().filter(|l| l.starts_with("node ")).count(),
+            NODES
+        );
+        assert!(text.ends_with("stop\n"));
+    }
+    std::fs::remove_dir_all(dir).unwrap();
+}
+
 // Issue #305: circo names its derived nodes in a root graph of its own (`makeDerivedNode`),
 // whose dictionary has no HTML strings, so `<G>` and `G` are one derived node there. The last of
 // them gets the position; `G` keeps its initial one, and its out-edge `G -- a` is not in the

@@ -6,7 +6,7 @@ use super::num::fmt_g;
 use super::{y_dir, y_offset};
 use graphviz_pure_core::{Graph, Point, math};
 use graphviz_pure_geom::shapes::{RecordField, ShapeKind};
-use std::collections::BTreeSet;
+use std::collections::{BTreeSet, HashSet};
 use std::fmt::Write;
 
 fn g5(v: f64) -> String {
@@ -272,35 +272,62 @@ pub(crate) fn propagate_inherited(g: &mut Graph, orig: &Graph, explicit: &[BTree
     }
 }
 
-/// Whether the root graph's string dictionary holds `s` as a plain string (not an HTML one):
-/// a name, an attribute name or a plain attribute value.
-fn root_holds_plain(g: &Graph, s: &str) -> bool {
-    let in_map = |m: &graphviz_pure_core::AttrMap| {
-        m.iter().any(|(k, v)| k == s || (v == s && !m.is_html(k)))
-    };
-    (!g.empty_name && g.name == s)
-        || in_map(&g.graph_attrs)
-        || in_map(&g.node_defaults)
-        || in_map(&g.edge_defaults)
-        || g.subgraphs.iter().any(|sg| {
-            (!sg.html_name && sg.name == s)
-                || in_map(&sg.graph_attrs)
-                || in_map(&sg.node_defaults)
-                || in_map(&sg.edge_defaults)
-        })
-        // fdp's cluster nodes (`__0:cluster_x`) are gone again after undoClusterEdges
-        || g.nodes.iter().any(|n| {
-            !n.layout.clust_node
-                && ((!n.html_name && n.name == s) || in_map(&n.attrs))
-        })
-        || g.edges
-            .iter()
-            .any(|e| (!e.key_html && e.key.as_deref() == Some(s)) || in_map(&e.attrs))
-        || g.dicts.iter().any(|d| {
-            [&d.graph, &d.node, &d.edge]
-                .iter()
-                .any(|m| m.iter().any(|(k, sym)| k == s || sym.defval == s))
-        })
+/// The plain strings (not HTML ones) the root graph's string dictionary holds: a name, an
+/// attribute name or a plain attribute value. C answers this with one hash lookup
+/// (C: lib/common/output.c:canon, lib/cgraph/refstr.c:agstrdup). Build the set once per
+/// graph so label lookups take expected constant time. The keys borrow the graph strings;
+/// the set is never iterated to write output.
+fn plain_strings(g: &Graph) -> HashSet<&str> {
+    fn add_map<'g>(set: &mut HashSet<&'g str>, m: &'g graphviz_pure_core::AttrMap) {
+        for (k, v) in m.iter() {
+            set.insert(k.as_str());
+            if !m.is_html(k) {
+                set.insert(v.as_str());
+            }
+        }
+    }
+    let mut set: HashSet<&str> = HashSet::new();
+    if !g.empty_name {
+        set.insert(g.name.as_str());
+    }
+    add_map(&mut set, &g.graph_attrs);
+    add_map(&mut set, &g.node_defaults);
+    add_map(&mut set, &g.edge_defaults);
+    for sg in &g.subgraphs {
+        if !sg.html_name {
+            set.insert(sg.name.as_str());
+        }
+        add_map(&mut set, &sg.graph_attrs);
+        add_map(&mut set, &sg.node_defaults);
+        add_map(&mut set, &sg.edge_defaults);
+    }
+    // fdp's cluster nodes (`__0:cluster_x`) are gone again after undoClusterEdges
+    for n in &g.nodes {
+        if n.layout.clust_node {
+            continue;
+        }
+        if !n.html_name {
+            set.insert(n.name.as_str());
+        }
+        add_map(&mut set, &n.attrs);
+    }
+    for e in &g.edges {
+        if !e.key_html
+            && let Some(k) = e.key.as_deref()
+        {
+            set.insert(k);
+        }
+        add_map(&mut set, &e.attrs);
+    }
+    for d in &g.dicts {
+        for m in [&d.graph, &d.node, &d.edge] {
+            for (k, sym) in m {
+                set.insert(k.as_str());
+                set.insert(sym.defval.as_str());
+            }
+        }
+    }
+    set
 }
 
 /// `canon` in `output.c`, for the text of an edge label, of a node's non-HTML label, or of the
@@ -311,12 +338,9 @@ fn root_holds_plain(g: &Graph, s: &str) -> bool {
 /// from run to run or nothing; the port writes the empty field. An HTML edge label whose text
 /// is not also a name or a plain value takes that path, and so does the default label of a
 /// node with an HTML name.
-fn plain_label_canon(g: &Graph, earlier: Option<&Graph>, text: &str) -> String {
+fn plain_label_canon(g: &HashSet<&str>, earlier: Option<&HashSet<&str>>, text: &str) -> String {
     let c = graphviz_pure_parser::canon_str(text);
-    if c == text
-        && !root_holds_plain(g, text)
-        && !earlier.is_some_and(|e| root_holds_plain(e, text))
-    {
+    if c == text && !g.contains(text) && !earlier.is_some_and(|e| e.contains(text)) {
         return String::new();
     }
     c
@@ -335,6 +359,8 @@ pub(crate) fn write_plain(
     let g = m.g;
     let mut out = String::new();
     let y_off = y_offset(m.bb);
+    let plain = plain_strings(g);
+    let earlier = earlier.map(plain_strings);
     let _ = writeln!(
         out,
         "graph {} {} {}",
@@ -350,7 +376,7 @@ pub(crate) fn write_plain(
         let lbl = if n.label.is_html {
             canon_value(a.get("label").unwrap_or(""), true)
         } else {
-            plain_label_canon(g, earlier, &n.label.text)
+            plain_label_canon(&plain, earlier.as_ref(), &n.label.text)
         };
         let fill = a
             .nonempty("fillcolor")
@@ -408,7 +434,11 @@ pub(crate) fn write_plain(
                     let gn = &g.nodes[node];
                     if gn.layout.clust_node {
                         // writenodeandport: `canon` of the cluster's name
-                        out.push_str(&plain_label_canon(g, earlier, m.nodes[node].name));
+                        out.push_str(&plain_label_canon(
+                            &plain,
+                            earlier.as_ref(),
+                            m.nodes[node].name,
+                        ));
                     } else {
                         out.push_str(&canon_value(m.nodes[node].name, gn.html_name));
                     }
@@ -429,7 +459,7 @@ pub(crate) fn write_plain(
                 let _ = write!(
                     out,
                     " {} {} {}",
-                    plain_label_canon(g, earlier, &l.text),
+                    plain_label_canon(&plain, earlier.as_ref(), &l.text),
                     g5(l.pos.x / 72.0),
                     g5(y_dir(l.pos.y, y_off) / 72.0)
                 );
