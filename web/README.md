@@ -74,4 +74,5 @@ command line does.
 
 Each release is built by GitHub Actions and published with npm provenance; check it with
 `npm audit signatures`. Documentation, fidelity evidence and the source:
-https://graphviz-pure.github.io/ and https://github.com/graphviz-pure/graphviz-pure. Licence: EPL-2.0.
+https://graphviz-pure.github.io/ and https://github.com/graphviz-pure/graphviz-pure. Licence: EPL-2.0 AND MIT.
+The package ships `NOTICE` and the licence texts in `LICENSES/`.
