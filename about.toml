@@ -4,8 +4,11 @@
 # The same licences as deny.toml's allow list, in the same order. For a crate offering a choice
 # (MIT OR Apache-2.0, ...) the first acceptable one in this list is the one reproduced.
 accepted = [
-    "EPL-2.0", "MIT", "Apache-2.0", "Unlicense", "Unicode-3.0", "OFL-1.1",
+    "EPL-2.0", "MIT", "Apache-2.0", "Unlicense", "Unicode-3.0",
+    # graphviz-pure-raster (resvg, tiny-skia, png, jpeg-encoder) and their dependencies.
     "BSD-2-Clause", "BSD-3-Clause", "Zlib",
+    # graphviz-pure-raster's bundled Tinos, Arimo and Cousine fonts (SIL Open Font License 1.1).
+    "OFL-1.1",
     "IJG",
 ]
 

@@ -14,9 +14,11 @@ version = 2
 # The workspace's own licence, and those of the 23 third-party crates (all from crates.io).
 # A dependency under any other licence fails the check until someone decides on it.
 allow = [
-    "EPL-2.0", "MIT", "Apache-2.0", "Unlicense", "Unicode-3.0", "OFL-1.1",
+    "EPL-2.0", "MIT", "Apache-2.0", "Unlicense", "Unicode-3.0",
     # graphviz-pure-raster (resvg, tiny-skia, png, jpeg-encoder) and their dependencies.
     "BSD-2-Clause", "BSD-3-Clause", "Zlib",
+    # graphviz-pure-raster's bundled Tinos, Arimo and Cousine fonts (SIL Open Font License 1.1).
+    "OFL-1.1",
     # jpeg-encoder: requires the IJG acknowledgement, which is in NOTICE and the README.
     "IJG",
 ]
