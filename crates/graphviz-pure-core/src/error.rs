@@ -64,6 +64,10 @@ pub enum GraphvizErrorKind {
     Attribute,
     /// A renderer failed, including raster encoding.
     Render,
+    /// An allocation failed where C checks it (`gv_calloc`, `gv_alloc`): C writes the
+    /// message with `fprintf(stderr, ...)` and exits, and the port stops the run with
+    /// it.
+    Allocation,
 }
 
 /// How serious a [`Diagnostic`] is.
@@ -244,6 +248,17 @@ impl GraphvizError {
         Self::plain(GraphvizErrorKind::Render, message.into())
     }
 
+    /// An allocation that failed where C checks it (`gv_calloc`, `gv_alloc` in
+    /// `lib/util/alloc.h`). `message` is C's own text, which C writes with
+    /// `fprintf(stderr, ...)` before it exits: "out of memory when trying to allocate
+    /// N bytes" or "integer overflow when trying to allocate N * M bytes".
+    ///
+    /// [`std::fmt::Display`] writes the message as it is, with no category prefix, as
+    /// C writes it.
+    pub fn allocation(message: impl Into<String>) -> Self {
+        Self::plain(GraphvizErrorKind::Allocation, message.into())
+    }
+
     /// The kind of failure.
     #[must_use]
     pub fn kind(&self) -> GraphvizErrorKind {
@@ -384,6 +399,8 @@ impl fmt::Display for GraphvizError {
                 )
             }
             GraphvizErrorKind::Render => write!(f, "Rendering error: {}", self.detail),
+            // C writes this message with `fprintf(stderr, ...)`, with no prefix.
+            GraphvizErrorKind::Allocation => f.write_str(&self.detail),
         }
     }
 }

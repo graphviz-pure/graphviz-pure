@@ -592,8 +592,18 @@ fn render_jobs_finish(graph: &Graph, line: u32) {
 /// `agerrorf` of an input's error, as C's bytes. A syntax error names the file `aagerror`
 /// knows: the input, or the one a `# N "file"` line directive named.
 fn report_error(name: &str, e: &graphviz_pure_core::GraphvizError) {
-    let name = e.file().unwrap_or(name);
-    agerrorf(&format!("{name}: {e}\n"));
+    match e.kind() {
+        // C's `gv_calloc` writes the message with `fprintf(stderr, ...)` and exits
+        // (`lib/util/alloc.h`): the port writes it as C did, with no `Error: ` prefix and
+        // no file name.
+        graphviz_pure_core::GraphvizErrorKind::Allocation => {
+            fprintf_stderr(&format!("{}\n", e.message()));
+        }
+        _ => {
+            let name = e.file().unwrap_or(name);
+            agerrorf(&format!("{name}: {e}\n"));
+        }
+    }
 }
 
 /// `auto_output_filename`: `<input>[.<graph number>].<format>`, with the parts of a

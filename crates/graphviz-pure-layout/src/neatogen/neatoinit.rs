@@ -66,7 +66,7 @@ fn neato_init_node_edge<'a>(
     ndim: usize,
     inputscale: f64,
     decl: PosDecl,
-) -> LGraph<'a> {
+) -> Result<LGraph<'a>> {
     let ng = src.nodes.len();
     LGraph::new_with(src, ndim, EdgeType::Line, |nd, node| {
         user_pos(nd, node, ng, inputscale, decl);
@@ -973,7 +973,7 @@ fn init_nop(
 
 /// `neato_layout(g)` with `Nop`: `init_nop(g, 1)`, then `gv_postprocess(g, 0)`. A node
 /// without a position ends the layout of this graph only, which is still drawn.
-fn neato_layout_nop(graph: &mut Graph) {
+fn neato_layout_nop(graph: &mut Graph) -> Result<()> {
     let nop = super::neatosplines::nop();
     let attrs = &graph.graph_attrs;
     let outdim = late_int(attrs, "dimen", 2, 2);
@@ -984,7 +984,7 @@ fn neato_layout_nop(graph: &mut Graph) {
     // applies `Reduce`.
     let full = graph.clone();
     let decl = PosDecl::of(&full);
-    let g0 = neato_init_node_edge(&full, ndim, inputscale, decl);
+    let g0 = neato_init_node_edge(&full, ndim, inputscale, decl)?;
     add_z(&g0, decl.z, graph);
     // init_nop's scan_graph, before `Reduce` deletes nodes
     graphviz_pure_core::verbose_msg!(
@@ -999,7 +999,7 @@ fn neato_layout_nop(graph: &mut Graph) {
             graph.delete_nodes(&deleted);
             reduced = graph.clone();
             let mut g =
-                graphviz_pure_core::diag::silently(|| LGraph::new(&reduced, ndim, EdgeType::Line));
+                graphviz_pure_core::diag::silently(|| LGraph::new(&reduced, ndim, EdgeType::Line))?;
             let kept = g0.nodes.iter().zip(&deleted).filter(|(_, d)| !**d);
             for (node, (old, _)) in g.nodes.iter_mut().zip(kept) {
                 node.pos.clone_from(&old.pos);
@@ -1036,7 +1036,7 @@ fn neato_layout_nop(graph: &mut Graph) {
         }
         graph.bb = graphviz_pure_core::BoundingBox::default();
         graph.layout.label_pos = Some(Point::default());
-        return;
+        return Ok(());
     };
     gv_postprocess(&mut g, false);
     // GD_odim(g->root) = MIN(outdim, Ndim)
@@ -1050,6 +1050,7 @@ fn neato_layout_nop(graph: &mut Graph) {
             e.layout.no_attrs = ge.spl.is_some();
         }
     }
+    Ok(())
 }
 
 /// `nop1_layout` and `nop2_layout` (`plugin/neato_layout/gvlayout_neato_layout.c:48-57`):
@@ -1063,8 +1064,7 @@ pub fn nop_layout(graph: &mut Graph, nop: u8) -> Result<()> {
 /// `neato_layout(g)`, with `Nop` (the `-n` level) as the run set it.
 pub fn neato_layout(graph: &mut Graph) -> Result<()> {
     if super::neatosplines::nop() > 0 {
-        neato_layout_nop(graph);
-        return Ok(());
+        return neato_layout_nop(graph);
     }
     let attrs = &graph.graph_attrs;
     let no_translate = mapbool(attrs.get("notranslate").map(String::as_str));
@@ -1075,39 +1075,42 @@ pub fn neato_layout(graph: &mut Graph) -> Result<()> {
     // `Reduce` (`dot -x`) deletes nodes in `scan_graph_mode`, per component once `pccomps`
     // has split the graph: the components are those of the whole graph, and one it empties
     // is still packed.
-    let reduced = super::stuff::reduce_set(graph).map(|deleted| {
-        let full = graph.clone();
-        // `user_pos` on the whole graph, with what it declares before `Reduce` deletes nodes.
-        let g0 = neato_init_node_edge(&full, ndim, inputscale, PosDecl::of(&full));
-        let (ccs, pin) = pccomps(&g0, CC_PFX);
-        let mut new_index = vec![None; deleted.len()];
-        let kept = deleted.iter().enumerate().filter(|(_, d)| !**d);
-        for (new, (old, _)) in kept.enumerate() {
-            if let Some(slot) = new_index.get_mut(old) {
-                *slot = Some(new);
+    let reduced = match super::stuff::reduce_set(graph) {
+        None => None,
+        Some(deleted) => {
+            let full = graph.clone();
+            // `user_pos` on the whole graph, with what it declares before `Reduce` deletes nodes.
+            let g0 = neato_init_node_edge(&full, ndim, inputscale, PosDecl::of(&full))?;
+            let (ccs, pin) = pccomps(&g0, CC_PFX);
+            let mut new_index = vec![None; deleted.len()];
+            let kept = deleted.iter().enumerate().filter(|(_, d)| !**d);
+            for (new, (old, _)) in kept.enumerate() {
+                if let Some(slot) = new_index.get_mut(old) {
+                    *slot = Some(new);
+                }
             }
+            let comps: Vec<Vec<usize>> = ccs
+                .iter()
+                .map(|c| {
+                    c.nodes
+                        .iter()
+                        .filter_map(|&v| new_index.get(v).copied().flatten())
+                        .collect()
+                })
+                .collect();
+            // `user_pos` ran on the whole graph, before `scan_graph_mode`: its positions, pins
+            // and `drand48` draws (`nG` is the whole graph's count) are kept.
+            let kept_pos: Vec<(Vec<f64>, u8)> = g0
+                .nodes
+                .iter()
+                .zip(&deleted)
+                .filter(|(_, d)| !**d)
+                .map(|(n, _)| (n.pos.clone(), n.pinned))
+                .collect();
+            graph.delete_nodes(&deleted);
+            Some((comps, pin, kept_pos))
         }
-        let comps: Vec<Vec<usize>> = ccs
-            .iter()
-            .map(|c| {
-                c.nodes
-                    .iter()
-                    .filter_map(|&v| new_index.get(v).copied().flatten())
-                    .collect()
-            })
-            .collect();
-        // `user_pos` ran on the whole graph, before `scan_graph_mode`: its positions, pins
-        // and `drand48` draws (`nG` is the whole graph's count) are kept.
-        let kept_pos: Vec<(Vec<f64>, u8)> = g0
-            .nodes
-            .iter()
-            .zip(&deleted)
-            .filter(|(_, d)| !**d)
-            .map(|(n, _)| (n.pos.clone(), n.pinned))
-            .collect();
-        graph.delete_nodes(&deleted);
-        (comps, pin, kept_pos)
-    });
+    };
     let src = graph.clone();
     // What the graph declares after `Reduce`: a graph without attribute dictionaries
     // declares what its remaining nodes carry.
@@ -1116,14 +1119,14 @@ pub fn neato_layout(graph: &mut Graph) -> Result<()> {
         // `user_pos` ran on the whole graph, before `scan_graph_mode` deleted nodes.
         Some((_, _, kept_pos)) => {
             let mut g =
-                graphviz_pure_core::diag::silently(|| LGraph::new(&src, ndim, EdgeType::Line));
+                graphviz_pure_core::diag::silently(|| LGraph::new(&src, ndim, EdgeType::Line))?;
             for (node, (pos, pinned)) in g.nodes.iter_mut().zip(kept_pos) {
                 node.pos.clone_from(pos);
                 node.pinned = *pinned;
             }
             g
         }
-        None => neato_init_node_edge(&src, ndim, inputscale, decl),
+        None => neato_init_node_edge(&src, ndim, inputscale, decl)?,
     };
     let z_declared = decl.z;
     let layout_mode = neato_mode(&g);

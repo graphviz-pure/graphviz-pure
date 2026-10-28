@@ -11,6 +11,7 @@
 //! `ND_ht`).
 
 use crate::html_label::HtmlLabel;
+use graphviz_pure_core::alloc::{element_count, gv_calloc_vec};
 use graphviz_pure_core::cnum::{is_exactly_equal, is_exactly_zero};
 use graphviz_pure_core::math;
 use graphviz_pure_core::strtod::{sscanf, strtod};
@@ -22,7 +23,7 @@ use graphviz_pure_core::font::{
     DEFAULT_FONT_NAME, DEFAULT_FONT_SIZE, LabelSubstContext, MIN_FONT_SIZE, NamesInBuffer,
     TextLabelLayout, make_text_label,
 };
-use graphviz_pure_core::{AgName, AttrMap, BoundingBox, Graph, NodeData, Point};
+use graphviz_pure_core::{AgName, AttrMap, BoundingBox, Graph, NodeData, Point, Result};
 use std::f64::consts::PI;
 
 /// `GAP` from `lib/common/const.h`: whitespace in points between peripheries.
@@ -450,7 +451,10 @@ pub fn node_font(attrs: &AttrMap) -> (&str, f64) {
 }
 
 /// `common_init_node` + shape `initfn`: the exact size and label geometry of `node`.
-pub fn node_geometry(node: &NodeData, env: &NodeSizeEnv<'_>) -> NodeGeometry {
+///
+/// The shape's `initfn` allocates the vertices of the node's peripheries, and C's
+/// `gv_calloc` reports a failed allocation and exits; the port returns the error.
+pub fn node_geometry(node: &NodeData, env: &NodeSizeEnv<'_>) -> Result<NodeGeometry> {
     // `<G>` and `G` are two nodes: the tag keeps the HTML flag, as the node lookup does
     let key = graphviz_pure_core::Graph::node_key(&node.name, node.html_name);
     graphviz_pure_core::font::textfont_object(format!("node:{key}"), || {
@@ -458,7 +462,7 @@ pub fn node_geometry(node: &NodeData, env: &NodeSizeEnv<'_>) -> NodeGeometry {
     })
 }
 
-fn node_geometry_measured(node: &NodeData, env: &NodeSizeEnv<'_>) -> NodeGeometry {
+fn node_geometry_measured(node: &NodeData, env: &NodeSizeEnv<'_>) -> Result<NodeGeometry> {
     let attrs = &node.attrs;
     let shape_name = late_nnstring(attrs, "shape", "ellipse");
     // bind_shape: a `shapefile` that `safefile` accepts (except with epsf) makes the shape
@@ -559,13 +563,13 @@ fn node_geometry_measured(node: &NodeData, env: &NodeSizeEnv<'_>) -> NodeGeometr
     match init {
         ShapeInit::Poly => {
             let desc = desc.unwrap_or(pd(false, 1, 4));
-            poly_init(node, shape, desc, usershape, env, &mut geom);
+            poly_init(node, shape, desc, usershape, env, &mut geom)?;
         }
         ShapeInit::Epsf => epsf_init(node, &mut geom),
-        ShapeInit::Point => point_init(node, desc.map_or(1, |d| d.peripheries), &mut geom),
+        ShapeInit::Point => point_init(node, desc.map_or(1, |d| d.peripheries), &mut geom)?,
         ShapeInit::Record => record_init(node, label_str, &xobj, env, &mut geom),
     }
-    geom
+    Ok(geom)
 }
 
 /// `GD_label_pos` flags (`lib/common/const.h`).
@@ -789,7 +793,7 @@ pub fn edge_label_geometry(
 
 /// Sizes every node of `graph` (sets `NodeData::width`/`height` to `ND_width`/`ND_height`),
 /// reading `rankdir`, `quantum` and `charset` from the root graph.
-pub fn size_graph_nodes(graph: &mut Graph) {
+pub fn size_graph_nodes(graph: &mut Graph) -> Result<()> {
     let env_attrs = graph.graph_attrs.clone();
     let name = graph.root_name().to_string();
     let env = NodeSizeEnv {
@@ -798,10 +802,11 @@ pub fn size_graph_nodes(graph: &mut Graph) {
         ..NodeSizeEnv::from_attrs(&name, &env_attrs)
     };
     for node in &mut graph.nodes {
-        let geom = node_geometry(node, &env);
+        let geom = node_geometry(node, &env)?;
         node.width = geom.width;
         node.height = geom.height;
     }
+    Ok(())
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -940,7 +945,7 @@ fn poly_init(
     usershape: bool,
     env: &NodeSizeEnv<'_>,
     geom: &mut NodeGeometry,
-) {
+) -> Result<()> {
     let attrs = &node.attrs;
     let is_plain = shape == ShapeKind::Plain;
     let mut regular = desc.regular;
@@ -1140,7 +1145,8 @@ fn poly_init(
     let mut outline_bb;
     if sides < 3 {
         sides = 2;
-        vertices = vec![Point::default(); outp * sides];
+        // `gv_calloc(outp * sides, sizeof(pointf))`
+        vertices = gv_calloc_vec::<Point>(element_count(outp, sides))?;
         let mut p = Point::new(bb.x / 2.0, bb.y / 2.0);
         vertices[0] = Point::new(-p.x, -p.y);
         vertices[1] = p;
@@ -1165,7 +1171,8 @@ fn poly_init(
             outline_bb = Point::new(2.0 * p.x, 2.0 * p.y);
         }
     } else {
-        vertices = vec![Point::default(); outp * sides];
+        // `gv_calloc(outp * sides, sizeof(pointf))`
+        vertices = gv_calloc_vec::<Point>(element_count(outp, sides))?;
         let (mut sinx, mut cosx) = (0.0_f64, 0.0_f64);
         let (mut xmax, mut ymax);
         if has_gen {
@@ -1306,13 +1313,14 @@ fn poly_init(
         fixedshape,
         vertices,
     });
+    Ok(())
 }
 
 // ---------------------------------------------------------------------------------------------
 // point_init
 // ---------------------------------------------------------------------------------------------
 
-fn point_init(node: &NodeData, default_peripheries: usize, geom: &mut NodeGeometry) {
+fn point_init(node: &NodeData, default_peripheries: usize, geom: &mut NodeGeometry) -> Result<()> {
     let attrs = &node.attrs;
     let w = late_double(attrs, "width", f64::MAX, MIN_NODEWIDTH);
     let h = late_double(attrs, "height", f64::MAX, MIN_NODEHEIGHT);
@@ -1332,7 +1340,8 @@ fn point_init(node: &NodeData, default_peripheries: usize, geom: &mut NodeGeomet
     if peripheries >= 1 && penwidth > 0.0 {
         outp += 1;
     }
-    let mut vertices = vec![Point::default(); outp * sides];
+    // `gv_calloc(outp * sides, sizeof(pointf))`
+    let mut vertices = gv_calloc_vec::<Point>(element_count(outp, sides))?;
     let mut p = Point::new(sz / 2.0, sz / 2.0);
     vertices[0] = Point::new(-p.x, -p.y);
     vertices[1] = p;
@@ -1371,6 +1380,7 @@ fn point_init(node: &NodeData, default_peripheries: usize, geom: &mut NodeGeomet
         fixedshape: false,
         vertices,
     });
+    Ok(())
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -1785,14 +1795,14 @@ mod tests {
     }
 
     fn wh(attrs: &[(&str, &str)]) -> (String, String) {
-        let g = node_geometry(&node(attrs), &NodeSizeEnv::new("G"));
+        let g = node_geometry(&node(attrs), &NodeSizeEnv::new("G")).unwrap();
         (format!("{:.5}", g.width), format!("{:.5}", g.height))
     }
 
     // Expected values are `dot -Tdot` output of Graphviz 16.1.0 with the LUT text estimator.
     #[test]
     fn ellipse_hello_world() {
-        let g = node_geometry(&node(&[("label", "hello world")]), &NodeSizeEnv::new("G"));
+        let g = node_geometry(&node(&[("label", "hello world")]), &NodeSizeEnv::new("G")).unwrap();
         assert!((g.width - 1.5358).abs() < 5e-5, "{}", g.width);
         assert!((g.height - 0.5).abs() < 1e-12);
     }
@@ -1876,10 +1886,10 @@ mod tests {
     fn quoted_angle_label_is_text_not_html() {
         // `label="<x>"` is plain text in C (aghtmlstr is false); `label=<x>` is HTML.
         let env = NodeSizeEnv::new("G");
-        let q = node_geometry(&node(&[("label", "<x>")]), &env);
+        let q = node_geometry(&node(&[("label", "<x>")]), &env).unwrap();
         let mut n = node(&[]);
         n.attrs.set("label", "x".into(), true);
-        let h = node_geometry(&n, &env);
+        let h = node_geometry(&n, &env).unwrap();
         assert!(!q.label.html);
         assert!(h.label.html);
         assert!(

@@ -23,7 +23,7 @@ pub fn twopi_layout(graph: &mut Graph) -> Result<()> {
     }
     let src = graph.clone();
     // twopi_init_graph: EDGETYPE_LINE by default, 2 dimensions.
-    let mut g = LGraph::new(&src, 2, EdgeType::Line);
+    let mut g = LGraph::new(&src, 2, EdgeType::Line)?;
     let mut ctr: Option<usize> = None;
     let mut set_root = false;
     if let Some(s) = g.gattr("root") {

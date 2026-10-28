@@ -33,8 +33,36 @@ pub mod splinegraph;
 pub mod types;
 pub mod utils;
 
-use graphviz_pure_core::{Graph, Result};
+use graphviz_pure_core::{Graph, GraphvizError, GraphvizErrorKind, Result};
 use types::*;
+
+/// The prefix of a fatal error in the dotgen's message channel.
+///
+/// The dotgen's errors are C's own messages, which the CLI reports as a layout error.
+/// Where C exits with a message of its own (`gv_calloc`'s "out of memory when trying to
+/// allocate N bytes"), the port stops the layout with that message, and the CLI writes it
+/// as C wrote it: the message travels with this prefix, as [`mincross::ABORT_LAYOUT`]
+/// travels with its own.
+pub const FATAL: &str = "\u{1}fatal:";
+
+/// The message of a fatal error in the dotgen's message channel, where the port stops the
+/// layout where C exits.
+pub fn fatal(error: impl Into<GraphvizError>) -> String {
+    let error = error.into();
+    match error.kind() {
+        GraphvizErrorKind::Allocation => format!("{FATAL}{}", error.message()),
+        _ => error.message().to_string(),
+    }
+}
+
+/// The layout error of the dotgen's message channel: C's own message, or the message of a
+/// fatal error, which the CLI writes as C wrote it.
+pub fn dot_error(message: String) -> GraphvizError {
+    match message.strip_prefix(FATAL) {
+        Some(text) => GraphvizError::allocation(text),
+        None => GraphvizError::layout("dot", message),
+    }
+}
 
 /// All dot layout state: arenas mirroring the cgraph objects and their
 /// `Agraphinfo_t`/`Agnodeinfo_t`/`Agedgeinfo_t` records, plus the C file-scope
@@ -262,7 +290,7 @@ impl<'a> Dot<'a> {
             );
         }
         self.dot_init_subg();
-        self.dot_init_node_edge();
+        self.dot_init_node_edge()?;
         graphviz_pure_core::gv_info!("dotinit.c", 305, "Starting phase 1 [dot_rank]");
         self.dot_rank()?;
         self.gvdump("R");
@@ -308,7 +336,7 @@ impl<'a> Dot<'a> {
 /// Lays out `graph` with the dotgen port.
 pub fn layout_dot(graph: &mut Graph) -> Result<()> {
     // dot_init_node's common_init_node reports the node diagnostics, in C's place.
-    graphviz_pure_core::diag::quietly(|| graphviz_pure_geom::size_graph_nodes(graph));
+    graphviz_pure_core::diag::quietly(|| graphviz_pure_geom::size_graph_nodes(graph))?;
     let aborted;
     let result = {
         let mut d = Dot::new(graph);
@@ -316,8 +344,7 @@ pub fn layout_dot(graph: &mut Graph) -> Result<()> {
         let maxphase = utils::late_int(d.agget(0, "phase"), -1, 1);
         // dot_layout: doDot only when there are nodes; dotneato_postprocess always.
         if !graph.nodes.is_empty() {
-            pack::do_dot(&mut d, graph)
-                .map_err(|message| graphviz_pure_core::GraphvizError::layout("dot", message))?;
+            pack::do_dot(&mut d, graph).map_err(dot_error)?;
         }
         if !d.aborted {
             d.dotneato_postprocess();

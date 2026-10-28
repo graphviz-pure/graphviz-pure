@@ -31,7 +31,10 @@ use crate::neatogen::neatosplines::{
 use crate::osage::register_clusters;
 use crate::pack::{PackInfo, PackMode, put_graphs};
 use graphviz_pure_core::math;
-use graphviz_pure_core::{AttrMap, BoundingBox, Graph, GraphKind, NodeId, Obj, Point, Result};
+use graphviz_pure_core::{
+    AttrMap, BoundingBox, Graph, GraphKind, GraphvizError, GraphvizErrorKind, NodeId, Obj, Point,
+    Result,
+};
 use std::collections::HashMap;
 use std::f64::consts::PI;
 
@@ -279,7 +282,7 @@ pub fn with_lgraph<R>(
     dg: &mut DG,
     keep: &[usize],
     f: impl FnOnce(&mut LGraph<'_>, &mut Sub, &[usize]) -> R,
-) -> R {
+) -> Result<R> {
     let mut src = Graph::new("derived", GraphKind::Directed, true);
     src.graph_attrs = dg.attrs.clone();
     let mut map = vec![usize::MAX; dg.nodes.len()];
@@ -298,46 +301,41 @@ pub fn with_lgraph<R>(
             edges.push(ei);
         }
     }
-    let nodes: Vec<LNode> = keep
-        .iter()
-        .enumerate()
-        .map(|(i, &n)| {
-            let d = &dg.nodes[n];
-            // mkDeriveNode allocates GD_ndim(dg) coordinates; fdp's t_layout,
-            // chkPos and copy-back only ever write the first two, so the rest
-            // stay zero (layout.c:187). They still matter: fdpAdjust hands the
-            // full-width array to remove_overlap, where call_tri reads it with
-            // a stride of 2.
-            let mut pos = vec![d.pos[0], d.pos[1]];
-            pos.resize(dg.ndim.max(2), 0.0);
-            LNode {
-                pos,
-                coord: Point::default(),
-                width: d.width,
-                height: d.height,
-                lw: d.lw,
-                rw: d.rw,
-                ht: d.ht,
-                pinned: d.pinned,
-                id: 0,
-                heapindex: -1,
-                hops: 0,
-                dist: 0.0,
-                mark: false,
-                shape: d
-                    .shape
-                    .clone()
-                    .unwrap_or_else(|| NodeShape::new(&src.nodes[i])),
-                xlabel: None,
-                // ND_clust(dn) = subg for a cluster's derived node
-                clust: match d.kind {
-                    DKind::Clust(c) => Some(c),
-                    _ => None,
-                },
-                lim: -1,
-            }
-        })
-        .collect();
+    let mut nodes: Vec<LNode> = Vec::with_capacity(keep.len());
+    for (i, &n) in keep.iter().enumerate() {
+        let d = &dg.nodes[n];
+        // mkDeriveNode allocates GD_ndim(dg) coordinates; fdp's t_layout,
+        // chkPos and copy-back only ever write the first two, so the rest
+        // stay zero (layout.c:187). They still matter: fdpAdjust hands the
+        // full-width array to remove_overlap, where call_tri reads it with
+        // a stride of 2.
+        let mut pos = vec![d.pos[0], d.pos[1]];
+        pos.resize(dg.ndim.max(2), 0.0);
+        let node = LNode {
+            pos,
+            coord: Point::default(),
+            width: d.width,
+            height: d.height,
+            lw: d.lw,
+            rw: d.rw,
+            ht: d.ht,
+            pinned: d.pinned,
+            id: 0,
+            heapindex: -1,
+            hops: 0,
+            dist: 0.0,
+            mark: false,
+            shape: d.shape.clone().unwrap_or(NodeShape::new(&src.nodes[i])?),
+            xlabel: None,
+            // ND_clust(dn) = subg for a cluster's derived node
+            clust: match d.kind {
+                DKind::Clust(c) => Some(c),
+                _ => None,
+            },
+            lim: -1,
+        };
+        nodes.push(node);
+    }
     let mut out = vec![Vec::new(); keep.len()];
     let mut inn = vec![Vec::new(); keep.len()];
     let ledges: Vec<LEdge> = edges
@@ -397,7 +395,7 @@ pub fn with_lgraph<R>(
     for (i, &n) in keep.iter().enumerate() {
         dg.nodes[n].pos = [lg.nodes[i].pos[0], lg.nodes[i].pos[1]];
     }
-    r
+    Ok(r)
 }
 
 /// `erec`.
@@ -959,12 +957,14 @@ impl Fdp<'_, '_> {
         }
     }
 
-    fn layout(&mut self, g: Option<usize>) -> std::result::Result<(), ()> {
+    fn layout(&mut self, g: Option<usize>) -> Result<()> {
         graphviz_pure_core::verbose_msg!("layout {}\n", self.gname(g));
         for n in self.members_of(g) {
             self.dnode[n] = None;
         }
-        let mut dg = self.derive_graph(g).ok_or(())?;
+        let mut dg = self
+            .derive_graph(g)
+            .ok_or_else(|| GraphvizError::layout("fdp", "non-comparable clusters"))?;
         let (mut cc, pinned) = find_ccomp(&dg, &mut self.cc_counter);
 
         for ci in 0..cc.len() {
@@ -995,9 +995,9 @@ impl Fdp<'_, '_> {
                     // normalize(cg) reads `normalize` on the derived graph: a command-line one.
                     with_lgraph(&mut dg, &comp.nodes, |lg, sub, _| {
                         normalize(lg, sub);
-                    });
+                    })?;
                 }
-                fdp_x_layout(&mut self.st, &mut dg, comp, &xpms);
+                fdp_x_layout(&mut self.st, &mut dg, comp, &xpms)?;
             }
             self.dbg("XL", g, &dg, &cc[ci], true);
         }
@@ -1032,7 +1032,7 @@ impl Fdp<'_, '_> {
                 None
             };
             (subs.iter().map(|s| s.bb).collect::<Vec<_>>(), pts)
-        });
+        })?;
         let bb = self.final_cc(&mut dg, &cc, &bbs, pts.as_deref(), g);
 
         for dn in &dg.nodes {
@@ -1229,7 +1229,7 @@ pub fn fdp_layout(graph: &mut Graph) -> Result<()> {
         .collect();
     let attrs = &src.graph_attrs;
     let ndim = late_int(attrs, "dim", 2, 2).min(MAXDIM as i32) as usize;
-    let mut g = LGraph::new(&src, ndim, EdgeType::Line);
+    let mut g = LGraph::new(&src, ndim, EdgeType::Line)?;
     let tree = mk_clusters(&src);
     register_clusters(&mut g, &tree);
     let st = fdp_init_params(attrs);
@@ -1285,7 +1285,12 @@ pub fn fdp_layout(graph: &mut Graph) -> Result<()> {
         labeled: vec![false; nc],
         heap,
     };
-    let ok = f.layout(None).is_ok();
+    let ok = match f.layout(None) {
+        Ok(()) => true,
+        // Where C exits, the port stops the run with the message C writes.
+        Err(e) if e.kind() == GraphvizErrorKind::Allocation => return Err(e),
+        Err(_) => false,
+    };
     if ok {
         f.set_clust_nodes();
         f.eval_positions(None);

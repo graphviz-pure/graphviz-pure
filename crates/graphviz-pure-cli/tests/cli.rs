@@ -4136,6 +4136,48 @@ fn huge_rank_and_node_separations_wrap_like_c() {
     );
 }
 
+/// Issue #583: C's `poly_init` allocates the vertices of the peripheries with
+/// `gv_calloc(outp * sides, sizeof(pointf))` (`lib/common/shapes.c`), and C's `gv_calloc`
+/// (`lib/util/alloc.h`) checks that count for overflow and reports a failed allocation:
+/// it writes the message with `fprintf(stderr, ...)` and calls `graphviz_exit(EXIT_FAILURE)`.
+/// The port allocated the array without a check, and the Rust allocator aborted the
+/// process (SIGABRT) with its own message.
+///
+/// The counts here are the ones C refuses on every machine: the array is bigger than the
+/// address space, so the allocation fails before it is tried, and the message is the same
+/// everywhere. C 16.1.0's messages and exit status are these.
+///
+/// `patchwork` sets `shape=box` on every node, so its count is the box's four sides and
+/// the only allocation it reaches is the 128 GiB one, whose failure depends on the
+/// machine's memory. The other engines keep the node's shape.
+#[test]
+fn issue583_an_allocation_c_refuses_is_reported_as_cs_message() {
+    // 2^31 peripheries of 2^28 sides: 2^59 vertices of 16 bytes, 2^63 bytes.
+    let out_of_memory = "digraph G {\n  node [peripheries=\"2147483647\", sides=\"268435456\"];\n  a [shape=polygon];\n  a -> b;\n}\n";
+    // 2^31 peripheries of 2^31 sides: the count overflows the size C checks.
+    let overflow = "digraph G {\n  node [peripheries=\"2147483647\", sides=\"2147483647\"];\n  a [shape=polygon];\n  a -> b;\n}\n";
+    for engine in ["dot", "neato", "fdp", "sfdp", "twopi", "circo", "osage"] {
+        let dir = scratch("issue583");
+        let engine_arg = format!("-K{engine}");
+        let (out, err, code) = run_in(&dir, &[&engine_arg, "-Tsvg"], out_of_memory);
+        assert_eq!(code, 1, "{engine}: {err}");
+        assert_eq!(
+            err, "out of memory when trying to allocate 9223372036854775808 bytes\n",
+            "{engine}"
+        );
+        assert!(out.is_empty(), "{engine}: {out}");
+
+        let dir = scratch("issue583");
+        let (out, err, code) = run_in(&dir, &[&engine_arg, "-Tsvg"], overflow);
+        assert_eq!(code, 1, "{engine}: {err}");
+        assert_eq!(
+            err, "integer overflow when trying to allocate 4611686016279904256 * 16 bytes\n",
+            "{engine}"
+        );
+        assert!(out.is_empty(), "{engine}: {out}");
+    }
+}
+
 // Issue #233: inside cluster2, `rank=sink` and the nested `rank=min` set contradict each
 // other, network simplex prints `trouble in init_rank` and leaves no node of the cluster on
 // rank 0. C fails `assert(leader != NULL)` in `cluster_leader` (rank.c:316, exit 134). The

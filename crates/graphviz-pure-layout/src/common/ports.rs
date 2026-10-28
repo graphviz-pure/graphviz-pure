@@ -368,16 +368,17 @@ pub fn shape_port<S: PortGraph + ?Sized>(
     n: usize,
     portname: &str,
     compass: Option<&str>,
-) -> PortInfo {
+) -> graphviz_pure_core::Result<PortInfo> {
     if portname.is_empty() {
-        return port_center();
+        return Ok(port_center());
     }
     let compass = compass.unwrap_or("_");
     let all = BOTTOM | RIGHT | TOP | LEFT;
     let src = g.port_node(n);
     // The node was sized, and its diagnostics reported, by common_init_node.
-    let geom =
-        graphviz_pure_core::diag::quietly(|| graphviz_pure_geom::node_geometry(src, &g.port_env()));
+    let geom = graphviz_pure_core::diag::quietly(|| {
+        graphviz_pure_geom::node_geometry(src, &g.port_env())
+    })?;
     let mut rv = PortInfo::default();
     let is_record = g.shape(n).is_some_and(|s| s.inside == InsideFn::Record);
     if is_record && let Some(rec) = geom.record.as_ref() {
@@ -394,7 +395,7 @@ pub fn shape_port<S: PortGraph + ?Sized>(
                 }
             }
         }
-        return rv;
+        return Ok(rv);
     }
     if let Some(graphviz_pure_geom::html_label::HtmlLabel::Table(tbl)) =
         geom.label.html_label.as_deref()
@@ -404,7 +405,7 @@ pub fn shape_port<S: PortGraph + ?Sized>(
             bad_compass(src, portname, compass);
         }
         rv.name = None;
-        return rv;
+        return Ok(rv);
     }
     // IS_BOX: the shape's polygon is p_box, as for box, rect, rectangle, unknown names
     // (bind_shape copies Shapes[0]) and shapefile user shapes.
@@ -424,7 +425,7 @@ pub fn shape_port<S: PortGraph + ?Sized>(
         unrecognized(src, portname);
     }
     rv.name = None;
-    rv
+    Ok(rv)
 }
 
 /// `unrecognized(n, p)` (`lib/common/shapes.c:362-365`).
@@ -448,9 +449,13 @@ fn bad_compass(n: &NodeData, portname: &str, compass: &str) {
 }
 
 /// `chkPort(portfn, n, s)` for a parsed port (`name[:compass]`).
-pub fn chk_port<S: PortGraph + ?Sized>(g: &S, n: usize, p: &graphviz_pure_core::Port) -> PortInfo {
+pub fn chk_port<S: PortGraph + ?Sized>(
+    g: &S,
+    n: usize,
+    p: &graphviz_pure_core::Port,
+) -> graphviz_pure_core::Result<PortInfo> {
     let name = p.name.clone().unwrap_or_default();
-    let mut pt = shape_port(g, n, &name, p.compass.as_deref());
+    let mut pt = shape_port(g, n, &name, p.compass.as_deref())?;
     pt.name = if name.is_empty() && p.compass.is_none() {
         None
     } else if let Some(c) = &p.compass {
@@ -458,7 +463,7 @@ pub fn chk_port<S: PortGraph + ?Sized>(g: &S, n: usize, p: &graphviz_pure_core::
     } else {
         Some(name)
     };
-    pt
+    Ok(pt)
 }
 
 /// `closestSide(n, other, oldport)`: compass of the side of the port box
@@ -554,14 +559,14 @@ impl PortGraph for LGraph<'_> {
 
 /// Resolves `tailport`/`headport` of edge `ei` (`chkPort` in `common_init_edge`), keeping
 /// `*clip=false`.
-pub fn resolve_edge_ports(g: &mut LGraph<'_>, ei: usize) {
+pub fn resolve_edge_ports(g: &mut LGraph<'_>, ei: usize) -> graphviz_pure_core::Result<()> {
     let src = &g.src.edges[ei];
     let (t, h) = (g.edges[ei].tail, g.edges[ei].head);
     let (tsrc, hsrc) = (src.tail_port.clone(), src.head_port.clone());
     let tclip = g.edges[ei].tail_port.clip;
     let hclip = g.edges[ei].head_port.clip;
-    let mut tp = chk_port(g, t, &tsrc);
-    let mut hp = chk_port(g, h, &hsrc);
+    let mut tp = chk_port(g, t, &tsrc)?;
+    let mut hp = chk_port(g, h, &hsrc)?;
     if !tclip {
         tp.clip = false;
     }
@@ -570,4 +575,5 @@ pub fn resolve_edge_ports(g: &mut LGraph<'_>, ei: usize) {
     }
     g.edges[ei].tail_port = tp;
     g.edges[ei].head_port = hp;
+    Ok(())
 }

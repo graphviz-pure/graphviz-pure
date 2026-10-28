@@ -633,6 +633,20 @@ with C's message, and writes nothing more:
 The stderr line has the port's usual prefix for a failed layout
 (`Error: <file>: Layout computation error in dot: …`) where C prints `Error: …`.
 
+**C's allocation checks.** `gv_calloc` (`lib/util/alloc.h:26`) checks the count of the array
+it allocates for overflow, and reports a failed allocation. C writes both messages with
+`fprintf(stderr, ...)`, with no `Error: ` prefix, and exits 1:
+
+| C | Message | Port |
+|---|---|---|
+| `gv_calloc` (`alloc.h:28`), `SIZE_MAX / nmemb < size` | `integer overflow when trying to allocate N * M bytes` | `core/src/alloc.rs` `gv_calloc` |
+| `gv_calloc` (`alloc.h:37`), `calloc` returns NULL | `out of memory when trying to allocate N bytes` | `core/src/alloc.rs` `gv_calloc` |
+
+The port allocates the vertices of a node's peripheries with that check (`poly_init` and
+`point_init` in `lib/common/shapes.c`, and the layout's own reconstruction of them), so an
+extreme `peripheries` or `sides` ends the run with C's message and exit status 1, where the
+port aborted the process (#583).
+
 **Where C has no check, the port wraps.** Everywhere else, C's `int` arithmetic has undefined
 behaviour on overflow, and the reference build wraps. That covers ns.c's arithmetic on
 weights, cut values, ranks and minimum lengths, and dotgen's weight sums (`group`'s ×100,

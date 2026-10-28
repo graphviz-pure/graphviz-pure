@@ -10,6 +10,7 @@
 //! this module rebuilds C's vertex arrays from the final size, which agrees with
 //! `poly_init` up to rounding because the vertices scale linearly with the size.
 
+use graphviz_pure_core::alloc::{AllocFailure, element_count, gv_calloc_grow, gv_calloc_vec};
 use graphviz_pure_core::cnum::{c_max, c_min, is_exactly_equal, is_exactly_zero};
 use graphviz_pure_core::math;
 use graphviz_pure_core::{NodeData, Point};
@@ -331,8 +332,9 @@ fn add_peripheries(
     peripheries: usize,
     outp: usize,
     penwidth: f64,
-) -> (Point, Point) {
-    v.resize(outp * sides, Point::default());
+) -> Result<(Point, Point), AllocFailure> {
+    // `gv_calloc(outp * sides, sizeof(pointf))`
+    gv_calloc_grow(v, element_count(outp, sides))?;
     let mut bb = Point::new(0.0, 0.0);
     for p in &v[..sides] {
         bb.x = bb.x.max(2.0 * p.x.abs());
@@ -340,7 +342,7 @@ fn add_peripheries(
     }
     let mut outline_bb = bb;
     if outp <= 1 {
-        return (bb, outline_bb);
+        return Ok((bb, outline_bb));
     }
     let (mut sinx, mut cosx) = (0.0f64, 0.0f64);
     let i_end = sides;
@@ -392,13 +394,16 @@ fn add_peripheries(
         outline_bb.x = outline_bb.x.max(2.0 * q.x.abs());
         outline_bb.y = outline_bb.y.max(2.0 * q.y.abs());
     }
-    (bb, outline_bb)
+    Ok((bb, outline_bb))
 }
 
 impl NodeShape {
     /// Builds the C shape data of `node`, whose final `width`/`height` (inches)
     /// have already been computed.
-    pub fn new(node: &NodeData) -> Self {
+    ///
+    /// The vertices of the peripheries are C's `gv_calloc` array, which reports a
+    /// failed allocation and exits; the port returns the error.
+    pub fn new(node: &NodeData) -> Result<Self, AllocFailure> {
         let name = node
             .attrs
             .get("shape")
@@ -443,7 +448,7 @@ impl NodeShape {
             InsideFn::Record | InsideFn::Epsf => {
                 shape.outline_width = width;
                 shape.outline_height = height;
-                return shape;
+                return Ok(shape);
             }
             InsideFn::Point => {
                 // point_init: sz = width; extra peripheries add GAP each.
@@ -453,7 +458,8 @@ impl NodeShape {
                 } else {
                     outp_base
                 };
-                let mut v = vec![Point::default(); outp * 2];
+                // `gv_calloc(outp * sides, sizeof(pointf))`
+                let mut v = gv_calloc_vec::<Point>(element_count(outp, 2))?;
                 let inner = width / 2.0 - GAP * peripheries.saturating_sub(1) as f64;
                 let mut p = Point::new(inner, inner);
                 v[0] = Point::new(-p.x, -p.y);
@@ -476,7 +482,7 @@ impl NodeShape {
                 shape.outline_width = 2.0 * p.x;
                 shape.outline_height = 2.0 * p.x;
                 shape.vertices = v;
-                return shape;
+                return Ok(shape);
             }
             _ => {}
         }
@@ -495,7 +501,8 @@ impl NodeShape {
         }
         if sides < 3 {
             // Ellipses: two vertices per periphery.
-            let mut v = vec![Point::default(); outp * 2];
+            // `gv_calloc(outp * sides, sizeof(pointf))`
+            let mut v = gv_calloc_vec::<Point>(element_count(outp, 2))?;
             let inner_x = width / 2.0 - GAP * peripheries.saturating_sub(1) as f64;
             let inner_y = height / 2.0 - GAP * peripheries.saturating_sub(1) as f64;
             let mut p = Point::new(inner_x, inner_y);
@@ -549,7 +556,7 @@ impl NodeShape {
                     .iter()
                     .map(|p| Point::new(p.x * sx, p.y * sy))
                     .collect::<Vec<_>>();
-                let (bb, outline) = add_peripheries(&mut v, sides, peripheries, outp, penwidth);
+                let (bb, outline) = add_peripheries(&mut v, sides, peripheries, outp, penwidth)?;
                 shape.outline_width = outline.x;
                 shape.outline_height = outline.y;
                 if peripheries <= 1 || iter >= 8 {
@@ -570,7 +577,7 @@ impl NodeShape {
         shape.orientation = orientation;
         shape.distortion = distortion;
         shape.skew = skew;
-        shape
+        Ok(shape)
     }
 
     /// Replaces the reconstructed vertices with C's exact `poly_init` /

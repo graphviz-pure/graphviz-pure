@@ -309,7 +309,7 @@ pub fn register_clusters(g: &mut LGraph<'_>, tree: &ClusterTree) {
 /// `osage_layout(g)`.
 pub fn osage_layout(graph: &mut Graph) -> Result<()> {
     let src = graph.clone();
-    let mut g = LGraph::new(&src, 2, EdgeType::Line);
+    let mut g = LGraph::new(&src, 2, EdgeType::Line)?;
     let tree = mk_clusters(&src);
     register_clusters(&mut g, &tree);
     // osage's mkClusters makes each cluster's label as it registers it, in tree order.
