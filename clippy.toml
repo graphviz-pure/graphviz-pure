@@ -1,3 +1,5 @@
+msrv = "1.88"
+
 # Every diagnostic goes through `graphviz_pure_core::diag` (C's `agerr` sink: the `-q` level,
 # `\ooo` escaping, `AGPREV`), or `diag::fprintf_stderr` where C writes with a bare `fprintf`.
 disallowed-macros = [

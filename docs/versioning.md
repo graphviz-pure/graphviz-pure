@@ -31,9 +31,12 @@ From `1.0`:
 | Removing or changing a public Rust or JavaScript API, a command-line option or a format | major |
 | A fix that makes output closer to C Graphviz (bytes change for some inputs) | minor |
 | A new format, engine option or API | minor |
-| Raising the minimum supported Rust version | minor |
+| Raising `rust-version` (at most current stable minus two) | any release; not a semver promise |
 | A fix that does not change output for any input in the test corpora; dependency updates; documentation | patch |
 | Updating the reference to a newer Graphviz release | major |
+
+`rust-version` is at most current stable minus two. Any release may raise it; it is not a
+semver promise. CI checks the workspace with exactly that toolchain.
 
 Output that moves *away* from C Graphviz is a bug, never a release decision: the fidelity
 ratchets in CI refuse it.
