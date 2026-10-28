@@ -559,6 +559,31 @@ mod tests {
     use graphviz_pure_parser::parse_dot;
 
     #[test]
+    fn output_format_names_have_device_and_render_plugins() {
+        for &(name, _) in OutputFormat::FORMATS {
+            let (renderer, package) = plugins::DEVICE_PLUGINS
+                .iter()
+                .find_map(|&(device, package)| {
+                    let (format, renderer) = device.split_once(':')?;
+                    (format == name).then_some((renderer, package))
+                })
+                .unwrap_or_else(|| panic!("no device plugin for {name}"));
+            assert!(
+                plugins::RENDER_PLUGINS.contains(&(renderer, package)),
+                "no render plugin for {name}:{renderer}:{package}"
+            );
+        }
+    }
+
+    #[test]
+    fn output_format_names_are_unique() {
+        let mut seen = std::collections::HashSet::new();
+        for name in OutputFormat::names() {
+            assert!(seen.insert(name), "duplicate output format name: {name}");
+        }
+    }
+
+    #[test]
     fn output_format_names_preserve_aliases_and_normalization() {
         for (name, expected) in [
             ("svg", OutputFormat::Svg),
