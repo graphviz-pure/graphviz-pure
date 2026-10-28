@@ -66,8 +66,6 @@ Graphviz, the bundled fonts and the other third-party material in the repository
 | [strict-num](https://crates.io/crates/strict-num) | 0.1.1 | MIT |
 | [svgtypes](https://crates.io/crates/svgtypes) | 0.16.1 | Apache-2.0 OR MIT |
 | [syn](https://crates.io/crates/syn) | 3.0.9 | MIT OR Apache-2.0 |
-| [thiserror](https://crates.io/crates/thiserror) | 2.0.21 | MIT OR Apache-2.0 |
-| [thiserror-impl](https://crates.io/crates/thiserror-impl) | 2.0.21 | MIT OR Apache-2.0 |
 | [tiny-skia](https://crates.io/crates/tiny-skia) | 0.12.0 | BSD-3-Clause |
 | [tiny-skia-path](https://crates.io/crates/tiny-skia-path) | 0.12.0 | BSD-3-Clause |
 | [tinyvec](https://crates.io/crates/tinyvec) | 1.13.3 | Zlib OR Apache-2.0 OR MIT |
@@ -1123,8 +1121,6 @@ Used by:
 - serde_derive 1.0.229 (Erick Tryzelaar <erick.tryzelaar@gmail.com>, David Tolnay <dtolnay@gmail.com>)
 - serde_json 1.0.154
 - syn 3.0.9 (David Tolnay <dtolnay@gmail.com>)
-- thiserror-impl 2.0.21 (David Tolnay <dtolnay@gmail.com>)
-- thiserror 2.0.21 (David Tolnay <dtolnay@gmail.com>)
 - unicode-ident 1.0.27 (David Tolnay <dtolnay@gmail.com>)
 - zmij 1.0.23 (David Tolnay <dtolnay@gmail.com>)
 
