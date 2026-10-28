@@ -334,8 +334,19 @@ struct Frame {
     saved: SavedDiag,
 }
 
+/// The current capture lives in `top`. `below` holds the captures it is nested
+/// in, and that `Vec` is allocated only then.
+///
+/// An empty [`HashSet`] and an empty [`Vec`] allocate nothing, so one capture
+/// that emits no diagnostic and no once-only key allocates nothing. The command
+/// line captures once, for a raster format, and the allocation ratchet is exact.
+struct Frames {
+    top: Option<Frame>,
+    below: Vec<Frame>,
+}
+
 thread_local! {
-    static FRAMES: RefCell<Vec<Frame>> = const { RefCell::new(Vec::new()) };
+    static FRAMES: RefCell<Frames> = const { RefCell::new(Frames { top: None, below: Vec::new() }) };
 }
 
 fn push_frame() {
@@ -348,7 +359,11 @@ fn push_frame() {
         silent: SILENT.with(|cell| cell.replace(0)),
     };
     FRAMES.with(|frames| {
-        frames.borrow_mut().push(Frame {
+        let mut frames = frames.borrow_mut();
+        if let Some(prev) = frames.top.take() {
+            frames.below.push(prev);
+        }
+        frames.top = Some(Frame {
             diagnostics: Vec::new(),
             saved,
         });
@@ -358,7 +373,12 @@ fn push_frame() {
 
 fn pop_frame() {
     crate::color::pop_capture_colors();
-    let Some(frame) = FRAMES.with(|frames| frames.borrow_mut().pop()) else {
+    let Some(frame) = FRAMES.with(|frames| {
+        let mut frames = frames.borrow_mut();
+        let top = frames.top.take()?;
+        frames.top = frames.below.pop();
+        Some(top)
+    }) else {
         return;
     };
     EMITTED.with(|cell| {
@@ -401,7 +421,8 @@ pub fn capture<R>(f: impl FnOnce() -> R) -> (R, Vec<crate::error::Diagnostic>) {
     let diagnostics = FRAMES.with(|frames| {
         frames
             .borrow_mut()
-            .last_mut()
+            .top
+            .as_mut()
             .map(|frame| std::mem::take(&mut frame.diagnostics))
             .unwrap_or_default()
     });
@@ -409,7 +430,7 @@ pub fn capture<R>(f: impl FnOnce() -> R) -> (R, Vec<crate::error::Diagnostic>) {
 }
 
 fn capturing() -> bool {
-    FRAMES.with(|frames| !frames.borrow().is_empty())
+    FRAMES.with(|frames| frames.borrow().top.is_some())
 }
 
 /// The level a collected message reports. `AGPREV` keeps the level of the
@@ -433,7 +454,7 @@ fn emit_agerr(original: AgErrLevel, bytes: &[u8]) {
         let message = String::from_utf8_lossy(bytes).into_owned();
         let diagnostic = crate::error::Diagnostic::new(diagnostic_level(original), message);
         FRAMES.with(|frames| {
-            if let Some(frame) = frames.borrow_mut().last_mut() {
+            if let Some(frame) = frames.borrow_mut().top.as_mut() {
                 frame.diagnostics.push(diagnostic);
             }
         });
