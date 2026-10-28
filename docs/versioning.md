@@ -1,8 +1,8 @@
 # Versioning
 
-graphviz-pure follows [Semantic Versioning](https://semver.org/). All crates and the npm package
-share one version number, set in `[workspace.package]` in `Cargo.toml` and in
-`web/package.json`, and are released together.
+graphviz-pure follows [Semantic Versioning](https://semver.org/). All release channels share
+one release version, set in `[workspace.package]` in `Cargo.toml`, `web/package.json` and
+`web/jsr.json`, with the channel-specific forms below.
 
 ## What the version covers
 
@@ -23,8 +23,31 @@ share one version number, set in `[workspace.package]` in `Cargo.toml` and in
   `ps2`, `svgz`, `tk`) and the cairo, gd and terminal formats (`pdf`, `gif`, `vt`, `kitty`, …).
 - **Output.** Because the project exists to reproduce Graphviz's output exactly, every change
   to the bytes the port writes for an existing input is listed in the changelog, whatever its
-  size. Every build computes with the same math library, so the bytes are the same on every
-  platform.
+  size. Except for the [crates.io raster exception](#cratesio-raster-exception), every build
+  computes with the same math library, so the bytes are the same on every platform.
+
+## Release channels
+
+The [release workflow](../.github/workflows/release.yml) publishes the channels listed in
+[channels.md](channels.md#shipped). Each version identifies the same graphviz-pure release:
+
+| channel | what the version means |
+| :--- | :--- |
+| GitHub releases | `vX.Y.Z` identifies the release; its native and WASI archives carry `X.Y.Z` in their names. |
+| crates.io | `X.Y.Z` versions the stable Rust API of the facade (`graphviz-pure`) and `graphviz-pure-raster`, and the CLI in `graphviz-pure-cli`. The facade pins its implementation crates with exact `=` requirements; those crates have no semver promise. |
+| npm and JSR `@graphviz-pure/wasm` | `X.Y.Z` versions the JavaScript API and its output on both registries. JSR publishes the files from the npm tarball. |
+| PyPI `graphviz-pure` wheels | The bundled CLI's release version, mapped to PEP 440: stable `X.Y.Z` stays `X.Y.Z`, and, for example, `0.3.0-rc.1` becomes `0.3.0rc1` ([releasing.md](releasing.md)). |
+| Wasmer `graphviz-pure/graphviz-pure` and WASI archives | The release version of the WASI CLI module. Wasmer packages the module from the `wasm32-wasip1` release archive and publishes stable versions only; other WASI runtimes can use the archive directly. |
+| ghcr.io `graphviz-pure/graphviz-pure` | `X.Y.Z` identifies the CLI image for that release. `X.Y` follows the highest stable `X.Y.*` image version, and `latest` follows the highest stable image version across all majors. Pre-releases get only their full version tag. The workflow does not push an `X` tag (for example, `:1`). |
+| Homebrew tap `graphviz-pure/tap/graphviz-pure` | The formula's version identifies the CLI release whose archives it installs. |
+| Scoop bucket `graphviz-pure/graphviz-pure` | The manifest's version identifies the CLI release whose archives it installs. |
+| cargo-binstall | The `graphviz-pure-cli` crate version selects the matching GitHub release archive; a source-build fallback has the crates.io raster exception below. |
+
+All CLI distributions above carry the same CLI and are covered by the command-line and output
+promises, including the `-V` line's shape. The Homebrew tap and Scoop bucket update their
+formula and manifest from the release archives after the GitHub release is published. ghcr's
+moving tags use versions already pushed to the image registry and only move forward; `latest`
+can cross a major-version boundary. Pin a full version to select a particular release.
 
 ## What each kind of change bumps
 
@@ -48,19 +71,37 @@ semver promise. CI checks the workspace with exactly that toolchain.
 Output that moves *away* from C Graphviz is a bug, never a release decision: the fidelity
 ratchets in CI refuse it.
 
+## Security support across 1.0
+
+Before 1.0.0, only the latest release receives security fixes. In 1.x, security fixes ship as
+patch releases of the latest 1.x minor only; earlier minors are unsupported. After 1.0.0,
+0.x receives no security fixes. This is the policy in [SECURITY.md](../SECURITY.md#supported-versions).
+
 ## What "identical to C" means
 
 Fidelity means identical to C Graphviz when C computes with the same math. Floating-point
 functions such as `pow`, `sin` and `atan2` differ in the last bit from one platform's libm to
 another, and C Graphviz uses whatever libm its platform has, so stock C itself writes different
-bytes on macOS and on Linux. graphviz-pure instead computes with one math library on every
-platform (`graphviz_pure_core::math`), and is compared with C running those same functions
+bytes on macOS and on Linux. graphviz-pure's layout instead computes with one math library on
+every platform (`graphviz_pure_core::math`), and is compared with C running those same functions
 (`scripts/dot-portable-libm.sh`; see [porting/libm.md](porting/libm.md)).
 
 - An output difference that comes only from a platform's libm is not a bug: for example, stock
   C on macOS calls Apple's libm, and differs from the port on the inputs that
   `gv-diff e2e --stock` lists as libm-only.
-- The port never follows a platform libm. No build or feature switches to one.
+- Layout and text output always use portable math, including in crates.io source builds.
+
+### crates.io raster exception
+
+Crates.io source builds (`cargo install graphviz-pure-cli`, or depending on
+`graphviz-pure-raster` from crates.io) do not inherit the workspace's `[patch.crates-io]`
+overrides for the vendored `kurbo`, `skrifa`, `svgtypes`, `tiny-skia` and `tiny-skia-path`.
+Their raster dependencies may therefore use the platform libm, so `-Tpng`/`-Tjpg` pixels can
+differ across platforms and from the release binaries. SVG, layout and text outputs are
+unaffected. Builds from this workspace, including the published binaries and WebAssembly,
+use the vendored overrides. This exception is accepted for 1.0 by
+[decision D11](roadmap/1.0.md#decisions); fixing it is planned for 1.x
+([#529](https://github.com/graphviz-pure/graphviz-pure/issues/529)).
 
 ## Making a release
 
