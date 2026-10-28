@@ -65,11 +65,10 @@ Host aur.archlinux.org
    prereleases are refused (pacman's `pkgver` cannot contain `-`, and the AUR packages follow
    stable releases). The script:
    - downloads the two Linux musl archives and `SHA256SUMS` from the release, runs
-     `gh attestation verify` on each archive (signer workflow `release.yml`, source ref the tag,
-     `--deny-self-hosted-runners`) and checks it against `SHA256SUMS`;
-   - for the source tarball, which has no attestation, requires the tag to carry an SSH
-     signature by a key in `.github/allowed_signers` on `master`, and the tarball's contents to
-     equal the tagged tree;
+     `gh attestation verify` on each archive (signer workflow `release.yml`, source ref the tag
+     or `refs/heads/master`, `--deny-self-hosted-runners`) and checks it against `SHA256SUMS`;
+   - for the source tarball, which has no attestation, requires an annotated tag and the
+     tarball's contents to equal the tagged tree;
    - writes `pkgver`, `pkgrel=1`, the checksums and the Maintainer line into copies of both
      PKGBUILDs, removes the TODO comments, and regenerates `.SRCINFO` with
      `makepkg --printsrcinfo` (in an `archlinux` container if makepkg is not installed; with

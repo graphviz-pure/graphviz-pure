@@ -20,6 +20,7 @@ their parent; a ```markdown fence around the entry is unwrapped, other fenced co
 
     release-changelog.py collect BASE HEAD [--exclude N]...     JSON on stdout
     release-changelog.py render JSON VERSION [--intro TEXT]     the CHANGELOG section
+                                                         (no --intro: a line counted from the entries)
     release-changelog.py next-version JSON PREVIOUS             the version the labels ask for
 
 The version rule (docs/versioning.md): while the version is 0.x, a pull request labelled
@@ -38,8 +39,6 @@ REPO = "graphviz-pure/graphviz-pure"
 BREAKING_LABEL = "breaking"
 # The CHANGELOG's sections, in the order they are written.
 SECTIONS = ["Breaking", "Added", "Changed", "Fixed", "Deprecated", "Removed", "Security"]
-# The line release-prep.sh writes where the release's intro goes; release-ready.sh refuses it.
-INTRO_PLACEHOLDER = "<!-- release-prep: replace this line with the release's intro paragraph -->"
 # An entry that says there is nothing to list: "None.", "None (test only).", "N/A", "Not
 # user-visible (CI only)." Prose that only starts with such a word ("None of the ...") is an entry.
 NOT_VISIBLE = re.compile(r"^(none|n/?a|not user[- ]visible|no user[- ]visible changes?)\s*([.:;(—–-]|$)", re.I)
@@ -253,8 +252,21 @@ def collect(base, head, exclude):
             "without_pr": without_pr}
 
 
+def default_intro(data):
+    """A one-line intro counted from the entries: "3 changes: 1 added, 2 fixed." """
+    counts = {}
+    for entry in data["entries"]:
+        counts[entry["section"]] = counts.get(entry["section"], 0) + 1
+    total = sum(counts.values())
+    if total == 0:
+        return "No user-visible changes."
+    parts = [f"{counts[name]} {name.lower()}" for name in SECTIONS if counts.get(name)]
+    noun = "change" if total == 1 else "changes"
+    return f"{total} {noun}: {', '.join(parts)}."
+
+
 def render(data, version, intro):
-    out = [f"## [{version}] - {datetime.date.today().isoformat()}", "", intro or INTRO_PLACEHOLDER]
+    out = [f"## [{version}] - {datetime.date.today().isoformat()}", "", intro or default_intro(data)]
     for name in SECTIONS:
         items = [e["text"] for e in data["entries"] if e["section"] == name]
         if not items:

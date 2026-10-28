@@ -113,7 +113,8 @@ Dependabot's branches live in this repository, and only Dependabot can push to t
 - The default workflow token is read-only. Workflows cannot approve pull requests.
 - `master` accepts changes only through the merge queue: a pull request needs a code owner's
   approval given after its last push, the required checks, and every review thread resolved.
-  Nobody can bypass this, admins included. Force pushes and deletion are blocked. Only
-  maintainers can create `v*` tags.
+  Force pushes and deletion are blocked. The release workflow's GitHub App is the one bypass,
+  and only so it can push the release commit and create the `v*` tag. Nobody else can bypass
+  the queue, and nobody else can create a `v*` tag.
 - `cargo deny` checks advisories, licences and sources. Secret scanning with push protection is
   on, and vulnerabilities are reported privately (SECURITY.md).

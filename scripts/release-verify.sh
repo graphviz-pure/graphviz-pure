@@ -17,13 +17,14 @@
 #           module of the release's attested wasm32-wasip1 archive byte for byte
 #   pypi    graphviz-pure VERSION on PyPI: one wheel per release platform, none yanked
 #           (scripts/check-pypi-wheels.py), each with its build-provenance attestation
-#   npm     @graphviz-pure/wasm VERSION is the `latest` dist-tag, and `npm audit signatures`
-#           passes for it (only after the owner approved the staged version)
+#   npm     @graphviz-pure/wasm VERSION is the `latest` dist-tag, an install pinned to the
+#           attested release tarball's integrity, and `npm audit signatures` passes
 #   taps    the Homebrew tap's formula and the Scoop bucket's manifest carry VERSION, and their
 #           newest update.yml run succeeded
 #
-# --ci checks github, crates, binstall, jsr, ghcr, wasmer and pypi only: release.yml's verify job runs it before npm is
-# approved and before the tap and bucket update. --channels LIST checks only those channels
+# --ci checks every channel but the tap and bucket: release.yml's verify job runs it once the
+# publishing jobs finish, and the tap and bucket updates are dispatched rather than waited on.
+# --channels LIST checks only those channels
 # (comma-separated); --failed LIST reports those as failing at once, without checking (the verify
 # job passes the channels whose publishing job did not succeed). --wait SECONDS retries failing
 # registry checks (crates.io, JSR, ghcr, Wasmer, PyPI) until they pass or SECONDS have passed in all. Reads only.
@@ -58,6 +59,12 @@ fails=0
 result() { # result NAME PASS DETAIL
   if [ "$2" = 1 ]; then echo "- [x] $1: $3"; else echo "- [ ] $1: FAIL — $3"; fails=$((fails + 1)); fi
 }
+# Releases through 0.2.3 were attested for the tag. A release cut by workflow_dispatch is
+# attested for refs/heads/master: the certificate's source ref is the workflow run's ref.
+attest() { # attest SUBJECT
+  gh attestation verify "$1" --repo "$REPO" --signer-workflow "$signer" --source-ref "refs/tags/$tag" > /dev/null 2>&1 && return 0
+  gh attestation verify "$1" --repo "$REPO" --signer-workflow "$signer" --source-ref "refs/heads/master" > /dev/null 2>&1
+}
 # retry CMD...: runs CMD until it succeeds or the deadline ($wait seconds after the start, shared
 # by every check) has passed.
 deadline=$((SECONDS + wait))
@@ -79,8 +86,7 @@ github() {
   gh release download "$tag" --repo "$REPO" --dir "$work/release" > /dev/null
   for f in "$work"/release/*; do
     n=$((n + 1))
-    gh attestation verify "$f" --repo "$REPO" --signer-workflow "$signer" --source-ref "refs/tags/$tag" > /dev/null 2>&1 ||
-      bad+=("$(basename "$f")")
+    attest "$f" || bad+=("$(basename "$f")")
   done
   if ! (cd "$work/release" && if command -v sha256sum > /dev/null; then sha256sum --check --quiet SHA256SUMS; else shasum -a 256 --check --quiet SHA256SUMS; fi) > /dev/null 2>&1; then
     bad+=(SHA256SUMS)
@@ -214,7 +220,7 @@ ghcr_tags() {
 ghcr() {
   if ! retry ghcr_tags; then
     result ghcr 0 "tags differ: $(awk '{printf "%s=%s ", $1, ($2 == "" ? "missing" : substr($2, 1, 19))}' "$work/ghcr")"
-  elif ! gh attestation verify "oci://$image:$version" --repo "$REPO" --signer-workflow "$signer" --source-ref "refs/tags/$tag" > /dev/null 2>&1; then
+  elif ! attest "oci://$image:$version"; then
     result ghcr 0 "$image:$version's attestation does not verify"
   else
     local held newer
@@ -257,7 +263,7 @@ wasmer_channel() {
   mkdir -p "$work/wasi"
   if ! gh release download "$tag" --repo "$REPO" --pattern "$asset" --dir "$work/wasi" > /dev/null 2>&1; then
     result wasmer 0 "$version is in the registry, but the release has no $asset to compare it with"
-  elif ! gh attestation verify "$work/wasi/$asset" --repo "$REPO" --signer-workflow "$signer" --source-ref "refs/tags/$tag" > /dev/null 2>&1; then
+  elif ! attest "$work/wasi/$asset"; then
     result wasmer 0 "$asset's attestation does not verify"
   elif ! python3 -I -c '
 import sys, tarfile
@@ -283,8 +289,7 @@ pypi() {
   line=$(tail -n 1 "$work/pypi.log")
   case "$line" in skipped:*) result pypi 1 "$line"; return ;; esac
   for wheel in "$work"/pypi/*.whl; do
-    gh attestation verify "$wheel" --repo "$REPO" --signer-workflow "$signer" --source-ref "refs/tags/$tag" > /dev/null 2>&1 ||
-      bad+=("$(basename "$wheel")")
+    attest "$wheel" || bad+=("$(basename "$wheel")")
   done
   if [ ${#bad[@]} = 0 ]; then result pypi 1 "$line, each attested"
   else result pypi 0 "not attested: ${bad[*]}"; fi
@@ -294,7 +299,7 @@ npm_channel() {
   local latest tarball dir integrity
   latest=$(npm view @graphviz-pure/wasm dist-tags.latest 2> /dev/null || true)
   if [ "$latest" != "$version" ]; then
-    result npm 0 "latest is ${latest:-unknown}, not $version (approve the staged version first)"
+    result npm 0 "latest is ${latest:-unknown}, not $version"
     return
   fi
   # The install is pinned to the attested GitHub-release tarball's sha512, not to anything the
@@ -303,7 +308,7 @@ npm_channel() {
   dir=$work/npm-release
   if ! gh release download "$tag" --repo "$REPO" --dir "$dir" -p "$tarball" -p SHA256SUMS > /dev/null 2>&1 ||
     ! (cd "$dir" && if command -v sha256sum > /dev/null; then sha256sum --check --quiet --ignore-missing SHA256SUMS; else shasum -a 256 --check --quiet --ignore-missing SHA256SUMS; fi) > /dev/null 2>&1 ||
-    ! gh attestation verify "$dir/$tarball" --repo "$REPO" --signer-workflow "$signer" --source-ref "refs/tags/$tag" > /dev/null 2>&1; then
+    ! attest "$dir/$tarball"; then
     result npm 0 "the release's $tarball is missing, fails SHA256SUMS, or its attestation does not verify"
     return
   fi
@@ -350,11 +355,9 @@ want jsr && jsr
 want ghcr && ghcr
 want wasmer && wasmer_channel
 want pypi && pypi
+want npm && npm_channel
 if [ "$ci" = 0 ]; then
-  want npm && npm_channel
   want taps && taps
-elif case ",$failed," in *,npm,*) true ;; *) false ;; esac; then
-  result npm 0 "its publishing job did not succeed"
 fi
 echo
 if [ "$fails" = 0 ]; then echo "**All channels pass.**"; else echo "**$fails channel(s) fail.**"; fi

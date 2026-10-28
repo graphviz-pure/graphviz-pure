@@ -1,0 +1,8 @@
+# actionlint 1.7.12 does not know GitHub's self-repository syntax (`uses: $/...`,
+# July 2026). zizmor 1.31.1, which CI runs, requires it instead of `uses: ./...`.
+# Drop these ignores when actionlint accepts `$/`.
+paths:
+  .github/workflows/release.yml:
+    ignore:
+      - 'reusable workflow call "\$/\.github/workflows/fuzz\.yml" at "uses" is not following the format'
+      - 'specifying action "\$/\.github/actions/use-release-commit" in invalid format because ref is missing'
