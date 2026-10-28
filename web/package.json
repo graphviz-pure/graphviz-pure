@@ -46,7 +46,7 @@
     "circo",
     "twopi"
   ],
-  "license": "EPL-2.0",
+  "license": "EPL-2.0 AND MIT",
   "repository": {
     "type": "git",
     "url": "https://github.com/graphviz-pure/graphviz-pure.git"
