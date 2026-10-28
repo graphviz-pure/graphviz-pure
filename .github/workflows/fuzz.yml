@@ -4,23 +4,31 @@ name: Fuzzing
 # (.clusterfuzzlite/): panics, hangs and running out of memory on crafted DOT. No C oracle; the
 # differential fuzzer against C Graphviz is separate (docs/porting/fuzzing.md).
 #
-# Fuzzing is a pre-release step. release.yml calls this workflow on the base commit (master at
-# dispatch); a person can also dispatch it. It does not run on a schedule or on pull requests: a
-# run takes over an hour, and the tests, the C differential corpora and the compiler already
-# gate every change, so fuzzing each pull request (25 minutes a push, one crash in 141 runs) or
-# each day only slowed the agents fixing bugs.
+# Fuzzing runs weekly, on a schedule, and before every release. The schedule keeps the corpus
+# alive (D7 in docs/roadmap/1.0.md): the corpus is an artifact of this workflow, kept for 90
+# days, so a gap of more than 90 days between releases loses it. release.yml calls this workflow
+# on the base commit (master at dispatch), and that call stays the release's gate; a person can
+# also dispatch it. It does not run on pull requests: a run takes over an hour, and the tests,
+# the C differential corpora and the compiler already gate every change, so fuzzing each pull
+# request (25 minutes a push, one crash in 141 runs) only slowed the agents fixing bugs.
 #
 # - A run fuzzes every target from the corpus of the earlier runs (kept as this workflow's
-#   artifacts, with the crashes and the builds), then prunes the corpus.
+#   artifacts, with the crashes and the builds), then prunes the corpus. The weekly run uploads
+#   the corpus again, so its artifacts never expire.
 # - A run whose inputs an earlier run already fuzzed is skipped. The inputs are what the fuzz
 #   targets are built from and seeded with (scripts/fuzz-inputs-key.sh): the crates' code, the
 #   fuzz workspace and the test graphs, not the version, docs, scripts or other tests. A run that
 #   passes uploads a `fuzzed-<key>` marker, and the `inputs` job looks for one, so dispatching
-#   again after a changelog-only push takes a minute. Dispatch with `force` to fuzz anyway.
+#   again after a changelog-only push takes a minute. Dispatch with `force` to fuzz anyway. The
+#   weekly run always fuzzes: a skipped run saves no corpus, and the corpus would expire.
 # - A crash fails the run. The minimised reproducer is the run's cifuzz-crashes-<target>
-#   artifact. The release workflow does not open an issue for it.
+#   artifact. The release workflow does not open an issue for it; the weekly run, which nobody
+#   waits for, opens one (the `report` job).
 
 on:
+  schedule:
+    # Weekly, on Monday (D7). Not on the hour: GitHub delays the busiest times.
+    - cron: "41 4 * * 1"
   workflow_dispatch:
     inputs:
       force:
@@ -83,7 +91,10 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           REPO_ID: ${{ github.repository_id }}
-          FORCE: ${{ inputs.force }}
+          # The weekly run always fuzzes: a skipped run saves no corpus, and the corpus would
+          # expire. A dispatch (and the release's call, whose event is the dispatch) keeps the
+          # marker cache, so the release's gate stays what it was.
+          FORCE: ${{ inputs.force || github.event_name == 'schedule' }}
         run: |
           key=$(scripts/fuzz-inputs-key.sh)
           echo "key=$key" >> "$GITHUB_OUTPUT"
@@ -168,3 +179,40 @@ jobs:
           name: fuzzed-${{ needs.inputs.outputs.key }}
           path: ${{ runner.temp }}/marker/fuzzed.txt
           retention-days: 90
+
+  # Nobody waits for a weekly run, so a crash (or a run that broke before it could fuzz) opens an
+  # issue, or comments on the one still open. A release's run opens no issue: its crash fails the
+  # release, and the release driver files it.
+  report:
+    name: Open an issue for a failed weekly run
+    needs: [inputs, batch]
+    if: ${{ failure() && github.event_name == 'schedule' && github.repository == 'graphviz-pure/graphviz-pure' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read # list this run's artifacts, to tell a crash from a broken run
+      issues: write # open the issue that reports the failure
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # ClusterFuzzLite uploads each target's crashes as cifuzz-crashes-<target>; without one,
+      # the build, the action or the runner failed.
+      - name: Open or update the issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.run_id }}
+          COMMIT: ${{ github.sha }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          crashes=$(gh api "repos/$GH_REPO/actions/runs/$RUN_ID/artifacts" \
+            --jq '[.artifacts[].name | select(startswith("cifuzz-crashes-"))] | join(", ")')
+          if [ -n "$crashes" ]; then
+            scripts/ci-report-failure.sh "Fuzzing finds a crash on master" crash,fuzz \
+              "The weekly fuzz run at $COMMIT crashed: $RUN_URL. Minimised reproducers: $crashes."
+          else
+            scripts/ci-report-failure.sh "Fuzzing workflow fails on master" fuzz \
+              "The weekly fuzz run at $COMMIT failed without a crash (build, action or runner): $RUN_URL."
+          fi
