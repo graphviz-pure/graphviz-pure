@@ -224,24 +224,31 @@ CARGO_PROFILE_RELEASE_DEBUG_ASSERTIONS=true`) on the port side:
 | **all** | **6,000** | **5,899** | **5,834** | **98.90%** | **99.32%** | **65** | **3** | **16** | **82** |
 
 There were **0** `exit_diff`, **0** `port_crash`, **0** `port_timeout` and **0** `debug_diff`
-cases across all 6,000 seeds. Every one of the 65 `svg_diff` cases (and the 3 `stderr_diff`
-notes on `same` cases) was minimised and triaged into an accepted class — **0 port bugs**:
+cases across all 6,000 seeds. Every one of the 65 `svg_diff` cases, the 3 `stderr_diff` notes on
+`same` cases and the extreme-attribute campaign outcomes was minimised and triaged — **port bugs:
+3** (#581, #582, #583) and 64 accepted `svg_diff` cases (including 2 new upstream-C
+undefined-behaviour classes, `037` #584 and `038` #585):
 
 | Class | Cause | Cases | Seeds / notes |
 |---|---|---:|---|
+| Port bug | neato/circo edge routing fails (`destination point not in any triangle`) where C routes it (`regular` + `penwidth` + `sep` + `overlap=oscale`; C stable over 31 GTS face orders and allocators, not #35; #582) | 1 | neato: `41310` (plus `43065` circo `stderr_diff` note on a `same` case) |
+| Port bug | dot `init_rank` diagnostics name anonymous rank-filler nodes `%fill<N>` in the port vs `%<id>` in C (`lib/dotgen/mincross.c:990`, `lib/cgraph/id.c:163`, not an `endgraph` effect; #581) | 0 (`1 stderr_diff`) | dot: `40126` (`stderr_diff` note on a `same` case) |
+| Port bug | `peripheries=2147483647` aborts the port with `SIGABRT` on a 128 GiB allocation (`port_crash` in `attr-extremes.py`) whereas C prints `out of memory` and exits 1 (#583) | 0 (`9` single + `1` mix in `attr-extremes.py`) | `attr-extremes.py`: `peripheries=2147483647` |
 | Platform / libc | x86-64 hardware negative quiet NaN printed as `-nan` by glibc vs `nan` on macOS arm64 (`docs/porting/libm.md`, "Linux x86-64"); byte-identical after `-nan` → `nan` | 25 | dot (1): `42601`; neato (2): `42189`, `43366`; fdp (14): `40364`, `40528`, `40887`, `41341`, `41569`, `41618`, `42022`, `42096`, `42183`, `42620`, `44177`, `45214`, `45291`, `45628`; sfdp (1): `43468`; osage (7): `40388`, `40696`, `42541`, `43466`, `44524`, `44991`, `45525` |
 | C nondeterminism | fdp cluster layout orders derived-graph edges and ports by `Agnode_t *` heap address (`025-fdp-cluster-address-dependent-layout`, #34); all 31 match the port byte for byte when C allocates derived nodes in `NodeHeap` order | 31 | fdp: `40027`, `40083`, `40121`, `40159`, `40321`, `40366`, `40517`, `40617`, `40709`, `40997`, `41344`, `41827`, `41882`, `42083`, `42228`, `42426`, `42448`, `43107`, `43540`, `43632`, `43841`, `44184`, `44215`, `44355`, `44363`, `44721`, `45256`, `45416`, `45692`, `45780`, `45968` |
 | C nondeterminism | VPSC solver iterates a `std::set` of constraint/block pointers (`docs/porting/neato.md`, "Ties by address", #225); all 5 match the port byte for byte when C uses a sequential bump allocator | 5 | neato (4): `41455`, `43156`, `44394`, `45025`; twopi (1): `40901` |
-| C nondeterminism | `makeMultiSpline` (`triPath`) breaks a horizontal symmetry tie by GTS face-pointer hash order (`026-neato-multispline-face-order`, #35) | 1 | neato: `41310` (also the 2 `stderr_diff` notes on `same` cases `43065` circo and `43458` neato, where GTS triangle order visits the failed endpoint side first) |
 | C error path | dot `pack` with a node in two non-nested clusters lays components out on shared node/edge records (`036-dot-pack-node-in-two-clusters`, #101) | 1 | dot: `40840` |
-| C undefined behaviour | `emit_background` (`lib/common/emit.c:1506-1518`) frees `clrs[0]` while leaving its pointer in `job->obj->fillcolor`, which a `style=wedged` node with a single-color `fillcolor` reads (`037-dot-wedged-bgcolor-freed-fillcolor`; ASan `heap-use-after-free`) | 1 | dot: `45877` |
-| C undefined behaviour | osage `layout` (`lib/osage/osageinit.c:110-129`) with `packmode=array_u`, clusters and node-only `sortv` allocates `vals` for nodes only, and `arrayRects` reads past it (`038-osage-array-u-cluster-vals-overread`; ASan `heap-buffer-overflow`) | 1 | osage: `40965` |
+| C undefined behaviour | `emit_background` (`lib/common/emit.c:1506-1518`) frees `clrs[0]` while leaving its pointer in `job->obj->fillcolor`, which a `style=wedged` node with a single-color `fillcolor` reads in `svg_print_paint` (`plugin/core/gvrender_core_svg.c:123`, from `svg_grstyle`) (`037-dot-wedged-bgcolor-freed-fillcolor`, #584; ASan `heap-use-after-free`) | 1 | dot: `45877` |
+| C undefined behaviour | osage `layout` (`lib/osage/osageinit.c:110-129`, `vals` at `:127`) with `packmode=array_u`, clusters and node-only `sortv` allocates `vals` for nodes only, and `ucmpf` (`lib/pack/pack.c:560`, called from `arrayRects` at `:656`) reads past it (`038-osage-array-u-cluster-vals-overread`, #585; ASan `heap-buffer-overflow`) | 1 | osage: `40965` |
 
-The 3 `stderr_diff` notes on cases whose SVG and exit status match C are: `43065` (circo) and
-`43458` (neato), where GTS triangle order changes which endpoint `Pshortestpath` reports outside
-the triangulation on a degenerate spline fallback, and `40126` (dot), where `init_rank` prints
-the names of rank-filler nodes (`%fill<N>` in the port vs `%<id>` in C, because `endgraph`
-stripped local `%` names when parsing the input graph).
+The 3 `stderr_diff` notes on cases whose SVG and exit status match C are: `40126` (dot, port bug
+#581: `init_rank` diagnostics name anonymous rank-filler nodes `%fill<N>` in the port vs `%<id>` in
+C, not an `endgraph` effect), `43065` (circo, port bug #582: the port fails edge routing with a 4th
+`destination point not in any triangle` warning where C is stable over 31 GTS face orders and
+allocators), and `43458` (neato, accepted #35: GTS triangle order changes which endpoint
+`Pshortestpath` reports outside the triangulation on a degenerate spline fallback). (Harness gaps
+where `fuzz-run.py` did not record `stderr_diff` on `svg_diff` cases and treated any two nonzero
+exits as equal are tracked in #586.)
 
 The crash and extreme-value campaigns were also re-run on the overflow-checked release build:
 
@@ -250,16 +257,17 @@ The crash and extreme-value campaigns were also re-run on the overflow-checked r
   `1–20000` and `40001–60000`) completed with **0 port panics and 0 port hangs**.
 * **Extreme attribute values (`scripts/attr-extremes.py`):** all 23,528 single-attribute cases
   and 4,000 mixed-attribute cases (`--mix 4000 --seed 1`) completed with **0 arithmetic-overflow
-  panics**. Every non-`same` case falls into an existing cause in `docs/porting/crashes.md` or
-  platform behavior: C crashes (`1,395` single, `636` mix), both time out (`23` single, `13`
-  mix), `peripheries=2147483647` triggers an identical 137 GB allocation failure in both C and
-  Rust (`9` single, `1` mix), `width=9223372036854775808` in dot aborts C on `xlhdxload`'s
-  assertion while the port runs network simplex (`1` single, `1` mix), `largeMinlen` exits 1 in
-  the port as documented in `crashes.md` (#262; `17` single, `13` mix), overflow error prefix
-  wording (#252; `2` single, `1` mix), and `-Tplain` differences from Linux x86-64 `-nan` sign
-  (`53` single, `34` mix) or x86-64 `cvttsd2si` (`INT_MIN`) vs arm64 `fcvtzs` (`INT_MAX` / `0`)
-  on out-of-range `double`-to-`int` casts (`68` single, `65` mix; `2` single and `4` mix on
-  `stderr_diff`).
+  panics** and **1 port bug** (#583: on `peripheries=2147483647`, `9` single and `1` mix, the
+  harness recorded `port_crash` because the port aborts with `SIGABRT` on a 128 GiB allocation
+  whereas C prints `out of memory` and exits 1). Every other non-`same` case falls into an existing
+  cause in `docs/porting/crashes.md` or platform behavior: C crashes (`1,395` single, `636` mix),
+  both time out (`23` single, `13` mix), `width=9223372036854775808` in dot aborts C on
+  `xlhdxload`'s assertion while the port runs network simplex (`1` single, `1` mix),
+  `largeMinlen` exits 1 in the port as documented in `crashes.md` (#262; `17` single, `13` mix),
+  overflow error prefix wording (#252; `2` single, `1` mix), and `-Tplain` differences from Linux
+  x86-64 `-nan` sign (`53` single, `34` mix) or x86-64 `cvttsd2si` (`INT_MIN`) vs arm64 `fcvtzs`
+  (`INT_MAX` / `0`) on out-of-range `double`-to-`int` casts (`68` single, `65` mix; `2` single and
+  `4` mix on `stderr_diff`).
 
 ### After all fixes
 
@@ -647,7 +655,7 @@ itself. The ortho variant also no longer has a gap: with a longer timeout, C fin
 | [`019-neato-polyline-compass-port-endpoint`](../../tests/fuzz-open/019-neato-polyline-compass-port-endpoint) | low | C nondeterminism | — | accepted (#28) |
 | [`023-neato-circuit-kk-agseq-index-crash`](../../tests/fuzz-open/023-neato-circuit-kk-agseq-index-crash) | high | C crash | 1 | accepted (#32) |
 | [`024-neato-ipsep-node-in-two-clusters-size-max-alloc`](../../tests/fuzz-open/024-neato-ipsep-node-in-two-clusters-size-max-alloc) | high | C error path | 1 | accepted (#33) |
-| [`025-fdp-cluster-address-dependent-layout`](../../tests/fuzz-open/025-fdp-cluster-address-dependent-layout) | medium | C nondeterminism | 3 | accepted (#34) |
+| [`025-fdp-cluster-address-dependent-layout`](../../tests/fuzz-open/025-fdp-cluster-address-dependent-layout) | medium | C nondeterminism | 34 | accepted (#34) |
 | [`026-neato-multispline-face-order`](../../tests/fuzz-open/026-neato-multispline-face-order) | medium | C nondeterminism | 3 | accepted (#35) |
 | [`027-dot-sameport-record-uninit-pathend`](../../tests/fuzz-open/027-dot-sameport-record-uninit-pathend) | medium | C nondeterminism | 2 | accepted (#36) |
 | [`029-neato-fdp-start-time-seeded`](../../tests/fuzz-open/029-neato-fdp-start-time-seeded) | low | C nondeterminism | 11 | accepted (#38) |
@@ -657,9 +665,9 @@ itself. The ortho variant also no longer has a gap: with a longer timeout, C fin
 | [`033-latin1-plain-freed-label`](../../tests/fuzz-open/033-latin1-plain-freed-label) | low | C nondeterminism | — | accepted (#42) |
 | [`034-html-cell-dashed-style-overread`](../../tests/fuzz-open/034-html-cell-dashed-style-overread) | low | C nondeterminism | — | accepted (#43) |
 | [`035-fdp-overlap-compress-cluster-edges`](../../tests/fuzz-open/035-fdp-overlap-compress-cluster-edges) | medium | C nondeterminism | — | accepted (#476) |
-| [`036-dot-pack-node-in-two-clusters`](../../tests/fuzz-open/036-dot-pack-node-in-two-clusters) | medium | C error path | 1 | accepted (#101) |
-| [`037-dot-wedged-bgcolor-freed-fillcolor`](../../tests/fuzz-open/037-dot-wedged-bgcolor-freed-fillcolor) | low | C nondeterminism | 1 | accepted (C UB) |
-| [`038-osage-array-u-cluster-vals-overread`](../../tests/fuzz-open/038-osage-array-u-cluster-vals-overread) | medium | C nondeterminism | 1 | accepted (C UB) |
+| [`036-dot-pack-node-in-two-clusters`](../../tests/fuzz-open/036-dot-pack-node-in-two-clusters) | medium | C error path | 2 | accepted (#101) |
+| [`037-dot-wedged-bgcolor-freed-fillcolor`](../../tests/fuzz-open/037-dot-wedged-bgcolor-freed-fillcolor) | low | C nondeterminism | 1 | accepted (#584) |
+| [`038-osage-array-u-cluster-vals-overread`](../../tests/fuzz-open/038-osage-array-u-cluster-vals-overread) | medium | C nondeterminism | 1 | accepted (#585) |
 
 The C nondeterminism noted above still applies to the corpus. fdp and neato with
 clusters, twopi with samehead arrows, and VPSC (`mode=ipsep`, which iterates a
