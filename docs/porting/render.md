@@ -192,7 +192,7 @@ leaves bytes `>= 0x80` alone, and so does the port).
   (`charset::begin_layout`/`begin_render`, called by `layout_graph_with_options`
   and `render_graph_named`); `NodeSizeEnv::new` and `-n2` labels use it.
 - The public API's root functions (`graphviz_pure::render_dot` and the others) take and
-  return text, converting with `charset::from_text`/`to_text`; `graphviz_pure::decoded`
+  return text, converting with `charset::from_text`/`to_text`; `graphviz_pure_render::decoded`
   takes decoded input (`charset::Decoded`), as the CLI does (#378).
 - Not reproduced: HTML lexer error messages (`Error: not well-formed ...`,
   `unknown encoding`).

@@ -53,7 +53,8 @@ toml = re.sub(r'(\[workspace\.package\][^\[]*?\nversion = ")[^"]+(")', rf"\g<1>{
 toml = bump_reqs(toml, new)
 open("Cargo.toml", "w").write(toml)
 facade = "crates/graphviz-pure/Cargo.toml"
-open(facade, "w").write(bump_reqs(open(facade).read(), new))
+facade_text = open(facade).read()
+open(facade, "w").write(bump_reqs(facade_text, new))
 for path in ("web/package.json", "web/jsr.json"):
     pkg = json.load(open(path))
     pkg["version"] = new

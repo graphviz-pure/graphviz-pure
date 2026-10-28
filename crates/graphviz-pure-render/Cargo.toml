@@ -15,7 +15,8 @@ graphviz-pure-core.workspace = true
 graphviz-pure-geom.workspace = true
 graphviz-pure-layout.workspace = true
 graphviz-pure-parser.workspace = true
-serde.workspace = true
+
+[dev-dependencies]
 serde_json.workspace = true
 
 [lints]

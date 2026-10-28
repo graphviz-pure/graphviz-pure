@@ -10,6 +10,9 @@ share one version number, set in `[workspace.package]` in `Cargo.toml` and in
   **the JavaScript API** of `@graphviz-pure/wasm`.
   `graphviz-pure-core`, `graphviz-pure-parser`, `graphviz-pure-geom`, `graphviz-pure-layout`
   and `graphviz-pure-render` are implementation crates with no semver promise.
+  The types the facade re-exports (`GraphvizError`, `Result`, `charset`, `LayoutEngine`,
+  `LayoutOptions`, `GlobalAttrs`, `OutputFormat`) are covered by the facade's promise even
+  though they are defined in an implementation crate.
 - **The command line:** options, accepted `-T` formats, exit status.
 - **Output.** Because the project exists to reproduce Graphviz's output exactly, every change
   to the bytes the port writes for an existing input is listed in the changelog, whatever its

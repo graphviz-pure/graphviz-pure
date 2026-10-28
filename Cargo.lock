@@ -330,7 +330,6 @@ dependencies = [
  "graphviz-pure-geom",
  "graphviz-pure-layout",
  "graphviz-pure-parser",
- "serde",
  "serde_json",
 ]
 
