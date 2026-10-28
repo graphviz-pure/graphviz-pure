@@ -179,6 +179,7 @@ impl<'a> Dot<'a> {
         c.root_input = root_input;
         c.comp = true;
         let (r, g) = (&root.graphs[0], &mut c.graphs[0]);
+        g.next_anon_id = r.next_anon_id.clone();
         g.rankdir = r.rankdir;
         g.nodesep = r.nodesep;
         g.ranksep = r.ranksep;

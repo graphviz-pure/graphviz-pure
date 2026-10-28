@@ -3971,6 +3971,80 @@ fn init_rank_trouble_without_lost_nodes_lays_out_like_c() {
     );
 }
 
+// Issue #581: realFillRanks creates its fillers with `agnode(sg, NULL, 1)`. Their names come
+// from the same cgraph id counter as anonymous objects read from the input, not their arena
+// indices; this complete stderr is C 16.1.0's.
+#[test]
+fn init_rank_rank_fillers_use_anonymous_cgraph_ids() {
+    let src = "digraph G {
+newrank=true;
+subgraph cluster_0 {
+subgraph cluster_1 {
+rank=min;
+a;
+subgraph cluster_3 {
+b;
+c [shape=point];
+}
+}
+subgraph cluster_2 {
+d [width=1.04];
+e [fillcolor=\"0.5 0.5 0.5\"];
+}
+}
+subgraph cluster_4 {
+}
+b -> a [label=\"0\"];
+f -> c;
+a -> g;
+g -> h;
+h -> e;
+{i} -> j;
+}
+";
+    let (_, err, ok) = run(&["-Kdot", "-Tsvg"], src);
+    assert!(!ok, "{err}");
+    assert_eq!(
+        err,
+        "Error: trouble in init_rank\n\
+         \t%0 1\n\
+         \t%0 10\n\
+         \t%0 1\n\
+         \t%0 2\n\
+         \t%0 2\n\
+         \t%0 3\n\
+         \t%0 2\n\
+         \t%0 11\n\
+         \t%0 1\n\
+         \te 1\n\
+         \t%27 1\n\
+         \t%25 1\n\
+         \t%23 1\n\
+         \t%21 1\n\
+         \t%19 1\n\
+         \t%17 1\n\
+         \t%15 2\n\
+         \td 1\n\
+         \tc 1\n\
+         \tb 4\n\
+         \ta 3\n\
+         \t%0 1\n\
+         \th 3\n\
+         \t%0 3\n\
+         \tg 3\n\
+         \t%0 2\n\
+         \t%0 2\n\
+         \tf 3\n\
+         \ti 1\n\
+         \t%0 2\n\
+         \tj 3\n\
+         lib/pathplan/shortest.c:333: triangulation failed\n\
+         lib/pathplan/shortest.c:182: source point not in any triangle\n\
+         Error: in routesplines, Pshortestpath failed\n\
+         Error: lost b a edge\n"
+    );
+}
+
 // With `splines=false` the same kind of unplaced node is drawn: C's `makeLineEdge` reads no
 // rank, so `make_regular_edge` must not check one (issue #114 review). stderr and the SVG
 // are C 16.1.0's.

@@ -14,6 +14,11 @@ impl Dot<'_> {
         self.graphs.push(GraphInfo {
             name: name.to_string(),
             root: g,
+            next_anon_id: std::rc::Rc::new(std::cell::Cell::new(if name.starts_with('%') {
+                3
+            } else {
+                1
+            })),
             bound: true,
             ..GraphInfo::default()
         });
@@ -238,6 +243,20 @@ impl Dot<'_> {
         });
         self.agsubnode(g, n);
         n
+    }
+
+    /// `agnode(g, NULL, 1)`: a node named by the next anonymous id in `g`'s root.
+    pub fn cg_new_anonymous_node(&mut self, g: G) -> N {
+        let counter = self
+            .graphs
+            .get(g)
+            .and_then(|graph| self.graphs.get(graph.root))
+            .map(|graph| graph.next_anon_id.clone());
+        let name = format!("%{}", counter.as_ref().map_or(0, |c| c.get()));
+        if let Some(counter) = counter {
+            counter.set(counter.get().wrapping_add(2));
+        }
+        self.cg_new_node(g, &name)
     }
 
     /// Finds a node of `g`'s root by name (`agnode(g, name, 0)` on a root).

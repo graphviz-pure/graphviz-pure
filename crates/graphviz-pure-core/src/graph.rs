@@ -417,6 +417,8 @@ pub struct Graph {
     /// anonymous subgraphs and edges draw odd ids from one counter in creation order. C
     /// prints an anonymous subgraph's name as `%<id>`.
     pub anon_subgraph_ids: BTreeMap<u32, u64>,
+    /// The next id from the root's shared anonymous-object counter (`idmap`'s `counter`).
+    pub next_anon_id: u64,
     /// cgraph attribute dictionaries (`Agdatadict_t`) as built while parsing: index 0 is the
     /// root graph, index `i + 1` subgraph `i`. Writers that reproduce `agwrite` use them to
     /// tell local declarations from inherited values.
@@ -471,8 +473,15 @@ pub struct AttrDicts {
 
 impl Graph {
     pub fn new(name: impl Into<String>, kind: GraphKind, strict: bool) -> Self {
+        let name = name.into();
+        let next_anon_id = if name.is_empty() || name.starts_with('%') {
+            3
+        } else {
+            1
+        };
         Self {
-            name: name.into(),
+            name,
+            next_anon_id,
             strict,
             kind,
             graph_attrs: AttrMap::new(),

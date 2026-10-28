@@ -788,8 +788,7 @@ impl Dot<'_> {
                         s
                     }
                 };
-                let name = format!("%fill{}", self.nodes.len());
-                let n = self.cg_new_node(s, &name);
+                let n = self.cg_new_anonymous_node(s);
                 self.nodes[n].rank = i;
                 self.nodes[n].lw = 0.5;
                 self.nodes[n].rw = 0.5;

@@ -302,6 +302,7 @@ impl<'a> Parser<'a> {
     fn read_graph_reporting(&mut self, report: impl FnOnce(&GraphvizError)) -> Result<()> {
         self.started = false;
         let result = self.parse_graph();
+        self.graph.next_anon_id = self.anon_ctr;
         if let Err(e) = &result {
             report(e);
         }
