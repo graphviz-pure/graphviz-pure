@@ -272,7 +272,10 @@ mod tests {
 <text x="18" y="40" font-family="Times,serif" font-size="16">Été</text>
 </g></svg>"#;
         let png = rasterize(SHAPES, RasterFormat::Png, false).unwrap();
-        let hash = format!("{:x}", Sha256::digest(&png));
+        let hash: String = Sha256::digest(&png)
+            .iter()
+            .map(|b| format!("{b:02x}"))
+            .collect();
         assert_eq!(
             hash,
             "30c8424e7946b977c41de493bdfd569c9bca183405e95584148b644417995d51"
