@@ -1409,12 +1409,12 @@ fn parse_error(msg: &str, tok: &Token) -> GraphvizError {
             ScanState::Initial => {}
         }
     }
-    GraphvizError::SyntaxError {
-        line: tok.c_line,
-        col: tok.col,
+    GraphvizError::syntax(
+        tok.c_line,
+        tok.col,
         message,
-        file: tok.file.as_deref().map(str::to_string),
-    }
+        tok.file.as_deref().map(str::to_string),
+    )
 }
 
 /// A `tailport`/`headport` value (an HTML string's inner text, as `agget` gives it), split

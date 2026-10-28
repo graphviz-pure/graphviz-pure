@@ -22,7 +22,7 @@ pub mod xdot;
 pub use color::{
     RgbaColor, format_svg_color, resolve_color, resolve_color_with_scheme, warn_unknown_color,
 };
-pub use error::{GraphvizError, Result};
+pub use error::{GraphvizError, GraphvizErrorKind, Result};
 pub use font::{
     DEFAULT_FONT_NAME, DEFAULT_FONT_SIZE, DEFAULT_LABEL_FONT_SIZE, LINESPACING, LabelSubstContext,
     TextJustify, TextLabelLayout, TextLineLayout, estimate_text_size, estimate_text_width_1pt,

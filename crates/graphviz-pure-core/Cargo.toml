@@ -16,7 +16,6 @@ math-trace = []
 
 [dependencies]
 libm.workspace = true
-thiserror.workspace = true
 
 [lints]
 workspace = true

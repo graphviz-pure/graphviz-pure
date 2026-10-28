@@ -21,11 +21,16 @@
 //! at 96 dpi (1pt = 4/3 px); with one, the SVG is already scaled to that resolution and is
 //! rasterized at one pixel per point.
 
+pub use graphviz_pure_core::{GraphvizError, GraphvizErrorKind};
 use resvg::{tiny_skia, usvg};
 use std::sync::{Arc, OnceLock};
 
 /// A raster output format.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+///
+/// Non-exhaustive, so a new format can be added in a minor release. A `match`
+/// outside this crate needs a wildcard arm.
+#[non_exhaustive]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum RasterFormat {
     Png,
     Jpeg,
@@ -119,7 +124,11 @@ fn fontdb() -> Arc<usvg::fontdb::Database> {
 
 /// Rasterizes the port's SVG for one graph. `explicit_dpi` says whether the graph set `dpi`
 /// or `resolution` (then the SVG is already scaled and is drawn at one pixel per point).
-pub fn rasterize(svg: &str, format: RasterFormat, explicit_dpi: bool) -> Result<Vec<u8>, String> {
+pub fn rasterize(
+    svg: &str,
+    format: RasterFormat,
+    explicit_dpi: bool,
+) -> Result<Vec<u8>, GraphvizError> {
     let opt = usvg::Options {
         fontdb: fontdb(),
         font_family: "Tinos".to_string(),
@@ -130,7 +139,8 @@ pub fn rasterize(svg: &str, format: RasterFormat, explicit_dpi: bool) -> Result<
         },
         ..usvg::Options::default()
     };
-    let tree = usvg::Tree::from_str(svg, &opt).map_err(|e| format!("rasterizing the SVG: {e}"))?;
+    let tree = usvg::Tree::from_str(svg, &opt)
+        .map_err(|e| GraphvizError::render(format!("rasterizing the SVG: {e}")))?;
     // usvg reads the SVG's `pt` sizes as CSS pixels at 96 dpi (1pt = 4/3 px), Graphviz's default
     // raster resolution. With an explicit dpi the SVG's points are already the pixels.
     let scale = if explicit_dpi { 0.75 } else { 1.0 };
@@ -139,7 +149,8 @@ pub fn rasterize(svg: &str, format: RasterFormat, explicit_dpi: bool) -> Result<
         (size.width() * scale).round().max(1.0) as u32,
         (size.height() * scale).round().max(1.0) as u32,
     );
-    let mut pixmap = tiny_skia::Pixmap::new(w, h).ok_or("the drawing is too large to rasterize")?;
+    let mut pixmap = tiny_skia::Pixmap::new(w, h)
+        .ok_or_else(|| GraphvizError::render("the drawing is too large to rasterize"))?;
     resvg::render(
         &tree,
         tiny_skia::Transform::from_scale(scale, scale),
@@ -148,7 +159,7 @@ pub fn rasterize(svg: &str, format: RasterFormat, explicit_dpi: bool) -> Result<
     match format {
         RasterFormat::Png => pixmap
             .encode_png()
-            .map_err(|e| format!("encoding the PNG: {e}")),
+            .map_err(|e| GraphvizError::render(format!("encoding the PNG: {e}"))),
         RasterFormat::Jpeg => {
             // JPEG has no alpha: composite onto white, as Graphviz's background is.
             let mut rgb = Vec::with_capacity((w * h * 3) as usize);
@@ -161,7 +172,7 @@ pub fn rasterize(svg: &str, format: RasterFormat, explicit_dpi: bool) -> Result<
             let mut out = Vec::new();
             jpeg_encoder::Encoder::new(&mut out, 90)
                 .encode(&rgb, w as u16, h as u16, jpeg_encoder::ColorType::Rgb)
-                .map_err(|e| format!("encoding the JPEG: {e}"))?;
+                .map_err(|e| GraphvizError::render(format!("encoding the JPEG: {e}")))?;
             Ok(out)
         }
     }
@@ -244,6 +255,21 @@ mod tests {
     fn jpeg_encodes() {
         let jpg = rasterize(SVG, RasterFormat::Jpeg, false).unwrap();
         assert_eq!(&jpg[..2], &[0xFF, 0xD8]);
+    }
+
+    #[test]
+    fn invalid_svg_is_a_render_error() {
+        let err = rasterize("<not-svg>", RasterFormat::Png, false).unwrap_err();
+        assert_eq!(err.kind(), GraphvizErrorKind::Render);
+        assert_eq!(
+            err.to_string(),
+            format!("Rendering error: {}", err.message())
+        );
+        assert!(
+            err.to_string()
+                .starts_with("Rendering error: rasterizing the SVG: "),
+            "{err}"
+        );
     }
 
     // #339. `Vec2::atan2` is `y.atan2(x)`. Unpatched on Apple Silicon this input is

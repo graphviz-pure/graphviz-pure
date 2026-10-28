@@ -261,9 +261,11 @@ fn line_directives_renumber_lines() {
         &GlobalAttrs::default(),
     );
     match err {
-        Some(graphviz_pure_core::GraphvizError::SyntaxError { message, file, .. }) => {
-            assert_eq!(message, "syntax error in line 100 near ';'");
-            assert_eq!(file.as_deref(), Some("other.gv"));
+        Some(err) => {
+            assert_eq!(err.kind(), graphviz_pure_core::GraphvizErrorKind::Syntax);
+            assert_eq!(err.message(), "syntax error in line 100 near ';'");
+            assert_eq!(err.file(), Some("other.gv"));
+            assert_eq!(err.line(), Some(100));
         }
         other => panic!("{other:?}"),
     }

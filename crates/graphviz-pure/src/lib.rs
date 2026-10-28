@@ -15,8 +15,8 @@
 
 use std::borrow::Cow;
 
-pub use graphviz_pure_core::{GraphvizError, Result, charset};
-pub use graphviz_pure_layout::{LayoutEngine, LayoutOptions};
+pub use graphviz_pure_core::{GraphvizError, GraphvizErrorKind, Result, charset};
+pub use graphviz_pure_layout::{LayoutEngine, LayoutOptions, LayoutOptionsBuilder};
 pub use graphviz_pure_parser::GlobalAttrs;
 pub use graphviz_pure_render::OutputFormat;
 
@@ -194,31 +194,7 @@ fn text(s: String) -> String {
 
 /// An error whose messages are text for the caller.
 fn error_text(e: GraphvizError) -> GraphvizError {
-    use GraphvizError::*;
-    match e {
-        SyntaxError {
-            line,
-            col,
-            message,
-            file,
-        } => SyntaxError {
-            line,
-            col,
-            message: text(message),
-            file: file.map(text),
-        },
-        UnsupportedEngine(s) => UnsupportedEngine(text(s)),
-        UnsupportedFormat(s) => UnsupportedFormat(text(s)),
-        LayoutError { stage, message } => LayoutError {
-            stage,
-            message: text(message),
-        },
-        AttributeError { attr, message } => AttributeError {
-            attr: text(attr),
-            message: text(message),
-        },
-        RenderError(s) => RenderError(text(s)),
-    }
+    e.__map_text(text)
 }
 
 #[cfg(test)]
@@ -247,16 +223,13 @@ mod tests {
     #[test]
     fn one_call_is_one_process_for_the_random_state() {
         let g = "graph { dim=3; a [pos=\"10,20,5\" z=\"3\"]; b [pos=\"30,40\"]; a -- b }\n";
-        let opts = LayoutOptions {
-            nop: 1,
-            ..LayoutOptions::default()
-        };
+        let opts = LayoutOptions::builder().nop(1).build();
         let both = render_dot_all_with_options(
             &g.repeat(2),
             "neato",
             "dot",
             &GlobalAttrs::default(),
-            opts,
+            opts.clone(),
         )
         .unwrap();
         assert!(both[0].contains("z=57.090927") && both[1].contains("z=121.029893"));
@@ -265,7 +238,7 @@ mod tests {
             "neato",
             "dot",
             &GlobalAttrs::default(),
-            opts,
+            opts.clone(),
         )
         .unwrap();
         assert_eq!(both, again);
@@ -273,30 +246,37 @@ mod tests {
         // advanced.
         let mut state = RandState::default();
         let outer = with_rand_state(&mut state, || {
-            render_dot_all_with_options(&g.repeat(2), "neato", "dot", &GlobalAttrs::default(), opts)
+            render_dot_all_with_options(
+                &g.repeat(2),
+                "neato",
+                "dot",
+                &GlobalAttrs::default(),
+                opts.clone(),
+            )
         })
         .unwrap();
         assert_eq!(outer, both);
         assert_ne!(state, RandState::default());
         let (third, _) = with_rand_state(&mut state, || {
-            render_dot_all_partial(g, "neato", "dot", &GlobalAttrs::default(), opts)
+            render_dot_all_partial(g, "neato", "dot", &GlobalAttrs::default(), opts.clone())
         });
         assert!(!third[0].contains("z=57.090927") && !third[0].contains("z=121.029893"));
         let (svgs, _) = with_rand_state(&mut RandState::default(), || {
-            render_svg_all_partial(&g.repeat(2), "neato", &GlobalAttrs::default(), opts)
+            render_svg_all_partial(&g.repeat(2), "neato", &GlobalAttrs::default(), opts.clone())
         });
         assert_eq!(svgs.len(), 2);
 
-        let mut jobs = LayoutJobs::new(LayoutEngine::Neato, opts);
+        let mut jobs = LayoutJobs::new(LayoutEngine::Neato, opts.clone());
         let mut first = parse_dot(g).unwrap();
         jobs.layout(&mut first.inner).unwrap();
         let mut graph = parse_dot(g).unwrap();
-        let mut carried = LayoutJobs::continuing(LayoutEngine::Neato, opts, jobs.rand_state());
+        let mut carried =
+            LayoutJobs::continuing(LayoutEngine::Neato, opts.clone(), jobs.rand_state());
         carried.layout(&mut graph.inner).unwrap();
         let z = |g: &Graph| g.inner.nodes[1].attrs["z"].clone();
         assert_eq!(z(&graph), "121.029893");
         let mut alone = parse_dot(g).unwrap();
-        layout_graph_with_options(&mut alone, LayoutEngine::Neato, opts).unwrap();
+        layout_graph_with_options(&mut alone, LayoutEngine::Neato, opts.clone()).unwrap();
         assert_eq!(z(&alone), "57.090927");
     }
 
@@ -305,10 +285,7 @@ mod tests {
     // no longer applies to the call's later graphs, nor to a `LayoutJobs`' later layouts.
     #[test]
     fn nop_engines_clear_the_runs_nop() {
-        let opts = LayoutOptions {
-            nop: 2,
-            ..LayoutOptions::default()
-        };
+        let opts = LayoutOptions::builder().nop(2).build();
         let b = "graph B { layout=neato; b; c; b -- c }\n";
         let laid_out = "node b 0.375 0.39777 0.75 0.5 b solid ellipse black lightgrey\n";
         for a in [
@@ -316,14 +293,25 @@ mod tests {
             "graph A { layout=fdp; splines=true; a -- x }\n",
         ] {
             let src = format!("{a}{b}");
-            let all =
-                render_dot_all_with_options(&src, "neato", "plain", &GlobalAttrs::default(), opts)
-                    .unwrap();
+            let all = render_dot_all_with_options(
+                &src,
+                "neato",
+                "plain",
+                &GlobalAttrs::default(),
+                opts.clone(),
+            )
+            .unwrap();
             assert!(all[1].contains(laid_out), "{}", all[1]);
-            let (all, _) =
-                render_dot_all_partial(&src, "neato", "plain", &GlobalAttrs::default(), opts);
+            let (all, _) = render_dot_all_partial(
+                &src,
+                "neato",
+                "plain",
+                &GlobalAttrs::default(),
+                opts.clone(),
+            );
             assert!(all[1].contains(laid_out), "{}", all[1]);
-            let (svgs, _) = render_svg_all_partial(&src, "neato", &GlobalAttrs::default(), opts);
+            let (svgs, _) =
+                render_svg_all_partial(&src, "neato", &GlobalAttrs::default(), opts.clone());
             let (alone, _) = render_svg_all_partial(
                 b,
                 "neato",
@@ -332,7 +320,7 @@ mod tests {
             );
             assert_eq!(svgs[1], alone[0]);
 
-            let mut jobs = LayoutJobs::new(LayoutEngine::Neato, opts);
+            let mut jobs = LayoutJobs::new(LayoutEngine::Neato, opts.clone());
             let mut parsed = parse_dot(a).unwrap();
             jobs.layout(&mut parsed.inner).unwrap();
             let mut graph = parse_dot(b).unwrap();
@@ -342,7 +330,13 @@ mod tests {
         // fdp with line edges leaves `Nop`.
         let src = format!("graph A {{ layout=fdp; a -- x }}\n{b}");
         let (all, _) = graphviz_pure_core::diag::quietly(|| {
-            render_dot_all_partial(&src, "neato", "plain", &GlobalAttrs::default(), opts)
+            render_dot_all_partial(
+                &src,
+                "neato",
+                "plain",
+                &GlobalAttrs::default(),
+                opts.clone(),
+            )
         });
         assert!(all[1].contains("node b 0 0 "), "{}", all[1]);
     }
@@ -391,12 +385,12 @@ mod tests {
         assert!(charset::encode(&raw).starts_with(b"graph 1 0.76854 1.7333\nnode xAy "));
         let opts = LayoutOptions::default();
         let no_globals = GlobalAttrs::default();
-        let all = render_dot_all_with_options(src, "dot", "plain", &no_globals, opts);
+        let all = render_dot_all_with_options(src, "dot", "plain", &no_globals, opts.clone());
         assert_eq!(all.unwrap(), [want]);
-        let (all, err) = render_dot_all_partial(src, "dot", "plain", &no_globals, opts);
+        let (all, err) = render_dot_all_partial(src, "dot", "plain", &no_globals, opts.clone());
         assert!(err.is_none());
         assert_eq!(all, [want]);
-        let (svgs, err) = render_svg_all_partial(src, "dot", &no_globals, opts);
+        let (svgs, err) = render_svg_all_partial(src, "dot", &no_globals, opts.clone());
         assert!(err.is_none());
         assert!(svgs[0].0.contains(">x\u{10FF41}y</text>"), "{}", svgs[0].0);
         // globals are text too
@@ -404,9 +398,10 @@ mod tests {
         globals.node.insert("label".into(), "\u{10FF41}".into());
         let out = render_dot_all("digraph { a }", "dot", "plain", &globals).unwrap();
         assert!(out[0].contains(" 0.5 \u{10FF41} solid "), "{}", out[0]);
-        let (out, _) = render_dot_all_partial("digraph { a }", "dot", "plain", &globals, opts);
+        let (out, _) =
+            render_dot_all_partial("digraph { a }", "dot", "plain", &globals, opts.clone());
         assert!(out[0].contains(" 0.5 \u{10FF41} solid "), "{}", out[0]);
-        let (svgs, _) = render_svg_all_partial("digraph { a }", "dot", &globals, opts);
+        let (svgs, _) = render_svg_all_partial("digraph { a }", "dot", &globals, opts.clone());
         assert!(svgs[0].0.contains(">\u{10FF41}</text>"), "{}", svgs[0].0);
         let g = &parse_dot_all("digraph { a }", &globals).unwrap()[0];
         let canon = render_graph(g, OutputFormat::Canon).unwrap();

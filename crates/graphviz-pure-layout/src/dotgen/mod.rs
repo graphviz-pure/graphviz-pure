@@ -316,12 +316,8 @@ pub fn layout_dot(graph: &mut Graph) -> Result<()> {
         let maxphase = utils::late_int(d.agget(0, "phase"), -1, 1);
         // dot_layout: doDot only when there are nodes; dotneato_postprocess always.
         if !graph.nodes.is_empty() {
-            pack::do_dot(&mut d, graph).map_err(|message| {
-                graphviz_pure_core::GraphvizError::LayoutError {
-                    stage: "dot",
-                    message,
-                }
-            })?;
+            pack::do_dot(&mut d, graph)
+                .map_err(|message| graphviz_pure_core::GraphvizError::layout("dot", message))?;
         }
         if !d.aborted {
             d.dotneato_postprocess();
