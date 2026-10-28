@@ -129,6 +129,16 @@ fn fontdb() -> Arc<usvg::fontdb::Database> {
 ///
 /// The bytes are [`Rendered<Vec<u8>>`]. Diagnostics from the rasterizing call are
 /// on that value, or on the error. This writes nothing to stderr.
+///
+/// ```
+/// use graphviz_pure_raster::{RasterFormat, rasterize};
+///
+/// let svg = r#"<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"></svg>"#;
+/// let png = rasterize(svg, RasterFormat::Png, false)
+///     .unwrap()
+///     .into_output();
+/// assert_eq!(&png[1..4], b"PNG");
+/// ```
 pub fn rasterize(
     svg: &str,
     format: RasterFormat,

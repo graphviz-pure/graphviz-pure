@@ -1,7 +1,8 @@
 //! High-level Graphviz orchestration engine (`graphviz-pure`).
 //!
-//! The functions here take and return ordinary text: DOT source, engine and format names,
-//! [`GlobalAttrs`] values, outputs and error messages. The port reads every string in a
+//! The functions here take ordinary text: DOT source, engine and format names,
+//! [`GlobalAttrs`] values, and error messages. A success returns that text, or a
+//! [`Graph`], inside [`Rendered`]. The port reads every string in a
 //! decoded form ([`charset`]), where U+10FF00..=U+10FFFF stands for an input byte that is not
 //! UTF-8; these functions convert at the boundary, so a real U+10FFxx character in the source
 //! is that character, as its UTF-8 bytes are to C.
@@ -15,7 +16,17 @@
 //!
 //! A call returns the diagnostics it collected ([`Diagnostic`]) on the [`Rendered`] value,
 //! or on the [`GraphvizError`] when the call failed. It does not write them to stderr.
-//! The command line prints that text itself.
+//! The command line prints that text itself. Read the drawing with [`Rendered::into_output`]
+//! or [`Rendered::output`], and lay a parsed graph out through [`Rendered::output_mut`].
+//!
+//! ```
+//! let mut parsed = graphviz_pure::parse_dot("digraph { a -> b }").unwrap();
+//! graphviz_pure::layout_graph(parsed.output_mut(), graphviz_pure::LayoutEngine::Dot).unwrap();
+//! let svg = graphviz_pure::render_graph(parsed.output(), graphviz_pure::OutputFormat::Svg)
+//!     .unwrap()
+//!     .into_output();
+//! assert!(svg.contains("<svg"));
+//! ```
 
 use std::borrow::Cow;
 
@@ -48,6 +59,13 @@ impl Graph {
 ///
 /// The [`Rendered`] value carries the output and every diagnostic the call collected.
 /// Nothing is written to stderr.
+///
+/// ```
+/// let svg = graphviz_pure::render_dot("digraph { a -> b }", "dot", "svg")
+///     .unwrap()
+///     .into_output();
+/// assert!(svg.contains("<svg"));
+/// ```
 pub fn render_dot(dot_source: &str, engine: &str, format: &str) -> Result<Rendered<String>> {
     finish(diag::capture(|| {
         decoded::render_dot(

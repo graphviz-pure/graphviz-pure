@@ -89,6 +89,30 @@ Output is identical in every row. The ortho speedup comes from data structures w
 
 ---
 
+## Library
+
+A successful call returns a [`Rendered`](crates/graphviz-pure-core/src/error.rs) value. The drawing is `into_output()` (or `output()` for a borrow). `diagnostics()` is the warnings that call collected. The library does not write them to stderr.
+
+```rust
+let svg = graphviz_pure::render_dot("digraph { a -> b }", "dot", "svg")
+    .unwrap()
+    .into_output();
+```
+
+A parsed graph is laid out through `output_mut`:
+
+```rust
+let mut parsed = graphviz_pure::parse_dot("digraph { a -> b }").unwrap();
+graphviz_pure::layout_graph(parsed.output_mut(), graphviz_pure::LayoutEngine::Dot).unwrap();
+let svg = graphviz_pure::render_graph(parsed.output(), graphviz_pure::OutputFormat::Svg)
+    .unwrap()
+    .into_output();
+```
+
+`graphviz_pure_raster::rasterize` returns `Rendered<Vec<u8>>` the same way.
+
+---
+
 ## Browser usage (`@graphviz-pure/wasm`)
 
 ```js
