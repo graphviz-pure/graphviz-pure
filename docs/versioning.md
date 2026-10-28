@@ -10,9 +10,10 @@ share one version number, set in `[workspace.package]` in `Cargo.toml` and in
   **the JavaScript API** of `@graphviz-pure/wasm`.
   `graphviz-pure-core`, `graphviz-pure-parser`, `graphviz-pure-geom`, `graphviz-pure-layout`
   and `graphviz-pure-render` are implementation crates with no semver promise.
-  The types the facade re-exports (`GraphvizError`, `Result`, `charset`, `LayoutEngine`,
-  `LayoutOptions`, `GlobalAttrs`, `OutputFormat`) are covered by the facade's promise even
-  though they are defined in an implementation crate.
+  The types the facade re-exports (`GraphvizError`, `GraphvizErrorKind`, `Result`,
+  `charset`, `LayoutEngine`, `LayoutOptions`, `LayoutOptionsBuilder`, `GlobalAttrs`,
+  `OutputFormat`) are covered by the facade's promise even though they are defined in an
+  implementation crate.
 - **The command line:** options, accepted `-T` formats, exit status, and the `-V` line's shape:
   `graphviz-pure - graphviz version 16.1.0 (graphviz-pure X.Y.Z)`. Not ported: C's remaining
   core-plugin formats (`cmap`, `eps`, `fig`, `imap`, `imap_np`, `ismap`, `pic`, `pov`, `ps`,

@@ -129,10 +129,9 @@ pub fn render_port(laid: &str, format: &str) -> Result<String, String> {
             "neato",
             &fmt,
             &graphviz_pure_parser::GlobalAttrs::default(),
-            graphviz_pure_layout::LayoutOptions {
-                nop: 2,
-                ..Default::default()
-            },
+            graphviz_pure_layout::LayoutOptions::builder()
+                .nop(2)
+                .build(),
         )
     });
     match res {

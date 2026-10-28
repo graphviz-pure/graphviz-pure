@@ -15,8 +15,8 @@
 
 use std::borrow::Cow;
 
-pub use graphviz_pure_core::{GraphvizError, Result, charset};
-pub use graphviz_pure_layout::{LayoutEngine, LayoutOptions};
+pub use graphviz_pure_core::{GraphvizError, GraphvizErrorKind, Result, charset};
+pub use graphviz_pure_layout::{LayoutEngine, LayoutOptions, LayoutOptionsBuilder};
 pub use graphviz_pure_parser::GlobalAttrs;
 pub use graphviz_pure_render::OutputFormat;
 
@@ -194,31 +194,7 @@ fn text(s: String) -> String {
 
 /// An error whose messages are text for the caller.
 fn error_text(e: GraphvizError) -> GraphvizError {
-    use GraphvizError::*;
-    match e {
-        SyntaxError {
-            line,
-            col,
-            message,
-            file,
-        } => SyntaxError {
-            line,
-            col,
-            message: text(message),
-            file: file.map(text),
-        },
-        UnsupportedEngine(s) => UnsupportedEngine(text(s)),
-        UnsupportedFormat(s) => UnsupportedFormat(text(s)),
-        LayoutError { stage, message } => LayoutError {
-            stage,
-            message: text(message),
-        },
-        AttributeError { attr, message } => AttributeError {
-            attr: text(attr),
-            message: text(message),
-        },
-        RenderError(s) => RenderError(text(s)),
-    }
+    e.map_text(text)
 }
 
 #[cfg(test)]
@@ -247,10 +223,7 @@ mod tests {
     #[test]
     fn one_call_is_one_process_for_the_random_state() {
         let g = "graph { dim=3; a [pos=\"10,20,5\" z=\"3\"]; b [pos=\"30,40\"]; a -- b }\n";
-        let opts = LayoutOptions {
-            nop: 1,
-            ..LayoutOptions::default()
-        };
+        let opts = LayoutOptions::builder().nop(1).build();
         let both = render_dot_all_with_options(
             &g.repeat(2),
             "neato",
@@ -305,10 +278,7 @@ mod tests {
     // no longer applies to the call's later graphs, nor to a `LayoutJobs`' later layouts.
     #[test]
     fn nop_engines_clear_the_runs_nop() {
-        let opts = LayoutOptions {
-            nop: 2,
-            ..LayoutOptions::default()
-        };
+        let opts = LayoutOptions::builder().nop(2).build();
         let b = "graph B { layout=neato; b; c; b -- c }\n";
         let laid_out = "node b 0.375 0.39777 0.75 0.5 b solid ellipse black lightgrey\n";
         for a in [

@@ -260,7 +260,6 @@ name = "graphviz-pure-core"
 version = "0.2.3"
 dependencies = [
  "libm",
- "thiserror",
 ]
 
 [[package]]

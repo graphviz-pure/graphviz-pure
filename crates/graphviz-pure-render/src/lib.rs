@@ -56,6 +56,11 @@ pub fn render_svg(graph: &Graph) -> String {
 
 use graphviz_pure_core::{Graph, GraphvizError, Result};
 
+/// An output format.
+///
+/// Non-exhaustive, so a new format can be added in a minor release. A `match`
+/// outside this crate needs a wildcard arm.
+#[non_exhaustive]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum OutputFormat {
     Svg,
@@ -102,7 +107,7 @@ impl OutputFormat {
         Self::FORMATS
             .iter()
             .find_map(|&(candidate, format)| (candidate == name).then_some(format))
-            .ok_or(GraphvizError::UnsupportedFormat(name))
+            .ok_or_else(|| GraphvizError::unsupported_format(name))
     }
 }
 
@@ -610,10 +615,12 @@ mod tests {
                 expected
             );
         }
-        assert!(matches!(
-            OutputFormat::parse(" PNG "),
-            Err(GraphvizError::UnsupportedFormat(name)) if name == "png"
-        ));
+        let err = OutputFormat::parse(" PNG ").unwrap_err();
+        assert_eq!(
+            err.kind(),
+            graphviz_pure_core::GraphvizErrorKind::UnsupportedFormat
+        );
+        assert_eq!(err.to_string(), "Unsupported output format: 'png'");
     }
 
     // The model accepts only clusters below a graph from its exported `GD_clust` list,

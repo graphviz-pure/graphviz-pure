@@ -310,17 +310,17 @@ fn parse_args(argv0: &str, os_args: &[OsString]) -> Parsed {
             continue;
         }
         if bytes[1] == b'x' {
-            layout.reduce = true;
+            layout.set_reduce(true);
             continue;
         }
         let rest = decode_slice(&bytes[2..]);
         if rest.is_empty() {
-            layout.nop = 1;
+            layout.set_nop(1);
             continue;
         }
         // `Nop = atoi(arg + 2)`, an error when not positive.
         match atoi(&rest) {
-            n if n > 0 => layout.nop = n.min(255) as u8,
+            n if n > 0 => layout.set_nop(n.min(255) as u8),
             _ => {
                 agerrorf(&format!("Invalid parameter \"{rest}\" for -n flag\n"));
                 return Parsed::Exit(usage(argv0, 1));
@@ -335,7 +335,7 @@ fn parse_args(argv0: &str, os_args: &[OsString]) -> Parsed {
             kept.push(os_arg.clone());
             continue;
         }
-        if set_fdp_attr(&mut layout.fdp, &decode_slice(&bytes[2..])).is_err() {
+        if set_fdp_attr(layout.fdp_mut(), &decode_slice(&bytes[2..])).is_err() {
             return Parsed::Exit(usage(argv0, 1));
         }
     }
@@ -512,11 +512,13 @@ fn parse_args(argv0: &str, os_args: &[OsString]) -> Parsed {
                         return Parsed::Exit(usage(argv0, 1));
                     }
                     // is_exactly_zero: `-s-0` keeps -0, which then does not scale.
-                    opts.layout.inputscale = if graphviz_pure_core::cnum::is_exactly_zero(scale) {
-                        72.0
-                    } else {
-                        scale
-                    };
+                    opts.layout.set_inputscale(
+                        if graphviz_pure_core::cnum::is_exactly_zero(scale) {
+                            72.0
+                        } else {
+                            scale
+                        },
+                    );
                 }
                 'y' => opts.y_invert = true,
                 _ => {
@@ -590,12 +592,7 @@ fn render_jobs_finish(graph: &Graph, line: u32) {
 /// `agerrorf` of an input's error, as C's bytes. A syntax error names the file `aagerror`
 /// knows: the input, or the one a `# N "file"` line directive named.
 fn report_error(name: &str, e: &graphviz_pure_core::GraphvizError) {
-    let name = match e {
-        graphviz_pure_core::GraphvizError::SyntaxError {
-            file: Some(file), ..
-        } => file.as_str(),
-        _ => name,
-    };
+    let name = e.file().unwrap_or(name);
     agerrorf(&format!("{name}: {e}\n"));
 }
 
@@ -630,8 +627,7 @@ fn render_job(
         // `resolution`), which then scales the drawing.
         let explicit_dpi = graphviz_pure_core::cnum::drawing_dpi(&graph.graph_attrs) > 0.0;
         let svg = jobs.render_raster_svg_as(job, langname)?;
-        return graphviz_pure_raster::rasterize(&svg, fmt, explicit_dpi)
-            .map_err(graphviz_pure_core::GraphvizError::RenderError);
+        return graphviz_pure_raster::rasterize(&svg, fmt, explicit_dpi);
     }
     let text = jobs.render_as(job, OutputFormat::parse(typ)?, langname)?;
     Ok(graphviz_pure_core::charset::encode(&text).into_owned())
