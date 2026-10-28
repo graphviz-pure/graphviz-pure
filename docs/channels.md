@@ -42,15 +42,21 @@ not be confirmed from the channel's documentation.
   the build-provenance attestation (`github.github_attestations` defaults to on). A fresh release
   is hidden for a while by mise's default `minimum_release_age`.
 - **eget:** `eget graphviz-pure/graphviz-pure` picks the archive by target name.
-- **npm CDNs:** jsDelivr (`https://cdn.jsdelivr.net/npm/@graphviz-pure/wasm@0.2.0/+esm`,
-  `https://esm.run/@graphviz-pure/wasm@0.2.0`), unpkg
-  (`https://unpkg.com/@graphviz-pure/wasm@0.2.0/pkg/graphviz_pure_wasm_bg.wasm`), esm.sh
-  (`https://esm.sh/@graphviz-pure/wasm@0.2.0`) and JSR's own URLs serve the npm and JSR packages,
+- **npm CDNs:** replace `X.Y.Z` with the release version. jsDelivr (`https://cdn.jsdelivr.net/npm/@graphviz-pure/wasm@X.Y.Z/+esm`,
+  `https://esm.run/@graphviz-pure/wasm@X.Y.Z`), unpkg
+  (`https://unpkg.com/@graphviz-pure/wasm@X.Y.Z/pkg/graphviz_pure_wasm_bg.wasm`), esm.sh
+  (`https://esm.sh/@graphviz-pure/wasm@X.Y.Z`) and JSR's own URLs serve the npm and JSR packages,
   `.wasm` as `application/wasm`. jsDelivr's `/gh/` mirror serves files of the repository at a tag,
   not release assets.
 - **Deno:** `npm:` and `jsr:` specifiers already work.
 
 ## Ranked
+
+The AUR, nixpkgs and conda-forge files in `packaging/` are submission templates, not published
+channels. Their example versions, hashes and maintainer placeholders are filled in from a
+verified release at submission time, following [packaging/README.md](../packaging/README.md).
+The release workflow does not bump these templates. The AUR update script refuses to finish
+while TODOs or placeholder checksums remain; nixpkgs and conda-forge are completed by hand.
 
 Rank **A**: worth doing now. **B**: worth doing once eligible or once the effort pays. **C**: low
 reach or high cost. **X**: not a fit.
@@ -59,9 +65,9 @@ reach or high cost. **X**: not a fit.
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | aqua registry | medium (aqua; the backend mise recommends for tools without packslips) | one PR to `aquaproj/aqua-registry`, scaffolded with `argd s`, signed commits | none per release: entries are version-agnostic | none; users verify the attestations (`github_artifact_attestations`) | **A** |
 | winget | high on Windows | first manifest by hand (`komac new`), Microsoft's validation and moderation | `komac update --submit`, from a pull repository (the token stays out of this repository) | **classic** PAT with `public_repo` (fine-grained tokens cannot open the PR); no OIDC | **A** |
-| nixpkgs | high among Nix users | one PR; `packaging/nixpkgs/` is ready | r-ryantm opens the bumps | none | **A** |
-| conda-forge | high (Python, data science, pixi) | one PR to `staged-recipes`; `packaging/conda-forge/` is ready | autotick bot | none | **A** |
-| AUR `graphviz-pure-bin`, `graphviz-pure` | medium-high on Arch | an AUR account and SSH key; `packaging/aur/` is ready | `packaging/aur/update.sh` per release, or a pull repository holding the key | SSH key (no expiry); no OIDC | **A** |
+| nixpkgs | high among Nix users | one PR; `packaging/nixpkgs/` has a submission template | r-ryantm opens the bumps | none | **A** |
+| conda-forge | high (Python, data science, pixi) | one PR to `staged-recipes`; `packaging/conda-forge/` has a submission template | autotick bot | none | **A** |
+| AUR `graphviz-pure-bin`, `graphviz-pure` | medium-high on Arch | an AUR account and SSH key; `packaging/aur/` has a submission template | `packaging/aur/update.sh` per release, or a pull repository holding the key | SSH key (no expiry); no OIDC | **A** |
 | mise packslip | medium (mise's top-ranked backend) | signed release manifests ([packslip](https://mise.jdx.dev/dev-tools/backends/packslip.html), keyless OIDC signing) published with each release | `release.yml` | OIDC (keyless) | **B** |
 | GitHub Action `setup-graphviz-pure` | medium (CI) | a public repository with `action.yml` at its root; the Marketplace developer agreement | none per release: the action downloads the version asked for and runs `gh attestation verify` | none | **B** |
 | homebrew-core | very high on macOS | a from-source formula; notability: 75 stars (or 30 forks or watchers) for a third-party submission, 225 stars (or 90 forks or watchers) for the author's own; the repository at least 30 days old | autobump every 3 h | none | **B** (not eligible yet) |

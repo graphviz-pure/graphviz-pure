@@ -6,6 +6,13 @@ memory, which must keep every output byte-identical. Nothing here was optimised:
 for `master` at 0.2.2 (`f9c2fd1d`). The raw data is in [`data/`](data/), and
 `scripts/bench/` regenerates it ([Reproducing](#reproducing)).
 
+Since this snapshot, the quadratic plain-string lookup (#541, fixed by #566) and the
+`agwrite` adjacency scan (#545, fixed by #568) have been fixed. Their historical timings below
+remain the 0.2.2 baseline, not the current port's performance. The release profile also moved
+from `.cargo/config.toml` into the workspace `Cargo.toml` and the published CLI manifest
+(#540, fixed by #546), which also enabled CLI stripping. The `pow` fast paths (#532, #543)
+and sfdp quadtree allocation reuse (#534, #548) landed too; the timings below predate them.
+
 ## Headlines
 
 - **dot, fdp and circo are already faster than C**: dot is 0.5–0.9× C's time (geometric mean
@@ -18,7 +25,7 @@ for `master` at 0.2.2 (`f9c2fd1d`). The raw data is in [`data/`](data/), and
   2,603 corpus inputs it was checked on (every input but the six slow `badvoro` copies). This
   is hotspot 1 below. aarch64 (Apple Silicon, Linux arm64) has FMA in its baseline, so this
   applies to x86-64 only, which includes the WASM build.
-- **`-Tplain` is quadratic in graph size**: `root_holds_plain` scans the whole graph for every
+- **`-Tplain` was quadratic in graph size at 0.2.2**: `root_holds_plain` scans the whole graph for every
   label it writes. osage on 20,000 nodes takes 8.9 s with `-Tplain` and 0.44 s with `-Tsvg`;
   C takes 0.2 s for both. This is the worst scaling found.
 - **Memory**: the port's peak RSS is 1.0–3.1× C's. The ratio grows with size on graphs with
@@ -160,7 +167,7 @@ routing and its `mul_add` calls (hotspots 1 and 9).
 `-Tsvg` and `-Tplain` cost the same on dot's graphs, so layout dominates there. `-Tpng` adds
 1.4 s and 172 MiB on b29, and 0.9 s and 203 MiB on b143. That cost goes to the resvg/tiny-skia
 rasterizer (41% of the b29 PNG profile) and to zlib compression of the pixels (miniz_oxide
-`compress_inner`, 25%), and the memory to the full-size pixmap. `-Tplain` scales quadratically
+`compress_inner`, 25%), and the memory to the full-size pixmap. `-Tplain` scaled quadratically at 0.2.2
 on large graphs (hotspot 2):
 
 | graph | -Tsvg | -Tplain | C -Tplain |

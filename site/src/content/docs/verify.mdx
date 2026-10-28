@@ -82,7 +82,7 @@ C's output for some inputs is not stable: it depends on heap addresses, or C rea
 | `tests/golden/e2e.json`, `tests/golden/e2e-baseline.portable.json` | The same against stock C on macOS (Apple's libm), and the files that match it | `gv-diff e2e --stock`, a report |
 | `tests/golden/*.dot`, `tests/golden/<engine>/*.dot` | C's `-Tdot` layouts | layout check |
 | `tests/golden/*baseline.portable.json` | Per-file element counts and errors | layout ratchets |
-| `tests/golden/render/` | C's layouts (`laid/`) and its renderings in seven formats | `gv-diff render` |
+| `tests/golden/render/` | C's layouts (`laid/`) and its renderings in nine formats | `gv-diff render` |
 
 The render goldens are moving into a compressed archive, `tests/golden/render.tar.xz`, which the harness unpacks before comparing; the baselines stay as JSON.
 

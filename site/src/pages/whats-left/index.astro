@@ -86,7 +86,7 @@ const byClass = CLASSES.map((c) => ({ ...c, list: acceptedIn(c.key) }));
 		{fidelity.e2e.differs.length > 0 && <li><strong>{fmt(fidelity.e2e.differs.length)} corpus files differ from C with the same math</strong>: see the <a href={url('fidelity/#full-pipeline')}>file list</a>.</li>}
 		<li><strong>{fmt(fidelity.e2e.stock.libm_only)} corpus files differ from stock C on macOS</strong> only because C there calls Apple's libm; the port equals C computing with the same math on each. These are not bugs, by policy: every build uses the same math library and never follows a platform libm (<a href={url('porting/libm/')}>The math library</a>, <a href={url('fidelity/#stock-c-on-macos')}>the file list</a>).</li>
 		<li><strong>{twopi.total - twopi.exact} twopi layouts</strong>: C routes the arrows graphs differently from run to run (<a href={url('whats-left/twopi-arrows-c-nondeterministic-routing/')}>issue</a>).</li>
-		<li><strong>{(100 - lastFuzz.all).toFixed(1)}% of the last fuzzing round</strong>: every remaining case belongs to one of the issues above; the round-by-round record is in <a href={url('porting/fuzzing/')}>the fuzzing notes</a>.</li>
+		<li><strong>{(100 - lastFuzz.all).toFixed(1)}% differed in historical fuzzing round {lastFuzz.round}</strong>, before later fixes; the round-by-round record is in <a href={url('porting/fuzzing/')}>the fuzzing notes</a>.</li>
 		<li><strong>stderr</strong>: the port prints C's warnings, and so does the wording of DOT syntax errors.</li>
 	</ul>
 </StarlightPage>

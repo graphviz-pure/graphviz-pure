@@ -22,9 +22,9 @@ const patches = [
 	{ k: 'Identical to stock Graphviz on a Mac (Apple’s libm)', a: f.e2e.stock.identical, b: f.e2e.stock.total, href: 'fidelity/#stock-c-on-macos' },
 	{ k: 'Layouts with every node and edge in place', a: layoutMain.exact, b: layoutMain.total, href: 'fidelity/#layout' },
 	{ k: 'The same check, engine by engine', a: engExact, b: engTotal, href: 'fidelity/#layout' },
-	{ k: 'Output files in 7 formats, from Graphviz’s layouts', a: rSvg, b: rTotal, href: 'fidelity/#renderers' },
-	{ k: 'Graphviz’s own test graphs, 5 ways', a: cg, b: cgTotal, href: 'fidelity/#c-test-graphs' },
-	{ k: 'Random graphs that match', a: lastFuzz.all, b: 100, pct: true, cases: lastFuzz.cases, href: 'fidelity/#fuzzing' },
+	{ k: `Output files in ${f.render.length} formats, from Graphviz’s layouts`, a: rSvg, b: rTotal, href: 'fidelity/#renderers' },
+	{ k: `Graphviz’s own test graphs, ${f.c_graphs.variants.length} ways`, a: cg, b: cgTotal, href: 'fidelity/#c-test-graphs' },
+	{ k: `Random graphs that matched in round ${lastFuzz.round}`, a: lastFuzz.all, b: 100, pct: true, cases: lastFuzz.cases, href: 'fidelity/#fuzzing' },
 ];
 ---
 

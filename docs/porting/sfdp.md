@@ -25,22 +25,21 @@ ANN). So `HAVE_GTS` and `SFDP` are defined:
 
 ## Fidelity
 
-`gv-diff` against C 16.1.0 goldens (built-in text metrics,
-`scripts/gen-golden.sh`):
-
-| corpus | before (old approximation) | after |
-|---|---|---|
-| `tests/sfdp` (292 files at the start, now 297) | 70 exact, score 99.9/292 (34%), nodes 68/13022 | 293 exact, score 294.0/297 (99.0%) |
-| main corpus, the two `layout=sfdp` files (`gallery_beautify_*`) | 0/7 nodes each | both exact |
-| main corpus overall (508 files) | 250 exact, score 408.9 | 252 exact, score 410.7, no regressions |
+Re-measured on 2026-10-28 with `gv-diff --golden tests/golden/sfdp
+--baseline tests/golden/sfdp-baseline.portable.json --worst 0 tests/sfdp`, without
+`--update`: **297 / 297 exact**, with no regression. All stable sfdp inputs match byte for byte
+in `gv-diff e2e`; one C-nondeterministic input is skipped (see
+[README](../../README.md#fidelity-against-c-graphviz-1610)).
 
 Layouts are bit-identical to C, including multilevel coarsening, quadtree
 Barnes–Hut forces, all smoothers and overlap removal, on graphs up to 12000
 nodes (checked locally beyond the corpus: 5000-node random, 3000-node `dim=3`
 octree, `quadtree=fast` with 12000 nodes, 7 packed components of 143 nodes,
-`overlap=false` on 600 boxes). The remaining non-exact corpus files:
+`overlap=false` on 600 boxes). The original port investigation also covered the cases below.
+These are not current corpus failures: every committed sfdp layout reference now matches. The chaotic examples outside the
+corpus retain the C-order limitations described here:
 
-- `splines=ortho`: routed by `lib/ortho` (see `docs/porting/neato.md`);
+- `splines=ortho` is implemented through `lib/ortho` (see `docs/porting/neato.md`);
   `overlap=ortho*` and `overlap=vpsc` are ported (opus5.5/neato-gaps).
 - `label_scheme=4` with `overlap=false`: the penalty iteration is
   chaotic (C itself runs ~180 tries; scheme 2 diverges to 1e142 in C). C's

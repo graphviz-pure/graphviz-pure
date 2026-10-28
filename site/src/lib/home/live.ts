@@ -536,7 +536,7 @@ export function mountLive(root: HTMLElement) {
 	/* ---------- Start ---------- */
 
 	async function start() {
-		status.textContent = 'Loading the WASM build (about 700 KB compressed)…';
+		status.textContent = 'Loading the WASM build…';
 		const src = homeSource(figures, opts());
 		srcOut.textContent = src;
 		const [j, s] = await Promise.all([render(src, 'dot', 'json'), render(src, 'dot', 'svg')]);

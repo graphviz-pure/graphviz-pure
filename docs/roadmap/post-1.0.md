@@ -1,7 +1,7 @@
 # After 1.0: faster, smaller, idiomatic (a plan for hill-climbing)
 
 Status: **decided** on 2026-10-27 (see [Decisions](#decisions)). The draft issues are filed in the
-[`post-1.0` milestone](https://github.com/graphviz-pure/graphviz-pure/milestone/8) as #530–#540; the `-Tplain` item is #541, in the `1.0` milestone.
+[`post-1.0` milestone](https://github.com/graphviz-pure/graphviz-pure/milestone/8) as #530–#540; the `-Tplain` item (#541) was fixed before 1.0 by #566.
 It assumes 1.0 as the 1.0 roadmap defines it (#512; it adds `docs/roadmap/1.0.md`), which has no
 performance target of its own. The benchmark harness and the measured baseline are a sibling
 effort (`docs/perf/baseline.md` and `scripts/bench/`, #518). This document reuses them
@@ -10,6 +10,12 @@ and doesn't define a second harness.
 Up to 1.0 the port is a line-by-line translation of Graphviz 16.1.0, held byte-identical to C by
 the fidelity ratchets. After 1.0 the project hill-climbs. Each step makes the code faster, smaller
 in memory, or more idiomatic Rust, and each step keeps the bytes.
+
+Completed since this plan was written: the performance ratchet (#530, #547), `pow` fast paths
+(#532, #543), sfdp quadtree reuse (#534, #548), provenance reporting (#539, #542), and the
+release-profile evaluation and CLI stripping (#540, #546). Their original measurements below
+remain historical; they are not pending work. The declared MSRV is now Rust 1.88 and CI tests it
+(#504, #565).
 
 ## Contents
 
@@ -98,14 +104,14 @@ section differ:
   sentinel (`sfdpinit.rs:130`), which `multilevel_spring_electrical_embedding` replaces with
   `-1.0` (`spring_electrical.rs:1022`), so the default exponent is exactly 2. An instrumented
   build counted more than 8.4 M `powf` calls with `y == 2.0` and 12 others on rnd2000, so T2
-  stands, together with the baseline's fix of calling `pow` once per pair instead of once per
-  dimension (#532).
+  was implemented by #543 (#532), including one `pow` call per pair rather than per dimension.
 - **Memory.** The parse-only 12× below is the worst case. End to end, the baseline's peak RSS is
   1.0–3.1× C's, and the ratio grows with node count.
-- **Release profile.** The profile lives in `.cargo/config.toml`, which `cargo install` from
-  crates.io does not read, so those builds get Cargo's defaults (no LTO, 16 codegen units; #540).
-- **`-Tplain` is quadratic** (the baseline's hotspot 2), which this plan had missed. It is
-  fixed before 1.0 (#541).
+- **Release profile.** At 0.2.2 the profile lived in `.cargo/config.toml`, so crates.io
+  installs got Cargo's defaults. #546 fixed #540 by moving it into the workspace `Cargo.toml`
+  and repeating it in the published CLI manifest.
+- **`-Tplain` was quadratic** in the 0.2.2 baseline (hotspot 2). #566 fixed #541
+  with one per-output set of plain strings; this is complete.
 
 Machine: AMD Ryzen 9 5900XT (28 threads, FMA and AVX2), shared with other agents (load ~5).
 Each wall time is from one run, so treat it as ±10%. The Rust build is `cargo build --release
@@ -403,8 +409,9 @@ Parallelism is safe only where **each output's computation is unchanged and inde
 
 #### T14: build configuration
 
-The workspace already uses `opt-level=3`, thin LTO and `codegen-units=1` (`.cargo/config.toml`).
-Remaining options:
+Completed by #546 (#540): the release profile is in the workspace `Cargo.toml` and repeated
+in the published CLI manifest, with CLI symbols stripped. The evaluation retained thin LTO and
+unwinding. The original options considered were:
 
 - **PGO** for release binaries via `cargo-pgo` with the corpus as the training set. The Perf Book
   reports 10%+; it is unavailable to `cargo install` users.
@@ -423,7 +430,7 @@ Every step is one PR that is proved by three ratchets:
 1. **Fidelity ratchet** (exists): no file that matched C stops matching. This is the hard gate.
 2. **Panic-site ratchet** (exists): no module gains a site. Refactors are expected to lower
    counts, and the PR runs `scripts/panic-sites.sh --update` to lock them in.
-3. **Perf ratchet** (new, built on #518's harness; decided 2026-10-27: both counts below):
+3. **Perf ratchet** (implemented by #547, built on #518's harness; see [the current guide](../perf/ratchet.md)):
    - **Allocation counts**, through `dhat` as a dev-only dependency. They do not vary at all
      between runs (#518), so this gate is exact: any increase fails. They are blind to CPU work,
      though: the FMA libcalls, `pow` and network simplex would regress without a single new
@@ -481,9 +488,9 @@ depends on it.
 **Phase 1: quick wins (fidelity: none).**
 
 - T1: x86-64-v3 release artifacts plus a v1 compatibility build; a ratchet job built with v3.
-- T2: `pow` fast paths.
-- T14: PGO, CLI `strip`, and possibly `panic=abort`.
-- T9: allocation reuse in the sfdp quadtree.
+- T2: `pow` fast paths (completed by #543).
+- T14: build-profile evaluation and CLI stripping (completed by #546).
+- T9: allocation reuse in the sfdp quadtree (completed by #548).
 - T8: neato mat-vec row-blocking and slice iteration.
 - T3: streaming tokens in the parser.
 
@@ -545,17 +552,17 @@ come in 1.x (D6, #528).
 Filed on 2026-10-27 in the `post-1.0` milestone, in this order, as #530–#540 (1 is #530, 11 is
 #540). Each is one PR unless noted.
 
-1. **perf: add a perf ratchet to CI.** Exact allocation counts (`dhat`), Callgrind instruction
+1. **Completed (#547): perf ratchet in CI.** Exact allocation counts (`dhat`), Callgrind instruction
    counts and peak heap on #518's quick set; exact, 2% and 5% gates; a `perf-regression-accepted`
    label. This depends on `scripts/bench/`.
 2. **release: build x86-64 artifacts with `-C target-cpu=x86-64-v3`, plus a v1 compat artifact.**
    Add a ratchet job built with v3, and a byte-equality check between v1 and v3 (T1; measured
    4.5–5.0× neato, 2.3× sfdp, 2× fdp).
-3. **math: bit-exact fast paths in `pow` for `y == 2` and `y == 1`.** Include a differential test
+3. **Completed (#543): math: bit-exact fast paths in `pow` for `y == 2` and `y == 1`.** Include a differential test
    against the general path, and call `pow` once per pair (T2; sfdp `pow` is 38–44% of samples).
 4. **neatogen: restructure `right_mult_with_vector_ff` without reordering any sum.** Row-blocking,
    a split scatter loop, slice iteration (T8; 88% of neato).
-5. **sfdp: inline the quadtree cells' vectors and reuse supernode buffers** (T9; 4 M allocations
+5. **Completed (#548): sfdp: inline the quadtree cells' vectors and reuse supernode buffers** (T9; 4 M allocations
    per rnd2000 run, 85% in `add_internal`).
 6. **parser: stop retaining every token; borrow token text from the input** (T3; 982 MB against
    C's 82 MB on a 12 MB file).
@@ -567,15 +574,13 @@ Filed on 2026-10-27 in the `post-1.0` milestone, in this order, as #530–#540 (
    profile-driven, NS first).
 10. **docs: replace "Follow the C" in CONTRIBUTING.md with provenance tags and a C-mirror module
     list** plus a script that reports C functions without a provenance tag
-    (decision 2; the CONTRIBUTING.md text landed with #514, the script is #539).
-11. **release: evaluate PGO (`cargo-pgo`) and CLI `strip`/`panic=abort`** (T14), and move the
-    release profile into `Cargo.toml` so crates.io builds get it. Report the gains and the
-    exit-status change.
-12. **render: `-Tplain` is quadratic** (the baseline's hotspot 2): `root_holds_plain`
-    (`render/src/emit/output.rs:277`) scans the whole graph for every label, so osage on 20,000
-    nodes takes 7.6–8.9 s with `-Tplain` against C's 0.2 s. Building the set of plain strings
-    once per output fixes it without touching a float. The maintainer decided it blocks 1.0, so
-    it is filed in the `1.0` milestone (#541), not here.
+    (completed: the CONTRIBUTING.md text landed with #514, the script with #542 for #539).
+11. **Completed (#546): release profile and CLI size evaluation** (T14, #540). The profile
+    moved into `Cargo.toml` and the published CLI manifest, and CLI stripping is enabled.
+    Thin LTO and unwinding were retained after evaluating PGO, fat LTO and `panic=abort`.
+12. **Completed (#566): render `-Tplain` scaling** (#541). At 0.2.2, `root_holds_plain`
+    scanned the graph for every label (baseline hotspot 2). The per-output string set fixes
+    the quadratic scan without changing floating-point operations. This landed before 1.0.
 
 The baseline's other hotspots without an issue yet are candidates for the next round, each
 classed *none*: circo's `count_all_crossings` (hotspot 7), twopi's `set_n_steps_to_leaf` (11),

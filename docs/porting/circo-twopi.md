@@ -13,23 +13,14 @@ Both reuse the shared neato-family infrastructure (`common::LGraph`, `pack`,
 
 ## Fidelity
 
-`gv-diff` against C 16.1.0 goldens (built-in text metrics, see
-`scripts/gen-golden.sh`):
+Re-measured on 2026-10-28 with the circo and twopi commands in
+`scripts/update-baselines.sh`, without `--update`, against the `*.portable.json` baselines:
+**circo 282 / 282 exact; twopi 281 / 289 exact**, with no regressions.
+All stable inputs in both corpora match byte for byte in `gv-diff e2e`.
 
-| corpus | before (force_circular) | after |
-|---|---|---|
-| `tests/circo` (280 files) | 70 exact, score 100.3/280 (35.8%), 78/5128 nodes | 279 exact, score 279.6/280, 5128/5128 nodes, 6816/6818 edges |
-| `tests/twopi` (287 files) | 89 exact, score 120.8/287 (42.1%), 326/5334 nodes | 280 exact, score 286.9/287, 5334/5334 nodes, 7004/7014 edges |
-| main corpus (508 files) | 250 exact, 408.9 | no regressions; the shared fixes below add exact files |
+Remaining differences:
 
-`-Tdot` output is byte-identical to C on 279/280 circo and 279/287 twopi files.
-
-Remaining differences, all in shared code:
-
-- `splines=ortho` now routes through `lib/ortho` (see `neato.md`); circo's
-  arrows graphs with `-Gsplines=ortho` (4 files) still differ by one track
-  position.
-- twopi `splines=true` on the arrows graphs (7 files): `i`, `Z` and `I` are
+- twopi `splines=true` on the arrows graphs (8 files): `i`, `Z` and `I` are
   exactly vertically aligned, and which side the pathplan router passes an
   obstacle vertex on is a floating-point tie. C does not even break it the same
   way from run to run: the same C binary gives 3–4 different outputs over 20

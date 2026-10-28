@@ -144,7 +144,10 @@ match C (pos/lp/head_lp/tail_lp/xlp within 2pt) except where C itself exceeds a
 
 ## Validation
 
-* `cargo run --release -p graphviz-pure-diff -- --baseline tests/golden/baseline.json`.
+These are historical measurements from the original dotgen port; see the
+[README](../../README.md#fidelity-against-c-graphviz-1610) for current ratchets.
+
+* `cargo run --release -p graphviz-pure-diff -- --baseline tests/golden/baseline.portable.json`.
   At the switch to dotgen: nodes ok 73.5% (old engine 14.7%), edges 22%, bb 84%.
   After phase 2: exact 499/508, nodes ok 99.1%, edges ok 99.6%, bb ok 98.2%,
   clusters 98.9%, score 98.8%. The dot files left are the four `pack` files;
@@ -208,6 +211,9 @@ whose overflow into the next node C relies on; its point dictionaries use the
 cdt splay tree; `edge_attr_declared` is cached (it made splines quadratic).
 
 ### Validation (phase 3)
+
+Historical phase-3 measurements follow; the current ratchets are in
+[README](../../README.md#fidelity-against-c-graphviz-1610).
 
 * Main corpus: 499/508 -> 508/508 exact before the additions; with the six
   `tests/wild/phase3_*` cases (pack/packmode, records/samehead, neato ortho

@@ -45,7 +45,7 @@ For information, never as a check: `gv-diff e2e --stock` compares the same outpu
 
 <DiffList stock />
 
-C itself is less consistent across platforms than that. Built on Linux the way Homebrew builds it on macOS, it takes glibc's math, `qsort` and `rand`, and matches C on macOS on {fmt(cLinux.agree)} of {fmt(cLinux.total)} files. The details are in [The math library](../porting/libm/).
+C itself is less consistent across platforms than that. In the historical cross-platform comparison, C built on Linux the way Homebrew builds it on macOS used glibc's math, `qsort` and `rand`, and matched C on macOS on {fmt(cLinux.agree)} of {fmt(cLinux.total)} files. The details are in [The math library](../porting/libm/).
 
 ## Layout
 
@@ -61,7 +61,7 @@ The {twopi.total - twopi.exact} twopi files are a floating-point tie in edge rou
 
 <RenderTable />
 
-The skipped `-Tplain` and `-Tplain-ext` references are ones C does not reproduce from run to run: for some converted labels C prints a string after `lib/common/output.c` has freed it, so the field holds whatever is left in that memory. Two of the plain files that differ hit the same path; on the reference machine C prints an empty label there, while the port prints the label. The 6 files that differ in every format are fuzz reproducers whose `neato -n2` rendering misses label placement: edge labels without `lp` and external labels without `xlp` (issues #142 and #266).
+The skipped `-Tplain` and `-Tplain-ext` references are ones C does not reproduce from run to run: for some converted labels C prints a string after `lib/common/output.c` has freed it, so the field holds whatever is left in that memory. Every stable reference matches, including `svg_inline` and `cmapx`; the format list and counts above come from the current render ratchet.
 
 ## C test graphs
 
@@ -69,7 +69,7 @@ The skipped `-Tplain` and `-Tplain-ext` references are ones C does not reproduce
 
 <CGraphs />
 
-These figures are carried over from the README: they need the Graphviz source tree and the C reference on the machine, so `scripts/site-data.py` does not regenerate them.
+These historical figures are carried over from the README: they need the Graphviz source tree and the C reference on the machine, so `scripts/site-data.py` does not regenerate them.
 
 ## Fuzzing
 
@@ -79,7 +79,7 @@ Identity is the share of comparable cases whose output and exit status both matc
 
 <FuzzRounds />
 
-Read from the rounds table in [the fuzzing notes](../porting/fuzzing/), which also break down the remaining differences: mostly C nondeterminism (layouts that depend on heap addresses), C undefined behaviour on inputs it reports as invalid, and a few open differences, which are tracked in [What's left](../whats-left/).
+These are historical results from each round, before later fixes; round 5 is tracked in [#511](https://github.com/graphviz-pure/graphviz-pure/issues/511). Read from the rounds table in [the fuzzing notes](../porting/fuzzing/), which also break down the remaining differences: mostly C nondeterminism (layouts that depend on heap addresses), C undefined behaviour on inputs it reports as invalid, with the current status tracked in [What's left](../whats-left/).
 
 ## The reference
 

@@ -1,8 +1,8 @@
 {
- "generated": "2026-10-23T15:51:36+00:00",
- "commit": "99daec995482ebbc6df72ebce5311b137afdb71a",
- "commit_short": "99daec9",
- "commit_date": "2026-10-23T11:51:35-04:00",
+ "generated": "2026-10-28T20:32:11+00:00",
+ "commit": "19af77268c1dfcf574a1e7c143f1095340795ad2",
+ "commit_short": "19af772",
+ "commit_date": "2026-10-28T20:00:13Z",
  "source": "baselines",
  "measured_on": null,
  "oracle": {
@@ -2965,106 +2965,67 @@
  ],
  "render": [
   {
-   "format": "svg",
+   "format": "cmapx",
    "total": 587,
-   "identical": 581,
+   "identical": 587,
    "skipped": 0,
-   "differs": [
-    "fuzz_concentrate_abort",
-    "fuzz_lost_edge_label",
-    "fuzz_pack_splines_none",
-    "fuzz_subgraph_splines_root",
-    "fuzz_xlabel_backslash_l",
-    "fuzz_xlabel_empty_label"
-   ]
-  },
-  {
-   "format": "xdot",
-   "total": 587,
-   "identical": 581,
-   "skipped": 0,
-   "differs": [
-    "fuzz_concentrate_abort",
-    "fuzz_lost_edge_label",
-    "fuzz_pack_splines_none",
-    "fuzz_subgraph_splines_root",
-    "fuzz_xlabel_backslash_l",
-    "fuzz_xlabel_empty_label"
-   ]
+   "differs": []
   },
   {
    "format": "dot",
    "total": 587,
-   "identical": 581,
+   "identical": 587,
    "skipped": 0,
-   "differs": [
-    "fuzz_concentrate_abort",
-    "fuzz_lost_edge_label",
-    "fuzz_pack_splines_none",
-    "fuzz_subgraph_splines_root",
-    "fuzz_xlabel_backslash_l",
-    "fuzz_xlabel_empty_label"
-   ]
+   "differs": []
   },
   {
    "format": "json",
    "total": 551,
-   "identical": 545,
+   "identical": 551,
    "skipped": 0,
-   "differs": [
-    "fuzz_concentrate_abort",
-    "fuzz_lost_edge_label",
-    "fuzz_pack_splines_none",
-    "fuzz_subgraph_splines_root",
-    "fuzz_xlabel_backslash_l",
-    "fuzz_xlabel_empty_label"
-   ]
+   "differs": []
   },
   {
    "format": "json0",
    "total": 587,
-   "identical": 581,
+   "identical": 587,
    "skipped": 0,
-   "differs": [
-    "fuzz_concentrate_abort",
-    "fuzz_lost_edge_label",
-    "fuzz_pack_splines_none",
-    "fuzz_subgraph_splines_root",
-    "fuzz_xlabel_backslash_l",
-    "fuzz_xlabel_empty_label"
-   ]
+   "differs": []
   },
   {
    "format": "plain",
    "total": 577,
-   "identical": 569,
+   "identical": 577,
    "skipped": 10,
-   "differs": [
-    "fuzz_concentrate_abort",
-    "fuzz_lost_edge_label",
-    "fuzz_pack_splines_none",
-    "fuzz_subgraph_splines_root",
-    "fuzz_xlabel_backslash_l",
-    "fuzz_xlabel_empty_label",
-    "gv16_graphs_Latin1_cd0c3d",
-    "gv16_graphs_b60_bf5b3a"
-   ]
+   "differs": []
   },
   {
    "format": "plain-ext",
    "total": 577,
-   "identical": 569,
+   "identical": 577,
    "skipped": 10,
-   "differs": [
-    "fuzz_concentrate_abort",
-    "fuzz_lost_edge_label",
-    "fuzz_pack_splines_none",
-    "fuzz_subgraph_splines_root",
-    "fuzz_xlabel_backslash_l",
-    "fuzz_xlabel_empty_label",
-    "gv16_graphs_Latin1_cd0c3d",
-    "gv16_graphs_b60_bf5b3a"
-   ]
+   "differs": []
+  },
+  {
+   "format": "svg",
+   "total": 587,
+   "identical": 587,
+   "skipped": 0,
+   "differs": []
+  },
+  {
+   "format": "svg_inline",
+   "total": 587,
+   "identical": 587,
+   "skipped": 0,
+   "differs": []
+  },
+  {
+   "format": "xdot",
+   "total": 587,
+   "identical": 587,
+   "skipped": 0,
+   "differs": []
   }
  ],
  "fuzz": {

@@ -40,7 +40,7 @@ gate.
 dhat is a dev-dependency of `graphviz-pure-cli`, used only by the example: no shipped binary has
 it as its allocator, and `#[global_allocator] static ALLOC: dhat::Alloc` needs no `unsafe`.
 
-The build pins the release profile of `.cargo/config.toml` (`ratchet.py`'s `PROFILE`) and
+The build pins the release profile of the workspace `Cargo.toml` (`ratchet.py`'s `PROFILE`) and
 `perf.yml` pins the Rust version (`RUST_VERSION`, as release.yml does). A change to the shipped
 profile or a Rust upgrade therefore moves the ratchet only when it is copied there, in a pull
 request that also refreshes the baseline.

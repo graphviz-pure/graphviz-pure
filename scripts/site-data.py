@@ -52,7 +52,6 @@ E2E_CORPORA = OrderedDict(
     ]
 )
 LAYOUT_CORPORA = ["main", "neato", "sfdp", "circo", "twopi", "fdp", "osage", "patchwork"]
-RENDER_FORMATS = ["svg", "xdot", "dot", "json", "json0", "plain", "plain-ext"]
 
 
 def load(p):
@@ -213,8 +212,7 @@ def main():
     skipped = render_unstable()
     render_base = load(GOLDEN / "render" / "baseline.portable.json")["formats"]
     render = []
-    for fmt in RENDER_FORMATS:
-        m = render_base[fmt]
+    for fmt, m in render_base.items():
         render.append(
             {
                 "format": fmt,
