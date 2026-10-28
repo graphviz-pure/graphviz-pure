@@ -6,6 +6,7 @@
 #   - ci.yml and cross-platform.yml succeeded on master's head;
 #   - every pull request since the last release has a changelog entry, none is marked
 #     breaking without the breaking label, and the labels ask for the version;
+#   - stable Rust API breaks against crates.io have a merged breaking PR and a matching bump;
 #   - CHANGELOG.md's Unreleased section is empty (entries belong in pull request bodies);
 #   - the version is not tagged yet, and no GitHub release (including a draft) exists for it;
 #   - the e2e fidelity count (tests/golden/e2e-baseline.libm-matched.portable.json) is at
@@ -90,6 +91,18 @@ item() { # item PASS TEXT [DETAIL]
   else
     item "$([ "$computed" = "$version" ] && echo 1)" "The \`breaking\` labels ask for $version (${breaking:-no breaking pull request})" "they ask for $computed"
   fi
+
+  # Check precisely the master revision being released, without changing this checkout.
+  mkdir "$work/api"
+  git archive "$target" | tar -x -C "$work/api"
+  if SEMVER_MANIFEST="$work/api/Cargo.toml" RELEASE_VERSION="$version" \
+    BREAKING="$([ -n "$breaking" ] && echo true || echo false)" \
+    scripts/check-semver.sh release > "$work/semver.txt" 2>&1; then
+    item 1 "Stable Rust API changes against crates.io agree with the merged labels and $version"
+  else
+    item 0 "Stable Rust API changes against crates.io agree with the merged labels and $version"
+  fi
+  cat "$work/semver.txt"
 
   unreleased=$(git show "$target:CHANGELOG.md" | python3 -c '
 import re, sys

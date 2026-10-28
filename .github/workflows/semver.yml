@@ -1,7 +1,7 @@
 name: Semver
 
 # Separate from CI: changing a label must not restart the workspace tests or affect their
-# result-cache lookup. Do not cache this verdict: both labels and crates.io can change.
+# result-cache lookup. Do not cache this verdict: labels can change.
 on:
   pull_request:
     types: [opened, synchronize, reopened, labeled, unlabeled]
@@ -46,6 +46,8 @@ jobs:
         if: github.event_name == 'pull_request'
         with:
           persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0 # cargo-semver-checks needs the PR base commit's source
       - name: Install Rust ${{ env.RUST_VERSION }}
         if: github.event_name == 'pull_request'
         run: rustup toolchain install "$RUST_VERSION" --profile minimal && rustup default "$RUST_VERSION"
@@ -61,11 +63,11 @@ jobs:
       - name: Install cargo-semver-checks
         if: github.event_name == 'pull_request' && steps.tool.outputs.cache-hit != 'true'
         run: cargo install --locked cargo-semver-checks@0.51.0
-      - name: Check stable crates against crates.io
+      - name: Check this PR's stable API changes
         if: github.event_name == 'pull_request'
         env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
           BREAKING: ${{ contains(github.event.pull_request.labels.*.name, 'breaking') }}
         run: |
-          cargo semver-checks --version | grep -Fx 'cargo-semver-checks 0.51.0'
           python3 -m unittest discover -s scripts/tests -p test_check_semver.py
-          scripts/check-semver.sh
+          scripts/check-semver.sh pr

@@ -17,6 +17,7 @@ A dry run, or a check that fails, never asks for the `release` environment. A re
 - no open `priority:p1` or `priority:p2` issue, and no open "Cross-platform fails on master";
 - the newest `ci.yml` and `cross-platform.yml` runs on master's head succeeded;
 - every pull request merged since the last tag has a `## Changelog entry`. An entry marked breaking (under a `### Breaking` heading, or a bullet starting `**Breaking:**` or `**Changed (breaking):**`) has to come from a pull request with the `breaking` label. The labels decide the version;
+- the stable Rust APIs (`graphviz-pure` and `graphviz-pure-raster`) are checked against their latest non-yanked stable crates.io releases with cargo-semver-checks 0.51.0. Detected breaks require a merged `breaking` PR and a minor bump while `0.x`, major from `1.0`; this runs before publishing approval;
 - CHANGELOG.md's Unreleased section is empty. Entries belong in pull request bodies;
 - the version is not tagged yet, and no GitHub release, including a draft, exists for it;
 - the release commit merges cleanly onto current master (`git merge-tree --write-tree`). Master moving is fine; a conflict fails the run before any approval is requested;

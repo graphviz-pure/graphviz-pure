@@ -12,12 +12,16 @@ PACKAGES = ["graphviz-pure", "graphviz-pure-raster"]
 
 
 class SemverGateTest(unittest.TestCase):
-    def run_gate(self, statuses, breaking=False, versions=None, baseline=None):
+    def run_gate(self, statuses, breaking=False, versions=None, baseline=None, mode="pr",
+                 release="0.3.0", manifest=None):
         with tempfile.TemporaryDirectory() as directory:
             work = Path(directory)
             cargo = work / "cargo"
             cargo.write_text("""#!/usr/bin/env python3
 import json, os, sys
+if sys.argv[1:] == ['semver-checks', '--version']:
+    print('cargo-semver-checks 0.51.0')
+    sys.exit(0)
 with open(os.environ['CALLS'], 'a') as calls:
     calls.write(json.dumps(sys.argv[1:]) + '\\n')
 package = sys.argv[sys.argv.index('-p') + 1]
@@ -25,17 +29,24 @@ sys.exit(json.loads(os.environ['STATUSES'])[package])
 """)
             cargo.chmod(0o755)
             curl = work / "curl"
-            curl.write_text("#!/usr/bin/env python3\nimport os\nprint(os.environ['VERSIONS'])\n")
+            curl.write_text("#!/usr/bin/env python3\nimport os\nassert os.environ['MODE'] == 'release'\nprint(os.environ['VERSIONS'])\n")
             curl.chmod(0o755)
-            env = dict(os.environ, PATH=f"{work}:{os.environ['PATH']}",
+            env = dict(os.environ, MODE=mode, PATH=f"{work}:{os.environ['PATH']}",
                        BREAKING=str(breaking).lower(), STATUSES=json.dumps(dict(zip(PACKAGES, statuses))),
                        VERSIONS="\n".join(json.dumps(version) for version in
                                           (versions or [{"vers": "0.2.3", "yanked": False}])),
                        CALLS=str(work / "calls"))
-            env.pop("BASELINE_VERSION", None)
+            for name in ("BASELINE_VERSION", "BASE_SHA", "RELEASE_VERSION", "SEMVER_MANIFEST"):
+                env.pop(name, None)
+            if mode == "pr":
+                env["BASE_SHA"] = "a" * 40
+            else:
+                env["RELEASE_VERSION"] = release
+            if manifest:
+                env["SEMVER_MANIFEST"] = manifest
             if baseline:
                 env["BASELINE_VERSION"] = baseline
-            result = subprocess.run(["bash", str(SCRIPT)], env=env, text=True,
+            result = subprocess.run(["bash", str(SCRIPT), mode], env=env, text=True,
                                     stdout=subprocess.PIPE, stderr=subprocess.STDOUT, check=False)
             calls = work / "calls"
             return result, [json.loads(line) for line in calls.read_text().splitlines()] if calls.exists() else []
@@ -44,6 +55,10 @@ sys.exit(json.loads(os.environ['STATUSES'])[package])
         result, calls = self.run_gate([0, 0])
         self.assertEqual(result.returncode, 0, result.stdout)
         self.assertEqual([call[call.index("-p") + 1] for call in calls], PACKAGES)
+        for call in calls:
+            self.assertEqual(call[call.index("--baseline-rev") + 1], "a" * 40)
+            self.assertNotIn("--baseline-version", call)
+            self.assertEqual(call[call.index("--release-type") + 1], "minor")
 
     def test_break_in_either_stable_crate_requires_label(self):
         for statuses in ([100, 0], [0, 100]):
@@ -67,7 +82,7 @@ sys.exit(json.loads(os.environ['STATUSES'])[package])
                 self.assertEqual(len(calls), 2)
 
     def test_baseline_advances_to_one_point_zero(self):
-        result, calls = self.run_gate([0, 0], versions=[
+        result, calls = self.run_gate([0, 0], mode="release", versions=[
             {"vers": "0.2.3", "yanked": False},
             {"vers": "1.0.0", "yanked": False},
             {"vers": "1.1.0-rc.1", "yanked": False},
@@ -80,23 +95,55 @@ sys.exit(json.loads(os.environ['STATUSES'])[package])
             self.assertEqual(call[call.index("--release-type") + 1], "minor")
 
     def test_baseline_uses_numeric_semver_order(self):
-        result, calls = self.run_gate([0, 0], versions=[
+        result, calls = self.run_gate([0, 0], mode="release", versions=[
             {"vers": version, "yanked": False} for version in ("1.9.0", "1.10.0", "0.99.0")
         ])
         self.assertEqual(result.returncode, 0, result.stdout)
         self.assertTrue(all(call[call.index("--baseline-version") + 1] == "1.10.0" for call in calls))
 
     def test_no_stable_baseline_fails_closed(self):
-        result, calls = self.run_gate([0, 0], breaking=True, versions=[
+        result, calls = self.run_gate([0, 0], mode="release", breaking=True, versions=[
             {"vers": "1.0.0-rc.1", "yanked": False},
         ])
         self.assertNotEqual(result.returncode, 0)
         self.assertEqual(calls, [])
 
     def test_local_baseline_override(self):
-        result, calls = self.run_gate([0, 0], baseline="0.2.3")
+        result, calls = self.run_gate([0, 0], mode="release", baseline="0.2.3")
         self.assertEqual(result.returncode, 0, result.stdout)
         self.assertTrue(all(call[call.index("--baseline-version") + 1] == "0.2.3" for call in calls))
+    def test_release_break_requires_a_merged_breaking_label(self):
+        result, _ = self.run_gate([100, 0], mode="release", release="1.0.0")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("no merged PR carries breaking", result.stdout)
+
+    def test_release_bump_must_cover_detected_breakage(self):
+        for baseline, release, allowed in (
+            ("0.2.3", "0.2.4", False), ("0.2.3", "0.3.0", True),
+            ("0.2.3", "1.0.0", True), ("1.0.0", "1.0.1", False),
+            ("1.0.0", "1.1.0", False), ("1.0.0", "2.0.0", True),
+        ):
+            with self.subTest(baseline=baseline, release=release):
+                result, _ = self.run_gate([100, 0], mode="release", baseline=baseline,
+                                          release=release, breaking=True)
+                self.assertEqual(result.returncode == 0, allowed, result.stdout)
+                required = "minor" if baseline.startswith("0.") else "major"
+                self.assertIn(f"requires a {required} version bump", result.stdout)
+
+    def test_release_compatible_without_breaking_label(self):
+        result, _ = self.run_gate([0, 0], mode="release", release="0.2.4")
+        self.assertEqual(result.returncode, 0, result.stdout)
+
+    def test_release_tool_error_is_not_waived(self):
+        result, _ = self.run_gate([101, 0], mode="release", breaking=True)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("cannot waive", result.stdout)
+
+    def test_release_checks_the_recorded_master_snapshot(self):
+        result, calls = self.run_gate([0, 0], mode="release", manifest="release-source/Cargo.toml")
+        self.assertEqual(result.returncode, 0, result.stdout)
+        self.assertTrue(all(call[call.index("--manifest-path") + 1] == "release-source/Cargo.toml"
+                            for call in calls))
 
 
 if __name__ == "__main__":

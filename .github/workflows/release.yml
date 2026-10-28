@@ -146,6 +146,8 @@ jobs:
           fi
       - name: Install Rust ${{ env.RUST_VERSION }}
         run: rustup toolchain install "$RUST_VERSION" --profile minimal && rustup default "$RUST_VERSION"
+      - name: Install the pinned API checker for release readiness
+        run: cargo install --locked cargo-semver-checks@0.51.0
       - name: Readiness, changelog and release commit
         id: commit
         env:
