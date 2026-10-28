@@ -29,6 +29,7 @@ impl<'a> Dot<'a> {
         d.graphs.push(GraphInfo {
             name: input.name.clone(),
             root: 0,
+            next_anon_id: input.next_anon_id,
             attrs: input.graph_attrs.clone(),
             bound: true,
             ..GraphInfo::default()

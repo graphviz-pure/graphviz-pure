@@ -14,6 +14,9 @@ impl Dot<'_> {
         self.graphs.push(GraphInfo {
             name: name.to_string(),
             root: g,
+            next_anon_id: graphviz_pure_core::Graph::initial_next_anon_id(
+                (!name.is_empty()).then_some(name),
+            ),
             bound: true,
             ..GraphInfo::default()
         });
@@ -238,6 +241,23 @@ impl Dot<'_> {
         });
         self.agsubnode(g, n);
         n
+    }
+
+    /// `agnode(g, NULL, 1)`: a node named by the next anonymous id in `g`'s root.
+    pub fn cg_new_anonymous_node(&mut self, g: G) -> N {
+        let Some(root) = self.graphs.get(g).map(|graph| graph.root) else {
+            unreachable!("agnode received a graph outside the arena");
+        };
+        let Some(counter) = self
+            .graphs
+            .get_mut(root)
+            .map(|graph| &mut graph.next_anon_id)
+        else {
+            unreachable!("a cgraph subgraph has no root");
+        };
+        let name = format!("%{}", *counter);
+        *counter = counter.saturating_add(2);
+        self.cg_new_node(g, &name)
     }
 
     /// Finds a node of `g`'s root by name (`agnode(g, name, 0)` on a root).
