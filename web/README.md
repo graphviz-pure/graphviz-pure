@@ -86,7 +86,8 @@ A failure throws `GraphvizError`, a class the package exports (`extends Error`),
 `instanceof GraphvizError` is true. `message` is the text the command line prints,
 without the program-name prefix. `status` is a number and is currently always `1`,
 the status C's `dot` exits with when one graph fails. `kind` is `"Syntax"`,
-`"UnsupportedEngine"`, `"UnsupportedFormat"`, `"Layout"`, `"Attribute"` or `"Render"`.
+`"UnsupportedEngine"`, `"UnsupportedFormat"`, `"Layout"`, `"Attribute"`, `"Render"`,
+or `"Error"` for a kind this version does not name yet.
 `diagnostics` is the `agerr` messages emitted around the failure. The failure's own
 text is `message`, not one of those entries. The plain functions and the
 `*WithDiagnostics` functions throw the same object.
