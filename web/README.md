@@ -14,6 +14,8 @@ await init();
 const svg = render('digraph G { a -> b [label="fast"]; }', 'dot', 'svg');
 ```
 
+SVG from untrusted DOT is untrusted markup: like C Graphviz, `URL`/`href` attributes can carry `javascript:` links, so sanitise it before embedding it inline (including with `innerHTML`), or display it with `<img>`. Layout cost is unbounded, as in C; services must impose input-size, time and memory limits in an isolated worker or process with a timeout.
+
 `init()` loads the WebAssembly module (1.9 MB, about 650 KB gzipped) once; call it before
 anything else. Where it finds the module depends on the runtime. CI runs each setup below
 (`scripts/wasm-runtimes/`).
@@ -60,8 +62,11 @@ export default {
 };
 ```
 
-The Worker uploads at about 1.9 MB, far inside the 64 MiB size limit. Most graphs lay out in a
-few milliseconds, but large ones take tens, more than the Free plan's 10 ms of CPU per request.
+Before serving untrusted requests with this Worker, cap the request-body size and configure
+a [CPU timeout](https://developers.cloudflare.com/workers/wrangler/configuration/#limits),
+for example `limits.cpu_ms = 1000` in `wrangler.toml` on a paid plan (enforced after deployment);
+the Free plan allows only [10 ms of CPU time per request](https://developers.cloudflare.com/workers/platform/limits/#cpu-time).
+`render` is synchronous, so `setTimeout` or `Promise.race` on the same thread cannot interrupt it.
 
 `render(dot, engine, format)` lays out the first graph; `renderAll` returns one output per
 graph; `renderAllBytes` takes and returns raw bytes, including non-UTF-8 input, as the
