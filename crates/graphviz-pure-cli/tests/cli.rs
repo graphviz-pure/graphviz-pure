@@ -231,7 +231,7 @@ fn args_c_option_and_error_paths() {
     let (_, err, code) = run_in(&dir, &["-Tfoo"], "");
     assert_eq!(code, 1);
     assert!(
-        err.starts_with("Format: \"foo\" not recognized. Use one of: canon dot "),
+        err.starts_with("Format: \"foo\" not recognized. Use one of: canon cmapx cmapx_np dot "),
         "{err}"
     );
     let (_, err, code) = run_in(&dir, &["-Kfoo"], "");
@@ -330,11 +330,11 @@ fn issue298_verbose_reports_the_plugins_it_uses() {
     let svg = using(&[("render", "svg:core"), ("device", "svg:svg:core")]);
     let json = using(&[("render", "json:core"), ("device", "json:json:core")]);
     let xdot = using(&[("render", "xdot:core"), ("device", "xdot:xdot:core")]).repeat(3);
-    let status = "Demand loading of plugins is disabled.\n    render\t:  cairo dot dot_json json json0 svg xdot xdot_json\n    \
+    let status = "Demand loading of plugins is disabled.\n    render\t:  cairo dot dot_json json json0 map svg svg_inline xdot xdot_json\n    \
                   layout\t:  circo dot fdp neato nop nop1 nop2 osage patchwork sfdp twopi\n    \
                   textlayout\t: \n    \
-                  device\t:  canon dot dot_json gv jpe jpeg jpg json json0 plain plain-ext png \
-                  svg xdot xdot1.2 xdot1.4 xdot_json\n    \
+                  device\t:  canon cmapx cmapx_np dot dot_json gv jpe jpeg jpg json json0 plain \
+                  plain-ext png svg svg_inline xdot xdot1.2 xdot1.4 xdot_json\n    \
                   loadimage\t:  eps gif jpe jpeg jpg png ps svg\n";
     let version = format!(
         "graphviz-pure - graphviz-pure version {} (Rust port of Graphviz 16.1.0)\n",
@@ -367,8 +367,8 @@ fn issue298_verbose_reports_the_plugins_it_uses() {
     let err = plugin_lines(&err);
     assert!(
         err.contains(
-            "\n    render\t:  cairo:cairo dot:core dot_json:core json:core json0:core svg:core \
-             xdot:core xdot_json:core\n"
+            "\n    render\t:  cairo:cairo dot:core dot_json:core json:core json0:core map:core \
+             svg:core svg_inline:core xdot:core xdot_json:core\n"
         ),
         "{err}"
     );
@@ -12925,5 +12925,78 @@ fn issue30_missing_shapefile_warnings() {
         warnings("dot", src).0,
         "Warning: No or improper shapefile=\"<nil>\" for node \"a4\"\n\
          Warning: shapefile not set or not found for epsf node a5\n"
+    );
+}
+
+/// Issue #524: `-Tsvg_inline`, `-Tcmapx` and `-Tcmapx_np` match C 16.1.0 byte for byte.
+#[test]
+fn issue524_svg_inline_and_cmapx_match_c() {
+    let src = r#"digraph G {
+    URL="http://example.com/\G";
+    tooltip="graph \G";
+    subgraph cluster_c {
+        URL="http://example.com/clust";
+        label="Cluster";
+        a [URL="http://example.com/\N", target="_blank", tooltip="node \N"];
+        b [shape=box, URL="http://example.com/box"];
+        c [shape=circle, URL="http://example.com/circle"];
+        d [shape=triangle, URL="http://example.com/tri"];
+        r [shape=record, label="<f0> left|{<f1> mid|<f2> right}", URL="http://example.com/rec"];
+        h [shape=none, label=<<TABLE><TR><TD HREF="http://example.com/cell" TITLE="cell tip">cell</TD></TR></TABLE>>];
+    }
+    a -> b [URL="http://example.com/\E", edgetarget="_top", headURL="http://example.com/head", tailURL="http://example.com/tail", label="elab", labelURL="http://example.com/label"];
+}"#;
+    let (svg, err, ok) = run(&["-Tsvg"], src);
+    assert!(ok && err.is_empty(), "{err}");
+    let (svg_inline, err, ok) = run(&["-Tsvg_inline"], src);
+    assert!(ok && err.is_empty(), "{err}");
+    assert!(!svg_inline.starts_with("<?xml"), "{svg_inline}");
+    assert!(!svg_inline.contains("<!DOCTYPE"), "{svg_inline}");
+    assert!(!svg_inline.contains("xmlns="), "{svg_inline}");
+    let svg_after_doctype = svg.split_once("svg11.dtd\">\n").unwrap().1;
+    assert_eq!(
+        svg_inline,
+        svg_after_doctype.replacen(
+            " xmlns=\"http://www.w3.org/2000/svg\" xmlns:xlink=\"http://www.w3.org/1999/xlink\"",
+            "",
+            1
+        )
+    );
+
+    let (cmapx, err, ok) = run(&["-Tcmapx"], src);
+    assert!(ok && err.is_empty(), "{err}");
+    assert_eq!(
+        cmapx,
+        r#"<map id="G" name="G">
+<area shape="poly" id="node1" href="http://example.com/a" target="_blank" title="node N" alt="" coords="99,93,97,86,92,79,84,74,74,71,63,69,52,71,42,74,34,79,28,86,27,93,28,101,34,108,42,113,52,116,63,117,74,116,84,113,92,108,97,101"/>
+<area shape="rect" id="node2" href="http://example.com/box" title="b" alt="" coords="27,198,99,246"/>
+<area shape="poly" id="edge1" href="http://example.com/a-&gt;b" target="_top" title="elab" alt="" coords="64,116,65,182,60,182,61,120"/>
+<area shape="rect" id="edge1-label" href="http://example.com/label" title="elab" alt="" coords="63,151,94,174"/>
+<area shape="circle" id="node3" href="http://example.com/circle" title="c" alt="" coords="147,93,24"/>
+<area shape="poly" id="node4" href="http://example.com/tri" title="d" alt="" coords="237,60,195,110,280,110"/>
+<area shape="rect" id="node5" href="http://example.com/rec" title="&lt;f0&gt; left|{&lt;f1&gt; mid|&lt;f2&gt; right}" alt="" coords="303,60,406,127"/>
+<area shape="rect" id="node6_0" href="http://example.com/cell" title="cell tip" alt="" coords="449,78,484,109"/>
+<area shape="rect" id="clust1" href="http://example.com/clust" title="graph G" alt="" coords="16,16,513,256"/>
+<area shape="rect" id="graph0" href="http://example.com/G" title="graph G" alt="" coords="0,-0,529,272"/>
+</map>
+"#
+    );
+
+    let (cmapx_np, err, ok) = run(&["-Tcmapx_np"], src);
+    assert!(ok && err.is_empty(), "{err}");
+    assert_eq!(
+        cmapx_np,
+        r#"<map id="G" name="G">
+<area shape="rect" id="node1" href="http://example.com/a" target="_blank" title="node N" alt="" coords="27,69,99,117"/>
+<area shape="rect" id="node2" href="http://example.com/box" title="b" alt="" coords="27,198,99,246"/>
+<area shape="rect" id="edge1-label" href="http://example.com/label" title="elab" alt="" coords="63,151,94,174"/>
+<area shape="rect" id="node3" href="http://example.com/circle" title="c" alt="" coords="123,69,171,117"/>
+<area shape="rect" id="node4" href="http://example.com/tri" title="d" alt="" coords="195,60,280,127"/>
+<area shape="rect" id="node5" href="http://example.com/rec" title="&lt;f0&gt; left|{&lt;f1&gt; mid|&lt;f2&gt; right}" alt="" coords="303,60,406,127"/>
+<area shape="rect" id="node6_0" href="http://example.com/cell" title="cell tip" alt="" coords="449,78,484,109"/>
+<area shape="rect" id="clust1" href="http://example.com/clust" title="graph G" alt="" coords="16,16,513,256"/>
+<area shape="rect" id="graph0" href="http://example.com/G" title="graph G" alt="" coords="0,-0,529,272"/>
+</map>
+"#
     );
 }

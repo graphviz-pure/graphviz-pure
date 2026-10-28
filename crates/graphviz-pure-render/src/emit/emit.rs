@@ -7,10 +7,12 @@
 use super::attrs::{Attrs, PtrStr, StyleItem, default_line_style, mapbool, parse_style};
 use super::job::{
     EMIT_CLUSTERS_LAST, EMIT_EDGE_SORTED, EMIT_SORTED, EmitState, Emitter, Engine, FILL, GRADIENT,
-    GVDEVICE_DOES_TRUECOLOR, GVRENDER_DOES_LABELS, GVRENDER_DOES_MAPS, GVRENDER_DOES_TARGETS,
-    GVRENDER_DOES_TOOLTIPS, GVRENDER_NO_WHITE_BG, ObjKind, RGRADIENT,
+    GVDEVICE_DOES_TRUECOLOR, GVRENDER_DOES_LABELS, GVRENDER_DOES_MAP_POLYGON,
+    GVRENDER_DOES_MAP_RECTANGLE, GVRENDER_DOES_MAPS, GVRENDER_DOES_TARGETS, GVRENDER_DOES_TOOLTIPS,
+    GVRENDER_DOES_TRANSFORM, GVRENDER_NO_WHITE_BG, MapShape, ObjKind, RGRADIENT,
 };
 use super::model::{Bz, TextLabel};
+use super::shapes::{is_exactly_zero, is_rect, p_ellipse, rect2poly};
 use graphviz_pure_core::diag::{agerr_prev, agerrorf, agwarningf};
 use graphviz_pure_core::font::{
     LabelSubstContext, NamesInBuffer, convert_label_text, strdup_and_subst_obj,
@@ -222,6 +224,114 @@ fn label_overlaps(l: &TextLabel, b: BoundingBox) -> bool {
     )
 }
 
+/// `ptToLine2` (`lib/common/geom.c:218`).
+fn pt_to_line2(a: Point, b: Point, p: Point) -> f64 {
+    let dx = b.x - a.x;
+    let dy = b.y - a.y;
+    let mut a2 = (p.y - a.y).mul_add(dx, -((p.x - a.x) * dy));
+    a2 *= a2;
+    if a2 < 0.000_000_000_1 {
+        return 0.0;
+    }
+    a2 / dx.mul_add(dx, dy * dy)
+}
+
+/// `check_control_points` (`emit.c:745`).
+fn check_control_points(cp: &[Point; 4]) -> bool {
+    const HW: f64 = 2.0;
+    pt_to_line2(cp[0], cp[3], cp[1]) < HW * HW && pt_to_line2(cp[0], cp[3], cp[2]) < HW * HW
+}
+
+/// `approx_bezier` (`emit.c:838`).
+fn approx_bezier(cp: [Point; 4], segments: &mut Vec<Point>) {
+    let mut stack = vec![(cp, 0_usize)];
+    let mut budget = 1_u32 << 20;
+    while let Some((cp, depth)) = stack.pop() {
+        let ok = !cp.iter().all(|p| p.x.is_finite() && p.y.is_finite())
+            || check_control_points(&cp)
+            || depth >= (1 << 16)
+            || budget == 0;
+        if ok {
+            if segments.is_empty() {
+                segments.push(cp[0]);
+            }
+            segments.push(cp[3]);
+        } else {
+            budget -= 1;
+            let (_, left, right) = super::arrows::bezier_split(&cp, 0.5);
+            stack.push((right, depth + 1));
+            stack.push((left, depth + 1));
+        }
+    }
+}
+
+/// `bisect` (`emit.c:851`).
+fn bisect(pp: Point, cp: Point, np: Point) -> f64 {
+    let theta = math::atan2(np.y - cp.y, np.x - cp.x);
+    let phi = math::atan2(pp.y - cp.y, pp.x - cp.x);
+    let mut ang = theta - phi;
+    if ang > 0.0 {
+        ang -= 2.0 * std::f64::consts::PI;
+    }
+    phi + ang / 2.0
+}
+
+/// `mkSegPts` (`emit.c:868`).
+fn mk_seg_pts(prev: Option<Point>, cur: Point, next: Option<Point>, w2: f64) -> (Point, Point) {
+    let cp = cur;
+    let (pp, np) = match (prev, next) {
+        (Some(pp), Some(np)) => (pp, np),
+        (Some(pp), None) => (pp, Point::new(2.0 * (cp.x - pp.x), 2.0 * (cp.y - pp.y))),
+        (None, Some(np)) => (Point::new(2.0 * (cp.x - np.x), 2.0 * (cp.y - np.y)), np),
+        (None, None) => (cp, cp),
+    };
+    let theta = bisect(pp, cp, np);
+    let del = Point::new(w2 * math::cos(theta), w2 * math::sin(theta));
+    (
+        Point::new(cp.x + del.x, cp.y + del.y),
+        Point::new(cp.x - del.x, cp.y - del.y),
+    )
+}
+
+/// `map_output_bspline` (`emit.c:902-930`).
+fn map_output_bspline(b: &Bz, w2: f64) -> Vec<Vec<Point>> {
+    let mut segments = Vec::new();
+    let nc = b.list.len().saturating_sub(1) / 3;
+    for j in 0..nc {
+        let pts = [
+            b.list[3 * j],
+            b.list[3 * j + 1],
+            b.list[3 * j + 2],
+            b.list[3 * j + 3],
+        ];
+        approx_bezier(pts, &mut segments);
+    }
+    let mut polys = Vec::new();
+    let mut pt1 = [Point::default(); 50];
+    let mut pt2 = [Point::default(); 50];
+    let mut cnt = 0;
+    for i in 0..segments.len() {
+        let prev = (i > 0).then(|| segments[i - 1]);
+        let next = segments.get(i + 1).copied();
+        let (p1, p2) = mk_seg_pts(prev, segments[i], next, w2);
+        pt1[cnt] = p1;
+        pt2[cnt] = p2;
+        cnt += 1;
+        if i + 1 == segments.len() || cnt == 50 {
+            let mut poly = Vec::with_capacity(2 * cnt);
+            poly.extend_from_slice(&pt1[..cnt]);
+            for k in 0..cnt {
+                poly.push(pt2[cnt - k - 1]);
+            }
+            polys.push(poly);
+            pt1[0] = pt1[cnt - 1];
+            pt2[0] = pt2[cnt - 1];
+            cnt = 1;
+        }
+    }
+    polys
+}
+
 /// `interpretCRNL`.
 fn interpret_crnl(s: &str) -> String {
     let mut out = String::with_capacity(s.len());
@@ -375,6 +485,42 @@ impl<'a, E: Engine> Emitter<'a, E> {
 
     fn set_scheme(&mut self, s: Option<&str>) -> Option<String> {
         std::mem::replace(&mut self.job.color_scheme, s.map(str::to_string))
+    }
+
+    /// `emit_map_rect` (`emit.c:930-949`).
+    pub(crate) fn emit_map_rect(&mut self, b: BoundingBox) {
+        let flags = self.job.flags;
+        if flags & (GVRENDER_DOES_MAPS | GVRENDER_DOES_TOOLTIPS) == 0 {
+            return;
+        }
+        if flags & GVRENDER_DOES_MAP_RECTANGLE != 0 {
+            let mut p = vec![b.ll, b.ur];
+            if flags & GVRENDER_DOES_TRANSFORM == 0 {
+                self.job.ptf_a(&mut p);
+            }
+            let o = self.job.obj_mut();
+            o.url_map_shape = MapShape::Rectangle;
+            o.url_map_p = p;
+        } else if flags & GVRENDER_DOES_MAP_POLYGON != 0 {
+            let mut p = rect2poly([b.ll, b.ur]).to_vec();
+            if flags & GVRENDER_DOES_TRANSFORM == 0 {
+                self.job.ptf_a(&mut p);
+            }
+            let o = self.job.obj_mut();
+            o.url_map_shape = MapShape::Polygon;
+            o.url_map_p = p;
+        }
+    }
+
+    /// `map_label` (`emit.c:951-971`).
+    fn map_label(&mut self, lab: &TextLabel) {
+        let b = BoundingBox::new(
+            lab.pos.x - lab.dimen.x / 2.0,
+            lab.pos.y - lab.dimen.y / 2.0,
+            lab.pos.x + lab.dimen.x / 2.0,
+            lab.pos.y + lab.dimen.y / 2.0,
+        );
+        self.emit_map_rect(b);
     }
 
     /// `emit_graph`.
@@ -620,20 +766,41 @@ impl<'a, E: Engine> Emitter<'a, E> {
             None
         };
         let prev = self.set_scheme(m.root_attrs().get("colorscheme"));
-        self.eng.begin_page(&self.job);
-        self.set_pencolor(DEFAULT_COLOR);
-        self.set_fillcolor(DEFAULT_FILL);
         let flags = self.job.flags;
         let anchored = {
             let o = self.job.obj();
             o.url.is_some() || o.explicit_tooltip
         };
+        if flags & (GVRENDER_DOES_MAPS | GVRENDER_DOES_TOOLTIPS) != 0 && anchored {
+            let pb = self.job.page_box;
+            if flags & GVRENDER_DOES_MAP_RECTANGLE != 0 {
+                let mut p = vec![pb.ll, pb.ur];
+                if flags & GVRENDER_DOES_TRANSFORM == 0 {
+                    self.job.ptf_a(&mut p);
+                }
+                let o = self.job.obj_mut();
+                o.url_map_shape = MapShape::Rectangle;
+                o.url_map_p = p;
+            } else if flags & GVRENDER_DOES_MAP_POLYGON != 0 {
+                let mut p = rect2poly([pb.ll, pb.ur]).to_vec();
+                if flags & GVRENDER_DOES_TRANSFORM == 0 {
+                    self.job.ptf_a(&mut p);
+                }
+                let o = self.job.obj_mut();
+                o.url_map_shape = MapShape::Polygon;
+                o.url_map_p = p;
+            }
+        }
+        self.eng.begin_page(&self.job);
+        self.set_pencolor(DEFAULT_COLOR);
+        self.set_fillcolor(DEFAULT_FILL);
         if flags & GVRENDER_DOES_LABELS != 0
             && let Some(l) = &m.label
         {
             self.job.obj_mut().label = Some(l.text.clone());
         }
         if flags & EMIT_CLUSTERS_LAST == 0 && anchored {
+            self.emit_map_rect(self.job.clip);
             self.begin_obj_anchor();
         }
         self.emit_background();
@@ -836,6 +1003,9 @@ impl<'a, E: Engine> Emitter<'a, E> {
                 }
             }
         }
+        if flags & EMIT_CLUSTERS_LAST != 0 {
+            self.emit_clusters(&m.root_clusters);
+        }
     }
 
     fn emit_clusters(&mut self, list: &[usize]) {
@@ -845,6 +1015,9 @@ impl<'a, E: Engine> Emitter<'a, E> {
                 continue;
             }
             let cl = &m.clusters[c];
+            if self.job.flags & EMIT_CLUSTERS_LAST != 0 {
+                self.emit_clusters(&cl.children);
+            }
             let a = cl.attrs;
             self.job.push_obj(ObjKind::Cluster(c));
             self.job.obj_mut().emit_state = EmitState::CDraw;
@@ -858,7 +1031,8 @@ impl<'a, E: Engine> Emitter<'a, E> {
                 o.url.is_some() || o.explicit_tooltip
             };
             let prev = self.set_scheme(a.get("colorscheme"));
-            if anchored {
+            if anchored && self.job.flags & EMIT_CLUSTERS_LAST == 0 {
+                self.emit_map_rect(cl.bb);
                 self.begin_obj_anchor();
             }
             let mut filled = 0;
@@ -964,11 +1138,17 @@ impl<'a, E: Engine> Emitter<'a, E> {
                 self.emit_label(EmitState::CLabel, l);
             }
             if anchored {
+                if self.job.flags & EMIT_CLUSTERS_LAST != 0 {
+                    self.emit_map_rect(cl.bb);
+                    self.begin_obj_anchor();
+                }
                 self.end_anchor();
             }
             self.eng.end_cluster(&self.job);
             self.job.pop_obj();
-            self.emit_clusters(&cl.children);
+            if self.job.flags & EMIT_CLUSTERS_LAST == 0 {
+                self.emit_clusters(&cl.children);
+            }
             self.set_scheme(prev.as_deref());
         }
     }
@@ -1048,19 +1228,104 @@ impl<'a, E: Engine> Emitter<'a, E> {
         self.job.push_obj(ObjKind::Node(n));
         self.job.obj_mut().emit_state = EmitState::NDraw;
         self.init_obj_map_data(Some(nd.label.text.clone()), ObjKind::Node(n));
-        // The node's map shape (emit.c:1666-1674) starts with `isFilled(n)`, which parses
-        // its style (and repeats parse_style's diagnostics). No renderer here draws the map
-        // shape itself.
         let anchored = {
             let o = self.job.obj();
             o.url.is_some() || o.explicit_tooltip
         };
-        if self.job.flags & (GVRENDER_DOES_MAPS | GVRENDER_DOES_TOOLTIPS) != 0
-            && anchored
-            && let Some(st) = nd.attrs.nonempty("style")
-        {
-            // `bool filled = isFilled(n)` (emit.c:1673), which only the map shape reads.
-            let _filled = parse_style(st).iter().any(|i| i.name == "filled");
+        let flags = self.job.flags;
+        if flags & (GVRENDER_DOES_MAPS | GVRENDER_DOES_TOOLTIPS) != 0 && anchored {
+            let filled = nd
+                .attrs
+                .nonempty("style")
+                .is_some_and(|st| parse_style(st).iter().any(|i| i.name == "filled"));
+            let coord = nd.coord;
+            let is_rect_node = nd
+                .geom
+                .polygon
+                .as_ref()
+                .is_some_and(|poly| is_rect(poly) && (poly.peripheries > 0 || filled));
+            let (mut shape, mut p) = if let Some(poly) = &nd.geom.polygon
+                && !is_rect_node
+                && flags & GVRENDER_DOES_MAP_POLYGON != 0
+            {
+                let sides = if poly.sides < 3 { 1 } else { poly.sides };
+                let peripheries = if poly.peripheries < 2 {
+                    1
+                } else {
+                    poly.peripheries
+                };
+                let nump_int = nd.attrs.get("samplepoints").map_or(0, super::attrs::atoi);
+                let nump = if !(4..=60).contains(&nump_int) {
+                    20
+                } else {
+                    nump_int as usize
+                };
+                if poly.peripheries == 0 && !filled {
+                    (
+                        MapShape::Rectangle,
+                        vec![
+                            Point::new(coord.x - nd.lw, coord.y - nd.ht / 2.0),
+                            Point::new(coord.x + nd.lw, coord.y + nd.ht / 2.0),
+                        ],
+                    )
+                } else if poly.sides < 3
+                    && is_exactly_zero(poly.skew)
+                    && is_exactly_zero(poly.distortion)
+                {
+                    let rad = poly.vertices[2 * peripheries - 1];
+                    if poly.regular {
+                        (
+                            MapShape::Circle,
+                            vec![coord, Point::new(coord.x + rad.x, coord.y + rad.y)],
+                        )
+                    } else {
+                        let mut pts = p_ellipse(rad.x, rad.y, nump);
+                        for pt in &mut pts {
+                            pt.x += coord.x;
+                            pt.y += coord.y;
+                        }
+                        (MapShape::Polygon, pts)
+                    }
+                } else {
+                    let offset = (peripheries - 1) * poly.sides;
+                    if poly.sides >= nump {
+                        let delta = poly.sides / nump;
+                        let mut pts = Vec::with_capacity(nump);
+                        let mut j = 0;
+                        for _ in 0..nump {
+                            let v = poly.vertices[j + offset];
+                            pts.push(Point::new(coord.x + v.x, coord.y + v.y));
+                            j += delta;
+                        }
+                        (MapShape::Polygon, pts)
+                    } else {
+                        let mut pts = Vec::with_capacity(sides);
+                        for j in 0..sides {
+                            let v = poly.vertices[j + offset];
+                            pts.push(Point::new(coord.x + v.x, coord.y + v.y));
+                        }
+                        (MapShape::Polygon, pts)
+                    }
+                }
+            } else {
+                (
+                    MapShape::Rectangle,
+                    vec![
+                        Point::new(coord.x - nd.lw, coord.y - nd.ht / 2.0),
+                        Point::new(coord.x + nd.rw, coord.y + nd.ht / 2.0),
+                    ],
+                )
+            };
+            if shape == MapShape::Rectangle && flags & GVRENDER_DOES_MAP_RECTANGLE == 0 {
+                shape = MapShape::Polygon;
+                p = rect2poly([p[0], p[1]]).to_vec();
+            }
+            if flags & GVRENDER_DOES_TRANSFORM == 0 {
+                self.job.ptf_a(&mut p);
+            }
+            let o = self.job.obj_mut();
+            o.url_map_shape = shape;
+            o.url_map_p = p;
         }
         let prev = self.set_scheme(nd.attrs.get("colorscheme"));
         self.eng.begin_node(&self.job);
@@ -1255,6 +1520,30 @@ impl<'a, E: Engine> Emitter<'a, E> {
                 o.headtooltip = Some(l.clone());
             }
         }
+        let has_map_target = {
+            let o = self.job.obj();
+            o.url.is_some() || o.tooltip.is_some()
+        };
+        if flags & (GVRENDER_DOES_MAPS | GVRENDER_DOES_TOOLTIPS) != 0
+            && !ed.bz.is_empty()
+            && has_map_target
+            && flags & GVRENDER_DOES_MAP_POLYGON != 0
+        {
+            let w2 = (self.job.obj().penwidth / 2.0).max(2.0);
+            let mut polys = Vec::with_capacity(ed.bz.len());
+            for bz in &ed.bz {
+                for mut poly in map_output_bspline(bz, w2) {
+                    if flags & GVRENDER_DOES_TRANSFORM == 0 {
+                        self.job.ptf_a(&mut poly);
+                    }
+                    polys.push(poly);
+                }
+            }
+            let o = self.job.obj_mut();
+            o.url_map_shape = MapShape::Polygon;
+            o.url_map_p = polys.first().cloned().unwrap_or_default();
+            o.url_bsplinemap_polys = polys;
+        }
         self.eng.begin_edge(&self.job);
         let anchored = {
             let o = self.job.obj();
@@ -1291,7 +1580,8 @@ impl<'a, E: Engine> Emitter<'a, E> {
         let old = self.job.obj().emit_state;
         self.job.obj_mut().emit_state = lkind;
         let anchored = url.is_some() || explicit;
-        if anchored {
+        if anchored && self.job.flags & EMIT_CLUSTERS_LAST == 0 {
+            self.map_label(lbl);
             self.begin_anchor(
                 url.as_deref(),
                 tooltip.as_deref(),
@@ -1304,6 +1594,15 @@ impl<'a, E: Engine> Emitter<'a, E> {
             self.emit_attachment(lbl, spl);
         }
         if anchored {
+            if self.job.flags & EMIT_CLUSTERS_LAST != 0 {
+                self.map_label(lbl);
+                self.begin_anchor(
+                    url.as_deref(),
+                    tooltip.as_deref(),
+                    target.as_deref(),
+                    newid.as_deref(),
+                );
+            }
             self.end_anchor();
         }
         self.job.obj_mut().emit_state = old;
@@ -1332,6 +1631,15 @@ impl<'a, E: Engine> Emitter<'a, E> {
         };
         if anchored {
             self.end_anchor();
+            let polys = std::mem::take(&mut self.job.obj_mut().url_bsplinemap_polys);
+            if polys.len() > 1 {
+                for poly in polys.into_iter().skip(1) {
+                    self.job.obj_mut().url_map_p = poly;
+                    self.begin_obj_anchor();
+                    self.end_anchor();
+                }
+            }
+            self.job.obj_mut().url_map_p.clear();
         }
         let o = self.job.obj().clone();
         let decorate = (mapbool(Some(ed.attrs.late_string("decorate", "false")))

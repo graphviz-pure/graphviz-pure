@@ -1,7 +1,8 @@
 //! Implementation crate of graphviz-pure, with no semver promise. The stable crates are
 //! `graphviz-pure` and `graphviz-pure-raster`.
 //!
-//! Output renderers for `graphviz-pure` (`svg`, `json`, `json0`, `dot`, `xdot`, `canon`, `plain`).
+//! Output renderers for `graphviz-pure` (`svg`, `svg_inline`, `cmapx`, `json`, `json0`, `dot`,
+//! `xdot`, `canon`, `plain`).
 
 #![forbid(unsafe_code)]
 
@@ -9,6 +10,7 @@ mod agwrite;
 pub mod decoded;
 pub mod emit;
 pub mod json;
+mod map_engine;
 pub mod plugins;
 mod svg_engine;
 mod xdot_engine;
@@ -57,6 +59,8 @@ use graphviz_pure_core::{Graph, GraphvizError, Result};
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum OutputFormat {
     Svg,
+    SvgInline,
+    Cmapx,
     Json,
     Json0,
     Dot,
@@ -69,6 +73,8 @@ impl OutputFormat {
     pub fn parse(name: &str) -> Result<Self> {
         match name.trim().to_ascii_lowercase().as_str() {
             "svg" => Ok(Self::Svg),
+            "svg_inline" => Ok(Self::SvgInline),
+            "cmapx" | "cmapx_np" => Ok(Self::Cmapx),
             "json" => Ok(Self::Json),
             "json0" => Ok(Self::Json0),
             "dot" | "gv" => Ok(Self::Dot),
@@ -85,6 +91,8 @@ pub fn render_graph(graph: &Graph, format: OutputFormat) -> Result<String> {
     // The format's own name, which the render diagnostics print.
     let name = match format {
         OutputFormat::Svg => "svg",
+        OutputFormat::SvgInline => "svg_inline",
+        OutputFormat::Cmapx => "cmapx",
         OutputFormat::Json => "json",
         OutputFormat::Json0 => "json0",
         OutputFormat::Dot => "dot",
@@ -260,6 +268,7 @@ const DOT_FEATURES: emit::job::Features = emit::job::Features {
     default_pad: 0.0,
     knowncolors: &[],
     rgba: false,
+    default_dpi: 72.0,
 };
 
 /// `render_features_json` (`json`, `json0`, `dot_json`, `xdot_json`).
@@ -271,6 +280,7 @@ const JSON_FEATURES: emit::job::Features = emit::job::Features {
     default_pad: 0.0,
     knowncolors: &[],
     rgba: false,
+    default_dpi: 72.0,
 };
 
 /// Runs `emit_graph` for a render plugin that draws nothing, of `render_type` (`dot` with
@@ -436,7 +446,7 @@ impl<'g> GraphJobs<'g> {
         }
         // Renderers other than dot, xdot, json and canon run before undoClusterEdges.
         let drawn = match (format, graph.render_view.as_deref()) {
-            (OutputFormat::Svg, Some(v)) => v,
+            (OutputFormat::Svg | OutputFormat::SvgInline | OutputFormat::Cmapx, Some(v)) => v,
             _ => graph,
         };
         let m = emit::model::Model::build(drawn);
@@ -450,6 +460,14 @@ impl<'g> GraphJobs<'g> {
                 } else {
                     svg_engine::SvgEngine::default()
                 };
+                emit::run_job(&m, eng, opts).0.out
+            }
+            OutputFormat::SvgInline => {
+                let eng = svg_engine::SvgEngine::inline();
+                emit::run_job(&m, eng, opts).0.out
+            }
+            OutputFormat::Cmapx => {
+                let eng = map_engine::MapEngine::new(lname == "cmapx_np", name);
                 emit::run_job(&m, eng, opts).0.out
             }
             OutputFormat::Json | OutputFormat::Json0 => {

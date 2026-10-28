@@ -13,7 +13,10 @@ share one version number, set in `[workspace.package]` in `Cargo.toml` and in
   The types the facade re-exports (`GraphvizError`, `Result`, `charset`, `LayoutEngine`,
   `LayoutOptions`, `GlobalAttrs`, `OutputFormat`) are covered by the facade's promise even
   though they are defined in an implementation crate.
-- **The command line:** options, accepted `-T` formats, exit status.
+- **The command line:** options, accepted `-T` formats, exit status. Not ported: C's
+  remaining core-plugin formats (`cmap`, `eps`, `fig`, `imap`, `imap_np`, `ismap`, `pic`,
+  `pov`, `ps`, `ps2`, `svgz`, `tk`) and the cairo, gd and terminal formats (`pdf`, `gif`,
+  `vt`, `kitty`, …).
 - **Output.** Because the project exists to reproduce Graphviz's output exactly, every change
   to the bytes the port writes for an existing input is listed in the changelog, whatever its
   size. Every build computes with the same math library, so the bytes are the same on every

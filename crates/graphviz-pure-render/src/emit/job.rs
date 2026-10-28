@@ -18,6 +18,9 @@ pub(crate) const GVRENDER_Y_GOES_DOWN: u32 = 1 << 12;
 pub(crate) const GVRENDER_DOES_TRANSFORM: u32 = 1 << 13;
 pub(crate) const GVRENDER_DOES_LABELS: u32 = 1 << 15;
 pub(crate) const GVRENDER_DOES_MAPS: u32 = 1 << 16;
+pub(crate) const GVRENDER_DOES_MAP_RECTANGLE: u32 = 1 << 17;
+pub(crate) const GVRENDER_DOES_MAP_CIRCLE: u32 = 1 << 18;
+pub(crate) const GVRENDER_DOES_MAP_POLYGON: u32 = 1 << 19;
 pub(crate) const GVRENDER_DOES_TOOLTIPS: u32 = 1 << 22;
 pub(crate) const GVRENDER_DOES_TARGETS: u32 = 1 << 23;
 pub(crate) const GVRENDER_NO_WHITE_BG: u32 = 1 << 25;
@@ -77,6 +80,15 @@ pub(crate) enum Pen {
     Solid,
 }
 
+/// `map_shape_t`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub(crate) enum MapShape {
+    #[default]
+    Rectangle,
+    Circle,
+    Polygon,
+}
+
 /// The object an `obj_state_t` describes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum ObjKind {
@@ -122,6 +134,9 @@ pub(crate) struct ObjState {
     pub taillabel: Option<String>,
     pub headlabel: Option<String>,
     pub labeledgealigned: bool,
+    pub url_map_shape: MapShape,
+    pub url_map_p: Vec<Point>,
+    pub url_bsplinemap_polys: Vec<Vec<Point>>,
 }
 
 impl ObjState {
@@ -160,6 +175,9 @@ impl ObjState {
             taillabel: None,
             headlabel: None,
             labeledgealigned: false,
+            url_map_shape: MapShape::Rectangle,
+            url_map_p: Vec::new(),
+            url_bsplinemap_polys: Vec::new(),
         };
         if let Some(p) = parent {
             o.pencolor = p.pencolor.clone();
@@ -178,6 +196,7 @@ impl ObjState {
 pub(crate) struct Features {
     pub flags: u32,
     pub default_pad: f64,
+    pub default_dpi: f64,
     /// Sorted color names the renderer passes through as strings.
     pub knowncolors: &'static [&'static str],
     /// `RGBA_BYTE` (true) or `COLOR_STRING` (false).
@@ -260,7 +279,7 @@ impl LoadImage {
         match render_type {
             "svg" if image || stringtype == "svg" => Some(LoadImage::Svg),
             "xdot" if image || vector => Some(LoadImage::Xdot),
-            "dot" if image || vector => Some(LoadImage::Null),
+            "dot" | "map" if image || vector => Some(LoadImage::Null),
             // The `cairo` package (`plugin/pango`) loads png only; gd, gdk and rsvg, which
             // load the other types for cairo in some C builds, are not among the port's.
             "cairo" if stringtype == "png" => Some(LoadImage::Cairo),
@@ -290,9 +309,11 @@ pub(crate) struct Job<'a> {
     pub width: i32,
     pub height: i32,
     pub page_bounding_box: [i32; 4],
+    pub page_box: BoundingBox,
     pub clip: BoundingBox,
     pub translation: Point,
     pub scale: Point,
+    pub devscale: Point,
     /// `job->dpi`.
     pub dpi: Point,
     pub pages: (i32, i32),
@@ -340,7 +361,7 @@ impl<'a> Job<'a> {
         let margin = scan2("margin").map_or(Point::default(), |(x, y)| Point::new(x, y));
         let dpi = {
             let d = graphviz_pure_core::cnum::drawing_dpi(attrs.0);
-            if d > 0.0 { d } else { 72.0 }
+            if d > 0.0 { d } else { features.default_dpi }
         };
         // init_job_viewport
         let bb = m.bb;
@@ -445,9 +466,11 @@ impl<'a> Job<'a> {
             cll = Point::new(canvas_ll.y, canvas_ll.x);
             _cur = Point::new(canvas_ur.y, canvas_ur.x);
         }
-        // emit_graph: scale and view
+        // emit_graph: scale, devscale and view
         let scale = Point::new(z * dpi / 72.0, z * dpi / 72.0);
-        let y_down = features.flags & GVRENDER_Y_GOES_DOWN != 0;
+        let y_down = features.flags & GVRENDER_Y_GOES_DOWN != 0
+            || super::Y_INVERT.with(std::cell::Cell::get);
+        let devscale = Point::new(dpi / 72.0, if y_down { -(dpi / 72.0) } else { dpi / 72.0 });
         let view = if rotation != 0 {
             Point::new(f64::from(height) / scale.x, f64::from(width) / scale.y)
         } else {
@@ -456,6 +479,17 @@ impl<'a> Job<'a> {
         let _ = view;
         // setup_page (single page)
         let (pe, ps) = ((0.0, 0.0), (1.0, 1.0));
+        let page_box_ll = Point::new(
+            pe.0 * job_page_size.x - pad.x,
+            pe.1 * job_page_size.y - pad.y,
+        );
+        let page_box = BoundingBox {
+            ll: page_box_ll,
+            ur: Point::new(
+                page_box_ll.x + job_page_size.x,
+                page_box_ll.y + job_page_size.y,
+            ),
+        };
         let clip_ll = Point::new(
             focus.x + job_page_size.x * (pe.0 - ps.0 / 2.0),
             focus.y + job_page_size.y * (pe.1 - ps.1 / 2.0),
@@ -494,9 +528,11 @@ impl<'a> Job<'a> {
             width,
             height,
             page_bounding_box: pbb,
+            page_box,
             clip,
             translation,
             scale,
+            devscale,
             dpi: Point::new(dpi, dpi),
             pages: (1, 1),
             color_scheme: None,
@@ -507,6 +543,29 @@ impl<'a> Job<'a> {
             layer_delims: b":\t ".to_vec(),
             layer_list_delims: b",".to_vec(),
             layer_list: None,
+        }
+    }
+
+    /// `gvrender_ptf`.
+    pub fn ptf(&self, p: Point) -> Point {
+        let scale = Point::new(self.zoom * self.devscale.x, self.zoom * self.devscale.y);
+        if self.rotation != 0 {
+            Point::new(
+                -(p.y + self.translation.y) * scale.x,
+                (p.x + self.translation.x) * scale.y,
+            )
+        } else {
+            Point::new(
+                (p.x + self.translation.x) * scale.x,
+                (p.y + self.translation.y) * scale.y,
+            )
+        }
+    }
+
+    /// `gvrender_ptf_A` in place.
+    pub fn ptf_a(&self, pts: &mut [Point]) {
+        for p in pts {
+            *p = self.ptf(*p);
         }
     }
 
