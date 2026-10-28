@@ -43,9 +43,9 @@ labelled with the version measured.
 The historical macOS arm64 check on 2026-10-24 linked graphviz-pure 0.2.0 as `dot` in an
 otherwise Graphviz-free `PATH` and ran the `graphviz` package's executable tests
 (`python run-tests.py --only-exe`, xflr6/graphviz at `6ef1ce2`, pytest 8.0 as its `test` group
-pins). It recorded **16 passed, 18 failed**, against 34 passed with C `dot` 16.1.0; before the
-version-line workaround, it recorded 11 passed, 16 failed and 7 errors. These are historical
-counts, not a measurement of today's port.
+pins). It recorded **16 passed, 18 failed**, against 34 passed with C `dot` 16.1.0. Before `-V`
+took C's shape, it recorded 11 passed, 16 failed and 7 errors. These are historical counts,
+not a measurement of today's port.
 
 The format and tool gaps that remain are:
 
@@ -216,5 +216,6 @@ graphviz-pure is a port not affiliated with Graphviz.
 1. Re-run the Python executable suite against the shipped wheels, including `svg_inline`,
    `cmapx` and `-V`, and establish a CI ratchet.
 2. Add `ps` and `pdf` (#528); consider `unflatten` separately (#529).
-3. After compatibility testing, consider the optional `dot` wheel and the upstream #246 follow-up.
+3. After compatibility testing, consider the optional `dot` wheel and the upstream
+   [xflr6/graphviz#246](https://github.com/xflr6/graphviz/issues/246) follow-up.
 4. Later: (b) and the pyodide wheel.
