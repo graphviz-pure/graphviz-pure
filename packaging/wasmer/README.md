@@ -19,6 +19,8 @@ The flags are `dot`'s (`-K`, `-T`, `-o`, `-G`/`-N`/`-E`, ...). Output formats: `
 `dot`, `xdot`, `canon`, `json` and `plain` (with their variants; `-T?` lists them all). Text in PNG
 and JPEG is drawn with the bundled Tinos, Arimo and Cousine fonts.
 
+SVG from untrusted DOT is untrusted markup: like C Graphviz, `URL`/`href` attributes can carry `javascript:` links, so sanitise it before embedding it inline, or display it with `<img>`. Layout cost is unbounded, as in C; services must impose input-size, time and memory limits in an isolated worker or process with a timeout.
+
 The same build is attached to each [GitHub release](https://github.com/graphviz-pure/graphviz-pure/releases)
 as `graphviz-pure-VERSION-wasm32-wasip1.tar.gz`, with a signed build-provenance attestation, for
 other WASI runtimes: `wasmtime run --dir . graphviz-pure.wasm -Tsvg -o graph.svg graph.gv` (very

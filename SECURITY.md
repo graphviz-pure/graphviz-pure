@@ -7,35 +7,82 @@ reporting](https://github.com/graphviz-pure/graphviz-pure/security/advisories/ne
 vulnerability" on the Security tab), not in a public issue. You should get a reply within a week. Once a fix is
 released, the advisory is published with credit to the reporter unless you prefer otherwise.
 
-Relevant reports include crashes or hangs on crafted input (the port parses untrusted DOT and
-runs in browsers), memory-safety problems (the port forbids `unsafe` outside the test-only
-`graphviz-pure-portable-libm` crate), and anything in the build and distribution pipeline.
+Relevant reports include infinite loops, panics or unbounded memory use on small crafted
+inputs, memory-safety problems, and anything in the build and distribution pipeline. The
+project's own crates forbid `unsafe`, except the test-only `graphviz-pure-portable-libm`
+crate. That restriction does not cover dependencies: the vendored resvg stack used for raster
+output contains `unsafe`.
+
+## Untrusted input and output
+
+Like C Graphviz, layout cost can be superlinear and is unbounded. Services laying out
+untrusted DOT must impose their own input-size, time and memory limits, using an isolated
+worker or process that can be terminated on timeout. A finite but superlinear layout is not
+a vulnerability; an infinite loop, a panic or unbounded memory use on small input is. There
+is no built-in limits or cancellation API; that work is planned after 1.0.
+
+SVG from untrusted DOT is untrusted markup. As in C, escaping quotes and markup does not
+sanitise `URL`/`href` values or filter schemes: the output can contain `javascript:` links.
+Sanitise the SVG before embedding it inline (including with `innerHTML`), or display it as an
+image with `<img>` instead of inserting it into the document.
 
 ## Supported versions
 
-Only the latest release receives fixes.
+Before 1.0.0, only the latest release receives security fixes. In 1.x, security fixes ship as
+patch releases of the latest 1.x minor only; earlier minors are unsupported. After 1.0.0,
+0.x receives no security fixes.
 
 ## Supply chain
 
-- Every GitHub Action is pinned to a full commit SHA; only GitHub-owned actions,
-  `Swatinem/rust-cache`, `ossf/scorecard-action` and the ClusterFuzzLite actions
-  (`google/clusterfuzzlite`, for fuzzing) are used. The ClusterFuzzLite build image is pinned
-  by digest. Workflows run with read-only tokens by default and are linted with zizmor in CI.
-- Rust dependencies come from crates.io only, through `Cargo.lock`, and are checked in CI by
-  `cargo deny` (RustSec advisories, licences, sources). npm dependencies are installed from
-  `package-lock.json` without lifecycle scripts until their registry signatures are verified.
+- External GitHub Actions are pinned to full commit SHAs. They are GitHub-owned actions,
+  `Swatinem/rust-cache`, `ossf/scorecard-action`, `rust-lang/crates-io-auth-action` and the
+  ClusterFuzzLite actions (`google/clusterfuzzlite`). Local actions and reusable workflows
+  come from the workflow's commit. The ClusterFuzzLite build image is pinned by digest.
+  Workflow tokens are read-only by default; jobs request additional permissions where needed.
+  CI lints the workflows with zizmor.
+- Registry Rust dependencies come from crates.io through `Cargo.lock`, with local vendored
+  raster overrides in `Cargo.toml`. CI runs `cargo deny` (RustSec advisories, licences,
+  sources) and checks the bundled licence notices. The npm runtime-test dependencies are
+  installed from `package-lock.json` without lifecycle scripts, their registry signatures
+  are verified, and only then are their install scripts run.
 - Dependabot proposes updates with a 7-day cooldown.
+- CI runs on pull requests, merge-queue groups and pushes to `master`; build and test jobs
+  can reuse a successful result for identical inputs, but the supply-chain job always runs.
+- ClusterFuzzLite runs weekly on Monday at 04:41 UTC, on manual dispatch and as a release
+  gate, not on pull requests. Weekly runs always fuzz and refresh the retained corpus;
+  dispatches and releases can reuse a successful fuzzed-inputs marker. Fuzzing failures fail
+  the run; corpus-pruning failures warn and prevent a new marker, but do not fail the gate.
+  A failed weekly run opens or updates an issue.
 
 ## Releases
 
-A release starts from a workflow dispatch on `master`. Every artifact is built on GitHub-hosted
-runners from the release commit, without caches, and gets a signed build-provenance attestation:
+A real release starts from a workflow dispatch on `master`. The workflow prepares the version
+and changelog commit locally, then builds from it on GitHub-hosted runners without build
+caches, using a pinned Rust toolchain and locked Rust dependencies. Readiness checks, smoke
+tests, attestations and the fuzzing gate must pass before the seven publishing jobs wait
+together for one approval of the `release` environment. A dry run builds and attests without
+requesting that environment or publishing. Publishing jobs run independently after approval;
+a registry can publish even if the GitHub release job fails.
+
+Release archives, the npm tarball, `SHA256SUMS`, PyPI wheels and the container image receive
+signed Sigstore build-provenance attestations. Verify a downloaded file with:
 
     gh attestation verify FILE --repo graphviz-pure/graphviz-pure
 
-The certificate's source ref is `refs/heads/master` (the workflow run's ref). Its subject
-digest is the dispatch SHA, not the release commit. Releases through
-0.2.3 were attested for their tag. crates.io, npm, PyPI and JSR are published through trusted
-publishing (OIDC), so no registry token exists for them. Publishing needs one approval of the
-`release` environment. The full model is at the top of
-[`.github/workflows/release.yml`](.github/workflows/release.yml).
+For the container, use `gh attestation verify oci://ghcr.io/graphviz-pure/graphviz-pure:VERSION
+--repo graphviz-pure/graphviz-pure`. The attestation identifies the workflow's source ref
+(`refs/heads/master`) and dispatch SHA, rather than the prepared release commit; its subject
+digest identifies the artifact bytes. Releases through 0.2.3 were attested for their tag.
+The release tag is annotated and unsigned. The workflow performs no macOS Developer ID
+signing or notarisation and no Windows Authenticode signing; Sigstore attestations are
+separate from platform code signing.
+
+crates.io, npm, PyPI and JSR use OIDC publishing without stored registry tokens. npm publishes
+with provenance, and JSR adds provenance through `deno publish`. Wasmer uses a stored API
+token from the `release` environment. The container job uses its job-scoped GitHub token to
+publish to ghcr.io and pushes the image attestation to the registry. The GitHub release job
+uses the release App's credentials from the environment to mint a job-scoped token, push the
+release commit and tag, publish the release, and dispatch the Homebrew and Scoop updates.
+
+The implementation is in [release.yml](.github/workflows/release.yml),
+[fuzz.yml](.github/workflows/fuzz.yml) and [ci.yml](.github/workflows/ci.yml).

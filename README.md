@@ -98,6 +98,8 @@ const svg = render('digraph G { a -> b [label="fast"]; }', 'dot', 'svg');
 document.getElementById('diagram').innerHTML = svg;
 ```
 
+SVG from untrusted DOT is untrusted markup: like C Graphviz, `URL`/`href` attributes can carry `javascript:` links, so sanitise it before embedding it inline (including with `innerHTML`), or display it with `<img>`. Layout cost is unbounded, as in C; services must impose input-size, time and memory limits in an isolated worker or process with a timeout (see [SECURITY.md](SECURITY.md)).
+
 `render` lays out the first graph in the input. `renderAll` returns one output per graph, and `renderAllBytes` takes and returns raw bytes the way the command line does, including non-UTF-8 input. Each call starts from fresh state, so repeated calls give identical output. `web/index.html` is a playground: `cd web && npm run build:wasm && npm run serve`.
 
 The same `await init()` works in Node.js, Bun and Deno (`jsr:@graphviz-pure/wasm` or `npm:@graphviz-pure/wasm`). Cloudflare Workers import the `.wasm` file as a module and call `initSync({ module })` instead; [web/README.md](web/README.md) has the setup for each runtime, and CI runs every one of them (`scripts/wasm-runtimes/`).

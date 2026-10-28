@@ -16,6 +16,8 @@ This package installs the `graphviz-pure` command, with `dot`'s flags (`-K`, `-T
 `xdot`, `canon`, `json` and `plain` with their variants (`-T?` lists them); `pdf` and `ps` are not
 supported yet.
 
+SVG from untrusted DOT is untrusted markup: like C Graphviz, `URL`/`href` attributes can carry `javascript:` links, so sanitise it before embedding it inline, or display it with `<img>`. Layout cost is unbounded, as in C; services must impose input-size, time and memory limits in an isolated worker or process with a timeout.
+
 It does not install a `dot` command, so it never shadows a Graphviz you have. Python libraries
 that run `dot` by name (the `graphviz` package, pydot, Sphinx) keep using that one; pydot and
 Sphinx can be pointed at `graphviz-pure` (`prog="graphviz-pure"`, `graphviz_dot =
