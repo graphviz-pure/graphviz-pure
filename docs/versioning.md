@@ -36,18 +36,25 @@ The [release workflow](../.github/workflows/release.yml) publishes the channels 
 | GitHub releases | `vX.Y.Z` identifies the release; its native and WASI archives carry `X.Y.Z` in their names. |
 | crates.io | `X.Y.Z` versions the stable Rust API of the facade (`graphviz-pure`) and `graphviz-pure-raster`, and the CLI in `graphviz-pure-cli`. The facade pins its implementation crates with exact `=` requirements; those crates have no semver promise. |
 | npm and JSR `@graphviz-pure/wasm` | `X.Y.Z` versions the JavaScript API and its output on both registries. JSR publishes the files from the npm tarball. |
-| PyPI `graphviz-pure` wheels | The bundled CLI's release version, mapped to PEP 440: stable `X.Y.Z` stays `X.Y.Z`, and, for example, `0.3.0-rc.1` becomes `0.3.0rc1` ([releasing.md](releasing.md)). |
-| Wasmer `graphviz-pure/graphviz-pure` and WASI archives | The release version of the WASI CLI module. Wasmer packages the module from the `wasm32-wasip1` release archive and publishes stable versions only; other WASI runtimes can use the archive directly. |
+| PyPI `graphviz-pure` wheels | The bundled CLI's release version, mapped to PEP 440: stable `X.Y.Z` stays `X.Y.Z`; accepted pre-release suffixes `-alpha.N`, `-beta.N` and `-rc.N` become `aN`, `bN` and `rcN`, respectively (for example, `0.3.0-rc.1` becomes `0.3.0rc1`; [releasing.md](releasing.md)). |
+| Wasmer `graphviz-pure/graphviz-pure` and WASI archives | The release version of the WASI CLI module. Wasmer packages the module from the `wasm32-wasip1` release archive and publishes stable versions only. Publishing is skipped if `WASMER_TOKEN` is unset during initial setup; after setup, a missing token for a new version fails the job. Other WASI runtimes can use the archive directly. |
 | ghcr.io `graphviz-pure/graphviz-pure` | `X.Y.Z` identifies the CLI image for that release. `X.Y` follows the highest stable `X.Y.*` image version, and `latest` follows the highest stable image version across all majors. Pre-releases get only their full version tag. The workflow does not push an `X` tag (for example, `:1`). |
-| Homebrew tap `graphviz-pure/tap/graphviz-pure` | The formula's version identifies the CLI release whose archives it installs. |
-| Scoop bucket `graphviz-pure/graphviz-pure` | The manifest's version identifies the CLI release whose archives it installs. |
+| Homebrew tap `graphviz-pure/homebrew-tap` | The formula pins the CLI release version, archive URLs and SHA-256 checksums. Install with `brew install graphviz-pure/tap/graphviz-pure`. |
+| Scoop bucket `graphviz-pure/scoop-bucket` | The manifest pins the CLI release version, archive URLs and SHA-256 checksums. Run `scoop bucket add graphviz-pure https://github.com/graphviz-pure/scoop-bucket`, then `scoop install graphviz-pure/graphviz-pure`. |
 | cargo-binstall | The `graphviz-pure-cli` crate version selects the matching GitHub release archive; a source-build fallback has the crates.io raster exception below. |
 
 All CLI distributions above carry the same CLI and are covered by the command-line and output
-promises, including the `-V` line's shape. The Homebrew tap and Scoop bucket update their
-formula and manifest from the release archives after the GitHub release is published. ghcr's
-moving tags use versions already pushed to the image registry and only move forward; `latest`
-can cross a major-version boundary. Pin a full version to select a particular release.
+promises, including the `-V` line's shape. The Homebrew tap and Scoop bucket updates are
+dispatched after the GitHub release is published and also run on a 6-hour schedule. Both select
+GitHub's latest release and verify its archive attestations and checksums before regenerating
+the formula or manifest. Releases marked as pre-releases on GitHub are excluded, but the update
+scripts do not filter version suffixes themselves. `release-ship.sh` does not currently set
+GitHub's pre-release flag, so a version with a pre-release suffix can reach these manifests if
+GitHub selects it as latest
+([#579](https://github.com/graphviz-pure/graphviz-pure/issues/579)).
+
+ghcr's moving tags use versions already pushed to the image registry and only move forward;
+`latest` can cross a major-version boundary. Pin a full version to select a particular release.
 
 ## What each kind of change bumps
 
@@ -89,7 +96,7 @@ every platform (`graphviz_pure_core::math`), and is compared with C running thos
 - An output difference that comes only from a platform's libm is not a bug: for example, stock
   C on macOS calls Apple's libm, and differs from the port on the inputs that
   `gv-diff e2e --stock` lists as libm-only.
-- Layout and text output always use portable math, including in crates.io source builds.
+- SVG and layout outputs always use portable math, including in crates.io source builds.
 
 ### crates.io raster exception
 
@@ -97,7 +104,7 @@ Crates.io source builds (`cargo install graphviz-pure-cli`, or depending on
 `graphviz-pure-raster` from crates.io) do not inherit the workspace's `[patch.crates-io]`
 overrides for the vendored `kurbo`, `skrifa`, `svgtypes`, `tiny-skia` and `tiny-skia-path`.
 Their raster dependencies may therefore use the platform libm, so `-Tpng`/`-Tjpg` pixels can
-differ across platforms and from the release binaries. SVG, layout and text outputs are
+differ across platforms and from the release binaries. SVG and layout outputs are
 unaffected. Builds from this workspace, including the published binaries and WebAssembly,
 use the vendored overrides. This exception is accepted for 1.0 by
 [decision D11](roadmap/1.0.md#decisions); fixing it is planned for 1.x
