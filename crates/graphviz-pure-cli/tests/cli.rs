@@ -2861,6 +2861,86 @@ n11 -- n12;
     );
 }
 
+/// #587 review regression: coincident pinned nodes.
+/// Complete stdout and stderr from C Graphviz 16.1.0 with FMA and portable libm.
+#[test]
+fn neato_splines_duplicate_pinned_nodes_match_c() {
+    let src = r#"graph G {
+  layout=neato; splines=true;
+  a [pos="0,0!"]; b [pos="0,0!"]; c [pos="3,0!"];
+  a:w -- c; b -- c;
+}
+"#;
+    let (out, err, ok) = run(&["-Tdot"], src);
+    assert!(ok, "{err}");
+    assert_eq!(
+        out,
+        r#"graph G {
+	graph [bb="0,0,270.25,36",
+		layout=neato,
+		splines=true
+	];
+	node [label="\N"];
+	a	[height=0.5,
+		pos="27.253,18",
+		width=0.75];
+	c	[height=0.5,
+		pos="243.25,18",
+		width=0.75];
+	a:w -- c	[pos="0,18 0,18 152.2,18 215.82,18"];
+	b	[height=0.5,
+		pos="27.253,18",
+		width=0.75];
+	b -- c	[pos="54.61,18 96.045,18 174.27,18 215.78,18"];
+}
+"#
+    );
+    assert_eq!(
+        err,
+        r#"Warning: some nodes with margin (3.20,3.20) touch - falling back to straight line edges
+"#
+    );
+}
+
+/// #587 review regression: collinear pinned nodes with a boundary port.
+/// Complete stdout and stderr from C Graphviz 16.1.0 with FMA and portable libm.
+#[test]
+fn neato_splines_collinear_pinned_nodes_match_c() {
+    let src = r#"graph G {
+  layout=neato; splines=true;
+  a [pos="0,0!"]; b [pos="3,0!"]; c [pos="6,0!"];
+  a:w -- c; a -- b; b -- c;
+}
+"#;
+    let (out, err, ok) = run(&["-Tdot"], src);
+    assert!(ok, "{err}");
+    assert_eq!(
+        out,
+        r#"graph G {
+	graph [bb="0,0,486.41,90.312",
+		layout=neato,
+		splines=true
+	];
+	node [label="\N"];
+	a	[height=0.5,
+		pos="27.414,72.312",
+		width=0.75];
+	b	[height=0.5,
+		pos="243.41,72.312",
+		width=0.75];
+	a -- b	[pos="54.77,72.312 96.206,72.312 174.43,72.312 215.94,72.312"];
+	c	[height=0.5,
+		pos="459.41,72.312",
+		width=0.75];
+	a:w -- c	[pos="0.16576,72.212 0.16576,72.212 0,61.888 5.1418,56.928 12.552,49.781 17.218,51.986 27.414,50.556 207.77,25.263 264.14,0 437.14,56.928 \
+438.48,57.368 439.8,57.914 441.11,58.536"];
+	b -- c	[pos="270.77,72.312 312.21,72.312 390.43,72.312 431.94,72.312"];
+}
+"#
+    );
+    assert_eq!(err, r#""#);
+}
+
 /// Issue #452: neato `splines=compound` passes the original edge type into
 /// `makeMultiSpline` (`lib/neatogen/neatosplines.c`). The polyline flag is
 /// `edgetype == EDGETYPE_PLINE`, false for `EDGETYPE_COMPOUND`, so a two-edge
