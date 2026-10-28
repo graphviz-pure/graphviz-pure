@@ -459,9 +459,9 @@ Steps 1–3 are the risky part, and step 3 is the large PR. It could be split by
 2. **Keep `Val::ABSENT` permanently, or remove it (step 8)?** Removing it matches cgraph and
    deletes per-site emulation, but it is a second ordering-class change.
 3. **`root_holds_plain` (#541):** should the interner track live counts per `Sym` (a `u32` per
-   string, no `Rc`) so that it can answer C's refstr question exactly, or should #541 keep its
-   own per-output string set? I lean towards the latter: it keeps the interner simple and the
-   question local to the one writer that asks it.
+   string, no `Rc`) so that it can answer C's refstr question exactly, or should it preserve
+   the per-output string set shipped in #566? I lean towards the latter: it keeps the interner
+   simple and the question local to the one writer that asks it.
 4. **A corpus stderr ratchet** (step 0) would be new test infrastructure, and the C references
    would need regenerating to record stderr. Is that acceptable, or is the CLI test suite's
    coverage of warnings judged enough for steps 5–6?
@@ -473,13 +473,18 @@ Steps 1–3 are the risky part, and step 3 is the large PR. It could be split by
 
 ## Side finding: `agwrite` is quadratic in nodes × edges
 
+This finding describes the measured 0.2.2 code. It was filed as #545 and fixed by #568,
+which indexes graph-local adjacency once; it is no longer pending. The plain-string scan
+(#541) was fixed by #566 with a per-output string set. References to those fixes elsewhere
+in this design note describe the constraints a future interner must preserve.
+
 `agwrite`'s `node_test` (`render/agwrite.rs:291`) calls `has_no_edges` (`:284`), which scans
 every edge of the graph (`members_e[gi]`) for each node it considers writing. On the 50k-node
 chain, `-Tcanon` spends **55.7%** of its samples in `node_test`, and takes 6.39 s where C takes
 2.12 s (dot `-Tdot` chain5k: 6.4%). C's `has_no_edges` is
 `agfstin(g, n) == NULL && agfstout(g, n) == NULL` (`write.c:414`), which is O(1). A per-graph
 "has an edge" bit array built once (or the out/in lists `agwrite` already builds) fixes it with
-no change in order. That is a separate fix like #541, not part of T4. It is not filed yet.
+no change in order. That separate fix landed as #568 (#545), outside T4.
 
 ## Reproducing
 

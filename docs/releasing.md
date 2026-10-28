@@ -178,11 +178,12 @@ it (same fields, see [npm](#npm-organization-graphviz-pure)) just before dispatc
 ## Verifying a download
 
 ```sh
-gh attestation verify graphviz-pure-0.1.0-x86_64-unknown-linux-musl.tar.gz \
+# Replace X.Y.Z with the release version.
+gh attestation verify graphviz-pure-X.Y.Z-x86_64-unknown-linux-musl.tar.gz \
   --repo graphviz-pure/graphviz-pure --signer-workflow graphviz-pure/graphviz-pure/.github/workflows/release.yml
 sha256sum --check --ignore-missing SHA256SUMS
 npm audit signatures   # in a project that depends on @graphviz-pure/wasm
-gh attestation verify oci://ghcr.io/graphviz-pure/graphviz-pure:0.1.0 \
+gh attestation verify oci://ghcr.io/graphviz-pure/graphviz-pure:X.Y.Z \
   --repo graphviz-pure/graphviz-pure --signer-workflow graphviz-pure/graphviz-pure/.github/workflows/release.yml
 ```
 
@@ -302,7 +303,7 @@ only). GitHub's documentation gives two answers for the visibility of a package 
 from a workflow: private, like every new package, or inherited from the repository. Check
 after the first release:
 
-1. `docker logout ghcr.io && docker pull ghcr.io/graphviz-pure/graphviz-pure:0.1.0`. If that
+1. `docker logout ghcr.io && docker pull ghcr.io/graphviz-pure/graphviz-pure:X.Y.Z`. If that
    fails as unauthorized, the package is private: Organization → Packages → `graphviz-pure` →
    Package settings → Danger Zone → **Change visibility** → Public. This cannot be undone. If
    Public is not offered, allow it under Organization settings → Packages → Package creation.

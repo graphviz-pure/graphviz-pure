@@ -39,7 +39,7 @@ const corpus = m ? m.corpus_files : fidelity.e2e.total;
 const cc = platforms.c_linux_vs_macos;
 const e2e = fidelity.e2e;
 const bars = [
-	{ k: 'C Graphviz built on Linux', d: 'compared with C Graphviz on a Mac', a: cc.agree, b: cc.total, cls: 'c' },
+	{ k: 'C Graphviz built on Linux', d: 'historical comparison with C Graphviz on a Mac', a: cc.agree, b: cc.total, cls: 'c' },
 	{ k: 'graphviz-pure, every machine', d: "Linux, Windows, Macs and browsers, compared with C Graphviz on a Mac, which uses Apple's libm", a: e2e.stock.identical, b: e2e.stock.total, cls: 'rs' },
 	{ k: 'graphviz-pure, every machine', d: 'compared with C Graphviz given the same math functions', a: e2e.identical, b: e2e.total, cls: 'rs' },
 ];

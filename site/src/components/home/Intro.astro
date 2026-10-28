@@ -54,15 +54,14 @@ const docker = `docker run --rm -i ghcr.io/graphviz-pure/graphviz-pure -Tsvg < g
 				<h3>It is one self-contained package.</h3>
 				<p>
 					A single binary for the command line, a Rust crate with no C inside, or one npm package for browsers, Node.js, Deno, Bun and
-					Cloudflare Workers. It needs no system libraries, plugins or C compiler, and it has no <code>unsafe</code> code. The WebAssembly build
-					is under 700&nbsp;KB gzipped.
+					Cloudflare Workers. It needs no system libraries, plugins or C compiler, and it has no <code>unsafe</code> code.
 				</p>
 			</li>
 			<li>
 				<h3>It gives the same picture on every machine.</h3>
 				<p>
 					graphviz-pure writes byte-for-byte the same output on Linux, Windows, Macs and in every browser, for <strong class="num">100%</strong>
-					of the test graphs. The original C Graphviz manages only <strong class="num">{pct(cc.agree, cc.total)}</strong> between Linux and a
+					of the test graphs. In the historical cross-platform comparison, C Graphviz managed <strong class="num">{pct(cc.agree, cc.total)}</strong> between Linux and a
 					Mac. graphviz-pure does all its math in pure Rust, with the same portable math library on every platform, and CI compares every output
 					byte for byte across them. No build borrows the operating system's math library, on any machine.
 				</p>
@@ -102,7 +101,7 @@ const docker = `docker run --rm -i ghcr.io/graphviz-pure/graphviz-pure -Tsvg < g
 				<li><strong>Every engine:</strong> <code>dot</code>, <code>neato</code>, <code>fdp</code>, <code>sfdp</code>, <code>twopi</code>, <code>circo</code>, <code>osage</code> and <code>patchwork</code>.</li>
 				<li><strong>Every common format:</strong> SVG, JSON, DOT, xdot and plain text everywhere; PNG and JPEG from the command line.</li>
 				<li><strong>A drop-in <code>dot</code>:</strong> the <code>graphviz-pure</code> command takes the same flags as <code>dot</code> and exits with the same status.</li>
-				<li><strong>Often faster:</strong> orthogonal edges on Graphviz's large <code>b100</code> test graph take 20 seconds instead of over five minutes.</li>
+				<li><strong>Often faster:</strong> the historical <a href="https://github.com/graphviz-pure/graphviz-pure/blob/master/README.md#performance">dot benchmarks</a> measured orthogonal edges on Graphviz's large <code>b100</code> graph at 20 seconds instead of over five minutes.</li>
 			</ul>
 		</div>
 	</section>

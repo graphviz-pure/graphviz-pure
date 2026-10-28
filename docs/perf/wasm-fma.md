@@ -11,6 +11,10 @@ user cycles** of fdp, sfdp and spline-routing runs under node, with byte-identic
 Catalogue row: T1b in [`docs/roadmap/post-1.0.md`](../roadmap/post-1.0.md). Baseline:
 [`baseline.md`](baseline.md#wasm).
 
+The end-to-end measurements below predate the merged `pow` fast paths (#543, #532).
+Those paths remove much of sfdp's measured FMA work; the reported sfdp gain is historical,
+not a measurement of the current port. The software FMA prototype remains research.
+
 ## Headlines
 
 - **fma is most of fdp's and sfdp's WASM time.** Under node 24 (`--cpu-prof`, WASI CLI),
@@ -226,7 +230,7 @@ to the uninstrumented build.
 - The fast-path result equalled hardware FMA on all **717,435,142** in-window real calls.
 - On sfdp, 90% of the fma calls are inside CORE-MATH `pow` (`pow/mod.rs:75`, the double-double
   product). The `pow(x, 2)` fast path of #543 (T2) removes nearly all of those `pow` calls, so
-  **after #543 sfdp's fma share, and so T1b's sfdp gain, will be much smaller**. fdp
+  **#543 has since reduced sfdp's fma share, so T1b's current sfdp gain needs re-measuring**. fdp
   (`xlayout.rs` and `hypot`) and spline routing (`visibility.rs`, `route.rs`, `triang.rs`) are
   not affected by #543.
 

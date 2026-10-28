@@ -23,8 +23,8 @@ differential test harness.
 
 ## Tests in the source packages
 
-The source recipes run the command line's own tests (`cargo test -p graphviz-pure-cli`): about
-twenty end-to-end runs of the built binary, offline, in seconds. They do not run
+The source recipes run the command line's own tests (`cargo test -p graphviz-pure-cli`),
+including end-to-end runs of the built binary, offline. They do not run
 `cargo test --workspace`, whose fidelity ratchets compare the port with C Graphviz's committed
 outputs on about 2,600 inputs: that works offline from the tarball too, but takes far longer than
 a distribution build should, and upstream CI already runs it on every change. conda-forge runs
@@ -50,6 +50,9 @@ with that engine, and any name that is not a layout engine with `dot`.
 
 ## AUR
 
+Replace `X.Y.Z` below with the verified stable release version. These recipes are templates;
+set their version, hashes and maintainer metadata before submitting them.
+
 **One-time setup:** create an account on https://aur.archlinux.org, add an SSH public key to it
 (My Account → SSH Public Key), and point SSH at that key:
 
@@ -61,7 +64,7 @@ Host aur.archlinux.org
 
 **Each release:**
 
-1. `AUR_MAINTAINER='Name <email>' packaging/aur/update.sh 0.1.0`. VERSION must be `X.Y.Z`:
+1. `AUR_MAINTAINER='Name <email>' packaging/aur/update.sh X.Y.Z`. VERSION must be `X.Y.Z`:
    prereleases are refused (pacman's `pkgver` cannot contain `-`, and the AUR packages follow
    stable releases). The script:
    - downloads the two Linux musl archives and `SHA256SUMS` from the release, runs
@@ -95,7 +98,7 @@ Host aur.archlinux.org
    cd graphviz-pure-bin
    pkgctl license check   # optional, from devtools: checks the REUSE setup
    git add PKGBUILD .SRCINFO LICENSE LICENSES REUSE.toml
-   git commit -m "Update to 0.1.0" && git push
+   git commit -m "Update to X.Y.Z" && git push
    ```
 
    and the same for `graphviz-pure`. The first push creates the package.
@@ -120,18 +123,19 @@ for `cloudbring` to `maintainers/maintainer-list.nix` in a separate first commit
 
 1. In a nixpkgs checkout on a branch from `master`, copy
    `packaging/nixpkgs/pkgs/by-name/gr/graphviz-pure/package.nix` to the same path.
-2. Compute the two hashes with the fake-hash trick: both start as `lib.fakeHash`. Run
+2. Set `version` to the release version. Compute the two hashes with the fake-hash trick:
+   both start as `lib.fakeHash`. Run
    `nix-build -A graphviz-pure`; it fails with `hash mismatch ... got: sha256-...` for `src`.
    Put that value in `src.hash` and build again; the second failure gives `cargoHash`. (For `src`
-   alone, `nix-prefetch-github graphviz-pure graphviz-pure --rev v0.1.0` or
-   `nix flake prefetch github:graphviz-pure/graphviz-pure/v0.1.0` print the same hash.)
+   alone, `nix-prefetch-github graphviz-pure graphviz-pure --rev vX.Y.Z` or
+   `nix flake prefetch github:graphviz-pure/graphviz-pure/vX.Y.Z` print the same hash.)
 3. Build until it succeeds: `nix-build -A graphviz-pure`, then
    `./result/bin/graphviz-pure -V`. Format with `nix fmt` (CI requires nixfmt), and run
    `nixpkgs-review` on the branch or the PR.
-4. Commit as `graphviz-pure: init at 0.1.0` and open the pull request, filling in its checklist
+4. Commit as `graphviz-pure: init at X.Y.Z` and open the pull request, filling in its checklist
    (built on which platforms, tested the binary, sandboxing on).
 5. Later releases: change `version`, reset both hashes to `lib.fakeHash` and repeat step 2, with
-   the commit message `graphviz-pure: 0.1.0 -> 0.2.0`. `nixpkgs-update` (r-ryantm) usually opens
+   the commit message `graphviz-pure: X.Y.Z -> NEXT_VERSION`. `nixpkgs-update` (r-ryantm) usually opens
    these pull requests by itself.
 
 The expression follows nixpkgs' current style: `finalAttrs`, `tag =` in `fetchFromGitHub`,
@@ -152,8 +156,9 @@ statically linked crates, which conda-forge requires), stripped symbols and fat 
 
 1. Fork `conda-forge/staged-recipes`, branch from `main`, and copy
    `packaging/conda-forge/graphviz-pure/recipe.yaml` to `recipes/graphviz-pure/recipe.yaml`.
-2. Set `source.sha256` to the source tarball's sha256 printed by `packaging/aur/update.sh`, or
-   `curl -sL https://github.com/graphviz-pure/graphviz-pure/archive/refs/tags/v0.1.0.tar.gz | sha256sum`
+2. Set `context.version` to the release version and `source.sha256` to the source tarball's
+   sha256 printed by `packaging/aur/update.sh`, or
+   `curl -sL https://github.com/graphviz-pure/graphviz-pure/archive/refs/tags/vX.Y.Z.tar.gz | sha256sum`
    (only after the tag's signature has been checked, which update.sh does). Remove the TODO line.
 3. Optionally build locally: `pixi run build-linux` (or `python build-locally.py`) in the
    staged-recipes checkout, and `pixi run lint`.

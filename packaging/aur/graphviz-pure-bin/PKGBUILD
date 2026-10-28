@@ -1,4 +1,4 @@
-# Maintainer: cloudbring <TODO: AUR account email>
+# Maintainer: TODO(submission): set with AUR_MAINTAINER
 #
 # Installs the static musl binaries from the GitHub release.
 # TODO(release): the checksums below are placeholders. Run `packaging/aur/update.sh VERSION`

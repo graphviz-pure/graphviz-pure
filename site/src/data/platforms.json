@@ -4,10 +4,5 @@
     "agree": 2005,
     "total": 2586,
     "what": "C Graphviz 16.1.0 built on Linux the way Homebrew builds it on macOS, against C Graphviz on macOS"
-  },
-  "c_portable_math": {
-    "agree": 2590,
-    "total": 2590,
-    "what": "the port's portable build against C Graphviz running the same portable math functions"
   }
 }

@@ -159,7 +159,7 @@ In CI, `.github/workflows/fuzz.yml` runs the targets with
   on the base commit (master at dispatch, `prepare`'s `base_sha`), so it covers everything merged
   since the last release ([releasing.md](../releasing.md)). It does not run on pull requests.
 * A run fuzzes every target for 6 minutes, starting from the corpus of the previous runs, and
-  then prunes the corpus (up to 5 minutes a target). The corpus, the crashes (minimised) and the
+  then prunes the corpus (up to 10 minutes a target). The corpus, the crashes (minimised) and the
   builds are kept as artifacts of the workflow. The weekly run saves the corpus again, so it
   never expires (an artifact is kept for 90 days).
 * A run is skipped when its inputs were already fuzzed: the crates' code, the fuzz workspace,
