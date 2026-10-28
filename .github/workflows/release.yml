@@ -429,7 +429,7 @@ jobs:
           exec "$RUNNER_TEMP/wasmer/bin/wasmer" run --volume "$PWD:$PWD" "$PWD/target/wasm32-wasip1/release/graphviz-pure.wasm" -- "\$@"
           EOF
           chmod +x "$RUNNER_TEMP/graphviz-pure"
-          "$RUNNER_TEMP/graphviz-pure" -V 2>&1 | grep -F "graphviz-pure version $VERSION ("
+          "$RUNNER_TEMP/graphviz-pure" -V 2>&1 | grep -F "graphviz-pure - graphviz version 16.1.0 (graphviz-pure $VERSION)"
           python3 scripts/release-smoke.py "$RUNNER_TEMP/graphviz-pure"
       - name: Package
         env:
@@ -551,7 +551,7 @@ jobs:
           exec docker run --rm --pull never --network none --platform $PLATFORM -v "$PWD:$PWD:ro" $IMAGE:$VERSION "\$@"
           EOF
           chmod +x "$RUNNER_TEMP/graphviz-pure"
-          "$RUNNER_TEMP/graphviz-pure" -V 2>&1 | grep -F "graphviz-pure version $VERSION ("
+          "$RUNNER_TEMP/graphviz-pure" -V 2>&1 | grep -F "graphviz-pure - graphviz version 16.1.0 (graphviz-pure $VERSION)"
           python3 scripts/release-smoke.py "$RUNNER_TEMP/graphviz-pure"
 
   # Installs the Windows zips with Scoop, from a manifest written like the one
@@ -635,7 +635,7 @@ jobs:
           exe="$(cygpath -u "$SCOOP")/apps/graphviz-pure/current/graphviz-pure.exe"
           python -c 'import struct, sys; d = open(sys.argv[1], "rb").read(4096); m = struct.unpack_from("<H", d, struct.unpack_from("<I", d, 0x3C)[0] + 4)[0]; print(f"machine {m:#06x}"); sys.exit(m != int(sys.argv[2], 16))' "$exe" "$MACHINE"
           shim="$(cygpath -u "$SCOOP")/shims/graphviz-pure.exe"
-          "$shim" -V 2>&1 | grep -F "graphviz-pure version $VERSION ("
+          "$shim" -V 2>&1 | grep -F "graphviz-pure - graphviz version 16.1.0 (graphviz-pure $VERSION)"
           python scripts/release-smoke.py "$shim"
 
   attest:

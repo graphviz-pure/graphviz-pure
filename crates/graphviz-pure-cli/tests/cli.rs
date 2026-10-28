@@ -337,7 +337,7 @@ fn issue298_verbose_reports_the_plugins_it_uses() {
                   plain-ext png svg svg_inline xdot xdot1.2 xdot1.4 xdot_json\n    \
                   loadimage\t:  eps gif jpe jpeg jpg png ps svg\n";
     let version = format!(
-        "graphviz-pure - graphviz-pure version {} (Rust port of Graphviz 16.1.0)\n",
+        "graphviz-pure - graphviz version 16.1.0 (graphviz-pure {})\n",
         env!("CARGO_PKG_VERSION")
     );
     let (_, err, ok) = run(
@@ -1168,9 +1168,32 @@ fn multiple_input_files_are_each_rendered() {
 
 #[test]
 fn version_and_help_exit_successfully() {
-    let (_, err, ok) = run(&["-V"], "");
-    let version = concat!("graphviz-pure version ", env!("CARGO_PKG_VERSION"), " ");
-    assert!(ok && err.contains(version), "{err}");
+    let (out, err, ok) = run(&["-V"], "");
+    let version = format!(
+        "graphviz-pure - graphviz version 16.1.0 (graphviz-pure {})\n",
+        env!("CARGO_PKG_VERSION")
+    );
+    assert!(ok, "{err}");
+    assert_eq!(out, "");
+    assert_eq!(err, version);
+
+    // Python graphviz's `graphviz version N.N[.N]` reads the Graphviz version, not ours.
+    let python_version = err
+        .strip_prefix("graphviz-pure - graphviz version ")
+        .and_then(|rest| rest.split_ascii_whitespace().next())
+        .expect("Python graphviz's version regex matches");
+    assert_eq!(python_version, "16.1.0");
+
+    // PlantUML's `(\d+)\.(\d\d?)` reads the first dotted number as major.minor.
+    let plantuml_version = err.split_ascii_whitespace().find_map(|field| {
+        let (major, minor) = field.split_once('.')?;
+        let minor_len = minor.bytes().take_while(u8::is_ascii_digit).count();
+        let matches =
+            !major.is_empty() && major.bytes().all(|b| b.is_ascii_digit()) && minor_len > 0;
+        matches.then_some((major, &minor[..minor_len.min(2)]))
+    });
+    assert_eq!(plantuml_version, Some(("16", "1")));
+
     let (out, _, ok) = run(&["-?"], "");
     assert!(ok && out.contains("Usage:"));
 }

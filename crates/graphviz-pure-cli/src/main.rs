@@ -19,9 +19,9 @@ use std::process::ExitCode;
 macro_rules! version_info {
     () => {
         concat!(
-            "graphviz-pure version ",
+            "graphviz version 16.1.0 (graphviz-pure ",
             ::core::env!("CARGO_PKG_VERSION"),
-            " (Rust port of Graphviz 16.1.0)"
+            ")"
         )
     };
 }
