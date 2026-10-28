@@ -15,8 +15,8 @@
 //! `triangulate_polygon`), destroys the enclosing vertices and removes faces
 //! whose constraint edges run against the face orientation
 //! (`delaunay_remove_holes`). Here the constrained Delaunay triangulation is
-//! computed with Bowyer–Watson insertion, Sloan's edge flips for the
-//! constraints and Lawson flips, on exact predicates; it is the same
+//! computed with GTS's face splitting and Delaunay legalization, Sloan's edge
+//! flips for the constraints and Lawson flips, on exact predicates; it is the same
 //! triangulation whenever no four points are co-circular. Face and neighbour
 //! numbering follow creation order rather than GTS's pointer-hash order,
 //! which only matters for exact ties in the triangle shortest path.
@@ -114,48 +114,57 @@ impl Cdt {
             .unwrap_or(k)
     }
 
-    /// Bowyer–Watson insertion of point `q`.
-    fn insert(&mut self, q: usize) {
+    /// GTS 0.7.6 `src/cdt.c:gts_delaunay_add_vertex_to_face`: split the containing face,
+    /// then restore the Delaunay property across its three original sides.
+    /// This also creates a zero-area face for an on-edge vertex, as GTS does;
+    /// legalization across the original edge removes it when that edge can flip.
+    /// Bowyer–Watson gave the same faces with different vertex rotations; the
+    /// resulting rounding in `triCenter` could select a different corridor (#582).
+    fn insert(&mut self, q: usize, constraints: &HashSet<(usize, usize)>) {
         let start = self.locate(q);
-        let mut cavity = vec![start];
-        let mut in_cav: HashSet<usize> = HashSet::from([start]);
-        let mut i = 0;
-        while i < cavity.len() {
-            let k = cavity[i];
-            i += 1;
-            let t = self.tris[k];
-            for j in 0..3 {
-                let (a, b) = (t[j], t[(j + 1) % 3]);
-                if let Some(&n) = self.emap.get(&(b, a))
-                    && !in_cav.contains(&n)
-                    && self.in_circle(n, q)
-                {
-                    in_cav.insert(n);
-                    cavity.push(n);
-                }
-            }
+        let [a, b, c] = self.tris[start];
+        self.kill(start);
+        let faces = [
+            self.add_tri([q, a, b]),
+            self.add_tri([q, b, c]),
+            self.add_tri([q, c, a]),
+        ];
+        for (k, (u, v)) in faces.into_iter().zip([(a, b), (b, c), (c, a)]) {
+            self.legalize(k, u, v, q, constraints);
         }
-        let mut boundary = Vec::new();
-        for &k in &cavity {
-            let t = self.tris[k];
-            for j in 0..3 {
-                let (a, b) = (t[j], t[(j + 1) % 3]);
-                let outside = match self.emap.get(&(b, a)) {
-                    Some(n) => !in_cav.contains(n),
-                    None => true,
-                };
-                if outside {
-                    boundary.push((a, b));
-                }
+    }
+
+    /// GTS 0.7.6 `src/cdt.c:swap_if_in_circle`: keep the new diagonal first in both faces.
+    /// Its direction determines the vertex order used by `triCenter`. The explicit
+    /// stack reproduces C's recursive order without growing the call stack.
+    fn legalize(
+        &mut self,
+        k: usize,
+        a: usize,
+        b: usize,
+        q: usize,
+        constraints: &HashSet<(usize, usize)>,
+    ) {
+        let mut pending = vec![(k, a, b)];
+        while let Some((k, a, b)) = pending.pop() {
+            if !self.alive[k] || constraints.contains(&(a.min(b), a.max(b))) {
+                continue;
             }
-        }
-        for &k in &cavity {
+            let Some(&other) = self.emap.get(&(b, a)) else {
+                continue;
+            };
+            let Some(z) = self.tris[other].iter().copied().find(|&v| v != a && v != b) else {
+                continue;
+            };
+            if !self.in_circle(k, z) {
+                continue;
+            }
             self.kill(k);
-        }
-        for (a, b) in boundary {
-            if self.orient(a, b, q) != 0.0 {
-                self.add_tri([a, b, q]);
-            }
+            self.kill(other);
+            let left = self.add_tri([q, z, b]);
+            let right = self.add_tri([z, q, a]);
+            pending.push((right, a, z));
+            pending.push((left, z, b));
         }
     }
 
@@ -277,14 +286,27 @@ pub fn mk_surface(x: &[f64], y: &[f64], segs: &[(usize, usize)]) -> Option<Surfa
     cdt.add_tri([n, n + 1, n + 2]);
     let mut seen: HashMap<(u64, u64), usize> = HashMap::new();
     let mut alias: Vec<usize> = (0..n).collect();
-    for i in 0..n {
+    // Resolve duplicates before protecting or inserting any constraint endpoints.
+    // C `tri` (lib/neatogen/delaunay.c) uses gts_vertex_replace for aliases.
+    for (i, representative) in alias.iter_mut().enumerate() {
         let key = (cdt.p[i].0.to_bits(), cdt.p[i].1.to_bits());
-        if let Some(&j) = seen.get(&key) {
-            alias[i] = j;
-            continue;
+        *representative = *seen.entry(key).or_insert(i);
+    }
+    // C `tri` creates constraint edges before inserting vertices. GTS 0.7.6
+    // src/cdt.c:gts_delaunay_add_vertex_to_face reuses those edges via
+    // gts_vertices_are_connected; swap_if_in_circle returns immediately for
+    // GTS_IS_CONSTRAINT(e1), so they are protected during insertion too.
+    let constraints = segs
+        .iter()
+        .map(|&(s0, s1)| {
+            let (a, b) = (alias[s0], alias[s1]);
+            (a.min(b), a.max(b))
+        })
+        .collect();
+    for (i, &representative) in alias.iter().enumerate() {
+        if representative == i {
+            cdt.insert(i, &constraints);
         }
-        seen.insert(key, i);
-        cdt.insert(i);
     }
     let mut fixed: HashSet<(usize, usize)> = HashSet::new();
     let mut dir: HashMap<(usize, usize), (usize, usize)> = HashMap::new();
@@ -1156,4 +1178,47 @@ pub fn make_multi_spline(
         n.edges.truncate(orig[i]);
     }
     ret
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn insertion_on_an_existing_edge_matches_gts() {
+        let mut cdt = Cdt {
+            p: vec![(0.0, 0.0), (4.0, 0.0), (4.0, 4.0), (0.0, 4.0), (2.0, 2.0)],
+            tris: Vec::new(),
+            alive: Vec::new(),
+            emap: HashMap::new(),
+        };
+        cdt.add_tri([0, 2, 3]);
+        cdt.add_tri([0, 1, 2]);
+        cdt.insert(4, &HashSet::new());
+        let mut faces: Vec<_> = cdt
+            .tris
+            .iter()
+            .zip(&cdt.alive)
+            .filter_map(|(&t, &alive)| alive.then_some(t))
+            .collect();
+        faces.sort_unstable();
+        // GTS gts_delaunay_add_vertex with a guess of face [0,1,2]. Its
+        // temporary zero-area face across [2,0] is removed by legalization.
+        assert_eq!(faces, [[3, 4, 2], [4, 0, 1], [4, 1, 2], [4, 3, 0]]);
+    }
+
+    #[test]
+    fn duplicate_constraint_endpoints_preserve_face_rotations() {
+        let x = [0.0, 4.0, 4.0, 0.0, 1.0, 3.0, 1.3, 1.0];
+        let y = [0.0, 0.0, 4.0, 4.0, 1.0, 1.0, 1.1, 1.0];
+        // Vertex 7 repeats vertex 4. With raw protection indices, insertion
+        // flips a protected side and changes the final face rotations.
+        let canonical = [(0, 1), (1, 2), (2, 3), (3, 0), (4, 6), (6, 5), (5, 4)];
+        let aliased = [(0, 1), (1, 2), (2, 3), (3, 0), (7, 6), (6, 5), (5, 7)];
+        let mut expected = mk_surface(&x, &y, &canonical).unwrap().faces;
+        let mut actual = mk_surface(&x, &y, &aliased).unwrap().faces;
+        expected.sort_unstable();
+        actual.sort_unstable();
+        assert_eq!(actual, expected);
+    }
 }

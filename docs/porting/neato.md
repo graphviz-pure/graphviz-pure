@@ -358,19 +358,15 @@ that coincides on only one axis still scales, as C does.
 - Prism (`overlap=false`, default for sfdp): GTS's edge enumeration order
   (pointer hashing) changes summation order in the solver by an ulp; visible
   only in printed digits (7 arrow graphs in e2e) and in chaotic cases.
-- `makeMultiSpline` triangle centres (issue #28): `triCenter`
-  (`multispline.c:391`) sums a face's corners in the order
-  `gts_triangle_vertices` returns them. The GTS manual documents only that
-  this order "respects the orientation of t" and that `e1` joins `v1` and
-  `v2`; which corner comes first depends on which edge GTS's construction
-  stored as `t->e1`. That is deterministic in C, but it follows GTS's
-  insertion and flip history, which the port's CDT does not replay. The port
-  can start at a different corner on every face (all 22 in the repro), so a
-  centre can differ by an ulp. When two triangle paths tie exactly in C
-  (mirror-image obstacles), that ulp picks the other side and `tweakEnd` can
-  move the end point 0.1pt. With C's corner order the port's `tri_path`
-  picks C's path, so the tie-break itself matches. See also #35 (face order).
-  Tracked by the ignored test `neato_polyline_compass_port_routes_like_c`.
+- `makeMultiSpline` triangle centres: `triCenter` (`multispline.c:391`) sums
+  a face's corners in the order `gts_triangle_vertices` returns them. Starting
+  at a different corner can move the centre by an ulp and select another
+  triangle path. Vertex insertion now follows GTS's face splitting and
+  Delaunay legalization (#582), preserving its vertex rotations instead of
+  Bowyer–Watson's. This fixes #582's failed routing and #28's compass-port
+  reproducer, covered by `neato_polyline_compass_port_routes_like_c`. Constraint
+  insertion still uses Sloan/Lawson flips rather than GTS's polygon
+  retriangulation, so its face rotations can still differ.
 - A two-way multi-edge pair (`13 -- 24` and `24 -- 13` in
   `tests/wild/gv16_undirected_ngk10_4_793340.gv`, `-Kneato -Tplain`) is routed
   from the same end in C and the port (#438). `GVDUMP` instrumentation of
