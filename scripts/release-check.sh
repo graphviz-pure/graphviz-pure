@@ -7,7 +7,7 @@
 #   - every pull request since the last release has a changelog entry, none is marked
 #     breaking without the breaking label, and the labels ask for the version;
 #   - CHANGELOG.md's Unreleased section is empty (entries belong in pull request bodies);
-#   - the version is not tagged yet;
+#   - the version is not tagged yet, and no GitHub release (including a draft) exists for it;
 #   - the e2e fidelity count (tests/golden/e2e-baseline.libm-matched.portable.json) is at
 #     least the last release's, and every input that was identical to C still is.
 #
@@ -100,6 +100,16 @@ print("" if m and not m.group(1).strip() else "not empty" if m else "missing")')
 
   tagged=$(git rev-parse -q --verify "refs/tags/v$version" || true)
   item "$([ -z "$tagged" ] && echo 1)" "v$version is not tagged yet" "it is, at ${tagged:0:12}"
+  # A 404 from the tags endpoint exits non-zero and still writes an error body. A draft is
+  # visible when this token can see drafts.
+  if gh api "repos/$REPO/releases/tags/v$version" > "$work/rel.json" 2> /dev/null; then
+    draft=$(jq -r '.draft' "$work/rel.json")
+    item 0 "No GitHub release for v$version" "draft=$draft"
+  else
+    listed=$(gh release list --repo "$REPO" --limit 100 --json tagName,isDraft |
+      jq -r --arg t "v$version" '.[] | select(.tagName == $t) | "draft=\(.isDraft)"')
+    item "$([ -z "$listed" ] && echo 1)" "No GitHub release for v$version" "$listed"
+  fi
 
   # Fidelity: every e2e input byte-identical to C at the last release still is, and the count
   # is not lower.

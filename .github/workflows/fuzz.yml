@@ -4,8 +4,8 @@ name: Fuzzing
 # (.clusterfuzzlite/): panics, hangs and running out of memory on crafted DOT. No C oracle; the
 # differential fuzzer against C Graphviz is separate (docs/porting/fuzzing.md).
 #
-# Fuzzing is a pre-release step. release.yml calls this workflow on the commit it is about to
-# release; a person can also dispatch it. It does not run on a schedule or on pull requests: a
+# Fuzzing is a pre-release step. release.yml calls this workflow on the base commit (master at
+# dispatch); a person can also dispatch it. It does not run on a schedule or on pull requests: a
 # run takes over an hour, and the tests, the C differential corpora and the compiler already
 # gate every change, so fuzzing each pull request (25 minutes a push, one crash in 141 runs) or
 # each day only slowed the agents fixing bugs.

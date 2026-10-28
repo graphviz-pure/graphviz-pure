@@ -34,8 +34,13 @@ author_name='github-actions[bot]'
 author_email='41898282+github-actions[bot]@users.noreply.github.com'
 url=$REMOTE_URL
 tag=v$version
-# The token is a header, not part of the remote URL, so a failed command does not print it in the URL.
-git_auth() { git -c "http.extraheader=AUTHORIZATION: bearer $token" "$@"; }
+# The same header actions/checkout uses for an installation token. basic, not bearer, and
+# the base64 is one line (GNU base64 wraps). The token stays out of the remote URL.
+git_auth() {
+  local basic
+  basic=$(printf 'x-access-token:%s' "$token" | base64 | tr -d '\n')
+  git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic $basic" "$@"
+}
 
 git_auth fetch --quiet "$url" '+refs/heads/master:refs/remotes/origin/master'
 master=$(git rev-parse origin/master)

@@ -8,7 +8,7 @@ To release: dispatch Release (`gh workflow run release.yml [-f version=X.Y.Z]`, 
 gh workflow run release.yml -f dry_run=true
 ```
 
-A dry run, or a check that fails, never asks for the `release` environment. One release run at a time. A real release has to be dispatched from `master`.
+A dry run, or a check that fails, never asks for the `release` environment. A real release uses the concurrency group `release` (one at a time; a second one waits). A dry run uses `release-dry-run`, so dispatching a dry run cannot cancel a real release that is queued or running. A real release has to be dispatched from `master`. The `release` environment allows deployments from `master` only, so a workflow run from any other branch cannot request it.
 
 ## Before dispatching
 
@@ -18,7 +18,8 @@ A dry run, or a check that fails, never asks for the `release` environment. One 
 - the newest `ci.yml` and `cross-platform.yml` runs on master's head succeeded;
 - every pull request merged since the last tag has a `## Changelog entry`. An entry marked breaking (under a `### Breaking` heading, or a bullet starting `**Breaking:**` or `**Changed (breaking):**`) has to come from a pull request with the `breaking` label. The labels decide the version;
 - CHANGELOG.md's Unreleased section is empty. Entries belong in pull request bodies;
-- the version is not tagged yet;
+- the version is not tagged yet, and no GitHub release, including a draft, exists for it;
+- the release commit merges cleanly onto current master (`git merge-tree --write-tree`). Master moving is fine; a conflict fails the run before any approval is requested;
 - every e2e input that was byte-identical to C at the last release still is, and the count is not lower.
 
 A pull request with no entry: add one to its body (`Not user-visible.` when there is nothing to say). An entry marked breaking without the label: label it, or unmark the entry.
@@ -36,7 +37,7 @@ newest version); npm's
 `latest` dist-tag, an install pinned to the attested release tarball's integrity (`npm ci`
 against a lockfile the script writes from it), and `npm audit signatures`; the tap's formula,
 the bucket's manifest and
-their newest `update.yml` run. Attestations come from `release.yml`. Releases through 0.2.3 were attested for the tag; a later release is attested for `refs/heads/master`, because the certificate records the workflow run's ref and the tag does not exist until the approval. The `verify` job runs the script with `--ci` (every channel but the tap and bucket) once the publishing jobs finish, and reports a channel whose publishing job failed without polling it.
+their newest `update.yml` run. Attestations come from `release.yml`. The certificate's source ref is `refs/heads/master`. Its subject digest is the dispatch SHA, master's HEAD when the run started, not the release commit. Releases through 0.2.3 were attested for the tag. The `verify` job runs the script with `--ci` (every channel but the tap and bucket) once the publishing jobs finish, and reports a channel whose publishing job failed without polling it.
 
 ### The `breaking` label
 
@@ -111,11 +112,12 @@ environment, and each publishes on its own:
   and `verify` leaves the channel out.
 
 Then `verify` checks what they published (`scripts/release-verify.sh --ci`) and closes a milestone
-titled X.Y.Z if one is open. The same approval's `github-release` job dispatches `update.yml` in
-`graphviz-pure/homebrew-tap` and `graphviz-pure/scoop-bucket`; those workflows verify each asset
-and commit the new formula and manifest. Their verifiers still ask for an attestation whose
-source ref is the tag, so a release attested for `refs/heads/master` fails that check until those
-repositories accept either ref.
+titled X.Y.Z if one is open and every publishing job that ran succeeded. A skipped job does not
+block that; a failed one leaves the milestone open. The same approval's `github-release` job
+dispatches `update.yml` in `graphviz-pure/homebrew-tap` and `graphviz-pure/scoop-bucket`; those
+workflows verify each asset and commit the new formula and manifest. Their verifiers accept an
+attestation whose source ref is the tag or `refs/heads/master` (the dispatch SHA is the subject
+digest).
 `graphviz-pure/graphviz-pure.github.io` deploys the site from `master` builds the same way. No
 repository holds a long-lived credential for another: the dispatch uses a GitHub App token minted
 in the `github-release` job and discarded with it.
@@ -131,16 +133,23 @@ those approvals run first: the readiness checklist, fuzzing, and every smoke tes
 in that same approval. What is given up: a registry can publish even if the GitHub release fails,
 and nothing is left to stop between the GitHub release and the registries. Keep
 `environment: release` on every publishing job (the crates.io, npm and PyPI trusted publishers
-are bound to it) and keep its approval manual: JSR and PyPI have no staging.
+are bound to it) and keep its approval manual: JSR and PyPI have no staging. Its deployment
+branch policy stays `master` only.
+
+Before that approval, `prepare` checks the release can land, with the job's read-only token:
+`git merge-tree --write-tree` of current master and the release commit is clean, `refs/tags/vX.Y.Z`
+does not exist, and no GitHub release, including a draft, exists for that tag. A missing App
+secret, or a ruleset bypass that does not let the App push, cannot be checked then. Those are
+confirmed once, when the environment secrets and the ruleset bypass are applied.
 
 ### If a publishing job fails
 
 The publishing jobs are independent, so a failure leaves the other channels published. Fix the
 cause (an expired trusted-publisher configuration, a registry outage), then **Re-run failed
-jobs** on the same run: never push a new tag for the same version. A re-run runs `release.yml`
-as it was in the tagged commit, and the release's tag cannot move, so a bug in the workflow
-itself is fixed on `master` and ships with the next version. A re-run asks for the approval
-again.
+jobs** on the same run. A re-run uses that dispatch: the workflow file and the SHA of master
+when the run was started. There is no tag until `github-release` creates it, and the re-run
+does not look up a pre-existing tag to decide what to build. A bug in the workflow itself is
+fixed on `master` and ships with the next dispatch. A re-run asks for the approval again.
 
 - `crates-io`: safe to re-run, also after a partial publish. The job asks crates.io which
   crates already have the version (`scripts/crates-to-publish.py`) and publishes only the
@@ -340,8 +349,8 @@ Other WASI runtimes take the release's `graphviz-pure-X.Y.Z-wasm32-wasip1.tar.gz
 
 Nothing to set up in this repository. After the GitHub release is published, the release
 workflow dispatches `update.yml` in the tap and the bucket; both also run on a 6-hour
-schedule. Their update scripts still require an attestation whose source ref is the tag, so
-they reject a release attested for `refs/heads/master` until those scripts accept either ref.
+schedule. Their update scripts accept an attestation whose source ref is the tag or
+`refs/heads/master`. The certificate's subject digest is the dispatch SHA.
 Users run `brew install graphviz-pure/tap/graphviz-pure` and
 `scoop bucket add graphviz-pure https://github.com/graphviz-pure/scoop-bucket` then
 `scoop install graphviz-pure/graphviz-pure`. Submitting to homebrew-core and the Scoop main

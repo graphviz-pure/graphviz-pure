@@ -49,6 +49,9 @@ git -C "$root" add -A
 git -C "$root" -c user.name="$author_name" -c user.email="$author_email" commit -m "Release $version"
 sha=$(git -C "$root" rev-parse HEAD)
 [ "$(git -C "$root" rev-parse HEAD^)" = "$base" ] || die "the release commit is not based on $base"
+tmp=$(mktemp)
+jq --arg sha "$sha" '. + {release_sha: $sha}' "$meta" > "$tmp"
+mv "$tmp" "$meta"
 
 mkdir -p "$(dirname "$bundle")"
 # A relative bundle path is relative to this repository, not the worktree.

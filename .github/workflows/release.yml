@@ -8,9 +8,11 @@ name: Release
 #     gh workflow run release.yml [-f version=X.Y.Z] [-f intro=...] [-f dry_run=true]
 #
 # Security model:
-# - One release run at a time (concurrency group `release`). A real release has to be
-#   dispatched from master; prepare refuses any other ref. dry_run may run from any ref and
-#   publishes nothing: its publishing jobs are skipped and the environment is never requested.
+# - One real release at a time (concurrency group `release`). A dry run uses `release-dry-run`,
+#   so it cannot cancel a pending real run. A real release has to be dispatched from master;
+#   prepare refuses any other ref. dry_run may run from any ref and publishes nothing: its
+#   publishing jobs are skipped and the environment is never requested. The environment's
+#   deployment branch policy allows only master, so a run from another branch cannot request it.
 # - prepare, with a read-only token and no environment, checks master's head and commits the
 #   changelog and the version bump locally, as github-actions[bot]. That commit is not on a
 #   branch yet. Later jobs check it out from a git bundle. The checks are the ones in
@@ -18,6 +20,9 @@ name: Release
 #   "Cross-platform fails on master", ci.yml and cross-platform.yml succeeded on that commit,
 #   every pull request since the last tag has a changelog entry, the version is the one the
 #   breaking labels ask for and is not tagged yet, and the e2e fidelity count is not lower.
+#   After the commit exists, prepare checks it can land: merge-tree onto current master is
+#   clean, refs/tags/vX.Y.Z does not exist, and no GitHub release (including a draft) does
+#   either. A missing App secret or a ruleset bypass cannot be checked here.
 # - Fuzzing (fuzz.yml, on that same base commit) runs beside the builds. Its fuzzed-inputs
 #   cache makes it a cache lookup when the code has not changed. It has to pass before the
 #   publishing jobs can ask for approval.
@@ -29,8 +34,9 @@ name: Release
 # - Every artifact gets a signed build-provenance attestation (Sigstore), verifiable with
 #   `gh attestation verify FILE --repo graphviz-pure/graphviz-pure`. The certificate's source
 #   ref is this run's ref. A real release is dispatched from master, so that ref is
-#   refs/heads/master, not the tag: the tag does not exist until the approval. Releases
-#   through 0.2.3 were attested for the tag.
+#   refs/heads/master, not the tag: the tag does not exist until the approval. The
+#   certificate's subject digest is the dispatch SHA (master at dispatch), not the release
+#   commit. Releases through 0.2.3 were attested for the tag.
 # - Publishing happens only in jobs bound to the `release` environment, which needs a
 #   reviewer's approval. The seven publishing jobs wait on the same jobs, so they wait for
 #   the environment together and one approval starts them all (see the crates-io job). The
@@ -50,8 +56,8 @@ name: Release
 #   for that job. This repository's GITHUB_TOKEN never writes contents.
 # - The verify job, with no environment, checks what the publishing jobs published
 #   (scripts/release-verify.sh --ci: every channel but the tap and bucket, which were
-#   dispatched rather than waited on) and closes a milestone titled X.Y.Z if one is open.
-#   It opens no issue and writes no comment.
+#   dispatched rather than waited on) and closes a milestone titled X.Y.Z if one is open
+#   and every publishing job that ran succeeded. It opens no issue and writes no comment.
 
 on:
   workflow_dispatch:
@@ -76,7 +82,9 @@ permissions:
   contents: read
 
 concurrency:
-  group: release
+  # A dry run is a different group, so dispatching one cannot cancel a real release that is
+  # queued or running. cancel-in-progress stays false: a second real run waits.
+  group: release${{ inputs.dry_run && '-dry-run' || '' }}
   cancel-in-progress: false
 
 env:
@@ -149,6 +157,9 @@ jobs:
             --meta "$RUNNER_TEMP/release-meta.json" --section "$RUNNER_TEMP/release-section.md"
           scripts/release-commit.sh --meta "$RUNNER_TEMP/release-meta.json" \
             --section "$RUNNER_TEMP/release-section.md" --bundle release-commit/release.bundle
+          # Still this job's read-only token, still before any publishing job exists.
+          scripts/release-land-check.sh --meta "$RUNNER_TEMP/release-meta.json" \
+            --summary "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: release-commit
@@ -1146,7 +1157,20 @@ jobs:
           scripts/release-verify.sh "$VERSION" --ci --wait 600 --channels "${ok#,}" --failed "${failed#,}" |
             tee -a "$GITHUB_STEP_SUMMARY"
       - name: Close the milestone
-        if: needs.github-release.result == 'success'
+        # A skipped publishing job did not run (a dry run, or a channel that was not part of
+        # this approval). A failure leaves the milestone open.
+        if: >-
+          (needs.github-release.result == 'success' || needs.github-release.result == 'skipped') &&
+          (needs.crates-io.result == 'success' || needs.crates-io.result == 'skipped') &&
+          (needs.npm.result == 'success' || needs.npm.result == 'skipped') &&
+          (needs.jsr.result == 'success' || needs.jsr.result == 'skipped') &&
+          (needs.ghcr.result == 'success' || needs.ghcr.result == 'skipped') &&
+          (needs.wasmer.result == 'success' || needs.wasmer.result == 'skipped') &&
+          (needs.pypi.result == 'success' || needs.pypi.result == 'skipped') &&
+          (needs.github-release.result == 'success' || needs.crates-io.result == 'success' ||
+           needs.npm.result == 'success' || needs.jsr.result == 'success' ||
+           needs.ghcr.result == 'success' || needs.wasmer.result == 'success' ||
+           needs.pypi.result == 'success')
         env:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ needs.check.outputs.version }}

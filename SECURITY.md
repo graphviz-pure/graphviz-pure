@@ -33,7 +33,8 @@ runners from the release commit, without caches, and gets a signed build-provena
 
     gh attestation verify FILE --repo graphviz-pure/graphviz-pure
 
-The certificate's source ref is `refs/heads/master` (the workflow run's ref). Releases through
+The certificate's source ref is `refs/heads/master` (the workflow run's ref). Its subject
+digest is the dispatch SHA, not the release commit. Releases through
 0.2.3 were attested for their tag. crates.io, npm, PyPI and JSR are published through trusted
 publishing (OIDC), so no registry token exists for them. Publishing needs one approval of the
 `release` environment. The full model is at the top of

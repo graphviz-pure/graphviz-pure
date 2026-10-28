@@ -9,7 +9,8 @@
 #
 # The crates' own version is left out (the root's [workspace.package] version, its requirements on
 # the workspace's crates, and their versions in fuzz/Cargo.lock): a release's version bump changes
-# no code, so the release branch keeps master's key. Tests other than the seeds, documentation,
+# no code. release.yml calls fuzz.yml on the base commit, so the key is that commit's. Tests
+# other than the seeds, documentation,
 # scripts and the site are not part of the key.
 #
 # Usage: scripts/fuzz-inputs-key.sh   (in a checkout; reads the index, so commit first)
