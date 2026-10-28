@@ -21,7 +21,9 @@
 //! at 96 dpi (1pt = 4/3 px); with one, the SVG is already scaled to that resolution and is
 //! rasterized at one pixel per point.
 
-pub use graphviz_pure_core::{GraphvizError, GraphvizErrorKind};
+pub use graphviz_pure_core::{
+    Diagnostic, DiagnosticLevel, GraphvizError, GraphvizErrorKind, Rendered,
+};
 use resvg::{tiny_skia, usvg};
 use std::sync::{Arc, OnceLock};
 
@@ -124,7 +126,33 @@ fn fontdb() -> Arc<usvg::fontdb::Database> {
 
 /// Rasterizes the port's SVG for one graph. `explicit_dpi` says whether the graph set `dpi`
 /// or `resolution` (then the SVG is already scaled and is drawn at one pixel per point).
+///
+/// The bytes are [`Rendered<Vec<u8>>`]. Diagnostics from the rasterizing call are
+/// on that value, or on the error. This writes nothing to stderr.
+///
+/// ```
+/// use graphviz_pure_raster::{RasterFormat, rasterize};
+///
+/// let svg = r#"<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"></svg>"#;
+/// let png = rasterize(svg, RasterFormat::Png, false)
+///     .unwrap()
+///     .into_output();
+/// assert_eq!(&png[1..4], b"PNG");
+/// ```
 pub fn rasterize(
+    svg: &str,
+    format: RasterFormat,
+    explicit_dpi: bool,
+) -> Result<Rendered<Vec<u8>>, GraphvizError> {
+    let (result, diagnostics) =
+        graphviz_pure_core::diag::capture(|| rasterize_inner(svg, format, explicit_dpi));
+    match result {
+        Ok(output) => Ok(Rendered::__from_parts(output, diagnostics)),
+        Err(error) => Err(error.__set_diagnostics(diagnostics)),
+    }
+}
+
+fn rasterize_inner(
     svg: &str,
     format: RasterFormat,
     explicit_dpi: bool,
@@ -190,16 +218,25 @@ mod tests {
     #[test]
     fn png_has_graphviz_default_size() {
         let png = rasterize(SVG, RasterFormat::Png, false).unwrap();
-        assert_eq!(&png[1..4], b"PNG");
+        assert_eq!(&png.output()[1..4], b"PNG");
         // IHDR width and height: 62pt and 116pt at 96 dpi, as C's -Tpng.
-        assert_eq!(u32::from_be_bytes(png[16..20].try_into().unwrap()), 83);
-        assert_eq!(u32::from_be_bytes(png[20..24].try_into().unwrap()), 155);
+        assert_eq!(
+            u32::from_be_bytes(png.output()[16..20].try_into().unwrap()),
+            83
+        );
+        assert_eq!(
+            u32::from_be_bytes(png.output()[20..24].try_into().unwrap()),
+            155
+        );
     }
 
     #[test]
     fn explicit_dpi_draws_one_pixel_per_point() {
         let png = rasterize(SVG, RasterFormat::Png, true).unwrap();
-        assert_eq!(u32::from_be_bytes(png[16..20].try_into().unwrap()), 62);
+        assert_eq!(
+            u32::from_be_bytes(png.output()[16..20].try_into().unwrap()),
+            62
+        );
     }
 
     #[test]
@@ -254,7 +291,7 @@ mod tests {
     #[test]
     fn jpeg_encodes() {
         let jpg = rasterize(SVG, RasterFormat::Jpeg, false).unwrap();
-        assert_eq!(&jpg[..2], &[0xFF, 0xD8]);
+        assert_eq!(&jpg.output()[..2], &[0xFF, 0xD8]);
     }
 
     #[test]
@@ -298,7 +335,7 @@ mod tests {
 <text x="18" y="40" font-family="Times,serif" font-size="16">Été</text>
 </g></svg>"#;
         let png = rasterize(SHAPES, RasterFormat::Png, false).unwrap();
-        let hash: String = Sha256::digest(&png)
+        let hash: String = Sha256::digest(png.output())
             .iter()
             .map(|b| format!("{b:02x}"))
             .collect();

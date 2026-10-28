@@ -11,6 +11,8 @@
 //! escapes. `GVDUMP` debugging traces go through [`dump`].
 //!
 //! The levels are per thread, so concurrent in-process renders do not see each other's errors.
+//! A [`capture`] scope collects `agerr` text for that call instead of writing it; the command
+//! line does not capture, and prints each message as C does.
 
 use std::borrow::Cow;
 use std::cell::{Cell, RefCell};
@@ -84,6 +86,11 @@ pub fn reporting_ports() -> bool {
 }
 
 /// `emit_once(str)`: true the first time `key` is seen on this thread.
+///
+/// A [`capture`] starts from an empty set and restores the previous one when
+/// the call ends, so the same warning is reported again on the next library
+/// call. The command line does not capture, and a key stays seen for the rest
+/// of the thread: C's once-per-process behaviour.
 pub fn emit_once(key: &str) -> bool {
     EMITTED.with(|e| e.borrow_mut().insert(key.to_string()))
 }
@@ -97,7 +104,7 @@ pub fn agseterr(lvl: AgErrLevel) -> AgErrLevel {
 /// `agerr(level, msg)` (`agerr_va`): `msg` is the C format output, normally ending in a newline.
 pub fn agerr(level: AgErrLevel, msg: &str) {
     if let Some(bytes) = agerr_va(level, msg) {
-        write_stderr(&bytes);
+        emit_agerr(level, &bytes);
     }
 }
 
@@ -281,6 +288,9 @@ pub fn fmt_f(v: f64, prec: usize) -> String {
 
 /// `fprintf(stderr, msg)`: a message C writes without `agerr`, so with no level, no count and
 /// no escaping. `msg` is written as C's bytes ([`crate::charset::encode`]).
+///
+/// Not a diagnostic. `-v` progress uses this, and it stays on the command line: a
+/// [`capture`] scope drops it instead of returning it.
 pub fn fprintf_stderr(msg: &str) {
     write_stderr(&crate::charset::encode(msg));
 }
@@ -306,9 +316,161 @@ fn usererr_bytes(msg: &str) -> Vec<u8> {
     out
 }
 
+/// Thread-local state a [`capture`] saves and restores, so one call cannot
+/// change what the next call on this thread observes.
+struct SavedDiag {
+    emitted: HashSet<String>,
+    errors: usize,
+    last: AgErrLevel,
+    /// The caller's quiet mode (`dot -q`). Restored, not cleared: the call
+    /// observes the mode it was entered under, and cannot leave a new one behind.
+    level: AgErrLevel,
+    quiet: u32,
+    silent: u32,
+}
+
+struct Frame {
+    diagnostics: Vec<crate::error::Diagnostic>,
+    saved: SavedDiag,
+}
+
+/// The current capture lives in `top`. `below` holds the captures it is nested
+/// in, and that `Vec` is allocated only then.
+///
+/// An empty [`HashSet`] and an empty [`Vec`] allocate nothing, so one capture
+/// that emits no diagnostic and no once-only key allocates nothing. The command
+/// line captures once, for a raster format, and the allocation ratchet is exact.
+struct Frames {
+    top: Option<Frame>,
+    below: Vec<Frame>,
+}
+
+thread_local! {
+    static FRAMES: RefCell<Frames> = const { RefCell::new(Frames { top: None, below: Vec::new() }) };
+}
+
+fn push_frame() {
+    let saved = SavedDiag {
+        emitted: EMITTED.with(|cell| cell.replace(HashSet::new())),
+        errors: ERRORS.with(|cell| cell.replace(0)),
+        last: LAST.with(|cell| cell.replace(AgErrLevel::Warn)),
+        level: LEVEL.with(Cell::get),
+        quiet: QUIET.with(|cell| cell.replace(0)),
+        silent: SILENT.with(|cell| cell.replace(0)),
+    };
+    FRAMES.with(|frames| {
+        let mut frames = frames.borrow_mut();
+        if let Some(prev) = frames.top.take() {
+            frames.below.push(prev);
+        }
+        frames.top = Some(Frame {
+            diagnostics: Vec::new(),
+            saved,
+        });
+    });
+    crate::color::push_capture_colors();
+}
+
+fn pop_frame() {
+    crate::color::pop_capture_colors();
+    let Some(frame) = FRAMES.with(|frames| {
+        let mut frames = frames.borrow_mut();
+        let top = frames.top.take()?;
+        frames.top = frames.below.pop();
+        Some(top)
+    }) else {
+        return;
+    };
+    EMITTED.with(|cell| {
+        cell.replace(frame.saved.emitted);
+    });
+    ERRORS.with(|cell| cell.set(frame.saved.errors));
+    LAST.with(|cell| cell.set(frame.saved.last));
+    LEVEL.with(|cell| cell.set(frame.saved.level));
+    QUIET.with(|cell| cell.set(frame.saved.quiet));
+    SILENT.with(|cell| cell.set(frame.saved.silent));
+}
+
+/// Pops the [`capture`] frame, including when `f` panics or returns early, so a
+/// call cannot leave its messages or its once-only set on the thread.
+struct FrameGuard;
+
+impl Drop for FrameGuard {
+    fn drop(&mut self) {
+        pop_frame();
+    }
+}
+
+/// Runs `f` and returns the `agerr` messages it wrote, in order, instead of
+/// writing them to stderr.
+///
+/// The frame is this call's alone. A nested [`capture`] keeps its own messages
+/// and its own once-only set, and another thread has its own frame, so two
+/// layouts cannot mix diagnostics. `fprintf` to stderr (including `-v`) is
+/// dropped for the duration: the command line does not capture, so its progress
+/// and its own messages still go to stderr as they are written.
+///
+/// A warning C prints once per process stays once per process on the command
+/// line, which does not capture: the key stays seen for the rest of that
+/// thread. A library call captures, so the same warning is reported again on
+/// the next call.
+pub fn capture<R>(f: impl FnOnce() -> R) -> (R, Vec<crate::error::Diagnostic>) {
+    push_frame();
+    let _guard = FrameGuard;
+    let result = f();
+    let diagnostics = FRAMES.with(|frames| {
+        frames
+            .borrow_mut()
+            .top
+            .as_mut()
+            .map(|frame| std::mem::take(&mut frame.diagnostics))
+            .unwrap_or_default()
+    });
+    (result, diagnostics)
+}
+
+fn capturing() -> bool {
+    FRAMES.with(|frames| frames.borrow().top.is_some())
+}
+
+/// The level a collected message reports. `AGPREV` keeps the level of the
+/// message it continues (`AGMAX` is stored as an error for that purpose).
+fn diagnostic_level(original: AgErrLevel) -> crate::error::DiagnosticLevel {
+    use crate::error::DiagnosticLevel;
+    match original {
+        AgErrLevel::Err => DiagnosticLevel::Error,
+        AgErrLevel::Warn => DiagnosticLevel::Warning,
+        AgErrLevel::Max => DiagnosticLevel::CountedAsError,
+        AgErrLevel::Prev => match LAST.with(Cell::get) {
+            AgErrLevel::Warn => DiagnosticLevel::Warning,
+            AgErrLevel::Max => DiagnosticLevel::CountedAsError,
+            AgErrLevel::Err | AgErrLevel::Prev => DiagnosticLevel::Error,
+        },
+    }
+}
+
+fn emit_agerr(original: AgErrLevel, bytes: &[u8]) {
+    if capturing() {
+        let message = String::from_utf8_lossy(bytes).into_owned();
+        let diagnostic = crate::error::Diagnostic::new(diagnostic_level(original), message);
+        FRAMES.with(|frames| {
+            if let Some(frame) = frames.borrow_mut().top.as_mut() {
+                frame.diagnostics.push(diagnostic);
+            }
+        });
+        return;
+    }
+    write_stderr(bytes);
+}
+
 // The one place that writes to stderr (`clippy.toml`).
 #[allow(clippy::disallowed_methods)]
 fn write_stderr(bytes: &[u8]) {
+    // A library call is collecting. stderr belongs to the command line, which
+    // does not capture, so its writes still land here in order.
+    if capturing() {
+        return;
+    }
     let _ = std::io::stderr().write_all(bytes);
 }
 
@@ -417,12 +579,131 @@ mod tests {
     }
 
     #[test]
+    fn capture_returns_each_call_s_messages_and_not_the_last_call_s() {
+        let ((), first) = capture(|| {
+            agwarningf("alpha\n");
+            agerrorf("bad\n");
+        });
+        let ((), second) = capture(|| agwarningf("beta\n"));
+        assert_eq!(first[0].level(), crate::error::DiagnosticLevel::Warning);
+        assert_eq!(first[0].message(), "Warning: alpha\n");
+        assert_eq!(first[1].level(), crate::error::DiagnosticLevel::Error);
+        assert_eq!(first[1].message(), "Error: bad\n");
+        assert_eq!(second.len(), 1);
+        assert_eq!(second[0].message(), "Warning: beta\n");
+        assert!(second.iter().all(|d| !d.message().contains("alpha")));
+    }
+
+    #[test]
+    fn captures_on_two_threads_do_not_mix() {
+        let left = std::thread::spawn(|| capture(|| agwarningf("from-a\n")).1);
+        let right = std::thread::spawn(|| capture(|| agwarningf("from-b\n")).1);
+        let left = left.join().unwrap();
+        let right = right.join().unwrap();
+        assert!(left.iter().all(|d| d.message().contains("from-a")));
+        assert!(right.iter().all(|d| d.message().contains("from-b")));
+        assert!(!left.iter().any(|d| d.message().contains("from-b")));
+        assert!(!right.iter().any(|d| d.message().contains("from-a")));
+    }
+
+    #[test]
     fn prev_continues_at_the_level_of_the_message_before_it() {
         let old = agseterr(AgErrLevel::Err);
         assert_eq!(out(AgErrLevel::Warn, "w\n"), None);
         assert_eq!(out(AgErrLevel::Prev, "more\n"), None);
         assert_eq!(out(AgErrLevel::Err, "e\n").as_deref(), Some("Error: e\n"));
         assert_eq!(out(AgErrLevel::Prev, "more\n").as_deref(), Some("more\n"));
+        agseterr(old);
+    }
+
+    #[test]
+    fn a_panic_inside_capture_restores_the_frame() {
+        let old = agseterr(AgErrLevel::Warn);
+        reset_errors();
+        let panicked = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let _ = capture(|| {
+                agwarningf("during\n");
+                assert!(emit_once("panic-key"));
+                panic!("boom");
+            });
+        }));
+        assert!(panicked.is_err());
+        assert!(reporting());
+        assert_eq!(error_count(), 0);
+        assert!(emit_once("panic-key"));
+        let ((), after) = capture(|| agwarningf("after\n"));
+        assert_eq!(after.len(), 1);
+        assert_eq!(after[0].message(), "Warning: after\n");
+        agseterr(old);
+    }
+
+    #[test]
+    fn nested_capture_keeps_its_own_messages_and_once_set() {
+        let ((inner_fresh, inner), outer) = capture(|| {
+            assert!(emit_once("nest"));
+            agwarningf("outer\n");
+            let (inner_fresh, inner) = capture(|| {
+                let fresh = emit_once("nest");
+                agwarningf("inner\n");
+                fresh
+            });
+            agwarningf("outer-after\n");
+            (inner_fresh, inner)
+        });
+        assert!(inner_fresh);
+        assert_eq!(inner.len(), 1);
+        assert_eq!(inner[0].message(), "Warning: inner\n");
+        assert_eq!(outer.len(), 2);
+        assert_eq!(outer[0].message(), "Warning: outer\n");
+        assert_eq!(outer[1].message(), "Warning: outer-after\n");
+        assert!(outer.iter().all(|d| !d.message().contains("inner")));
+    }
+
+    #[test]
+    fn an_early_return_returns_the_messages_so_far_and_restores_the_frame() {
+        let old = agseterr(AgErrLevel::Warn);
+        reset_errors();
+        let ((), messages) = capture(|| {
+            agerrorf("kept\n");
+            if error_count() > 0 {
+                return;
+            }
+            agwarningf("not reached\n");
+        });
+        assert_eq!(messages.len(), 1);
+        assert_eq!(messages[0].message(), "Error: kept\n");
+        assert_eq!(error_count(), 0);
+        assert!(reporting());
+        let ((), next) = capture(|| agwarningf("next\n"));
+        assert_eq!(next.len(), 1);
+        assert_eq!(next[0].message(), "Warning: next\n");
+        agseterr(old);
+    }
+
+    #[test]
+    fn capture_does_not_keep_counts_quiet_or_the_last_level() {
+        let old = agseterr(AgErrLevel::Warn);
+        reset_errors();
+        let ((), messages) = capture(|| {
+            agerrorf("inside\n");
+            agseterr(AgErrLevel::Max);
+            quietly(|| assert!(!reporting()));
+            assert!(reporting());
+            assert_eq!(error_count(), 1);
+            assert_eq!(agseterr(AgErrLevel::Max), AgErrLevel::Max);
+        });
+        assert_eq!(messages.len(), 1);
+        assert_eq!(error_count(), 0);
+        assert!(reporting());
+        // The caller's mode is restored. A continuation does not keep the
+        // captured error's level.
+        assert_eq!(agseterr(AgErrLevel::Warn), AgErrLevel::Warn);
+        let ((), continued) = capture(|| agerr_prev("more\n"));
+        assert_eq!(continued[0].level(), crate::error::DiagnosticLevel::Warning);
+        assert!(emit_once("scoped-once"));
+        assert!(!emit_once("scoped-once"));
+        let ((), again) = capture(|| assert!(emit_once("scoped-once")));
+        assert!(again.is_empty());
         agseterr(old);
     }
 }

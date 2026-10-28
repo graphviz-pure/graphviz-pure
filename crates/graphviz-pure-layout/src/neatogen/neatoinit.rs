@@ -725,18 +725,18 @@ fn set_label(l: Option<&mut TextLabel>, lp: Option<&str>) {
 /// it is unreadable.
 fn user_spline(g: &mut LGraph<'_>, e: usize) -> bool {
     use crate::common::splines::SplineGraph;
-    // A `static atomic_flag`: one warning per process.
-    static WARNED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
     let pos = g.eattr(e, "pos").unwrap_or("");
     if pos.is_empty() {
         return false;
     }
     // neatoinit.c:278: after the empty `pos` test, so only an edge with one warns.
+    // C's `static atomic_flag` warns once per process. [`diag::emit_once`] does
+    // that on the command line and again on the next library call.
     let (stype, etype) = g.arrow_flags(e);
     let spl = match parse_user_spline(pos, stype, etype) {
         Ok(spl) => spl,
         Err(err) => {
-            if !WARNED.swap(true, std::sync::atomic::Ordering::Relaxed) {
+            if graphviz_pure_core::diag::emit_once("\0neato\0user-spline") {
                 let (t, h) = g.edges.get(e).map_or(
                     (
                         graphviz_pure_core::AgName::own(""),

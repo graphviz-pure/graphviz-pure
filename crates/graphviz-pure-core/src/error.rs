@@ -13,7 +13,15 @@ use std::fmt;
 /// `Display` text unchanged.
 ///
 /// It does not wrap another error: [`std::error::Error::source`] returns `None`.
-#[derive(Debug, Clone, PartialEq, Eq)]
+///
+/// [`Self::diagnostics`] holds the `agerr` messages emitted before and around
+/// the failure. It does not include the failure's own text: that is
+/// [`std::fmt::Display`]. A syntax error carries none.
+///
+/// [`PartialEq`] compares the kind and the text (the detail, the line, the
+/// column, the file, the engine and the attribute name). It does not compare
+/// [`Self::diagnostics`].
+#[derive(Debug, Clone)]
 pub struct GraphvizError {
     kind: GraphvizErrorKind,
     /// The detail. [`std::fmt::Display`] adds the category prefix.
@@ -28,7 +36,15 @@ pub struct GraphvizError {
     column: Option<u32>,
     /// The file a `# N "file"` line directive named, for a syntax error.
     file: Option<String>,
+    /// `agerr` messages collected for the failed call. Absent until a call attaches
+    /// some, so the error stays small enough to return.
+    diagnostics: Option<Box<Diagnostics>>,
 }
+
+/// The heap list behind [`GraphvizError::diagnostics`]. A newtype, so the error
+/// holds a thin pointer rather than the three-word `Vec`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct Diagnostics(Vec<Diagnostic>);
 
 /// Why a [`GraphvizError`] was returned.
 ///
@@ -50,6 +66,118 @@ pub enum GraphvizErrorKind {
     Render,
 }
 
+/// How serious a [`Diagnostic`] is.
+///
+/// Non-exhaustive, so a new level can be added in a minor release. A `match`
+/// outside this crate needs a wildcard arm.
+///
+/// `AGPREV` is not a level of its own: a continuation takes the level of the
+/// message it extends. `AGMAX` is counted as an error and written as a warning.
+#[non_exhaustive]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum DiagnosticLevel {
+    /// `AGERR`. The message text starts with `Error: `.
+    Error,
+    /// `AGWARN`. The message text starts with `Warning: `.
+    Warning,
+    /// `AGMAX`. Counted as an error. The message text starts with `Warning: `.
+    CountedAsError,
+}
+
+/// One `agerr` / `agwarningf` message, in the order C wrote it.
+///
+/// [`Self::message`] is the exact text of that write, including the `Error: `
+/// or `Warning: ` prefix (none for a continuation) and the trailing newline,
+/// after C's escaping of control characters. It is not a whole stderr log:
+/// `-v` progress is not a diagnostic.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Diagnostic {
+    level: DiagnosticLevel,
+    message: String,
+}
+
+impl Diagnostic {
+    pub(crate) fn new(level: DiagnosticLevel, message: String) -> Self {
+        Self { level, message }
+    }
+
+    /// `AGERR`, `AGWARN` or `AGMAX`. A continuation uses the level it extends.
+    #[must_use]
+    pub fn level(&self) -> DiagnosticLevel {
+        self.level
+    }
+
+    /// The exact text of this one `agerr` write.
+    #[must_use]
+    pub fn message(&self) -> &str {
+        &self.message
+    }
+
+    /// Not part of the stable API. The facade rewrites decoded text at the boundary.
+    #[doc(hidden)]
+    pub fn __map_message(mut self, mut f: impl FnMut(String) -> String) -> Self {
+        self.message = f(self.message);
+        self
+    }
+}
+
+/// A successful call's value plus the diagnostics it collected.
+///
+/// Text from the facade is `Rendered<String>`, or `Rendered<Vec<String>>` when
+/// one call renders every graph. A parsed graph and a layout use the graph type
+/// and `()`. Raster bytes are `Rendered<Vec<u8>>`.
+///
+/// The diagnostics are the `agerr` messages of that call, in order. Dropping
+/// the value drops them. [`Self::into_output`] keeps only the value, and
+/// [`Self::into_parts`] keeps both.
+#[must_use]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Rendered<T> {
+    output: T,
+    diagnostics: Vec<Diagnostic>,
+}
+
+impl<T> Rendered<T> {
+    /// Not part of the stable API. The facade and the raster crate build the value.
+    #[doc(hidden)]
+    pub fn __from_parts(output: T, diagnostics: Vec<Diagnostic>) -> Self {
+        Self {
+            output,
+            diagnostics,
+        }
+    }
+
+    /// The call's value.
+    #[must_use]
+    pub fn output(&self) -> &T {
+        &self.output
+    }
+
+    /// The call's value, mutably. Laying a parsed graph out borrows it this way.
+    #[must_use]
+    pub fn output_mut(&mut self) -> &mut T {
+        &mut self.output
+    }
+
+    /// The value alone. The diagnostics are dropped.
+    #[must_use]
+    pub fn into_output(self) -> T {
+        self.output
+    }
+
+    /// The value and the diagnostics, in that order.
+    #[must_use]
+    pub fn into_parts(self) -> (T, Vec<Diagnostic>) {
+        (self.output, self.diagnostics)
+    }
+
+    /// `agerr` messages from the call, in order.
+    #[must_use]
+    pub fn diagnostics(&self) -> &[Diagnostic] {
+        &self.diagnostics
+    }
+}
+
 impl GraphvizError {
     fn plain(kind: GraphvizErrorKind, detail: String) -> Self {
         Self {
@@ -60,6 +188,7 @@ impl GraphvizError {
             line: None,
             column: None,
             file: None,
+            diagnostics: None,
         }
     }
 
@@ -81,6 +210,7 @@ impl GraphvizError {
             line: Some(line),
             column: u32::try_from(column).ok(),
             file,
+            diagnostics: None,
         }
     }
 
@@ -160,6 +290,30 @@ impl GraphvizError {
         self.engine
     }
 
+    /// `agerr` messages emitted before and around this failure, in order.
+    ///
+    /// Not this failure's own text: that is [`std::fmt::Display`], and
+    /// [`Self::message`] is the detail without the category prefix. Empty when
+    /// nothing was emitted around the failure. A syntax error is reported only
+    /// through this error, so its list is empty. Empty also when the error was
+    /// built without a collected call, as the command line's own messages are.
+    #[must_use]
+    pub fn diagnostics(&self) -> &[Diagnostic] {
+        self.diagnostics
+            .as_deref()
+            .map(|list| list.0.as_slice())
+            .unwrap_or(&[])
+    }
+
+    /// Attaches the `agerr` messages of the call that produced `self`.
+    ///
+    /// Not part of the stable API. The facade and the raster crate use it.
+    #[doc(hidden)]
+    pub fn __set_diagnostics(mut self, diagnostics: Vec<Diagnostic>) -> Self {
+        self.diagnostics = (!diagnostics.is_empty()).then(|| Box::new(Diagnostics(diagnostics)));
+        self
+    }
+
     /// Rewrites the detail, the attribute name and [`Self::file`].
     ///
     /// Not part of the stable API. The facade uses it to convert decoded text at
@@ -174,9 +328,34 @@ impl GraphvizError {
         if let Some(attr) = self.attr.take() {
             self.attr = Some(f(attr));
         }
+        let mapped = self
+            .diagnostics
+            .take()
+            .map(|list| {
+                list.0
+                    .into_iter()
+                    .map(|diagnostic| diagnostic.__map_message(&mut f))
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
+        self.diagnostics = (!mapped.is_empty()).then(|| Box::new(Diagnostics(mapped)));
         self
     }
 }
+
+impl PartialEq for GraphvizError {
+    fn eq(&self, other: &Self) -> bool {
+        self.kind == other.kind
+            && self.detail == other.detail
+            && self.engine == other.engine
+            && self.attr == other.attr
+            && self.line == other.line
+            && self.column == other.column
+            && self.file == other.file
+    }
+}
+
+impl Eq for GraphvizError {}
 
 impl fmt::Display for GraphvizError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -213,6 +392,10 @@ impl std::error::Error for GraphvizError {}
 
 pub type Result<T> = std::result::Result<T, GraphvizError>;
 
+/// An error has to stay under clippy's `result_large_err` limit. The diagnostic
+/// list is heap-allocated so this holds.
+const _: () = assert!(std::mem::size_of::<GraphvizError>() < 128);
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -220,13 +403,10 @@ mod tests {
     const _: fn() = || {
         fn assert_send_sync_static<T: Send + Sync + 'static>() {}
         assert_send_sync_static::<GraphvizError>();
+        assert_send_sync_static::<Diagnostic>();
+        assert_send_sync_static::<DiagnosticLevel>();
+        assert_send_sync_static::<Rendered<String>>();
     };
-
-    #[test]
-    fn graphviz_error_is_send_sync_and_static() {
-        fn assert_send_sync_static<T: Send + Sync + 'static>() {}
-        assert_send_sync_static::<GraphvizError>();
-    }
 
     #[test]
     fn display_text_is_the_message_the_cli_prints() {
@@ -305,5 +485,14 @@ mod tests {
         assert_eq!(render.message(), "encoding the PNG: no");
         assert_eq!(render.to_string(), "Rendering error: encoding the PNG: no");
         assert!(std::error::Error::source(&render).is_none());
+
+        let plain = GraphvizError::syntax(1, 1, "syntax error in line 1 near ';'", None);
+        assert!(plain.diagnostics().is_empty());
+        let marked = plain.clone().__set_diagnostics(vec![Diagnostic::new(
+            DiagnosticLevel::Warning,
+            "Warning: x\n".into(),
+        )]);
+        assert_eq!(plain, marked);
+        assert_ne!(plain.diagnostics(), marked.diagnostics());
     }
 }

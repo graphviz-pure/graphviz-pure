@@ -49,13 +49,11 @@ fn tok_colon(clrs: &str) -> impl Iterator<Item = &str> {
 
 /// `parseSegs`: `Err(1|2)` on error, `Ok((segs, rval))` with `rval` 0 or 3. Like C's
 /// `static atomic_flag warned`, only the first bad spec reports (2, 3); later ones give 1
-/// and 0. The flag is never reset, so on a thread that renders again a bad spec is drawn as
-/// C's second one is.
+/// and 0. The command line does not capture, so that first spec is the process's. A
+/// library call captures, so the next call reports and draws the spec again.
 pub(crate) fn parse_segs(clrs: &str) -> Result<(Vec<ColorSeg>, i32), i32> {
-    thread_local! {
-        static WARNED: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
-    }
-    let test_and_set = || WARNED.with(|w| w.replace(true));
+    // `true` the first time in this process, or in this library call.
+    let first = || graphviz_pure_core::diag::emit_once("\0render\0parseSegs");
     let mut segs: Vec<ColorSeg> = Vec::new();
     let mut left = 1.0f64;
     let mut rval = 0;
@@ -67,7 +65,7 @@ pub(crate) fn parse_segs(clrs: &str) -> Result<(Vec<ColorSeg>, i32), i32> {
                 match graphviz_pure_core::strtod::strtod_rest(rest) {
                     Some((v, _)) if v >= 0.0 => (&tok[..i], v),
                     _ => {
-                        if test_and_set() {
+                        if !first() {
                             return Err(1);
                         }
                         agerrorf(&format!(
@@ -81,7 +79,7 @@ pub(crate) fn parse_segs(clrs: &str) -> Result<(Vec<ColorSeg>, i32), i32> {
         let mut v = v;
         let del = v - left;
         if del > 0.0 {
-            if !aeq0(del) && !test_and_set() {
+            if !aeq0(del) && first() {
                 // C's message has no newline: the next one continues the line.
                 agwarningf(&format!("Total size > 1 in \"{clrs}\" color spec "));
                 rval = 3;

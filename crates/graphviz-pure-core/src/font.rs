@@ -509,14 +509,13 @@ fn get_metrics_for_font_variant(
 
 /// `estimate_character_width_canonical` from `lib/common/textspan_lut.c`: width of one byte in
 /// `(units_per_em * 1)` points. Bytes `>= 128` (every byte of a UTF-8 multi-byte sequence) use
-/// the width of `' '`; unknown ASCII widths (`-1`) count as `0`; each case warns once per process.
+/// the width of `' '`; unknown ASCII widths (`-1`) count as `0`. Each case warns once per
+/// command-line process, and again on the next library call ([`crate::diag::emit_once`]).
 #[inline]
 fn estimate_character_width_canonical(variant_metrics: &[i16; 128], byte: u8) -> u16 {
-    use std::sync::atomic::{AtomicBool, Ordering};
-    static NON_ASCII_WARNED: AtomicBool = AtomicBool::new(false);
-    static NO_WIDTH_WARNED: AtomicBool = AtomicBool::new(false);
     let character = if byte >= 128 {
-        if crate::diag::reporting() && !NON_ASCII_WARNED.swap(true, Ordering::Relaxed) {
+        // A quiet repeat leaves the warning to the measurement C makes.
+        if crate::diag::reporting() && crate::diag::emit_once("\0font\0non-ascii-width") {
             crate::diag::agwarningf(&format!(
                 "Warning: no value for width of non-ASCII character {byte}. Falling back to \
                  width of space character\n"
@@ -528,7 +527,7 @@ fn estimate_character_width_canonical(variant_metrics: &[i16; 128], byte: u8) ->
     };
     let width = variant_metrics[usize::from(character)];
     if width == -1 {
-        if crate::diag::reporting() && !NO_WIDTH_WARNED.swap(true, Ordering::Relaxed) {
+        if crate::diag::reporting() && crate::diag::emit_once("\0font\0missing-ascii-width") {
             crate::diag::agwarningf(&format!(
                 "Warning: no value for width of ASCII character {character}. Falling back to 0\n"
             ));

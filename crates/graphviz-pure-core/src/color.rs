@@ -234,16 +234,68 @@ pub fn resolve_color_with_scheme(spec: &str, colorscheme: Option<&str>) -> Optio
     lookup_named_color(&resolved_name)
 }
 
+/// The active capture's unknown-color set lives in `top`. `below` holds the
+/// sets of captures it is nested in, and that `Vec` allocates only then. An
+/// empty set allocates nothing, so a capture that names no unknown color does not.
+struct CaptureColors {
+    top: Option<std::collections::HashSet<String>>,
+    below: Vec<std::collections::HashSet<String>>,
+}
+
+thread_local! {
+    /// One set per active [`crate::diag::capture`]. `top` is `None` outside a
+    /// capture, where [`warn_unknown_color`] uses the process-wide set.
+    static CAPTURE_COLORS: std::cell::RefCell<CaptureColors> =
+        const { std::cell::RefCell::new(CaptureColors { top: None, below: Vec::new() }) };
+}
+
+/// Starts a fresh unknown-color set for one [`crate::diag::capture`] frame.
+pub(crate) fn push_capture_colors() {
+    CAPTURE_COLORS.with(|frames| {
+        let mut frames = frames.borrow_mut();
+        if let Some(prev) = frames.top.take() {
+            frames.below.push(prev);
+        }
+        frames.top = Some(std::collections::HashSet::new());
+    });
+}
+
+/// Drops the set [`push_capture_colors`] pushed and restores the enclosing one.
+pub(crate) fn pop_capture_colors() {
+    CAPTURE_COLORS.with(|frames| {
+        let mut frames = frames.borrow_mut();
+        frames.top = frames.below.pop();
+    });
+}
+
 /// Prints `Warning: <name> is not a known color.` to stderr, once per distinct name, like
 /// `gvrender_resolve_color`.
+///
+/// Outside a capture the set is process-wide, which is C's once-per-process behaviour and
+/// what the command line keeps. A capture has its own set, so the next library call warns
+/// again.
 pub fn warn_unknown_color(name: &str) {
     use std::collections::HashSet;
     use std::sync::{Mutex, OnceLock};
     static SEEN: OnceLock<Mutex<HashSet<String>>> = OnceLock::new();
-    let seen = SEEN.get_or_init(|| Mutex::new(HashSet::new()));
-    if let Ok(mut seen) = seen.lock()
-        && seen.insert(name.to_string())
-    {
+    let fresh = CAPTURE_COLORS.with(|frames| {
+        frames
+            .borrow_mut()
+            .top
+            .as_mut()
+            .map(|seen| seen.insert(name.to_string()))
+    });
+    let fresh = match fresh {
+        Some(fresh) => fresh,
+        None => {
+            let seen = SEEN.get_or_init(|| Mutex::new(HashSet::new()));
+            let Ok(mut seen) = seen.lock() else {
+                return;
+            };
+            seen.insert(name.to_string())
+        }
+    };
+    if fresh {
         crate::diag::agwarningf(&format!("{name} is not a known color.\n"));
     }
 }

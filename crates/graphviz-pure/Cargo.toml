@@ -17,7 +17,6 @@ graphviz-pure-parser = { path = "../graphviz-pure-parser", version = "=0.2.3" }
 graphviz-pure-geom = { path = "../graphviz-pure-geom", version = "=0.2.3" }
 graphviz-pure-layout = { path = "../graphviz-pure-layout", version = "=0.2.3" }
 graphviz-pure-render = { path = "../graphviz-pure-render", version = "=0.2.3" }
-thiserror.workspace = true
 
 [dev-dependencies]
 serde_json.workspace = true
