@@ -8,6 +8,10 @@
 // site/src/data/issues.json with `files` (what was copied) and, when filed.json maps the
 // slug to a URL, `issue_url`, and copies each entry's directory into
 // site/public/whats-left/<slug>/.
+//
+// It also copies docs/issues/e2e-skips.json (the corpus inputs `gv-diff e2e` skips, each with
+// its cause) to site/src/data/e2e-skips.json, and checks that the list names exactly the
+// inputs the golden records as unstable, so the page cannot drift from the check.
 import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -21,7 +25,10 @@ const opt = (name, dflt) => {
 
 const manifestPath = opt('--manifest', join(root, 'docs/issues/manifest.json'));
 const filedPath = opt('--filed', join(root, 'docs/issues/filed.json'));
+const skipsPath = opt('--skips', join(root, 'docs/issues/e2e-skips.json'));
+const goldenPath = opt('--golden', join(root, 'tests/golden/e2e.libm-matched.json'));
 const outData = join(root, 'site/src/data/issues.json');
+const outSkips = join(root, 'site/src/data/e2e-skips.json');
 const outPublic = join(root, 'site/public/whats-left');
 
 const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
@@ -53,7 +60,40 @@ const out = manifest.map((issue) => {
 
 mkdirSync(dirname(outData), { recursive: true });
 writeFileSync(outData, JSON.stringify(out, null, 1) + '\n');
+
+// The inputs `gv-diff e2e` skips, with the cause of each. The list must name exactly the
+// inputs the golden records as unstable: a skipped input without a cause is an F2 gap.
+const skips = JSON.parse(readFileSync(skipsPath, 'utf8'));
+if (!Array.isArray(skips)) throw new Error(`${skipsPath}: expected an array`);
+const named = skips.map((s) => s.input);
+if (new Set(named).size !== named.length) throw new Error(`${skipsPath}: duplicate input`);
+if (existsSync(goldenPath)) {
+	const golden = JSON.parse(readFileSync(goldenPath, 'utf8'));
+	const unstable = new Set(golden.unstable ?? []);
+	const missing = [...unstable].filter((i) => !named.includes(i));
+	const extra = named.filter((i) => !unstable.has(i));
+	if (missing.length || extra.length) {
+		throw new Error(
+			`${relative(root, skipsPath)} does not match the ${unstable.size} unstable inputs of ` +
+				`${relative(root, goldenPath)}` +
+				(missing.length ? `; without a cause: ${missing.join(', ')}` : '') +
+				(extra.length ? `; not skipped by gv-diff e2e: ${extra.join(', ')}` : ''),
+		);
+	}
+}
+writeFileSync(outSkips, JSON.stringify(skips, null, 1) + '\n');
+
+// docs/porting/fuzzing.md lists the same inputs with their causes; the two must agree.
+const fuzzing = readFileSync(join(root, 'docs/porting/fuzzing.md'), 'utf8');
+const unlisted = named.filter((i) => !fuzzing.includes('`' + i + '`'));
+if (unlisted.length) {
+	throw new Error(
+		`docs/porting/fuzzing.md does not list these skipped inputs: ${unlisted.join(', ')}`,
+	);
+}
+
 console.log(
 	`site-issues: ${out.length} issues from ${relative(root, manifestPath)}` +
-		`${Object.keys(filed).length ? `, ${out.filter((i) => i.issue_url).length} filed` : ''}`,
+		`${Object.keys(filed).length ? `, ${out.filter((i) => i.issue_url).length} filed` : ''}` +
+		`, ${skips.length} skipped e2e inputs`,
 );

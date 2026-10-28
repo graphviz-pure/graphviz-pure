@@ -7,7 +7,7 @@ import { Code } from '@astrojs/starlight/components';
 import DiffViewer from '../../components/DiffViewer.astro';
 import Mark from '../../components/Mark.astro';
 import { issues, url, type Issue } from '../../lib/data';
-import { pair } from '../../lib/issues';
+import { classLabel, pair } from '../../lib/issues';
 
 export function getStaticPaths() {
 	return issues.map((i) => ({ params: { slug: i.slug }, props: { i } }));
@@ -31,7 +31,7 @@ const others = i.files.filter((f) => !['repro.gv', 'cmd.txt', 'cases.txt'].inclu
 ---
 
 <StarlightPage
-	frontmatter={{ title: i.title, description: `${i.upstream_c ? 'Upstream C behaviour' : 'Open difference in graphviz-pure'}: ${i.title}`, tableOfContents: false }}
+	frontmatter={{ title: i.title, description: `${i.class ? classLabel(i.class) : 'Open difference in graphviz-pure'}: ${i.title}`, tableOfContents: false }}
 >
 	<style is:global>
 		:root {
@@ -40,7 +40,8 @@ const others = i.files.filter((f) => !['repro.gv', 'cmd.txt', 'cases.txt'].inclu
 		}
 	</style>
 	<dl class="meta not-content">
-		<div><dt class="label">Kind</dt><dd>{i.upstream_c ? <Mark kind="upstream" label="Upstream C behaviour" /> : <Mark kind="off" label="Port bug" />}</dd></div>
+		<div><dt class="label">Kind</dt><dd>{i.class ? <Mark kind="upstream" label="Accepted difference" /> : <Mark kind="off" label="Port bug" />}</dd></div>
+		{i.class && <div><dt class="label">Class</dt><dd>{classLabel(i.class)}</dd></div>}
 		<div><dt class="label">Severity</dt><dd class="mono">{i.severity}</dd></div>
 		<div><dt class="label">Engine</dt><dd><code>{i.engine}</code></dd></div>
 		<div><dt class="label">Category</dt><dd>{i.category}</dd></div>
@@ -91,7 +92,7 @@ const others = i.files.filter((f) => !['repro.gv', 'cmd.txt', 'cases.txt'].inclu
 		{others.length > 0 && null}. Source: <code>{i.dir}</code>.
 	</p>
 
-	<p class="back"><a href={url('whats-left/')}>All open issues</a></p>
+	<p class="back"><a href={url('whats-left/')}>All known differences</a></p>
 </StarlightPage>
 
 <style>

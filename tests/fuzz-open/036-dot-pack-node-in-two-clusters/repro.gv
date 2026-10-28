@@ -1,0 +1,10 @@
+digraph "G" {
+  pack="true";
+  subgraph "cluster_0" {
+    "v0" [];
+    "v6" [];
+  }
+  subgraph "cluster_2" {
+    "v6" -> "v0";
+  }
+}

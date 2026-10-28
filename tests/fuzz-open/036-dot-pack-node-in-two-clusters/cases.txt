@@ -1,0 +1,1 @@
+r1/diff/s1548.gv seed=1548  # minimised with the bounding-box fix from #100 applied

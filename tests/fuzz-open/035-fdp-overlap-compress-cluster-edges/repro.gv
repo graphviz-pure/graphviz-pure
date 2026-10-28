@@ -1,0 +1,5 @@
+graph {
+  subgraph cluster_a { a1 -- a2 }
+  subgraph cluster_b { b1 -- b2 }
+  cluster_a -- cluster_b
+}

@@ -2,7 +2,7 @@
 import StarlightPage from '@astrojs/starlight/components/StarlightPage.astro';
 import IssueRow from '../../components/IssueRow.astro';
 import { ENGINES, fidelity, fmt, issues, severityRank, url } from '../../lib/data';
-import { portBugs, upstream } from '../../lib/issues';
+import { CLASSES, accepted, acceptedIn, portBugs, skipped } from '../../lib/issues';
 
 const engines = ENGINES.filter((e) => issues.some((i) => i.engine === e)).concat(
 	[...new Set(issues.map((i) => i.engine))].filter((e) => !ENGINES.includes(e)),
@@ -11,13 +11,15 @@ const severities = [...new Set(issues.map((i) => i.severity))].sort((a, b) => se
 const count = (sev: string, eng: string) => issues.filter((i) => i.severity === sev && i.engine === eng).length;
 const twopi = fidelity.layout.find((l) => l.name === 'twopi')!;
 const lastFuzz = fidelity.fuzz.rounds[fidelity.fuzz.rounds.length - 1];
+const byClass = CLASSES.map((c) => ({ ...c, list: acceptedIn(c.key) }));
 ---
 
-<StarlightPage frontmatter={{ title: "What's left", description: 'Open differences between graphviz-pure and C Graphviz 16.1.0: bugs in the port, and C behaviour the port does not or should not reproduce.' }} headings={[{ depth: 2, slug: 'port', text: 'In the port' }, { depth: 2, slug: 'upstream', text: 'Upstream C behaviour' }, { depth: 2, slug: 'known', text: 'In numbers' }]}>
+<StarlightPage frontmatter={{ title: "What's left", description: 'Open differences between graphviz-pure and C Graphviz 16.1.0: bugs in the port, and C behaviour the port does not or should not reproduce.' }} headings={[{ depth: 2, slug: 'port', text: 'In the port' }, { depth: 2, slug: 'accepted', text: 'Accepted differences' }, { depth: 2, slug: 'skipped', text: 'The inputs the full check skips' }, { depth: 2, slug: 'known', text: 'In numbers' }]}>
 	<p class="intro">
 		Everything known not to match, each with a minimised reproducer, C's output and the port's. <strong>In the port</strong> means the port
-		should change. <strong>Upstream C behaviour</strong> means C's output comes from undefined behaviour, a crash path or nondeterminism, so it
-		cannot or should not be reproduced byte for byte; the port should still behave sensibly there.
+		should change. <strong>Accepted differences</strong> means C's output comes from undefined behaviour, a crash path or nondeterminism, so it
+		cannot or should not be reproduced byte for byte; the port should still behave sensibly there. Every accepted difference is in one of four
+		classes: C nondeterminism or undefined behaviour, a C crash or assertion, C's error path, or the platform libm.
 	</p>
 
 	{issues.length > 0 && (
@@ -32,10 +34,34 @@ const lastFuzz = fidelity.fuzz.rounds[fidelity.fuzz.rounds.length - 1];
 	)}
 
 	<h2 id="port">In the port <span class="n">{portBugs.length}</span></h2>
-	{portBugs.length ? <ul class="list">{portBugs.map((i) => <IssueRow i={i} />)}</ul> : <p class="empty">No open port bugs.</p>}
+	{portBugs.length ? <ul class="list">{portBugs.map((i) => <IssueRow i={i} />)}</ul> : <p class="empty">No open difference in the port: every case the fuzzing rounds found is fixed or accepted. The fuzzing round on the 1.0 candidate (<a href="https://github.com/graphviz-pure/graphviz-pure/issues/511">issue #511</a>) is what may still find one.</p>}
 
-	<h2 id="upstream">Upstream C behaviour <span class="n">{upstream.length}</span></h2>
-	{upstream.length ? <ul class="list">{upstream.map((i) => <IssueRow i={i} />)}</ul> : <p class="empty">None recorded.</p>}
+	<h2 id="accepted">Accepted differences <span class="n">{accepted.length}</span></h2>
+	{byClass.map((c) => (
+		<section>
+			<h3 id={`class-${c.key}`}>{c.label} <span class="n">{c.list.length}</span></h3>
+			{c.list.length ? <ul class="list">{c.list.map((i) => <IssueRow i={i} />)}</ul> : <p class="empty">None.</p>}
+		</section>
+	))}
+
+	<h2 id="skipped">The inputs the full check skips <span class="n">{skipped.length}</span></h2>
+	<p class="intro">
+		The full-pipeline check compares the port's whole <code>-Tsvg</code> with C's, byte for byte, on every corpus input. These
+		{skipped.length} inputs it does not compare, because C has no single output for them: C's own output changes from run to run, or C
+		crashes. Each one has the same cause as an accepted difference above.
+	</p>
+	<table class="ledger skips">
+		<thead><tr><th>Input</th><th>Class</th><th>Cause</th></tr></thead>
+		<tbody>
+			{skipped.map((s) => (
+				<tr>
+					<td class="mono">{s.input}</td>
+					<td>{CLASSES.find((c) => c.key === s.class)?.short ?? s.class}</td>
+					<td>{s.cause}{s.issue && <> <a href={s.issue}>Issue</a></>}</td>
+				</tr>
+			))}
+		</tbody>
+	</table>
 
 	<h2 id="known">In numbers</h2>
 	<ul class="known">
@@ -43,17 +69,22 @@ const lastFuzz = fidelity.fuzz.rounds[fidelity.fuzz.rounds.length - 1];
 		<li><strong>{fmt(fidelity.e2e.stock.libm_only)} corpus files differ from stock C on macOS</strong> only because C there calls Apple's libm; the port equals C computing with the same math on each. These are not bugs, by policy: every build uses the same math library and never follows a platform libm (<a href={url('porting/libm/')}>The math library</a>, <a href={url('fidelity/#stock-c-on-macos')}>the file list</a>).</li>
 		<li><strong>{twopi.total - twopi.exact} twopi layouts</strong>: C routes the arrows graphs differently from run to run (<a href={url('whats-left/twopi-arrows-c-nondeterministic-routing/')}>issue</a>).</li>
 		<li><strong>{(100 - lastFuzz.all).toFixed(1)}% of the last fuzzing round</strong>: every remaining case belongs to one of the issues above; the round-by-round record is in <a href={url('porting/fuzzing/')}>the fuzzing notes</a>.</li>
-		<li><strong>stderr</strong>: exit status matches, and so does the wording of DOT syntax errors; some warning texts do not, and a few malformed inputs are rejected at a different token (<a href={url('whats-left/stderr-missing-warnings/')}>warnings</a>).</li>
+		<li><strong>stderr</strong>: the port prints C's warnings, and so does the wording of DOT syntax errors.</li>
 	</ul>
 </StarlightPage>
 
 <style>
 	.intro { color: var(--key-2); }
 	.matrix { margin-top: 1.5rem; max-width: 40rem; }
-	h2 .n { font-family: var(--face-mono); font-size: var(--sl-text-sm); font-weight: 400; color: var(--key-3); margin-left: 0.5rem; }
+	h2 .n, h3 .n { font-family: var(--face-mono); font-size: var(--sl-text-sm); font-weight: 400; color: var(--key-3); margin-left: 0.5rem; }
+	h3 { margin-top: 1.5rem; }
 	.list { list-style: none; padding: 0; margin: 0; border-top: 0.5px solid var(--rule-strong); }
 	.empty { color: var(--key-3); }
 	.known li { color: var(--key-2); }
 	.known strong { color: var(--key); }
 	.known a { color: var(--register); }
+	.skips { margin-top: 1rem; }
+	.skips td { vertical-align: top; }
+	.skips td.mono { font-family: var(--face-mono); font-size: var(--sl-text-xs); white-space: nowrap; }
+	.skips a { color: var(--register); }
 </style>

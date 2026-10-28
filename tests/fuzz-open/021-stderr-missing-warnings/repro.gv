@@ -1,5 +1,0 @@
-graph G {
- splines=none
- a [xlabel=q, label=<<TABLE FOO="1"><TR><TD>x</TD></TR></TABLE>>]
- a:nosuch -- b [label=x]
-}

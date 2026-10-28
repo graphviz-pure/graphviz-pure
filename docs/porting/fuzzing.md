@@ -480,7 +480,7 @@ Robustness (debug overflow and panics)
   Issue #197; tested by `ipsep_vpsc_cycle_error_ends_the_layout` in
   `crates/graphviz-pure-cli/tests/cli.rs`.
 
-Diagnostics (stderr; part of open case `021-stderr-missing-warnings`, issue #30)
+Diagnostics (stderr; case `021-stderr-missing-warnings`, issue #30, closed)
 * Unknown ports and compass points warn from `poly_port`/`record_port`, once per `chkPort`
   call, in `agfstnode`/`agfstout` order with each edge's label diagnostics; patchwork, which
   never calls `common_init_edge`, resolves no ports and prints neither.
@@ -518,19 +518,24 @@ Diagnostics (stderr; part of open case `021-stderr-missing-warnings`, issue #30)
   the other end's cluster), and `agcontains` looks at every ancestor, not only the parent.
 * neato's ortho obstacles shrink to the node centre under a scaling `sep`/`esep`, as
   `makeObstacle` multiplies by its zero margin, so no touch warning is printed there.
-* The repros are in `crates/graphviz-pure-cli/tests/cli.rs` (`issue30_*`). Still missing,
-  with ignored tests there: HTML `<IMG>` file errors and the `shapefile`/`epsf` user-shape
-  warnings, because the port loads no images (issue #130). The expat encoding errors of
-  HTML labels (invalid UTF-8, `charset=BIG-5`) are also missing (issue #131).
+* The repros are in `crates/graphviz-pure-cli/tests/cli.rs` (`issue30_*`). The HTML `<IMG>`
+  file errors and the `shapefile`/`epsf` user-shape warnings are reported too, although the
+  port loads no images (issue #130). The expat encoding errors of HTML labels (invalid
+  UTF-8, `charset=BIG-5`) are reported as well (issue #131).
 
-## Differences that remain: the open issues
+## Differences that remain
 
-The remaining differences are triaged into one issue draft per root cause. The drafts are
-in [`docs/issues/manifest.json`](../issues/manifest.json) (title, labels, severity,
-seeds and the issue body). Each one has a directory under
+The remaining differences are triaged into one issue per root cause. The issues are in
+[`docs/issues/manifest.json`](../issues/manifest.json) (title, labels, severity, seeds, the
+issue body and the class the difference falls into). Each one has a directory under
 [`tests/fuzz-open/`](../../tests/fuzz-open) with the smallest reproducer (`repro.gv`),
 C's and the port's output (`c.*`, `rust.*`), the command (`cmd.txt`) and the fuzz cases
-it covers (`cases.txt`, with seeds).
+it covers (`cases.txt`, with seeds). The [What's left](https://graphviz-pure.github.io/whats-left/)
+page lists them by class.
+
+The classes are the ones of the 1.0 roadmap's F2 criterion: C nondeterminism or undefined
+behaviour, a C crash or assertion, C's error path, or the platform libm. A difference with
+no class is one in the port: the port should change. There is none left.
 
 How the triage was done:
 
@@ -571,25 +576,83 @@ notes: the circo/neato "record port 0.1pt off" difference is the record obstacle
 itself. The ortho variant also no longer has a gap: with a longer timeout, C finishes
 `b100`, `b103` and `b104`, and their outputs match the port's.
 
-| Issue | Severity | Fuzz cases | Status |
-|---|---|---:|---|
-| [`019-neato-polyline-compass-port-endpoint`](../../tests/fuzz-open/019-neato-polyline-compass-port-endpoint) | low | — | port |
-| [`021-stderr-missing-warnings`](../../tests/fuzz-open/021-stderr-missing-warnings) | low | — | port (partly fixed) |
-| [`023-neato-circuit-kk-agseq-index-crash`](../../tests/fuzz-open/023-neato-circuit-kk-agseq-index-crash) | high | 1 | upstream C, wontfix |
-| [`024-neato-ipsep-node-in-two-clusters-size-max-alloc`](../../tests/fuzz-open/024-neato-ipsep-node-in-two-clusters-size-max-alloc) | high | 1 | upstream C, wontfix |
-| [`025-fdp-cluster-address-dependent-layout`](../../tests/fuzz-open/025-fdp-cluster-address-dependent-layout) | medium | 3 | upstream C, wontfix |
-| [`026-neato-multispline-face-order`](../../tests/fuzz-open/026-neato-multispline-face-order) | medium | 3 | upstream C, wontfix |
-| [`027-dot-sameport-record-uninit-pathend`](../../tests/fuzz-open/027-dot-sameport-record-uninit-pathend) | medium | 2 | upstream C, wontfix |
-| [`028-pack-filledge-one-point-spline`](../../tests/fuzz-open/028-pack-filledge-one-point-spline) | medium | 2 | matches C (#456) |
-| [`029-neato-fdp-start-time-seeded`](../../tests/fuzz-open/029-neato-fdp-start-time-seeded) | low | 11 | upstream C, wontfix |
-| [`030-sfdp-smoothing-rng-c-unstable`](../../tests/fuzz-open/030-sfdp-smoothing-rng-c-unstable) | low | 1 | upstream C, wontfix |
-| [`031-platform-libm-apple`](../../tests/fuzz-open/031-platform-libm-apple) | medium | — | wontfix (platform) |
-| [`032-twopi-arrows-c-nondeterministic-routing`](../../tests/fuzz-open/032-twopi-arrows-c-nondeterministic-routing) | medium | — | upstream C, wontfix |
-| [`033-latin1-plain-freed-label`](../../tests/fuzz-open/033-latin1-plain-freed-label) | low | — | upstream C, wontfix |
-| [`034-html-cell-dashed-style-overread`](../../tests/fuzz-open/034-html-cell-dashed-style-overread) | low | — | upstream C, wontfix |
+| Issue | Severity | Class | Fuzz cases | Status |
+|---|---|---|---:|---|
+| [`019-neato-polyline-compass-port-endpoint`](../../tests/fuzz-open/019-neato-polyline-compass-port-endpoint) | low | C nondeterminism | — | accepted (#28) |
+| [`023-neato-circuit-kk-agseq-index-crash`](../../tests/fuzz-open/023-neato-circuit-kk-agseq-index-crash) | high | C crash | 1 | accepted (#32) |
+| [`024-neato-ipsep-node-in-two-clusters-size-max-alloc`](../../tests/fuzz-open/024-neato-ipsep-node-in-two-clusters-size-max-alloc) | high | C error path | 1 | accepted (#33) |
+| [`025-fdp-cluster-address-dependent-layout`](../../tests/fuzz-open/025-fdp-cluster-address-dependent-layout) | medium | C nondeterminism | 3 | accepted (#34) |
+| [`026-neato-multispline-face-order`](../../tests/fuzz-open/026-neato-multispline-face-order) | medium | C nondeterminism | 3 | accepted (#35) |
+| [`027-dot-sameport-record-uninit-pathend`](../../tests/fuzz-open/027-dot-sameport-record-uninit-pathend) | medium | C nondeterminism | 2 | accepted (#36) |
+| [`028-pack-filledge-one-point-spline`](../../tests/fuzz-open/028-pack-filledge-one-point-spline) | medium | C nondeterminism | 2 | accepted (#37), matches C now (#456) |
+| [`029-neato-fdp-start-time-seeded`](../../tests/fuzz-open/029-neato-fdp-start-time-seeded) | low | C nondeterminism | 11 | accepted (#38) |
+| [`030-sfdp-smoothing-rng-c-unstable`](../../tests/fuzz-open/030-sfdp-smoothing-rng-c-unstable) | low | C nondeterminism | 1 | accepted (#39) |
+| [`031-platform-libm-apple`](../../tests/fuzz-open/031-platform-libm-apple) | medium | platform libm | — | accepted (#40) |
+| [`032-twopi-arrows-c-nondeterministic-routing`](../../tests/fuzz-open/032-twopi-arrows-c-nondeterministic-routing) | medium | C nondeterminism | — | accepted (#41) |
+| [`033-latin1-plain-freed-label`](../../tests/fuzz-open/033-latin1-plain-freed-label) | low | C nondeterminism | — | accepted (#42) |
+| [`034-html-cell-dashed-style-overread`](../../tests/fuzz-open/034-html-cell-dashed-style-overread) | low | C nondeterminism | — | accepted (#43) |
+| [`035-fdp-overlap-compress-cluster-edges`](../../tests/fuzz-open/035-fdp-overlap-compress-cluster-edges) | medium | C nondeterminism | — | accepted (#476) |
+| [`036-dot-pack-node-in-two-clusters`](../../tests/fuzz-open/036-dot-pack-node-in-two-clusters) | medium | C error path | 1 | accepted (#101) |
 
 The C nondeterminism noted above still applies to the corpus. fdp and neato with
 clusters, twopi with samehead arrows, and VPSC (`mode=ipsep`, which iterates a
 `std::set` of pointers) depend on heap addresses. `gen-golden.sh` and
 `gv-diff e2e --generate` rewrite those corpus files on every run, so their committed
 goldens and hashes are kept.
+
+## The inputs the full check skips
+
+`gv-diff e2e` compares the port's whole `-Tsvg` with C's, byte for byte, on every corpus
+input. It does not compare the 14 inputs below, because C has no single output for them:
+C's own output changes from run to run, or C crashes and writes nothing. Each has the same
+cause as an accepted difference above. The list is
+[`docs/issues/e2e-skips.json`](../issues/e2e-skips.json), which the
+[What's left](https://graphviz-pure.github.io/whats-left/) page shows;
+`scripts/site-issues.mjs` checks that it names exactly the inputs the golden records as
+unstable, so a skipped input cannot lose its cause.
+
+| Input | Class | Cause |
+|---|---|---|
+| `twopi/fx_arrows` | C nondeterminism | C routes the arrows graphs differently from run to run (#41) |
+| `twopi/wild_gv16_directed_oldarrows_f70da3` | C nondeterminism | as above |
+| `twopi/wild_gv16_graphs_arrows_148b6b` | C nondeterminism | as above |
+| `twopi/wild_gv16_graphs_arrowsize_46ccd8` | C nondeterminism | as above |
+| `twopi/wild_gv16_graphs_newarrows_769825` | C nondeterminism | as above |
+| `twopi/wild_gv16_linux_x86_arrows_dot_1ce23f` | C nondeterminism | as above |
+| `twopi/wild_wild_graphs_arrows_a4826e` | C nondeterminism | as above |
+| `twopi/wild_wild_graphs_arrowsize_ccef6e` | C nondeterminism | as above |
+| `neato/fuzz_ipsep_cluster_other_component` | C crash | C aborts on `bitarray.h`'s assertion (exit 134) |
+| `neato/fuzz_ipsep_vpsc_clusters` | C crash | C aborts on the VPSC solver's `Cycle Error!` (exit 134) |
+| `neato/fuzz_nan_pin_edge` | C crash | C dies with SIGSEGV (exit 139) |
+| `fdp/wild_gv16_undirected_ngk10_4_793340` | C nondeterminism | C's routing of the two-way multi-edge pair is a near-tie on GTS's triangulation |
+| `fdp/wild_gv16_infosrc_plugins_1a797f` | C nondeterminism | C's fdp layout of a graph with clusters depends on the heap addresses of the derived graph's nodes (#34) |
+| `sfdp/wild_gv16_linux_x86_neatosplines_neato1_448ced` | C nondeterminism | GTS returns the Delaunay edges in a different order on every run, and the 1000 prism tries amplify it |
+
+The twopi arrows graphs tie in C's routing: nodes `Z`, `i` and `I` are exactly vertically
+aligned, so the edge between `Z` and `I` can run straight or pass the obstacle in between
+on either side. The same C binary gives 3 or 4 different SVGs over 20 runs of each of the
+8 files; the port is deterministic and always draws one of C's routes.
+
+The last two inputs had no recorded cause until #502. Both were measured again on the
+Linux C build (glibc's libm, no fused multiply-adds, GTS 0.7), where they are stable:
+20 `-Tsvg` runs and 20 `-Tdot` runs give one output each, with the port's math
+interposed as well. The instability is in C, not in the input:
+
+- For `fdp/wild_gv16_infosrc_plugins_1a797f` it is the heap address of the derived graph.
+  C's `lib/fdpgen/layout.c:466` (`if (hd > tl)`), `:501` (`if (dn > m)`) and `:634`
+  (`genPorts`) compare `Agnode_t *` pointers, so the derived edges and the ports are
+  ordered by address; the input has 11 clusters, so the derived-graph path is used.
+  Changing glibc's allocator tuning changes C's output here: `tcache_count=0`,
+  `tcache_count=100`, `MALLOC_TOP_PAD_=0` and `MALLOC_MMAP_THRESHOLD_=0` each give a
+  different drawing from the same binary and the same input.
+- For `sfdp/wild_gv16_linux_x86_neatosplines_neato1_448ced` it is the order GTS returns
+  the Delaunay edges in. The surface's face hash is keyed by pointers, so the order
+  changes on every run: a program that mirrors `delaunay_tri` (`lib/neatogen/delaunay.c`)
+  on the same 36 points gave 30 different edge orders in 30 runs, with the same edge set
+  every time. The input sets `overlap=false`, so sfdp runs the prism overlap removal with
+  1000 tries, and each try adds the entries of the overlap matrix in that order
+  (`call_tri`, `lib/neatogen/call_tri.c:35`), which shifts the summation order of the CG
+  solve by an ulp; the tries amplify it into a different layout.
+
+The port reproduces macOS's stock C byte for byte on the sfdp input (the hash of
+`tests/golden/e2e.json`), so the difference is C's, not the port's.

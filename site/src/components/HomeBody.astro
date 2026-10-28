@@ -15,7 +15,7 @@ const off = f.e2e.corpora
 const stock = f.e2e.stock;
 const twopi = f.layout.find((l) => l.name === 'twopi')!;
 const lastFuzz = f.fuzz.rounds[f.fuzz.rounds.length - 1];
-const portBugs = issues.filter((i) => !i.upstream_c).length;
+const portBugs = issues.filter((i) => !i.class).length;
 const upstream = issues.length - portBugs;
 const live = samples.filter((s) => s.identical).length;
 ---
@@ -93,7 +93,7 @@ const live = samples.filter((s) => s.identical).length;
 			<li>
 				<Mark kind="pending" />
 				<span>
-					<strong class="num">{issues.length}</strong> open issues: {portBugs} in graphviz-pure and {upstream} in how Graphviz itself
+					<strong class="num">{issues.length}</strong> known differences: {portBugs} in graphviz-pure and {upstream} in how Graphviz itself
 					behaves. <a href={url('whats-left/')}>See them all</a>
 				</span>
 			</li>

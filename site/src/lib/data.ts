@@ -1,6 +1,7 @@
 import fidelityJson from '../data/fidelity.json';
 import samplesJson from '../data/samples.json';
 import issuesJson from '../data/issues.json';
+import e2eSkipsJson from '../data/e2e-skips.json';
 
 export const BASE = import.meta.env.BASE_URL.replace(/\/?$/, '/');
 /** A root-relative URL under the site's base: url('gallery/') -> /graphviz-pure/gallery/ */
@@ -40,11 +41,23 @@ export interface Issue {
 	case_count: number;
 	upstream_c: boolean;
 	close_as_wontfix: boolean;
+	/** The F2 class of an accepted difference; absent for an open difference in the port. */
+	class?: string;
 	body: string;
 	files: string[];
 	issue_url?: string;
 }
 export const issues: Issue[] = issuesJson as Issue[];
+
+/** A corpus input `gv-diff e2e` skips, with the cause of the skip. */
+export interface E2eSkip {
+	input: string;
+	class: string;
+	cause: string;
+	issue: string | null;
+	where: string;
+}
+export const e2eSkips: E2eSkip[] = e2eSkipsJson as E2eSkip[];
 
 export const ENGINES = ['dot', 'neato', 'fdp', 'sfdp', 'circo', 'twopi', 'osage', 'patchwork'];
 const SEVERITY = ['crash', 'critical', 'high', 'major', 'medium', 'minor', 'low', 'cosmetic'];
