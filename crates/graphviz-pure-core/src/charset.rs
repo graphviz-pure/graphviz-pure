@@ -136,7 +136,7 @@ pub fn to_text(s: &str) -> Cow<'_, str> {
     }
 }
 
-/// A string in the decoded form, for the entry points that take it (`graphviz_pure::decoded`).
+/// A string in the decoded form, for callers that take file bytes rather than text.
 /// It is made by decoding bytes or converting text, so text and decoded strings can't be
 /// passed for each other by mistake.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]

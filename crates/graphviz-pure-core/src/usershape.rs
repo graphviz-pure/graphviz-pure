@@ -17,7 +17,6 @@ mod size;
 
 pub use size::ImageType;
 
-use serde::{Deserialize, Serialize};
 use std::cell::RefCell;
 use std::cmp::Ordering;
 use std::collections::{BTreeMap, HashMap, HashSet};
@@ -127,7 +126,7 @@ impl RunState {
 /// The usershape context of one graph's layout (`graph_init`'s globals and what the sizings
 /// found), which the layout leaves on the graph (`GraphLayout::usershapes`) and the
 /// renderers draw from ([`rendering`]).
-#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq)]
 pub struct UserShapes {
     /// `Gvimagepath`: the graph's `imagepath`, else `Gvfilepath`.
     pub imagepath: Option<String>,
@@ -147,7 +146,7 @@ pub struct UserShapes {
 }
 
 /// `epsf_init` of one node.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct EpsfNode {
     pub node: String,
     pub shapefile: Option<String>,
@@ -464,7 +463,7 @@ fn strerror(e: &io::Error) -> String {
 /// the size its header gives (`dpi` 0: the size is in pixels at the graph's resolution).
 /// A name C finds as a shape library member (`find_user_shape`) has type `(lib)` and
 /// size 0x0.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct UserShape {
     pub name: String,
     pub ty: ImageType,
@@ -650,7 +649,7 @@ fn scan_bounding_box(line: &[u8], v: &mut [i32; 4]) -> usize {
 
 /// An epsf file `user_init` read: its `%%BoundingBox` and its `macro_id`, the number of
 /// the PostScript procedure `user_shape_N` that `epsf_gencode` calls.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct EpsfShape {
     pub bb: [i32; 4],
     pub macro_id: i32,

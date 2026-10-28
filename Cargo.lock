@@ -239,7 +239,6 @@ dependencies = [
  "graphviz-pure-layout",
  "graphviz-pure-parser",
  "graphviz-pure-render",
- "serde",
  "serde_json",
  "thiserror",
 ]
@@ -249,10 +248,11 @@ name = "graphviz-pure-cli"
 version = "0.2.3"
 dependencies = [
  "dhat",
- "graphviz-pure",
  "graphviz-pure-core",
+ "graphviz-pure-layout",
  "graphviz-pure-parser",
  "graphviz-pure-raster",
+ "graphviz-pure-render",
 ]
 
 [[package]]
@@ -260,8 +260,6 @@ name = "graphviz-pure-core"
 version = "0.2.3"
 dependencies = [
  "libm",
- "serde",
- "serde_json",
  "thiserror",
 ]
 
@@ -269,9 +267,10 @@ dependencies = [
 name = "graphviz-pure-diff"
 version = "0.2.3"
 dependencies = [
- "graphviz-pure",
  "graphviz-pure-core",
+ "graphviz-pure-layout",
  "graphviz-pure-parser",
+ "graphviz-pure-render",
  "roxmltree",
  "serde",
  "serde_json",
@@ -297,7 +296,6 @@ name = "graphviz-pure-parser"
 version = "0.2.3"
 dependencies = [
  "graphviz-pure-core",
- "thiserror",
 ]
 
 [[package]]
@@ -326,8 +324,8 @@ version = "0.2.3"
 dependencies = [
  "graphviz-pure-core",
  "graphviz-pure-geom",
+ "graphviz-pure-layout",
  "graphviz-pure-parser",
- "serde",
  "serde_json",
 ]
 
@@ -337,6 +335,9 @@ version = "0.2.3"
 dependencies = [
  "graphviz-pure",
  "graphviz-pure-core",
+ "graphviz-pure-layout",
+ "graphviz-pure-parser",
+ "graphviz-pure-render",
  "serde",
  "serde_json",
  "wasm-bindgen",

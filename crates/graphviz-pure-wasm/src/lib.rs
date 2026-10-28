@@ -75,12 +75,12 @@ pub fn render_all_bytes(
 ) -> std::result::Result<Vec<u8>, JsValue> {
     let src = charset::Decoded::decode_slice(dot_source);
     let (engine, format) = (charset::from_text(engine), charset::from_text(format));
-    let (parts, err) = graphviz_pure::decoded::render_dot_all_partial(
+    let (parts, err) = graphviz_pure_render::decoded::render_dot_all_partial(
         &src,
         &engine,
         &format,
-        &graphviz_pure::GlobalAttrs::default(),
-        graphviz_pure::LayoutOptions::default(),
+        &graphviz_pure_parser::GlobalAttrs::default(),
+        graphviz_pure_layout::LayoutOptions::default(),
     );
     match err {
         Some(e) if parts.is_empty() => Err(js_error(e)),
@@ -108,9 +108,13 @@ pub fn inspect_graph(dot_source: &str, engine: &str) -> std::result::Result<Stri
 
 /// [`inspect_graph`] without the `JsValue`.
 fn inspect_text(dot_source: &str, engine: &str) -> Result<String, String> {
-    let layout_engine = graphviz_pure::LayoutEngine::parse(engine).map_err(|e| e.to_string())?;
-    let mut graph = graphviz_pure::parse_dot(dot_source).map_err(|e| e.to_string())?;
-    graphviz_pure::layout_graph(&mut graph, layout_engine).map_err(|e| e.to_string())?;
+    let layout_engine =
+        graphviz_pure_layout::LayoutEngine::parse(engine).map_err(|e| e.to_string())?;
+    // `parse_dot` on the facade converts text first; a real char of the raw-byte range is
+    // its UTF-8 bytes, and `to_text` below turns the graph's name back into that char.
+    let src = charset::from_text(dot_source);
+    let mut graph = graphviz_pure_parser::parse_dot(&src).map_err(error_text)?;
+    graphviz_pure_layout::layout_graph(&mut graph, layout_engine).map_err(error_text)?;
     let stats = GraphStats {
         // the parsed graph holds the decoded form
         name: charset::to_text(&graph.name).into_owned(),

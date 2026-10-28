@@ -1,4 +1,4 @@
-//! The entry points of the crate root for text already in the port's decoded form
+//! The entry points for text already in the port's decoded form
 //! ([`charset`]), which a [`Decoded`] holds: file bytes read with [`Decoded::decode`], or
 //! text converted with [`Decoded::from_text`]. Engine and format names, [`GlobalAttrs`] values
 //! and a [`Graph`]'s contents are decoded too, and so is what these functions return, errors
@@ -6,28 +6,28 @@
 //! The command line and the wasm bindings' byte entry point use these, so nothing is
 //! converted twice.
 //!
-//! [`charset`]: crate::charset
-//! [`charset::encode`]: crate::charset::encode
-//! [`charset::to_text`]: crate::charset::to_text
+//! [`charset`]: graphviz_pure_core::charset
+//! [`charset::encode`]: graphviz_pure_core::charset::encode
+//! [`charset::to_text`]: graphviz_pure_core::charset::to_text
 
-use crate::plugins::Plugins;
-use crate::{
-    GlobalAttrs, Graph, LAYOUT_PLUGINS, LayoutEngine, LayoutOptions, OutputFormat, RandState,
-    Result, in_rand_run, layout_select, plugin_list, with_rand_state,
-};
-use graphviz_pure_core::GraphvizError;
+use crate::OutputFormat;
+use crate::plugins::{LAYOUT_PLUGINS, Plugins, layout_select, plugin_list};
+use graphviz_pure_core::{Graph, GraphvizError, Result};
+use graphviz_pure_layout::cutil::{RandState, in_rand_run, with_rand_state};
+use graphviz_pure_layout::{LayoutEngine, LayoutOptions};
+use graphviz_pure_parser::GlobalAttrs;
 
+pub use crate::{GraphJobs, render_graph, render_graph_named};
 pub use graphviz_pure_core::charset::Decoded;
 pub use graphviz_pure_layout::{layout_graph, layout_graph_in_run, layout_graph_with_options};
 /// The graphs of a decoded input one at a time ([`graph_stream`]).
 pub use graphviz_pure_parser::GraphStream;
-pub use graphviz_pure_render::{GraphJobs, render_graph, render_graph_named};
 
-/// [`crate::render_dot`] on decoded text: renders the first graph in `dot_source`.
+/// `graphviz_pure::render_dot` on decoded text: renders the first graph in `dot_source`.
 pub fn render_dot(dot_source: &Decoded, engine: &str, format: &str) -> Result<String> {
     let output_format = OutputFormat::parse(format)?;
     // Each call is one C process: per-process counters (gradient and anchor ids) restart.
-    graphviz_pure_render::reset_render_state();
+    crate::reset_render_state();
     let graph = parse_dot(dot_source)?;
     render_parsed(
         graph,
@@ -38,7 +38,7 @@ pub fn render_dot(dot_source: &Decoded, engine: &str, format: &str) -> Result<St
     )
 }
 
-/// [`crate::render_dot_all`] on decoded text.
+/// `graphviz_pure::render_dot_all` on decoded text.
 pub fn render_dot_all(
     dot_source: &Decoded,
     engine: &str,
@@ -54,7 +54,7 @@ pub fn render_dot_all(
     )
 }
 
-/// [`crate::render_dot_all_with_options`] on decoded text.
+/// `graphviz_pure::render_dot_all_with_options` on decoded text.
 pub fn render_dot_all_with_options(
     dot_source: &Decoded,
     engine: &str,
@@ -63,7 +63,7 @@ pub fn render_dot_all_with_options(
     options: LayoutOptions,
 ) -> Result<Vec<String>> {
     let output_format = OutputFormat::parse(format)?;
-    graphviz_pure_render::reset_render_state();
+    crate::reset_render_state();
     let graphs = parse_dot_all(dot_source, globals)?;
     // One call is one C process: its graphs share the C library's generator states (the
     // caller's, inside a `with_rand_state`) and `Nop`.
@@ -76,7 +76,7 @@ pub fn render_dot_all_with_options(
     })
 }
 
-/// [`crate::render_dot_all_partial`] on decoded text.
+/// `graphviz_pure::render_dot_all_partial` on decoded text.
 pub fn render_dot_all_partial(
     dot_source: &Decoded,
     engine: &str,
@@ -93,7 +93,7 @@ pub fn render_dot_all_partial(
     })
 }
 
-/// [`crate::render_svg_all_partial`] on decoded text.
+/// `graphviz_pure::render_svg_all_partial` on decoded text.
 pub fn render_svg_all_partial(
     dot_source: &Decoded,
     engine: &str,
@@ -114,7 +114,7 @@ fn render_partial<T>(
     options: LayoutOptions,
     mut render: impl FnMut(Graph, &mut LayoutOptions) -> Result<T>,
 ) -> (Vec<T>, Option<GraphvizError>) {
-    graphviz_pure_render::reset_render_state();
+    crate::reset_render_state();
     let (graphs, parse_err) =
         graphviz_pure_parser::parse_dot_all_partial(dot_source.as_str(), globals);
     let mut out = Vec::with_capacity(graphs.len());
@@ -138,12 +138,12 @@ pub fn graph_stream<'a>(dot_source: &'a Decoded, globals: &GlobalAttrs) -> Graph
     GraphStream::new(dot_source.as_str(), globals)
 }
 
-/// [`crate::parse_dot`] on decoded text.
+/// `graphviz_pure::parse_dot` on decoded text.
 pub fn parse_dot(dot_source: &Decoded) -> Result<Graph> {
     graphviz_pure_parser::parse_dot(dot_source.as_str())
 }
 
-/// [`crate::parse_dot_all`] on decoded text.
+/// `graphviz_pure::parse_dot_all` on decoded text.
 pub fn parse_dot_all(dot_source: &Decoded, globals: &GlobalAttrs) -> Result<Vec<Graph>> {
     graphviz_pure_parser::parse_dot_all(dot_source.as_str(), globals)
 }

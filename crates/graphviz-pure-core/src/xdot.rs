@@ -1,10 +1,8 @@
 //! The xdot drawing-operation parser of `lib/xdot/xdot.c` (`parseXDot`), used by the JSON
 //! writers to expand `_draw_` attributes and by `init_xdot` for `_background`.
 
-use serde::{Deserialize, Serialize};
-
 /// A colour operand: a plain colour or a gradient (`xdot_color`).
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Grad {
     None(String),
     Linear(f64, f64, f64, f64, Vec<(f64, String)>),
@@ -12,7 +10,7 @@ pub enum Grad {
 }
 
 /// One drawing operation (`xdot_op`).
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Op {
     Ellipse(bool, [f64; 4]),
     Polygon(bool, Vec<(f64, f64)>),
@@ -205,7 +203,7 @@ pub fn parse_xdot(s: &str) -> Vec<Op> {
 
 /// `GD_drawing(g)->xdots`: what `init_xdot` parsed from the graph's `_background` (or its
 /// `_draw_`), which `emit_background` draws behind the graph.
-#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq)]
 pub struct Background {
     /// Each op (`exdot_op`) with its `bb` and, for a text op, its span. Only `init_nop`
     /// (`neato -n`) sets them, with `xdotBB`; elsewhere they stay as `parseXDotF`'s
@@ -214,7 +212,7 @@ pub struct Background {
 }
 
 /// An `exdot_op`'s `bb` and, for a text op, its span.
-#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq)]
 pub struct OpBox {
     pub ll: (f64, f64),
     pub ur: (f64, f64),
@@ -223,7 +221,7 @@ pub struct OpBox {
 
 /// What `xdotBB` gave a text op's span: the font of the last `F` and the flags of the last
 /// `t` before it, and the size `textspan_size` estimated.
-#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq)]
 pub struct SpanSize {
     pub fontname: String,
     pub fontsize: f64,

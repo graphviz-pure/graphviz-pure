@@ -1,10 +1,15 @@
+//! Implementation crate of graphviz-pure, with no semver promise. The stable crates are
+//! `graphviz-pure` and `graphviz-pure-raster`.
+//!
 //! Output renderers for `graphviz-pure` (`svg`, `json`, `json0`, `dot`, `xdot`, `canon`, `plain`).
 
 #![forbid(unsafe_code)]
 
 mod agwrite;
+pub mod decoded;
 pub mod emit;
 pub mod json;
+pub mod plugins;
 mod svg_engine;
 mod xdot_engine;
 

@@ -11,14 +11,16 @@ homepage.workspace = true
 description = "A pure-Rust port of Graphviz 16.1.0 with the same output on every platform: parse DOT, lay it out with any of the eight engines and render SVG and more, with no C and no FFI. Not affiliated with the Graphviz project."
 
 [dependencies]
-graphviz-pure-core.workspace = true
-graphviz-pure-parser.workspace = true
-graphviz-pure-geom.workspace = true
-graphviz-pure-layout.workspace = true
-graphviz-pure-render.workspace = true
-serde.workspace = true
-serde_json.workspace = true
+graphviz-pure-core = { path = "../graphviz-pure-core", version = "=0.2.3" }
+graphviz-pure-parser = { path = "../graphviz-pure-parser", version = "=0.2.3" }
+# Present only so this manifest can pin geom with `=`.
+graphviz-pure-geom = { path = "../graphviz-pure-geom", version = "=0.2.3" }
+graphviz-pure-layout = { path = "../graphviz-pure-layout", version = "=0.2.3" }
+graphviz-pure-render = { path = "../graphviz-pure-render", version = "=0.2.3" }
 thiserror.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true
 
 [lints]
 workspace = true

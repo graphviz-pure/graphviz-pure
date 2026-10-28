@@ -1,3 +1,6 @@
+//! Implementation crate of graphviz-pure, with no semver promise. The stable crates are
+//! `graphviz-pure` and `graphviz-pure-raster`.
+//!
 //! Re-entrant DOT and HTML-label parser and canonical serializer (`graphviz-pure-parser`).
 //! Fixes GV-BUG-001 (global mutable lexer state) and GV-BUG-005 (memory leaks on syntax errors).
 

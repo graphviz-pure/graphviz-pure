@@ -12,7 +12,6 @@ description = "DOT and HTML-label lexer, parser and canonical writer for graphvi
 
 [dependencies]
 graphviz-pure-core.workspace = true
-thiserror.workspace = true
 
 [lints]
 workspace = true

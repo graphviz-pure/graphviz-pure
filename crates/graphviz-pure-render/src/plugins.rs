@@ -11,10 +11,99 @@
 
 use std::collections::{HashMap, HashSet};
 
+use graphviz_pure_core::Graph;
 use graphviz_pure_core::diag::fprintf_stderr;
 pub use graphviz_pure_core::diag::{set_verbose, verbose};
+use graphviz_pure_layout::LayoutEngine;
+use graphviz_pure_parser::GlobalAttrs;
 
-use crate::{DEVICE_PLUGINS, LAYOUT_PLUGINS, plugin_list, plugin_load};
+/// The layout plugins, as `gvplugin_list(gvc, API_layout, "")` lists them, with their
+/// packages.
+pub const LAYOUT_PLUGINS: [(&str, &str); 11] = [
+    ("circo", "neato_layout"),
+    ("dot", "dot_layout"),
+    ("fdp", "neato_layout"),
+    ("neato", "neato_layout"),
+    ("nop", "neato_layout"),
+    ("nop1", "neato_layout"),
+    ("nop2", "neato_layout"),
+    ("osage", "neato_layout"),
+    ("patchwork", "neato_layout"),
+    ("sfdp", "neato_layout"),
+    ("twopi", "neato_layout"),
+];
+
+/// The output device plugins: type (`format:render`) and package, in `gvplugin_list` order.
+pub const DEVICE_PLUGINS: [(&str, &str); 17] = [
+    ("canon:dot", "core"),
+    ("dot:dot", "core"),
+    ("dot_json:json", "core"),
+    ("gv:dot", "core"),
+    ("jpe:cairo", "cairo"),
+    ("jpeg:cairo", "cairo"),
+    ("jpg:cairo", "cairo"),
+    ("json:json", "core"),
+    ("json0:json", "core"),
+    ("plain:dot", "core"),
+    ("plain-ext:dot", "core"),
+    ("png:cairo", "cairo"),
+    ("svg:svg", "core"),
+    ("xdot:xdot", "core"),
+    ("xdot1.2:xdot", "core"),
+    ("xdot1.4:xdot", "core"),
+    ("xdot_json:json", "core"),
+];
+
+/// `gvplugin_load`'s match of a requested `type[:dependency[:package]]` against `plugins`:
+/// the index of the first match. Names compare as C's `strcmp` does, case and all.
+pub fn plugin_load(plugins: &[(&str, &str)], req: &str) -> Option<usize> {
+    let mut parts = req.splitn(3, ':');
+    let reqtyp = parts.next().unwrap_or("");
+    let reqdep = parts.next();
+    let reqpkg = parts.next();
+    plugins.iter().position(|&(typestr, package)| {
+        let (typ, dep) = match typestr.split_once(':') {
+            Some((t, d)) => (t, Some(d)),
+            None => (typestr, None),
+        };
+        typ == reqtyp
+            && !matches!((dep, reqdep), (Some(d), Some(r)) if d != r)
+            && reqpkg.is_none_or(|p| p == package)
+    })
+}
+
+/// `gvplugin_list(gvc, api, str)`: `" type:package"` for each plugin of the requested type
+/// when `str` names one with a `:`, else `" type"` for each type.
+pub fn plugin_list(plugins: &[(&str, &str)], req: &str) -> String {
+    let mut out = String::new();
+    if let Some((typ, _)) = req.split_once(':') {
+        for &(typestr, package) in plugins {
+            let t = typestr.split(':').next().unwrap_or("");
+            if typ.is_empty() || typ.eq_ignore_ascii_case(t) {
+                out.push_str(&format!(" {typestr}:{package}"));
+            }
+        }
+        if !out.is_empty() {
+            return out;
+        }
+    }
+    let mut last: Option<&str> = None;
+    for &(typestr, _) in plugins {
+        let t = typestr.split(':').next().unwrap_or("");
+        if last.is_none_or(|l| !l.eq_ignore_ascii_case(t)) {
+            out.push(' ');
+            out.push_str(t);
+        }
+        last = Some(t);
+    }
+    out
+}
+
+/// `gvlayout_select`: the engine a layout name (`-K`, the `layout` attribute) selects.
+pub fn layout_select(name: &str) -> Option<LayoutEngine> {
+    let i = load_layout(name)?;
+    LayoutEngine::parse(LAYOUT_PLUGINS[i].0).ok()
+}
 
 /// `api_names`, indexed by `api_t`.
 pub const API_NAMES: [&str; 5] = ["render", "layout", "textlayout", "device", "loadimage"];
@@ -260,10 +349,7 @@ impl PluginGraph {
 ///
 /// `None` when a plugin or package name has no quoted DOT form (it ends with a backslash);
 /// the port's own tables have none.
-pub(crate) fn plugin_graph(
-    plugins: &Plugins<'_>,
-    globals: &crate::GlobalAttrs,
-) -> Option<crate::Graph> {
+pub(crate) fn plugin_graph(plugins: &Plugins<'_>, globals: &GlobalAttrs) -> Option<Graph> {
     const OWN: [&[&str]; 3] = [
         &["label", "rankdir", "rank", "ranksep"],
         &["label", "shape", "style", "width"],
@@ -604,8 +690,8 @@ mod tests {
             packages: &["core\\"],
             apis: [&[("dot", "core\\")], &[], &[], &[], &[]],
         };
-        assert!(plugin_graph(&odd, &crate::GlobalAttrs::default()).is_none());
-        assert!(plugin_graph(&PORT_PLUGINS, &crate::GlobalAttrs::default()).is_some());
+        assert!(plugin_graph(&odd, &GlobalAttrs::default()).is_none());
+        assert!(plugin_graph(&PORT_PLUGINS, &GlobalAttrs::default()).is_some());
     }
 
     // The loadimage list is the renderer's own table: each `TYPE:RENDER` pair is listed
@@ -636,16 +722,17 @@ mod tests {
     // layout (`-Tcanon`) and laid out (`-Tdot`), under the port's math.
     #[test]
     fn plugin_graph_of_the_reference_build_is_cs() {
-        let mut g = plugin_graph(&REFERENCE, &crate::GlobalAttrs::default()).expect("quotable");
-        crate::layout_graph(&mut g, crate::LayoutEngine::Dot).expect("layout");
+        let mut g = plugin_graph(&REFERENCE, &GlobalAttrs::default()).expect("quotable");
+        graphviz_pure_layout::layout_graph(&mut g, graphviz_pure_layout::LayoutEngine::Dot)
+            .expect("layout");
         for (format, want) in [
             (
                 "canon",
-                include_str!("../tests/data/plugin_graph_reference.canon"),
+                include_str!("../../graphviz-pure/tests/data/plugin_graph_reference.canon"),
             ),
             (
                 "dot",
-                include_str!("../tests/data/plugin_graph_reference.dot"),
+                include_str!("../../graphviz-pure/tests/data/plugin_graph_reference.dot"),
             ),
         ] {
             let fmt = crate::OutputFormat::parse(format).expect("format");

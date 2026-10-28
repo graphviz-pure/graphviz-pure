@@ -422,8 +422,8 @@ pub fn engine_for(source: &str) -> String {
 pub fn run_port(source: &str) -> Result<Layout, String> {
     let src = source.to_string();
     let res = std::panic::catch_unwind(move || {
-        graphviz_pure::decoded::render_dot(
-            &graphviz_pure::decoded::Decoded::from_decoded(src),
+        graphviz_pure_render::decoded::render_dot(
+            &graphviz_pure_render::decoded::Decoded::from_decoded(src),
             "dot",
             "dot",
         )

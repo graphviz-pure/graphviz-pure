@@ -13,18 +13,10 @@ description = "Graph model, attributes, font metric tables, colour tables and th
 [features]
 # Logs the arguments of every `math` call to `$GV_MATH_TRACE/` (see docs/porting/libm.md).
 math-trace = []
-# Deprecated, does nothing; to be removed in the next minor release. It used to select the
-# portable `math` implementations on Apple targets, which every build now uses on every target.
-# Kept so existing `--features graphviz-pure-core/portable-math` invocations still build.
-portable-math = []
 
 [dependencies]
 libm.workspace = true
-serde.workspace = true
 thiserror.workspace = true
-
-[dev-dependencies]
-serde_json.workspace = true
 
 [lints]
 workspace = true

@@ -36,7 +36,8 @@ pkg-fmt = "zip"
 [dependencies]
 graphviz-pure-core.workspace = true
 graphviz-pure-parser.workspace = true
-graphviz-pure.workspace = true
+graphviz-pure-layout.workspace = true
+graphviz-pure-render.workspace = true
 graphviz-pure-raster.workspace = true
 
 # The perf ratchet's heap counts (examples/heap_counts.rs, scripts/bench/ratchet.py). Only the
