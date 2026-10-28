@@ -51,17 +51,8 @@ jobs:
       - name: Install Rust ${{ env.RUST_VERSION }}
         if: github.event_name == 'pull_request'
         run: rustup toolchain install "$RUST_VERSION" --profile minimal && rustup default "$RUST_VERSION"
-      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
-        if: github.event_name == 'pull_request'
-      - name: Cache cargo-semver-checks
-        if: github.event_name == 'pull_request'
-        id: tool
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: ~/.cargo/bin/cargo-semver-checks
-          key: cargo-semver-checks-${{ runner.os }}-${{ env.RUST_VERSION }}-0.51.0
       - name: Install cargo-semver-checks
-        if: github.event_name == 'pull_request' && steps.tool.outputs.cache-hit != 'true'
+        if: github.event_name == 'pull_request'
         run: cargo install --locked cargo-semver-checks@0.51.0
       - name: Check this PR's stable API changes
         if: github.event_name == 'pull_request'
@@ -69,5 +60,5 @@ jobs:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           BREAKING: ${{ contains(github.event.pull_request.labels.*.name, 'breaking') }}
         run: |
-          python3 -m unittest discover -s scripts/tests -p test_check_semver.py
+          python3 -m unittest discover -s scripts/tests
           scripts/check-semver.sh pr

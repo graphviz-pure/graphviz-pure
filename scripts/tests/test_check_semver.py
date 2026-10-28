@@ -13,9 +13,33 @@ PACKAGES = ["graphviz-pure", "graphviz-pure-raster"]
 
 class SemverGateTest(unittest.TestCase):
     def run_gate(self, statuses, breaking=False, versions=None, baseline=None, mode="pr",
-                 release="0.3.0", manifest=None):
+                 release="0.3.0", manifest=None, merged_breaking=None):
         with tempfile.TemporaryDirectory() as directory:
             work = Path(directory)
+            git = work / "git"
+            git.write_text("""#!/usr/bin/env python3
+import json, os, sys
+with open(os.environ['GIT_CALLS'], 'a') as calls:
+    calls.write(json.dumps(sys.argv[1:]) + '\\n')
+if sys.argv[1] == 'merge-base':
+    print('a' * 40)
+elif sys.argv[1] == 'log':
+    assert sys.argv[-1].startswith('v') and '-rc' not in sys.argv[-1]
+    print('c' * 40 + '\\0API change (#1)')
+else:
+    sys.exit(2)
+""")
+            git.chmod(0o755)
+            gh = work / "gh"
+            gh.write_text("""#!/usr/bin/env python3
+import json, os
+labels = [{'name': 'breaking'}] if os.environ['MERGED_BREAKING'] == 'true' else []
+print(json.dumps({'data': {'repository': {'p1': {
+    'number': 1, 'title': 'API change', 'url': 'https://example.test/pr/1',
+    'body': '## Changelog entry\\nNot user-visible.', 'labels': {'nodes': labels}
+}}}}))
+""")
+            gh.chmod(0o755)
             cargo = work / "cargo"
             cargo.write_text("""#!/usr/bin/env python3
 import json, os, sys
@@ -32,6 +56,8 @@ sys.exit(json.loads(os.environ['STATUSES'])[package])
             curl.write_text("#!/usr/bin/env python3\nimport os\nassert os.environ['MODE'] == 'release'\nprint(os.environ['VERSIONS'])\n")
             curl.chmod(0o755)
             env = dict(os.environ, MODE=mode, PATH=f"{work}:{os.environ['PATH']}",
+                       GIT_CALLS=str(work / "git_calls"),
+                       MERGED_BREAKING=str(breaking if merged_breaking is None else merged_breaking).lower(),
                        BREAKING=str(breaking).lower(), STATUSES=json.dumps(dict(zip(PACKAGES, statuses))),
                        VERSIONS="\n".join(json.dumps(version) for version in
                                           (versions or [{"vers": "0.2.3", "yanked": False}])),
@@ -39,7 +65,7 @@ sys.exit(json.loads(os.environ['STATUSES'])[package])
             for name in ("BASELINE_VERSION", "BASE_SHA", "RELEASE_VERSION", "SEMVER_MANIFEST"):
                 env.pop(name, None)
             if mode == "pr":
-                env["BASE_SHA"] = "a" * 40
+                env["BASE_SHA"] = "b" * 40
             else:
                 env["RELEASE_VERSION"] = release
             if manifest:
@@ -49,6 +75,8 @@ sys.exit(json.loads(os.environ['STATUSES'])[package])
             result = subprocess.run(["bash", str(SCRIPT), mode], env=env, text=True,
                                     stdout=subprocess.PIPE, stderr=subprocess.STDOUT, check=False)
             calls = work / "calls"
+            git_calls = work / "git_calls"
+            self.git_calls = [json.loads(line) for line in git_calls.read_text().splitlines()] if git_calls.exists() else []
             return result, [json.loads(line) for line in calls.read_text().splitlines()] if calls.exists() else []
 
     def test_compatible_pr_passes_without_label(self):
@@ -59,6 +87,17 @@ sys.exit(json.loads(os.environ['STATUSES'])[package])
             self.assertEqual(call[call.index("--baseline-rev") + 1], "a" * 40)
             self.assertNotIn("--baseline-version", call)
             self.assertEqual(call[call.index("--release-type") + 1], "minor")
+
+    def test_behind_branch_uses_merge_base_instead_of_upstream_tip(self):
+        result, calls = self.run_gate([0, 0])
+        self.assertEqual(result.returncode, 0, result.stdout)
+        self.assertIn(["merge-base", "b" * 40, "HEAD"], self.git_calls)
+        self.assertTrue(all(call[call.index("--baseline-rev") + 1] == "a" * 40 for call in calls))
+
+    def test_release_labels_cover_the_published_baseline_not_the_rc(self):
+        result, _ = self.run_gate([100, 0], mode="release", breaking=False, merged_breaking=True)
+        self.assertEqual(result.returncode, 0, result.stdout)
+        self.assertTrue(all(call[-1] == "v0.2.3..HEAD" for call in self.git_calls))
 
     def test_break_in_either_stable_crate_requires_label(self):
         for statuses in ([100, 0], [0, 100]):
@@ -112,6 +151,7 @@ sys.exit(json.loads(os.environ['STATUSES'])[package])
         result, calls = self.run_gate([0, 0], mode="release", baseline="0.2.3")
         self.assertEqual(result.returncode, 0, result.stdout)
         self.assertTrue(all(call[call.index("--baseline-version") + 1] == "0.2.3" for call in calls))
+
     def test_release_break_requires_a_merged_breaking_label(self):
         result, _ = self.run_gate([100, 0], mode="release", release="1.0.0")
         self.assertNotEqual(result.returncode, 0)

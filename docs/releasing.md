@@ -8,6 +8,8 @@ To release: dispatch Release (`gh workflow run release.yml [-f version=X.Y.Z]`, 
 gh workflow run release.yml -f dry_run=true
 ```
 
+Cut 1.0.0 directly from 0.2.3 with `-f version=1.0.0`; use the corresponding explicit version for any later major, with no rc required. An explicit version may exceed the label-selected minimum, but must never be smaller.
+
 A dry run, or a check that fails, never asks for the `release` environment. A real release uses the concurrency group `release` (one at a time; a second one waits). A dry run uses `release-dry-run`, so dispatching a dry run cannot cancel a real release that is queued or running. A real release has to be dispatched from `master`. The `release` environment allows deployments from `master` only, so a workflow run from any other branch cannot request it.
 
 ## Before dispatching

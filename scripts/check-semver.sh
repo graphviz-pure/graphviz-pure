@@ -7,7 +7,10 @@ cd "$(dirname "$0")/.."
 
 mode=${1:-pr}
 case "$mode" in
-  pr) : "${BASE_SHA:?PR checks need the base commit from the event payload}" ;;
+  pr)
+    : "${BASE_SHA:?PR checks need the base commit from the event payload}"
+    pr_baseline=$(git merge-base "$BASE_SHA" HEAD)
+    ;;
   release) : "${RELEASE_VERSION:?Release checks need the version selected from merged PR labels}" ;;
   *) echo "usage: check-semver.sh [pr|release]" >&2; exit 2 ;;
 esac
@@ -16,7 +19,7 @@ cargo semver-checks --version | grep -Fx 'cargo-semver-checks 0.51.0'
 failed=0
 for package in graphviz-pure graphviz-pure-raster; do
   if [ "$mode" = pr ]; then
-    baseline=$BASE_SHA
+    baseline=$pr_baseline
     baseline_args=(--baseline-rev "$baseline")
   else
     # Release readiness compares the full release delta with crates.io, independently of
@@ -30,6 +33,10 @@ for package in graphviz-pure graphviz-pure-raster; do
           | max_by(split(".") | map(tonumber))')
     fi
     baseline_args=(--baseline-version "$baseline")
+    # An rc tag can be newer than the published baseline. Keep breaking labels from the
+    # entire API delta, including PRs already merged before that prerelease tag.
+    merged=$(python3 scripts/release-changelog.py collect "v$baseline" "${RELEASE_TARGET:-HEAD}")
+    BREAKING=$(jq -r '.breaking | length > 0' <<< "$merged")
   fi
   echo "Checking $package against $mode baseline $baseline (breaking=${BREAKING:-false})."
   status=0
