@@ -68,19 +68,47 @@ for example `limits.cpu_ms = 1000` in `wrangler.toml` on a paid plan (enforced a
 the Free plan allows only [10 ms of CPU time per request](https://developers.cloudflare.com/workers/platform/limits/#cpu-time).
 `render` is synchronous, so `setTimeout` or `Promise.race` on the same thread cannot interrupt it.
 
-`render(dot, engine, format)` lays out the first graph; `renderAll` returns one output per
-graph; `renderAllBytes` takes and returns raw bytes, including non-UTF-8 input, as the
-command line does.
+`render(dot, engine, format)` lays out the first graph and returns the output string.
+`renderAll` returns one string per graph. `renderAllBytes` takes and returns raw bytes
+(`Uint8Array`), including non-UTF-8 input, as the command line does. `renderSvg` and
+`renderJson` are `render` with the format filled in.
 
-`supportedFormats()` returns a JSON array **string** of every format name `render` accepts,
-including aliases: `svg`, `svg_inline`, `cmapx`, `json`, `json0`, `dot`, `xdot`, `canon`,
-`plain`, `cmapx_np`, `gv`, `xdot1.2`, `xdot1.4`, `dot_json`, `xdot_json` and `plain-ext`.
-Use `JSON.parse(supportedFormats())` to get the array. Raster formats (`png`, `jpg`, `jpeg`)
-are not available in this package.
+`renderWithDiagnostics`, `renderAllWithDiagnostics` and `renderAllBytesWithDiagnostics`
+return `{ output, diagnostics }`. `output` is what the plain function returns.
+`diagnostics` is an array of `{ level, message }`. `level` is `"Error"`, `"Warning"` or
+`"CountedAsError"`. `message` is the text of that one message, including the `Error: ` or
+`Warning: ` prefix and the trailing newline. A warning does not throw. A layout that
+succeeds and still reports an error-level diagnostic does not throw either: `dot` would
+exit 1, and the diagnostic is on this object. `render` drops the diagnostics and still
+returns the string.
+
+A failure throws an `Error` with `name` `"GraphvizError"` (`instanceof Error`). `message`
+is the text the command line prints, without the program-name prefix. `status` is `1`,
+the status `dot` uses when a graph fails. This package does not open files, so it does
+not use the command line's status `2` for a missing input. `kind` is `"Syntax"`,
+`"UnsupportedEngine"`, `"UnsupportedFormat"`, `"Layout"`, `"Attribute"` or `"Render"`.
+`diagnostics` is the messages emitted around the failure. A syntax error's array is
+empty, because the failure itself is `message`. The plain functions and the
+`*WithDiagnostics` functions throw the same object.
+
+`supportedEngines()` and `supportedFormats()` return arrays of strings.
+`supportedFormats()` lists every format name `render` accepts, including aliases:
+`svg`, `svg_inline`, `cmapx`, `json`, `json0`, `dot`, `xdot`, `canon`, `plain`,
+`cmapx_np`, `gv`, `xdot1.2`, `xdot1.4`, `dot_json`, `xdot_json` and `plain-ext`.
+Raster formats (`png`, `jpg`, `jpeg`) are not available in this package.
+
+`inspectGraph(dot, engine)` returns
+`{ name, directed, strict, nodes, edges, subgraphs, width_pt, height_pt }`.
+The fields are snake_case, the names they had as JSON keys. The function names are
+camelCase. `width_pt` and `height_pt` are the laid-out size in points. Warnings from
+the layout are not on this object.
 
 `version()` returns `graphviz version 16.1.0 (graphviz-pure X.Y.Z)`, where `X.Y.Z` is the
 package version compiled into the WebAssembly module. This follows the CLI's `-V` format
 without the command name prefix.
+
+`pkg/graphviz_pure_wasm.d.ts` is hand-checked and is the file the npm `types` entry and
+the JSR package publish. CI typechecks a sample against it (`deno check`, Deno 2.9.6).
 
 Each release is built by GitHub Actions and published with npm provenance; check it with
 `npm audit signatures`. Documentation, fidelity evidence and the source:

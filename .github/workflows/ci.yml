@@ -213,6 +213,14 @@ jobs:
       - name: Run the runtimes' install scripts
         working-directory: scripts/wasm-runtimes
         run: npm rebuild
+      # deno 2.9.6 is the pinned devDependency unpacked by the rebuild above. No separate toolchain.
+      - name: Typecheck the hand-checked package types
+        working-directory: scripts/wasm-runtimes
+        env:
+          DENO_NO_UPDATE_CHECK: "1"
+        run: |
+          cmp ../../web/graphviz_pure_wasm.d.ts ../../web/pkg/graphviz_pure_wasm.d.ts
+          ./node_modules/.bin/deno check --no-lock types.ts
       - name: Run the package in every runtime
         working-directory: scripts/wasm-runtimes
         env:

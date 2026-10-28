@@ -19,6 +19,11 @@ one release version, set in `[workspace.package]` in `Cargo.toml`, `web/package.
   `GraphvizError::__map_text`, `GraphvizError::__set_diagnostics`,
   `Diagnostic::__map_message` and `Rendered::__from_parts` are outside it: hidden hooks
   the facade and the raster crate use, free to change in any release.
+  JavaScript function names are camelCase. `inspectGraph()` keeps the field names
+  `name`, `directed`, `strict`, `nodes`, `edges`, `subgraphs`, `width_pt` and
+  `height_pt`. A failure throws an `Error` (`name` `"GraphvizError"`) with `message`,
+  `status`, `kind` and `diagnostics`. `render()` returns the output;
+  `renderWithDiagnostics()` returns `{output, diagnostics}`.
 - **The command line:** options, accepted `-T` formats, exit status, and the `-V` line's shape:
   `graphviz-pure - graphviz version 16.1.0 (graphviz-pure X.Y.Z)`. Not ported: C's remaining
   core-plugin formats (`cmap`, `eps`, `fig`, `imap`, `imap_np`, `ismap`, `pic`, `pov`, `ps`,

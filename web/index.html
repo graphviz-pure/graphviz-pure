@@ -318,7 +318,7 @@
         const t0 = performance.now();
         const out = render(src, eng, fmt);
         const dt = performance.now() - t0;
-        const stats = JSON.parse(inspectGraph(src, eng));
+        const stats = inspectGraph(src, eng);
 
         document.getElementById('stat-latency').textContent = `${dt.toFixed(2)} ms (${(dt * 1000).toFixed(0)} µs)`;
         document.getElementById('stat-nodes').textContent = stats.nodes;
@@ -338,7 +338,7 @@
           rawOutput.textContent = out;
         }
       } catch (err) {
-        statusIndicator.textContent = String(err);
+        statusIndicator.textContent = err instanceof Error ? err.message : String(err);
         statusIndicator.style.color = '#ef4444';
       }
     }

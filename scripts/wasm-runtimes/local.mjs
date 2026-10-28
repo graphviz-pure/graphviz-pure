@@ -5,6 +5,7 @@
 // Each form loads the package once per process, so each is its own run.
 import fs from 'node:fs';
 import process from 'node:process';
+import { checkApi } from './api-check.mjs';
 import { differing, loadSamples, report } from './samples.mjs';
 
 const how = process.argv[2];
@@ -27,5 +28,6 @@ if (how === 'npm' || how === 'bytes') {
   process.exit(2);
 }
 
+checkApi(gv);
 const samples = loadSamples();
 report(how, samples, await differing(samples, (input, engine) => gv.renderAllBytes(input, engine, 'svg')));
