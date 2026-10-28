@@ -51,8 +51,10 @@ on:
 permissions:
   contents: read
 
-# Every run reads and writes the one corpus, so runs never overlap: a run that wrote its corpus
-# while another pruned would undo the pruning.
+# Every run reads and writes the one corpus, so runs should never overlap: a run that wrote its
+# corpus while another pruned would undo the pruning. They can: in a called workflow
+# ${{ github.workflow }} is the caller's name, so the release's run and this workflow's own runs
+# are in different groups (#559).
 concurrency:
   group: ${{ github.workflow }}-corpus
   cancel-in-progress: false
@@ -207,8 +209,11 @@ jobs:
           COMMIT: ${{ github.sha }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
+          # A listing that fails (a token without actions: read, an API error) leaves the
+          # crashes unknown: fall back to the "without a crash" issue rather than failing this
+          # job, which would file nothing at all.
           crashes=$(gh api "repos/$GH_REPO/actions/runs/$RUN_ID/artifacts" \
-            --jq '[.artifacts[].name | select(startswith("cifuzz-crashes-"))] | join(", ")')
+            --jq '[.artifacts[].name | select(startswith("cifuzz-crashes-"))] | join(", ")') || crashes=""
           if [ -n "$crashes" ]; then
             scripts/ci-report-failure.sh "Fuzzing finds a crash on master" crash,fuzz \
               "The weekly fuzz run at $COMMIT crashed: $RUN_URL. Minimised reproducers: $crashes."

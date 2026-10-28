@@ -170,8 +170,9 @@ In CI, `.github/workflows/fuzz.yml` runs the targets with
   The weekly run always fuzzes: a skipped run saves no corpus, and the corpus would expire.
 * A crash fails the run, and so the release. The minimised reproducer is the run's
   `cifuzz-crashes-<target>` artifact. The release workflow does not file an issue; the weekly
-  run opens one labelled `crash`, or comments on the open one. The pull requests merged since
-  the last release are the suspects.
+  run opens one labelled `crash,fuzz`, or comments on the open one, and a run that broke
+  before it could fuzz opens one labelled `fuzz`. The pull requests merged since the last
+  release are the suspects.
 * Fuzz locally (above) when a change touches parsing or arithmetic: CI no longer fuzzes it
   before the next release.
 
