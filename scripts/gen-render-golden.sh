@@ -27,7 +27,7 @@ REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 C_DOT="${C_DOT:-$REPO_ROOT/scripts/dot-portable-libm.sh}"
 export GVBINDIR="${1:-$HOME/src/gv-ref/lutplugins}"
 OUT="$REPO_ROOT/tests/golden/render"
-FORMATS="svg json json0 xdot dot plain plain-ext"
+FORMATS="svg svg_inline cmapx json json0 xdot dot plain plain-ext"
 JSON_LIMIT=100000
 
 version="$("$C_DOT" -V 2>&1 || true)"

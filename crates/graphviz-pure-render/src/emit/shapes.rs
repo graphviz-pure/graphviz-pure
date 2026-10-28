@@ -8,9 +8,40 @@ use super::job::{EMIT_CLUSTERS_LAST, EmitState, Emitter, Engine, FILL, GRADIENT,
 use super::model::TextLabel;
 use super::num::fmt_g;
 use graphviz_pure_core::Point;
-use graphviz_pure_core::cnum::is_exactly_zero;
+pub(crate) use graphviz_pure_core::cnum::is_exactly_zero;
 use graphviz_pure_core::math;
+use graphviz_pure_geom::node_size::PolygonGeometry;
 use graphviz_pure_geom::shapes::{RecordField, ShapeKind};
+
+/// `IS_BOX` (`shapes.c:77-79`).
+pub(crate) fn is_rect(p: &PolygonGeometry) -> bool {
+    p.sides == 4
+        && p.orientation.round() as i32 % 90 == 0
+        && is_exactly_zero(p.distortion)
+        && is_exactly_zero(p.skew)
+}
+
+/// `p_ellipse` (`shapes.c:4128-4142`).
+pub(crate) fn p_ellipse(xrad: f64, yrad: f64, np: usize) -> Vec<Point> {
+    let delta = 2.0 * std::f64::consts::PI / np as f64;
+    let mut theta = 0.0;
+    let mut af = Vec::with_capacity(np);
+    for _ in 0..np {
+        af.push(Point::new(xrad * math::cos(theta), yrad * math::sin(theta)));
+        theta += delta;
+    }
+    af
+}
+
+/// `rect2poly` (`shapes.c:4120-4126`).
+pub(crate) fn rect2poly(p: [Point; 2]) -> [Point; 4] {
+    [
+        p[0],
+        Point::new(p[1].x, p[0].y),
+        p[1],
+        Point::new(p[0].x, p[1].y),
+    ]
+}
 
 /// `graphviz_polygon_style_t.shape` values.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -277,7 +308,7 @@ impl<E: Engine> Emitter<'_, E> {
         let nd = &m.nodes[n];
         let poly = nd.geom.polygon.as_ref().unwrap();
         let do_map = self.anchored();
-        if do_map {
+        if do_map && self.job.flags & EMIT_CLUSTERS_LAST == 0 {
             self.begin_obj_anchor();
         }
         let sides = poly.sides;
@@ -370,6 +401,9 @@ impl<E: Engine> Emitter<'_, E> {
         label.pos = nd.coord;
         self.emit_label(EmitState::NLabel, &label);
         if do_map {
+            if self.job.flags & EMIT_CLUSTERS_LAST != 0 {
+                self.begin_obj_anchor();
+            }
             self.end_anchor();
         }
     }
@@ -427,7 +461,7 @@ impl<E: Engine> Emitter<'_, E> {
         let nd = &m.nodes[n];
         let poly = nd.geom.polygon.as_ref().unwrap();
         let do_map = self.anchored();
-        if do_map {
+        if do_map && self.job.flags & EMIT_CLUSTERS_LAST == 0 {
             self.begin_obj_anchor();
         }
         let (st, _) = self.check_style(n);
@@ -458,6 +492,9 @@ impl<E: Engine> Emitter<'_, E> {
             filled = 0;
         }
         if do_map {
+            if self.job.flags & EMIT_CLUSTERS_LAST != 0 {
+                self.begin_obj_anchor();
+            }
             self.end_anchor();
         }
     }
@@ -470,7 +507,7 @@ impl<E: Engine> Emitter<'_, E> {
         bf.ll = add(bf.ll, nd.coord);
         bf.ur = add(bf.ur, nd.coord);
         let do_map = self.anchored();
-        if do_map {
+        if do_map && self.job.flags & EMIT_CLUSTERS_LAST == 0 {
             self.begin_obj_anchor();
         }
         let mut style = self.stylenode(n);
@@ -497,6 +534,9 @@ impl<E: Engine> Emitter<'_, E> {
         }
         self.gen_fields(n, f);
         if do_map {
+            if self.job.flags & EMIT_CLUSTERS_LAST != 0 {
+                self.begin_obj_anchor();
+            }
             self.end_anchor();
         }
     }

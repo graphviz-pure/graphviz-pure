@@ -39,7 +39,7 @@ struct GraphStats {
 }
 
 /// Renders a DOT string using the specified layout engine (`dot`, `neato`, `fdp`, `sfdp`, `twopi`, `circo`, `osage`, `patchwork`)
-/// and output format (`svg`, `json`, `json0`, `dot`, `xdot`, `canon`, `plain`).
+/// and output format (`svg`, `svg_inline`, `cmapx`, `json`, `json0`, `dot`, `xdot`, `canon`, `plain`).
 #[wasm_bindgen]
 pub fn render(
     dot_source: &str,
@@ -138,7 +138,7 @@ pub fn supported_engines() -> String {
 /// Returns the list of supported output formats as a JSON array.
 #[wasm_bindgen(js_name = supportedFormats)]
 pub fn supported_formats() -> String {
-    r#"["svg","json","json0","dot","xdot","canon","plain"]"#.to_string()
+    r#"["svg","svg_inline","cmapx","json","json0","dot","xdot","canon","plain"]"#.to_string()
 }
 
 /// Returns the version of `graphviz-pure` (compatible with Graphviz 16.1.0).

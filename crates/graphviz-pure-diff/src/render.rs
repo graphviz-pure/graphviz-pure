@@ -20,7 +20,17 @@ use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
 /// Output formats in the corpus: directory name and file extension.
-pub const FORMATS: &[&str] = &["svg", "json", "json0", "xdot", "dot", "plain", "plain-ext"];
+pub const FORMATS: &[&str] = &[
+    "svg",
+    "svg_inline",
+    "cmapx",
+    "json",
+    "json0",
+    "xdot",
+    "dot",
+    "plain",
+    "plain-ext",
+];
 
 /// References that C does not reproduce from run to run, skipped. In `-Tplain`, a label
 /// whose converted text (`htmlEntityUTF8`, e.g. `&infin;`, or `latin1ToUTF8`) is not
@@ -225,7 +235,11 @@ pub fn run_corpus(root: &Path, formats: &[&str], filter: Option<&str>) -> Render
                     let refs = std::fs::read(reference).unwrap_or_default();
                     let refs = graphviz_pure_core::charset::decode(refs);
                     let report = match render_port(&laid, fmt) {
-                        Ok(actual) => compare_output(&refs, &actual, fmt == "svg"),
+                        Ok(actual) => compare_output(
+                            &refs,
+                            &actual,
+                            matches!(fmt.as_str(), "svg" | "svg_inline"),
+                        ),
                         Err(e) => RenderReport {
                             identical: false,
                             diff_lines: refs.lines().count(),

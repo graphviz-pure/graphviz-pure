@@ -34,8 +34,10 @@ pub const LAYOUT_PLUGINS: [(&str, &str); 11] = [
 ];
 
 /// The output device plugins: type (`format:render`) and package, in `gvplugin_list` order.
-pub const DEVICE_PLUGINS: [(&str, &str); 17] = [
+pub const DEVICE_PLUGINS: [(&str, &str); 20] = [
     ("canon:dot", "core"),
+    ("cmapx:map", "core"),
+    ("cmapx_np:map", "core"),
     ("dot:dot", "core"),
     ("dot_json:json", "core"),
     ("gv:dot", "core"),
@@ -48,6 +50,7 @@ pub const DEVICE_PLUGINS: [(&str, &str); 17] = [
     ("plain-ext:dot", "core"),
     ("png:cairo", "cairo"),
     ("svg:svg", "core"),
+    ("svg_inline:svg", "core"),
     ("xdot:xdot", "core"),
     ("xdot1.2:xdot", "core"),
     ("xdot1.4:xdot", "core"),
@@ -115,44 +118,54 @@ const API_LOADIMAGE: usize = 4;
 
 /// The render plugins: type and package, in `gvc->apis[API_render]` order (by type). The
 /// `json` renderer writes four formats, which C lists as four types, as here.
-pub const RENDER_PLUGINS: [(&str, &str); 8] = [
+pub const RENDER_PLUGINS: [(&str, &str); 10] = [
     ("cairo", "cairo"),
     ("dot", "core"),
     ("dot_json", "core"),
     ("json", "core"),
     ("json0", "core"),
+    ("map", "core"),
     ("svg", "core"),
+    ("svg_inline", "core"),
     ("xdot", "core"),
     ("xdot_json", "core"),
 ];
 
 /// The loadimage plugins (`gvloadimage_core_types` for the port's renderers): `type:render`
 /// and package, in `gvc->apis[API_loadimage]` order: by type, the plugin installed last first.
-pub const LOADIMAGE_PLUGINS: [(&str, &str); 23] = [
+pub const LOADIMAGE_PLUGINS: [(&str, &str); 31] = [
     ("eps:xdot", "core"),
     ("eps:dot", "core"),
+    ("eps:map", "core"),
     ("gif:xdot", "core"),
     ("gif:dot", "core"),
+    ("gif:map", "core"),
     ("gif:svg", "core"),
     ("jpe:xdot", "core"),
     ("jpe:dot", "core"),
+    ("jpe:map", "core"),
     ("jpe:svg", "core"),
     ("jpeg:xdot", "core"),
     ("jpeg:dot", "core"),
+    ("jpeg:map", "core"),
     ("jpeg:svg", "core"),
     ("jpg:xdot", "core"),
     ("jpg:dot", "core"),
+    ("jpg:map", "core"),
     ("jpg:svg", "core"),
     ("png:xdot", "core"),
     ("png:dot", "core"),
+    ("png:map", "core"),
     ("png:svg", "core"),
     // `pango`'s, recorded before `core`'s: of equal quality, it ends up after them.
     ("png:cairo", "cairo"),
     ("ps:xdot", "core"),
     ("ps:dot", "core"),
+    ("ps:map", "core"),
     ("svg:svg", "core"),
     ("svg:xdot", "core"),
     ("svg:dot", "core"),
+    ("svg:map", "core"),
 ];
 
 /// The plugins of a run.

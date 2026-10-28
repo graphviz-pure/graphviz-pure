@@ -20,7 +20,7 @@ import tarfile
 ROOT = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "tests", "golden"))
 SRC = os.path.join(ROOT, "render")
 OUT = os.path.join(ROOT, "render.tar.xz")
-FORMATS = ["laid", "dot", "json", "json0", "plain", "plain-ext", "svg", "xdot"]
+FORMATS = ["laid", "cmapx", "dot", "json", "json0", "plain", "plain-ext", "svg", "svg_inline", "xdot"]
 
 
 def main():

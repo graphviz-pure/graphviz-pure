@@ -277,6 +277,7 @@ impl Engine for XdotEngine {
             default_pad: 0.0,
             knowncolors: &[],
             rgba: true,
+            default_dpi: 72.0,
         }
     }
 

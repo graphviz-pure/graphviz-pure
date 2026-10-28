@@ -274,7 +274,13 @@ impl<E: Engine> Emitter<'_, E> {
         }
     }
 
-    fn init_anchor(&mut self, env: &mut Env, data: &HtmlData, saved: &mut Saved) -> bool {
+    fn init_anchor(
+        &mut self,
+        env: &mut Env,
+        data: &HtmlData,
+        b: BoundingBox,
+        saved: &mut Saved,
+    ) -> bool {
         let o = self.job.obj();
         *saved = Saved {
             url: o.url.clone(),
@@ -323,7 +329,9 @@ impl<E: Engine> Emitter<'_, E> {
             assigned = true;
         }
         let _ = kind == ObjKind::Root;
-        if assigned && (o.url.is_some() || o.explicit_tooltip) {
+        let anchored = o.url.is_some() || o.explicit_tooltip;
+        if assigned && anchored {
+            self.emit_map_rect(b);
             self.begin_obj_anchor();
         }
         assigned
@@ -430,7 +438,7 @@ impl<E: Engine> Emitter<'_, E> {
         };
         let anchor = do_anchor
             && self.job.flags & EMIT_CLUSTERS_LAST == 0
-            && self.init_anchor(env, &tbl.data, &mut saved);
+            && self.init_anchor(env, &tbl.data, pts, &mut saved);
         if !tbl.data.style.invisible {
             if let Some(bg) = &tbl.data.bgcolor {
                 let filled = self.set_fill(bg, tbl.data.gradientangle, tbl.data.style.radial);
@@ -459,7 +467,11 @@ impl<E: Engine> Emitter<'_, E> {
                 self.emit_html_cell(cp, env);
             }
         }
-        if anchor {
+        if anchor
+            || (do_anchor
+                && self.job.flags & EMIT_CLUSTERS_LAST != 0
+                && self.init_anchor(env, &tbl.data, pts, &mut saved))
+        {
             self.end_anchor_html(saved);
         }
         if let Some((n, c, s)) = saved_font {
@@ -482,7 +494,7 @@ impl<E: Engine> Emitter<'_, E> {
         };
         let anchor = do_anchor
             && self.job.flags & EMIT_CLUSTERS_LAST == 0
-            && self.init_anchor(env, &cp.data, &mut saved);
+            && self.init_anchor(env, &cp.data, pts, &mut saved);
         if !cp.data.style.invisible {
             if let Some(bg) = &cp.data.bgcolor {
                 let filled = self.set_fill(bg, cp.data.gradientangle, cp.data.style.radial);
@@ -506,7 +518,11 @@ impl<E: Engine> Emitter<'_, E> {
                 HtmlContent::Text(t) => self.emit_html_txt(t, env),
             }
         }
-        if anchor {
+        if anchor
+            || (do_anchor
+                && self.job.flags & EMIT_CLUSTERS_LAST != 0
+                && self.init_anchor(env, &cp.data, pts, &mut saved))
+        {
             self.end_anchor_html(saved);
         }
     }
