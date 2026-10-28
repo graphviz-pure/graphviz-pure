@@ -283,7 +283,7 @@ pub struct GraphInfo {
     /// cgraph root of this graph.
     pub root: G,
     /// The root's next anonymous id (`idmap`'s `counter`), shared by its subgraphs.
-    pub next_anon_id: std::rc::Rc<std::cell::Cell<u64>>,
+    pub next_anon_id: u64,
     /// cgraph parent (`agparent`).
     pub cg_parent: Option<G>,
     /// cgraph child subgraphs in `agfstsubg` order.

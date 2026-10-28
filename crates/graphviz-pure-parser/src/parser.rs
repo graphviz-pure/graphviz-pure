@@ -355,11 +355,7 @@ impl<'a> Parser<'a> {
 
         // startgraph
         self.started = true;
-        self.anon_ctr = if name.as_deref().is_none_or(|n| n.starts_with('%')) {
-            3
-        } else {
-            1
-        };
+        self.anon_ctr = Graph::initial_next_anon_id(name.as_deref());
         self.local_ids.clear();
         if let Some(n) = name.as_ref().filter(|n| n.starts_with('%')) {
             self.local_ids.insert(format!("g{n}"), 1);

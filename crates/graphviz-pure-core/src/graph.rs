@@ -472,13 +472,18 @@ pub struct AttrDicts {
 }
 
 impl Graph {
-    pub fn new(name: impl Into<String>, kind: GraphKind, strict: bool) -> Self {
-        let name = name.into();
-        let next_anon_id = if name.is_empty() || name.starts_with('%') {
+    /// The first free anonymous id in a root opened with `name` (`agopen` and `idmap`).
+    pub fn initial_next_anon_id(name: Option<&str>) -> u64 {
+        if name.is_none_or(|n| n.starts_with('%')) {
             3
         } else {
             1
-        };
+        }
+    }
+
+    pub fn new(name: impl Into<String>, kind: GraphKind, strict: bool) -> Self {
+        let name = name.into();
+        let next_anon_id = Self::initial_next_anon_id((!name.is_empty()).then_some(name.as_str()));
         Self {
             name,
             next_anon_id,

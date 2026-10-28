@@ -179,7 +179,7 @@ impl<'a> Dot<'a> {
         c.root_input = root_input;
         c.comp = true;
         let (r, g) = (&root.graphs[0], &mut c.graphs[0]);
-        g.next_anon_id = r.next_anon_id.clone();
+        g.next_anon_id = r.next_anon_id;
         g.rankdir = r.rankdir;
         g.nodesep = r.nodesep;
         g.ranksep = r.ranksep;
@@ -626,8 +626,13 @@ pub fn do_dot(d: &mut Dot<'_>, graph: &Graph) -> Result<(), String> {
                 }
             }
         }
-        // `clip_and_install` grew the root's box.
-        d.graphs[0].bb = c.root_bb;
+        // `clip_and_install` grew the root's box, and anonymous allocations used its id counter.
+        let Some(component_root) = c.graphs.first() else {
+            unreachable!("a pack component has no root");
+        };
+        let root = &mut d.graphs[0];
+        root.bb = c.root_bb;
+        root.next_anon_id = component_root.next_anon_id;
         // The component's nodes and edges are the root's objects in C, so what
         // its layout wrote before failing (dot_init_node_edge's sizes, ...)
         // stays visible to the root.
