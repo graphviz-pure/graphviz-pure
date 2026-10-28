@@ -613,6 +613,13 @@ fn auto_output_filename(input: Option<&OsStr>, graph_index: usize, langname: &st
     name
 }
 
+/// Writes collected `agerr` text, in order. The message is already the stderr line.
+fn print_diagnostics(diagnostics: &[graphviz_pure_core::Diagnostic]) {
+    for diagnostic in diagnostics {
+        fprintf_stderr(diagnostic.message());
+    }
+}
+
 /// The output of one job for one graph: text formats from their writer, raster formats
 /// drawn from the SVG (graphviz-pure-raster).
 fn render_job(
@@ -627,8 +634,19 @@ fn render_job(
         // `resolution`), which then scales the drawing.
         let explicit_dpi = graphviz_pure_core::cnum::drawing_dpi(&graph.graph_attrs) > 0.0;
         let svg = jobs.render_raster_svg_as(job, langname)?;
-        return graphviz_pure_raster::rasterize(&svg, fmt, explicit_dpi)
-            .map(|rendered| rendered.into_output());
+        // Raster does not report diagnostics today. Print any a later encoder
+        // emits, in the order they were collected, instead of dropping them
+        // with the bytes.
+        return match graphviz_pure_raster::rasterize(&svg, fmt, explicit_dpi) {
+            Ok(rendered) => {
+                print_diagnostics(rendered.diagnostics());
+                Ok(rendered.into_output())
+            }
+            Err(error) => {
+                print_diagnostics(error.diagnostics());
+                Err(error)
+            }
+        };
     }
     let text = jobs.render_as(job, OutputFormat::parse(typ)?, langname)?;
     Ok(graphviz_pure_core::charset::encode(&text).into_owned())

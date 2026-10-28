@@ -127,8 +127,8 @@ fn fontdb() -> Arc<usvg::fontdb::Database> {
 /// Rasterizes the port's SVG for one graph. `explicit_dpi` says whether the graph set `dpi`
 /// or `resolution` (then the SVG is already scaled and is drawn at one pixel per point).
 ///
-/// Diagnostics from the rasterizing call are on the [`Rendered`] value, or on the
-/// error. This writes nothing to stderr.
+/// The bytes are [`Rendered<Vec<u8>>`]. Diagnostics from the rasterizing call are
+/// on that value, or on the error. This writes nothing to stderr.
 pub fn rasterize(
     svg: &str,
     format: RasterFormat,
@@ -137,7 +137,7 @@ pub fn rasterize(
     let (result, diagnostics) =
         graphviz_pure_core::diag::capture(|| rasterize_inner(svg, format, explicit_dpi));
     match result {
-        Ok(output) => Ok(Rendered::from_parts(output, diagnostics)),
+        Ok(output) => Ok(Rendered::__from_parts(output, diagnostics)),
         Err(error) => Err(error.__set_diagnostics(diagnostics)),
     }
 }
@@ -208,16 +208,25 @@ mod tests {
     #[test]
     fn png_has_graphviz_default_size() {
         let png = rasterize(SVG, RasterFormat::Png, false).unwrap();
-        assert_eq!(&png[1..4], b"PNG");
+        assert_eq!(&png.output()[1..4], b"PNG");
         // IHDR width and height: 62pt and 116pt at 96 dpi, as C's -Tpng.
-        assert_eq!(u32::from_be_bytes(png[16..20].try_into().unwrap()), 83);
-        assert_eq!(u32::from_be_bytes(png[20..24].try_into().unwrap()), 155);
+        assert_eq!(
+            u32::from_be_bytes(png.output()[16..20].try_into().unwrap()),
+            83
+        );
+        assert_eq!(
+            u32::from_be_bytes(png.output()[20..24].try_into().unwrap()),
+            155
+        );
     }
 
     #[test]
     fn explicit_dpi_draws_one_pixel_per_point() {
         let png = rasterize(SVG, RasterFormat::Png, true).unwrap();
-        assert_eq!(u32::from_be_bytes(png[16..20].try_into().unwrap()), 62);
+        assert_eq!(
+            u32::from_be_bytes(png.output()[16..20].try_into().unwrap()),
+            62
+        );
     }
 
     #[test]
@@ -272,7 +281,7 @@ mod tests {
     #[test]
     fn jpeg_encodes() {
         let jpg = rasterize(SVG, RasterFormat::Jpeg, false).unwrap();
-        assert_eq!(&jpg[..2], &[0xFF, 0xD8]);
+        assert_eq!(&jpg.output()[..2], &[0xFF, 0xD8]);
     }
 
     #[test]

@@ -17,7 +17,7 @@ one release version, set in `[workspace.package]` in `Cargo.toml`, `web/package.
   `GraphvizError`, `GraphvizErrorKind`, `Diagnostic`, `DiagnosticLevel` and `Rendered`, and
   its `RasterFormat` is part of that same promise.
   `GraphvizError::__map_text`, `GraphvizError::__set_diagnostics`,
-  `Diagnostic::map_message` and `Rendered::from_parts` are outside it: hidden hooks
+  `Diagnostic::__map_message` and `Rendered::__from_parts` are outside it: hidden hooks
   the facade and the raster crate use, free to change in any release.
 - **The command line:** options, accepted `-T` formats, exit status, and the `-V` line's shape:
   `graphviz-pure - graphviz version 16.1.0 (graphviz-pure X.Y.Z)`. Not ported: C's remaining

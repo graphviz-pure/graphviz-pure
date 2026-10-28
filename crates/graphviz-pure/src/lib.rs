@@ -242,7 +242,7 @@ fn finish<T>(
 ) -> std::result::Result<Rendered<T>, GraphvizError> {
     let diagnostics = rewrite(diagnostics);
     match result {
-        Ok(output) => Ok(Rendered::from_parts(output, diagnostics)),
+        Ok(output) => Ok(Rendered::__from_parts(output, diagnostics)),
         Err(error) => Err(error.__set_diagnostics(diagnostics)),
     }
 }
@@ -256,13 +256,13 @@ fn partial<T>(
 ) -> (Rendered<T>, Option<GraphvizError>) {
     let diagnostics = rewrite(diagnostics);
     let error = error.map(|error| error.__set_diagnostics(diagnostics.clone()));
-    (Rendered::from_parts(output, diagnostics), error)
+    (Rendered::__from_parts(output, diagnostics), error)
 }
 
 fn rewrite(diagnostics: Vec<Diagnostic>) -> Vec<Diagnostic> {
     diagnostics
         .into_iter()
-        .map(|diagnostic| diagnostic.map_message(text))
+        .map(|diagnostic| diagnostic.__map_message(text))
         .collect()
 }
 
@@ -277,7 +277,7 @@ mod tests {
             b [label=<<TABLE><TR><TD HREF="x">c</TD></TR></TABLE>>]; a -> b }"#;
         let first = render_dot(src, "dot", "svg").unwrap();
         assert_eq!(first, render_dot(src, "dot", "svg").unwrap());
-        assert!(first.contains("_l_0"));
+        assert!(first.output().contains("_l_0"));
     }
 
     use super::*;
@@ -301,7 +301,9 @@ mod tests {
             opts.clone(),
         )
         .unwrap();
-        assert!(both[0].contains("z=57.090927") && both[1].contains("z=121.029893"));
+        assert!(
+            both.output()[0].contains("z=57.090927") && both.output()[1].contains("z=121.029893")
+        );
         let again = render_dot_all_with_options(
             &g.repeat(2),
             "neato",
@@ -329,24 +331,28 @@ mod tests {
         let (third, _) = with_rand_state(&mut state, || {
             render_dot_all_partial(g, "neato", "dot", &GlobalAttrs::default(), opts.clone())
         });
-        assert!(!third[0].contains("z=57.090927") && !third[0].contains("z=121.029893"));
+        assert!(
+            !third.output()[0].contains("z=57.090927")
+                && !third.output()[0].contains("z=121.029893")
+        );
         let (svgs, _) = with_rand_state(&mut RandState::default(), || {
             render_svg_all_partial(&g.repeat(2), "neato", &GlobalAttrs::default(), opts.clone())
         });
-        assert_eq!(svgs.len(), 2);
+        assert_eq!(svgs.output().len(), 2);
 
         let mut jobs = LayoutJobs::new(LayoutEngine::Neato, opts.clone());
         let mut first = parse_dot(g).unwrap();
-        jobs.layout(&mut first.inner).unwrap();
+        jobs.layout(&mut first.output_mut().inner).unwrap();
         let mut graph = parse_dot(g).unwrap();
         let mut carried =
             LayoutJobs::continuing(LayoutEngine::Neato, opts.clone(), jobs.rand_state());
-        carried.layout(&mut graph.inner).unwrap();
+        carried.layout(&mut graph.output_mut().inner).unwrap();
         let z = |g: &Graph| g.inner.nodes[1].attrs["z"].clone();
-        assert_eq!(z(&graph), "121.029893");
+        assert_eq!(z(graph.output()), "121.029893");
         let mut alone = parse_dot(g).unwrap();
-        let _ = layout_graph_with_options(&mut alone, LayoutEngine::Neato, opts.clone()).unwrap();
-        assert_eq!(z(&alone), "57.090927");
+        let _ = layout_graph_with_options(alone.output_mut(), LayoutEngine::Neato, opts.clone())
+            .unwrap();
+        assert_eq!(z(alone.output()), "57.090927");
     }
 
     // Issue #332: `Nop` belongs to the run, as C's global: after a `nop` engine
@@ -370,7 +376,7 @@ mod tests {
                 opts.clone(),
             )
             .unwrap();
-            assert!(all[1].contains(laid_out), "{}", all[1]);
+            assert!(all.output()[1].contains(laid_out), "{}", all.output()[1]);
             let (all, _) = render_dot_all_partial(
                 &src,
                 "neato",
@@ -378,7 +384,7 @@ mod tests {
                 &GlobalAttrs::default(),
                 opts.clone(),
             );
-            assert!(all[1].contains(laid_out), "{}", all[1]);
+            assert!(all.output()[1].contains(laid_out), "{}", all.output()[1]);
             let (svgs, _) =
                 render_svg_all_partial(&src, "neato", &GlobalAttrs::default(), opts.clone());
             let (alone, _) = render_svg_all_partial(
@@ -387,14 +393,14 @@ mod tests {
                 &GlobalAttrs::default(),
                 LayoutOptions::default(),
             );
-            assert_eq!(svgs[1], alone[0]);
+            assert_eq!(svgs.output()[1], alone.output()[0]);
 
             let mut jobs = LayoutJobs::new(LayoutEngine::Neato, opts.clone());
             let mut parsed = parse_dot(a).unwrap();
-            jobs.layout(&mut parsed.inner).unwrap();
+            jobs.layout(&mut parsed.output_mut().inner).unwrap();
             let mut graph = parse_dot(b).unwrap();
-            jobs.layout(&mut graph.inner).unwrap();
-            assert!(graph.inner.nodes[0].pos != graph.inner.nodes[1].pos);
+            jobs.layout(&mut graph.output_mut().inner).unwrap();
+            assert!(graph.output().inner.nodes[0].pos != graph.output().inner.nodes[1].pos);
         }
         // fdp with line edges leaves `Nop`.
         let src = format!("graph A {{ layout=fdp; a -- x }}\n{b}");
@@ -407,13 +413,17 @@ mod tests {
                 opts.clone(),
             )
         });
-        assert!(all[1].contains("node b 0 0 "), "{}", all[1]);
+        assert!(
+            all.output()[1].contains("node b 0 0 "),
+            "{}",
+            all.output()[1]
+        );
     }
 
     #[test]
     fn smoke_render_svg() {
         let svg = render_dot("digraph G { a -> b; }", "dot", "svg").unwrap();
-        assert!(svg.contains("<svg"));
+        assert!(svg.output().contains("<svg"));
     }
 
     #[test]
@@ -427,9 +437,11 @@ mod tests {
             &globals,
         )
         .unwrap();
-        assert_eq!(outs.len(), 2);
-        assert!(outs[0].contains("<title>a</title>") && !outs[0].contains("<ellipse"));
-        assert!(outs[1].contains("<title>c</title>"));
+        assert_eq!(outs.output().len(), 2);
+        assert!(
+            outs.output()[0].contains("<title>a</title>") && !outs.output()[0].contains("<ellipse")
+        );
+        assert!(outs.output()[1].contains("<title>c</title>"));
     }
 
     // Issue #378: the root functions take and return text. A real U+10FF41 is the four bytes
@@ -444,7 +456,7 @@ mod tests {
              edge x\u{10FF41}y b 4 0.42153 1.2313 0.42153 1.0689 0.42153 0.84989 0.42153 0.66136 \
              \u{10FF41} 0.51876 0.86667 solid black\n\
              stop\n";
-        assert_eq!(render_dot(src, "dot", "plain").unwrap(), want);
+        assert_eq!(render_dot(src, "dot", "plain").unwrap().output(), want);
         // the command line's path: the file's bytes, decoded, rendered and encoded
         let file = Decoded::decode_slice(src.as_bytes());
         let out = decoded::render_dot(&file, "dot", "plain").unwrap();
@@ -455,35 +467,56 @@ mod tests {
         let opts = LayoutOptions::default();
         let no_globals = GlobalAttrs::default();
         let all = render_dot_all_with_options(src, "dot", "plain", &no_globals, opts.clone());
-        assert_eq!(all.unwrap(), [want]);
+        assert_eq!(all.unwrap().output().as_slice(), [want]);
         let (all, err) = render_dot_all_partial(src, "dot", "plain", &no_globals, opts.clone());
         assert!(err.is_none());
-        assert_eq!(all, [want]);
+        assert_eq!(all.output().as_slice(), [want]);
         let (svgs, err) = render_svg_all_partial(src, "dot", &no_globals, opts.clone());
         assert!(err.is_none());
-        assert!(svgs[0].0.contains(">x\u{10FF41}y</text>"), "{}", svgs[0].0);
+        assert!(
+            svgs.output()[0].0.contains(">x\u{10FF41}y</text>"),
+            "{}",
+            svgs.output()[0].0
+        );
         // globals are text too
         let mut globals = GlobalAttrs::default();
         globals.node.insert("label".into(), "\u{10FF41}".into());
         let out = render_dot_all("digraph { a }", "dot", "plain", &globals).unwrap();
-        assert!(out[0].contains(" 0.5 \u{10FF41} solid "), "{}", out[0]);
+        assert!(
+            out.output()[0].contains(" 0.5 \u{10FF41} solid "),
+            "{}",
+            out.output()[0]
+        );
         let (out, _) =
             render_dot_all_partial("digraph { a }", "dot", "plain", &globals, opts.clone());
-        assert!(out[0].contains(" 0.5 \u{10FF41} solid "), "{}", out[0]);
+        assert!(
+            out.output()[0].contains(" 0.5 \u{10FF41} solid "),
+            "{}",
+            out.output()[0]
+        );
         let (svgs, _) = render_svg_all_partial("digraph { a }", "dot", &globals, opts.clone());
-        assert!(svgs[0].0.contains(">\u{10FF41}</text>"), "{}", svgs[0].0);
-        let g = &parse_dot_all("digraph { a }", &globals).unwrap()[0];
+        assert!(
+            svgs.output()[0].0.contains(">\u{10FF41}</text>"),
+            "{}",
+            svgs.output()[0].0
+        );
+        let parsed = parse_dot_all("digraph { a }", &globals).unwrap();
+        let g = &parsed.output()[0];
         let canon = render_graph(g, OutputFormat::Canon).unwrap();
-        assert!(canon.contains("\tnode [label=\u{10FF41}];\n"), "{canon}");
+        assert!(
+            canon.output().contains("\tnode [label=\u{10FF41}];\n"),
+            "{}",
+            canon.output()
+        );
         // a parsed graph holds the decoded form, and renders back to text
         let mut g = parse_dot(src).unwrap();
         assert_eq!(
-            charset::encode(&g.inner.nodes[0].name),
+            charset::encode(&g.output().inner.nodes[0].name),
             "x\u{10FF41}y".as_bytes()
         );
-        let _ = layout_graph(&mut g, LayoutEngine::Dot).unwrap();
-        let plain = render_graph_named(&g, OutputFormat::Plain, "plain").unwrap();
-        assert_eq!(plain, want);
+        let _ = layout_graph(g.output_mut(), LayoutEngine::Dot).unwrap();
+        let plain = render_graph_named(g.output(), OutputFormat::Plain, "plain").unwrap();
+        assert_eq!(plain.output(), want);
         // error messages are text: they quote the caller's names as given
         let err = render_dot(src, "x\u{10FF41}", "plain").unwrap_err();
         assert_eq!(err.to_string(), "Unsupported layout engine: 'x\u{10FF41}'");
@@ -499,8 +532,8 @@ mod tests {
         // 1. Multi-graph DOT stream (`multi.gv`)
         let multi = "digraph G { a -> b; }\ndigraph H { c -> d; }\n";
         let svg = render_dot(multi, "dot", "svg").unwrap();
-        assert!(svg.contains("<svg"));
-        assert!(svg.contains("<title>a</title>"));
+        assert!(svg.output().contains("<svg"));
+        assert!(svg.output().contains("<title>a</title>"));
 
         // 2. Same cluster name in different parent scopes (`b7.gv`)
         let b7 = r#"
@@ -517,9 +550,9 @@ mod tests {
             }
         "#;
         let g = parse_dot(b7).unwrap();
-        assert_eq!(g.inner.subgraphs.len(), 3);
+        assert_eq!(g.output().inner.subgraphs.len(), 3);
         let j0 = render_dot(b7, "dot", "json0").unwrap();
-        assert!(j0.contains("\"_subgraph_cnt\": 3"));
+        assert!(j0.output().contains("\"_subgraph_cnt\": 3"));
     }
 
     #[test]
@@ -582,11 +615,11 @@ mod tests {
     fn raster_svg_is_drawn_as_cairo_draws() {
         let svg_and_raster = |src: &str| {
             let mut g = parse_dot(src).unwrap();
-            let _ = layout_graph(&mut g, LayoutEngine::Dot).unwrap();
-            let svg = GraphJobs::new(&g.inner)
+            let _ = layout_graph(g.output_mut(), LayoutEngine::Dot).unwrap();
+            let svg = GraphJobs::new(&g.output().inner)
                 .render(OutputFormat::Svg, "svg")
                 .unwrap();
-            let raster = GraphJobs::new(&g.inner)
+            let raster = GraphJobs::new(&g.output().inner)
                 .render_raster_svg_as(0, "png")
                 .unwrap();
             (svg, raster)
@@ -627,8 +660,8 @@ mod tests {
     fn epsf_run(src: &str) -> String {
         graphviz_pure_render::reset_render_state();
         let mut g = parse_dot(src).unwrap();
-        let _ = layout_graph(&mut g, LayoutEngine::Dot).unwrap();
-        let mut jobs = GraphJobs::new(&g.inner);
+        let _ = layout_graph(g.output_mut(), LayoutEngine::Dot).unwrap();
+        let mut jobs = GraphJobs::new(&g.output().inner);
         jobs.write_output_file_text(true);
         jobs.render(OutputFormat::Dot, "dot").unwrap()
     }
@@ -640,8 +673,8 @@ mod tests {
         let src = "digraph { a [_tldraw_=\"zz\"]; a -> b [_hdraw_=\"zz\"] }";
         for format in ["json", "xdot_json", "json0", "dot_json"] {
             let out = render_dot(src, "dot", format).unwrap();
-            let doc: serde_json::Value =
-                serde_json::from_str(&out).unwrap_or_else(|e| panic!("{format}: {e}\n{out}"));
+            let doc: serde_json::Value = serde_json::from_str(out.output())
+                .unwrap_or_else(|e| panic!("{format}: {e}\n{}", out.output()));
             let nodes = doc["objects"].as_array().unwrap();
             let a = nodes.iter().find(|o| o["name"] == "a").unwrap();
             let want = if format.contains("json0") || format == "dot_json" {
@@ -660,10 +693,14 @@ mod tests {
         let (png, eps) = image_dir("lib-runs");
         let src = format!("digraph {{ a [image=\"{}\" label=\"\"] }}", png.display());
         let first = render_dot(&src, "dot", "dot").unwrap();
-        assert!(first.contains("height=0.5,"), "{first}");
+        assert!(first.output().contains("height=0.5,"), "{}", first.output());
         write_png(&png, 400, 200);
         let second = render_dot(&src, "dot", "dot").unwrap();
-        assert!(second.contains("height=2.9856,"), "{second}");
+        assert!(
+            second.output().contains("height=2.9856,"),
+            "{}",
+            second.output()
+        );
         let src = format!(
             "digraph {{ e [shape=epsf shapefile=\"{}\"] }}",
             eps.display()
@@ -684,16 +721,16 @@ mod tests {
         let (png, _) = image_dir("lib-render");
         let src = format!("digraph {{ a [image=\"{}\"] }}", png.display());
         let mut a = parse_dot(&src).unwrap();
-        let _ = layout_graph(&mut a, LayoutEngine::Dot).unwrap();
+        let _ = layout_graph(a.output_mut(), LayoutEngine::Dot).unwrap();
         let mut b = parse_dot("digraph { imagepath=\"nowhere\"; x [image=\"none.png\"] }").unwrap();
-        let _ = layout_graph(&mut b, LayoutEngine::Dot).unwrap();
+        let _ = layout_graph(b.output_mut(), LayoutEngine::Dot).unwrap();
         let image = format!("<image xlink:href=\"{}\" width=\"40px\"", png.display());
-        let svg = render_graph(&a, OutputFormat::Svg).unwrap();
-        assert!(svg.contains(&image), "{svg}");
-        let svg = std::thread::spawn(move || render_graph(&a, OutputFormat::Svg).unwrap())
+        let svg = render_graph(a.output(), OutputFormat::Svg).unwrap();
+        assert!(svg.output().contains(&image), "{}", svg.output());
+        let svg = std::thread::spawn(move || render_graph(a.output(), OutputFormat::Svg).unwrap())
             .join()
             .unwrap();
-        assert!(svg.contains(&image), "{svg}");
+        assert!(svg.output().contains(&image), "{}", svg.output());
     }
 
     // #347 review: each job keeps its own loadimage plugin. The PostScript image comes first,
@@ -708,8 +745,8 @@ mod tests {
         );
         graphviz_pure_render::reset_render_state();
         let mut g = parse_dot(&src).unwrap();
-        let _ = layout_graph(&mut g, LayoutEngine::Dot).unwrap();
-        let mut jobs = GraphJobs::new(&g.inner);
+        let _ = layout_graph(g.output_mut(), LayoutEngine::Dot).unwrap();
+        let mut jobs = GraphJobs::new(&g.output().inner);
         let first = jobs.render_as(0, OutputFormat::Svg, "svg").unwrap();
         let second = jobs.render_as(1, OutputFormat::Svg, "svg").unwrap();
         assert_eq!(first, second);
@@ -726,13 +763,19 @@ mod tests {
             eps.display()
         );
         let json = render_dot(&src, "dot", "json").unwrap();
-        serde_json::from_str::<serde_json::Value>(&json).unwrap();
+        serde_json::from_str::<serde_json::Value>(json.output()).unwrap();
         assert!(
             render_dot(&src, "dot", "dot")
                 .unwrap()
+                .output()
                 .starts_with("digraph {")
         );
-        assert!(!render_dot(&src, "dot", "svg").unwrap().contains("newpath"));
+        assert!(
+            !render_dot(&src, "dot", "svg")
+                .unwrap()
+                .output()
+                .contains("newpath")
+        );
     }
 
     fn messages(diagnostics: &[Diagnostic]) -> Vec<&str> {
@@ -740,22 +783,62 @@ mod tests {
     }
 
     // #522: an unknown shape warns and the render still succeeds. The warning is the
-    // exact `agwarningf` text, and the next call does not keep it.
+    // exact `agwarningf` text. The same call on this thread reports it again.
     #[test]
     fn a_successful_render_returns_its_warnings() {
         let rendered = render_dot("digraph { a [shape=only_a] }", "dot", "svg").unwrap();
-        assert!(rendered.contains("<svg"));
+        assert!(rendered.output().contains("<svg"));
         assert_eq!(
             messages(rendered.diagnostics()),
             ["Warning: using box for unknown shape only_a\n"]
         );
         assert_eq!(rendered.diagnostics()[0].level(), DiagnosticLevel::Warning);
 
-        let next = render_dot("digraph { b [shape=only_b] }", "dot", "svg").unwrap();
+        let again = render_dot("digraph { a [shape=only_a] }", "dot", "svg").unwrap();
         assert_eq!(
-            messages(next.diagnostics()),
-            ["Warning: using box for unknown shape only_b\n"]
+            messages(again.diagnostics()),
+            messages(rendered.diagnostics())
         );
+    }
+
+    // The same input twice, including an unknown color (once per process on the
+    // command line) and, on the error path, an HTML tag mismatch.
+    #[test]
+    fn the_same_call_twice_returns_the_same_diagnostics() {
+        let src = "digraph { a [shape=only_a]; a->b [color=nosuchcolor] }";
+        let first = render_dot(src, "dot", "svg").unwrap();
+        let second = render_dot(src, "dot", "svg").unwrap();
+        assert_eq!(
+            messages(first.diagnostics()),
+            messages(second.diagnostics())
+        );
+        assert_eq!(
+            messages(first.diagnostics()),
+            [
+                "Warning: using box for unknown shape only_a\n",
+                "Warning: nosuchcolor is not a known color.\n",
+            ]
+        );
+
+        let bad = "digraph { a [label=<<b>A</i>>] }\ndigraph { layout=not_an_engine; b }";
+        let first = render_dot_all(bad, "dot", "svg", &GlobalAttrs::default()).unwrap_err();
+        let second = render_dot_all(bad, "dot", "svg", &GlobalAttrs::default()).unwrap_err();
+        assert_eq!(first, second);
+        assert_eq!(
+            messages(first.diagnostics()),
+            messages(second.diagnostics())
+        );
+        assert!(
+            messages(first.diagnostics())
+                .iter()
+                .any(|message| message.contains("mismatched tag")),
+            "{:?}",
+            messages(first.diagnostics())
+        );
+
+        let syntax = render_dot("digraph {", "dot", "svg").unwrap_err();
+        assert_eq!(syntax.kind(), GraphvizErrorKind::Syntax);
+        assert!(syntax.diagnostics().is_empty());
     }
 
     // The warning belongs to the call that failed, on the error, in order.
@@ -783,7 +866,7 @@ mod tests {
         let run = |shape: &'static str| {
             std::thread::spawn(move || {
                 let mut graph = parse_dot(&format!("digraph {{ a [shape={shape}] }}")).unwrap();
-                let laid_out = layout_graph(&mut graph, LayoutEngine::Dot).unwrap();
+                let laid_out = layout_graph(graph.output_mut(), LayoutEngine::Dot).unwrap();
                 messages(laid_out.diagnostics())
                     .into_iter()
                     .map(str::to_string)

@@ -14,10 +14,14 @@ use std::fmt;
 ///
 /// It does not wrap another error: [`std::error::Error::source`] returns `None`.
 ///
-/// [`Self::diagnostics`] is every `agerr` message from the call that failed, in
-/// order, including warnings printed before the failure. [`std::fmt::Display`]
-/// is only this error's own text.
-#[derive(Debug, Clone, PartialEq, Eq)]
+/// [`Self::diagnostics`] holds the `agerr` messages emitted before and around
+/// the failure. It does not include the failure's own text: that is
+/// [`std::fmt::Display`]. A syntax error carries none.
+///
+/// [`PartialEq`] compares the kind and the text (the detail, the line, the
+/// column, the file, the engine and the attribute name). It does not compare
+/// [`Self::diagnostics`].
+#[derive(Debug, Clone)]
 pub struct GraphvizError {
     kind: GraphvizErrorKind,
     /// The detail. [`std::fmt::Display`] adds the category prefix.
@@ -77,7 +81,7 @@ pub enum DiagnosticLevel {
     /// `AGWARN`. The message text starts with `Warning: `.
     Warning,
     /// `AGMAX`. Counted as an error. The message text starts with `Warning: `.
-    Max,
+    CountedAsError,
 }
 
 /// One `agerr` / `agwarningf` message, in the order C wrote it.
@@ -111,7 +115,7 @@ impl Diagnostic {
 
     /// Not part of the stable API. The facade rewrites decoded text at the boundary.
     #[doc(hidden)]
-    pub fn map_message(mut self, mut f: impl FnMut(String) -> String) -> Self {
+    pub fn __map_message(mut self, mut f: impl FnMut(String) -> String) -> Self {
         self.message = f(self.message);
         self
     }
@@ -119,10 +123,15 @@ impl Diagnostic {
 
 /// A successful call's value plus the diagnostics it collected.
 ///
+/// Text from the facade is `Rendered<String>`, or `Rendered<Vec<String>>` when
+/// one call renders every graph. A parsed graph and a layout use the graph type
+/// and `()`. Raster bytes are `Rendered<Vec<u8>>`.
+///
 /// The diagnostics are the `agerr` messages of that call, in order. Dropping
-/// the value drops them; [`Self::into_output`] keeps only the value.
+/// the value drops them. [`Self::into_output`] keeps only the value, and
+/// [`Self::into_parts`] keeps both.
 #[must_use]
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Rendered<T> {
     output: T,
     diagnostics: Vec<Diagnostic>,
@@ -131,7 +140,7 @@ pub struct Rendered<T> {
 impl<T> Rendered<T> {
     /// Not part of the stable API. The facade and the raster crate build the value.
     #[doc(hidden)]
-    pub fn from_parts(output: T, diagnostics: Vec<Diagnostic>) -> Self {
+    pub fn __from_parts(output: T, diagnostics: Vec<Diagnostic>) -> Self {
         Self {
             output,
             diagnostics,
@@ -156,80 +165,16 @@ impl<T> Rendered<T> {
         self.output
     }
 
+    /// The value and the diagnostics, in that order.
+    #[must_use]
+    pub fn into_parts(self) -> (T, Vec<Diagnostic>) {
+        (self.output, self.diagnostics)
+    }
+
     /// `agerr` messages from the call, in order.
     #[must_use]
     pub fn diagnostics(&self) -> &[Diagnostic] {
         &self.diagnostics
-    }
-}
-
-impl<T> std::ops::Deref for Rendered<T> {
-    type Target = T;
-
-    fn deref(&self) -> &T {
-        &self.output
-    }
-}
-
-impl<T> std::ops::DerefMut for Rendered<T> {
-    fn deref_mut(&mut self) -> &mut T {
-        &mut self.output
-    }
-}
-
-impl<T, I> std::ops::Index<I> for Rendered<T>
-where
-    T: std::ops::Index<I>,
-{
-    type Output = T::Output;
-
-    fn index(&self, index: I) -> &T::Output {
-        &self.output[index]
-    }
-}
-
-impl<T: PartialEq> PartialEq for Rendered<T> {
-    fn eq(&self, other: &Self) -> bool {
-        self.output == other.output && self.diagnostics == other.diagnostics
-    }
-}
-
-impl<T: Eq> Eq for Rendered<T> {}
-
-impl PartialEq<str> for Rendered<String> {
-    fn eq(&self, other: &str) -> bool {
-        self.output == other
-    }
-}
-
-impl PartialEq<&str> for Rendered<String> {
-    fn eq(&self, other: &&str) -> bool {
-        self.output == *other
-    }
-}
-
-impl<T: fmt::Display> fmt::Display for Rendered<T> {
-    /// The output. Diagnostics are [`Rendered::diagnostics`], not this text.
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        fmt::Display::fmt(&self.output, f)
-    }
-}
-
-impl<T, U> PartialEq<[U]> for Rendered<Vec<T>>
-where
-    T: PartialEq<U>,
-{
-    fn eq(&self, other: &[U]) -> bool {
-        self.output == other
-    }
-}
-
-impl<T, U, const N: usize> PartialEq<[U; N]> for Rendered<Vec<T>>
-where
-    T: PartialEq<U>,
-{
-    fn eq(&self, other: &[U; N]) -> bool {
-        self.output == *other
     }
 }
 
@@ -345,11 +290,13 @@ impl GraphvizError {
         self.engine
     }
 
-    /// `agerr` messages from the call that returned this error, in order.
+    /// `agerr` messages emitted before and around this failure, in order.
     ///
-    /// Empty when the error was built without a collected call, as the command
-    /// line's own messages are. A failed render still carries the warnings
-    /// printed before it failed.
+    /// Not this failure's own text: that is [`std::fmt::Display`], and
+    /// [`Self::message`] is the detail without the category prefix. Empty when
+    /// nothing was emitted around the failure. A syntax error is reported only
+    /// through this error, so its list is empty. Empty also when the error was
+    /// built without a collected call, as the command line's own messages are.
     #[must_use]
     pub fn diagnostics(&self) -> &[Diagnostic] {
         self.diagnostics
@@ -387,7 +334,7 @@ impl GraphvizError {
             .map(|list| {
                 list.0
                     .into_iter()
-                    .map(|diagnostic| diagnostic.map_message(&mut f))
+                    .map(|diagnostic| diagnostic.__map_message(&mut f))
                     .collect::<Vec<_>>()
             })
             .unwrap_or_default();
@@ -395,6 +342,20 @@ impl GraphvizError {
         self
     }
 }
+
+impl PartialEq for GraphvizError {
+    fn eq(&self, other: &Self) -> bool {
+        self.kind == other.kind
+            && self.detail == other.detail
+            && self.engine == other.engine
+            && self.attr == other.attr
+            && self.line == other.line
+            && self.column == other.column
+            && self.file == other.file
+    }
+}
+
+impl Eq for GraphvizError {}
 
 impl fmt::Display for GraphvizError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -524,5 +485,14 @@ mod tests {
         assert_eq!(render.message(), "encoding the PNG: no");
         assert_eq!(render.to_string(), "Rendering error: encoding the PNG: no");
         assert!(std::error::Error::source(&render).is_none());
+
+        let plain = GraphvizError::syntax(1, 1, "syntax error in line 1 near ';'", None);
+        assert!(plain.diagnostics().is_empty());
+        let marked = plain.clone().__set_diagnostics(vec![Diagnostic::new(
+            DiagnosticLevel::Warning,
+            "Warning: x\n".into(),
+        )]);
+        assert_eq!(plain, marked);
+        assert_ne!(plain.diagnostics(), marked.diagnostics());
     }
 }
