@@ -1,0 +1,2 @@
+C:    GVBINDIR=<pango-free plugins> dot -Kdot -Tsvg repro.gv
+port: graphviz-pure -Kdot -Tsvg repro.gv

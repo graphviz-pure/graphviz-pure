@@ -45,7 +45,8 @@ number, sort and container order reproduces macOS libc/cgraph behaviour.
   modes, sep/esep, splines, pack/packmode, labels, ports, ratio/size, random
   graphs up to 120 nodes). Goldens: `scripts/gen-golden.sh` writes
   `tests/golden/neato/`. Cases whose C output is not reproducible run to run
-  (`start=rand` uses the clock; `ngk10_4` reads uninitialised memory) and
+  (`start=rand` uses the clock; `ngk10_4`'s two-way multi-edge pair ends on the boundary
+  of GTS's triangulation, so the tie is broken by the order GTS returns its faces) and
   `model=circuit mode=KK` (segfaults in C 16.1.0) are excluded.
 - A locally built, instrumentable C copy lives in `~/src/gv-ref/build-neato`
   (`run.sh`); it matches Homebrew's output to the last printed digit on almost

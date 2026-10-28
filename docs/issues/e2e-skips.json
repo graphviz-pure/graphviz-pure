@@ -1,0 +1,100 @@
+[
+  {
+    "input": "twopi/fx_arrows",
+    "class": "c-nondeterminism",
+    "cause": "C routes the arrows graphs differently from run to run: nodes Z, i and I are exactly vertically aligned, so the edge between Z and I ties and can run straight or pass the obstacle in between on either side. The same C binary gives 3 or 4 different SVGs over 20 runs of each of the 8 arrows files. The port is deterministic and always draws one of C's routes.",
+    "issue": "https://github.com/graphviz-pure/graphviz-pure/issues/41",
+    "where": "tests/fuzz-open/032-twopi-arrows-c-nondeterministic-routing"
+  },
+  {
+    "input": "twopi/wild_gv16_directed_oldarrows_f70da3",
+    "class": "c-nondeterminism",
+    "cause": "C routes the arrows graphs differently from run to run: nodes Z, i and I are exactly vertically aligned, so the edge between Z and I ties and can run straight or pass the obstacle in between on either side. The same C binary gives 3 or 4 different SVGs over 20 runs of each of the 8 arrows files. The port is deterministic and always draws one of C's routes.",
+    "issue": "https://github.com/graphviz-pure/graphviz-pure/issues/41",
+    "where": "tests/fuzz-open/032-twopi-arrows-c-nondeterministic-routing"
+  },
+  {
+    "input": "twopi/wild_gv16_graphs_arrows_148b6b",
+    "class": "c-nondeterminism",
+    "cause": "C routes the arrows graphs differently from run to run: nodes Z, i and I are exactly vertically aligned, so the edge between Z and I ties and can run straight or pass the obstacle in between on either side. The same C binary gives 3 or 4 different SVGs over 20 runs of each of the 8 arrows files. The port is deterministic and always draws one of C's routes.",
+    "issue": "https://github.com/graphviz-pure/graphviz-pure/issues/41",
+    "where": "tests/fuzz-open/032-twopi-arrows-c-nondeterministic-routing"
+  },
+  {
+    "input": "twopi/wild_gv16_graphs_arrowsize_46ccd8",
+    "class": "c-nondeterminism",
+    "cause": "C routes the arrows graphs differently from run to run: nodes Z, i and I are exactly vertically aligned, so the edge between Z and I ties and can run straight or pass the obstacle in between on either side. The same C binary gives 3 or 4 different SVGs over 20 runs of each of the 8 arrows files. The port is deterministic and always draws one of C's routes.",
+    "issue": "https://github.com/graphviz-pure/graphviz-pure/issues/41",
+    "where": "tests/fuzz-open/032-twopi-arrows-c-nondeterministic-routing"
+  },
+  {
+    "input": "twopi/wild_gv16_graphs_newarrows_769825",
+    "class": "c-nondeterminism",
+    "cause": "C routes the arrows graphs differently from run to run: nodes Z, i and I are exactly vertically aligned, so the edge between Z and I ties and can run straight or pass the obstacle in between on either side. The same C binary gives 3 or 4 different SVGs over 20 runs of each of the 8 arrows files. The port is deterministic and always draws one of C's routes.",
+    "issue": "https://github.com/graphviz-pure/graphviz-pure/issues/41",
+    "where": "tests/fuzz-open/032-twopi-arrows-c-nondeterministic-routing"
+  },
+  {
+    "input": "twopi/wild_gv16_linux_x86_arrows_dot_1ce23f",
+    "class": "c-nondeterminism",
+    "cause": "C routes the arrows graphs differently from run to run: nodes Z, i and I are exactly vertically aligned, so the edge between Z and I ties and can run straight or pass the obstacle in between on either side. The same C binary gives 3 or 4 different SVGs over 20 runs of each of the 8 arrows files. The port is deterministic and always draws one of C's routes.",
+    "issue": "https://github.com/graphviz-pure/graphviz-pure/issues/41",
+    "where": "tests/fuzz-open/032-twopi-arrows-c-nondeterministic-routing"
+  },
+  {
+    "input": "twopi/wild_wild_graphs_arrows_a4826e",
+    "class": "c-nondeterminism",
+    "cause": "C routes the arrows graphs differently from run to run: nodes Z, i and I are exactly vertically aligned, so the edge between Z and I ties and can run straight or pass the obstacle in between on either side. The same C binary gives 3 or 4 different SVGs over 20 runs of each of the 8 arrows files. The port is deterministic and always draws one of C's routes.",
+    "issue": "https://github.com/graphviz-pure/graphviz-pure/issues/41",
+    "where": "tests/fuzz-open/032-twopi-arrows-c-nondeterministic-routing"
+  },
+  {
+    "input": "twopi/wild_wild_graphs_arrowsize_ccef6e",
+    "class": "c-nondeterminism",
+    "cause": "C routes the arrows graphs differently from run to run: nodes Z, i and I are exactly vertically aligned, so the edge between Z and I ties and can run straight or pass the obstacle in between on either side. The same C binary gives 3 or 4 different SVGs over 20 runs of each of the 8 arrows files. The port is deterministic and always draws one of C's routes.",
+    "issue": "https://github.com/graphviz-pure/graphviz-pure/issues/41",
+    "where": "tests/fuzz-open/032-twopi-arrows-c-nondeterministic-routing"
+  },
+  {
+    "input": "neato/fuzz_ipsep_cluster_other_component",
+    "class": "c-crash",
+    "cause": "C aborts: `bitarray.h:81: Assertion 'index < self->size_bits' failed` (exit 134), so there is no C output to match. The port draws the graph and exits 0.",
+    "issue": null,
+    "where": "crates/graphviz-pure-cli/tests/cli.rs"
+  },
+  {
+    "input": "neato/fuzz_ipsep_vpsc_clusters",
+    "class": "c-crash",
+    "cause": "C aborts: the VPSC solver throws `Cycle Error!`, an uncaught C++ exception (exit 134), so there is no C output to match. The port draws the graph and exits 0.",
+    "issue": null,
+    "where": "crates/graphviz-pure-cli/tests/cli.rs"
+  },
+  {
+    "input": "neato/fuzz_nan_pin_edge",
+    "class": "c-crash",
+    "cause": "C dies with SIGSEGV (exit 139), so there is no C output to match. The port draws the graph and exits 0.",
+    "issue": null,
+    "where": "crates/graphviz-pure-cli/tests/cli.rs"
+  },
+  {
+    "input": "fdp/wild_gv16_undirected_ngk10_4_793340",
+    "class": "c-nondeterminism",
+    "cause": "C's routing of the two-way multi-edge pair (13, 24) depends on whether the endpoint of the shortest path falls in a triangle of GTS's triangulation, which is a near-tie; over 10 runs of C with the reference's math the input gives three outcomes (fail the first edge, fail the second, or no warning at all), with different stdout. The port deterministically prints one of C's own outputs.",
+    "issue": null,
+    "where": "docs/porting/neato.md"
+  },
+  {
+    "input": "fdp/wild_gv16_infosrc_plugins_1a797f",
+    "class": "c-nondeterminism",
+    "cause": "C's fdp layout of a graph with clusters depends on the heap addresses of the derived graph's nodes: C compares `Agnode_t *` pointers in `lib/fdpgen/layout.c:466` (`if (hd > tl)`), `:501` (`if (dn > m)`) and `:634` (`genPorts`), so the derived edges and the ports are ordered by address. macOS's allocator gives the freed nodes of one derived graph back to the next one or fresh addresses from one run to the next, so C's output varies; the port models the allocator and always draws one of C's layouts.",
+    "issue": "https://github.com/graphviz-pure/graphviz-pure/issues/34",
+    "where": "tests/fuzz-open/025-fdp-cluster-address-dependent-layout"
+  },
+  {
+    "input": "sfdp/wild_gv16_linux_x86_neatosplines_neato1_448ced",
+    "class": "c-nondeterminism",
+    "cause": "GTS returns the Delaunay edges of the same points in a different order on every run (the surface's face hash is keyed by pointers). The input sets `overlap=false`, so sfdp runs the prism overlap removal with 1000 tries, and every try adds the entries of the overlap matrix in that order (`call_tri`, `lib/neatogen/call_tri.c:35`; `delaunay_tri`, `lib/neatogen/delaunay.c:334-347`), which changes the summation order of the CG solve by an ulp. The 1000 tries amplify that into a different layout. `docs/porting/sfdp.md` records the same file matching its golden in only 6 of 10 runs of C on the reference build.",
+    "issue": null,
+    "where": "docs/porting/sfdp.md"
+  }
+]

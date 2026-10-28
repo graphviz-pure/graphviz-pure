@@ -4,6 +4,8 @@ dist/
 # Generated at build time by ../scripts/site-sync-docs.mjs and site-issues.mjs, and site-wasm.sh
 src/content/docs/porting/
 src/data/issues.json
+src/data/e2e-skips.json
+src/data/open-fidelity.json
 public/whats-left/
 public/wasm/
 .starlight-links-validator/

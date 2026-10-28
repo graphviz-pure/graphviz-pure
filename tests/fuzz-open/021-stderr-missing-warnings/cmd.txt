@@ -1,2 +1,0 @@
-GVBINDIR=$HOME/src/gv-ref/lutplugins dot -Tsvg -o /dev/null repro.gv
-graphviz-pure -Tsvg -o /dev/null repro.gv

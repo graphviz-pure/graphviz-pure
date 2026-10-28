@@ -1,0 +1,2 @@
+C:    GVBINDIR=<pango-free plugins> dot -Kfdp -Gnormalize=30 -Gsep=+10 -Goverlap=compress -Tsvg repro.gv
+port: graphviz-pure -Kfdp -Gnormalize=30 -Gsep=+10 -Goverlap=compress -Tsvg repro.gv

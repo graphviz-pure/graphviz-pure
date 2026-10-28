@@ -1,0 +1,2 @@
+Error: node "v0" belongs to two non-nested clusters "cluster_2" and "cluster_0"
+Error: node "v6" belongs to two non-nested clusters "cluster_2" and "cluster_0"

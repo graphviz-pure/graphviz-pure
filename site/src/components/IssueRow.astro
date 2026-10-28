@@ -1,6 +1,7 @@
 ---
 import Mark from './Mark.astro';
 import { url, type Issue } from '../lib/data';
+import { classShort } from '../lib/issues';
 interface Props { i: Issue; }
 const { i } = Astro.props;
 ---
@@ -11,6 +12,7 @@ const { i } = Astro.props;
 		<span class="sub">
 			<code>{i.engine}</code> · {i.category} · {i.case_count} case{i.case_count === 1 ? '' : 's'}
 			{i.close_as_wontfix && <> · <span class="chip y">won't fix</span></>}
+			{i.class && <> · <span class="chip">{classShort(i.class)}</span></>}
 		</span>
 	</div>
 	<span class="filed">{i.issue_url ? <a href={i.issue_url}>GitHub issue</a> : <Mark kind="pending" label="not filed" />}</span>
