@@ -137,6 +137,7 @@ jobs:
           cargo build --release --target wasm32-unknown-unknown -p graphviz-pure-wasm
           wasm-bindgen --target nodejs --out-dir "$RUNNER_TEMP/gvwasm/pkg" \
             target/wasm32-unknown-unknown/release/graphviz_pure_wasm.wasm
+          node scripts/export-graphviz-error.mjs "$RUNNER_TEMP/gvwasm/pkg/graphviz_pure_wasm.js"
       # Fails if a file of tests/golden/e2e-baseline.libm-matched.portable.json stops matching C
       # (computing with the same math functions).
       - name: Run wasm e2e against the baseline
@@ -196,6 +197,15 @@ jobs:
       - name: Build the npm package
         working-directory: web
         run: npm run build:wasm
+      # The hand-checked .d.ts replaces the generated one inside build:wasm.
+      # This compares that generated file, written to a temp dir, with the source.
+      - name: Hand-checked types match wasm-bindgen's exports
+        run: |
+          wasm-bindgen --target web --remove-name-section --remove-producers-section \
+            --out-dir "$RUNNER_TEMP/gvtypes" \
+            target/wasm32-unknown-unknown/release/graphviz_pure_wasm.wasm
+          node scripts/check-wasm-dts.mjs "$RUNNER_TEMP/gvtypes/graphviz_pure_wasm.d.ts" \
+            web/graphviz_pure_wasm.d.ts
       # The release packs the same way (prepack copies the licence files in); JSR publishes the
       # tarball's files that jsr.json includes.
       - name: The npm and JSR packages carry the licence files

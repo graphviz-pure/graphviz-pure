@@ -57,9 +57,44 @@ export function checkApi(gv) {
     throw new Error('inspectGraph threw on a warning');
   }
 
-  expectThrow(() => gv.render('digraph {', 'dot', 'svg'), 'Syntax', 'syntax error');
-  expectThrow(() => gv.render('digraph { a -> b }', 'nope', 'svg'), 'UnsupportedEngine', 'nope');
-  expectThrow(() => gv.render('digraph { a -> b }', 'dot', 'png'), 'UnsupportedFormat', 'png');
+  const syntax = 'digraph {';
+  for (const fn of [
+    () => gv.render(syntax, 'dot', 'svg'),
+    () => gv.renderWithDiagnostics(syntax, 'dot', 'svg'),
+    () => gv.renderAll(syntax, 'dot', 'svg'),
+    () => gv.renderAllWithDiagnostics(syntax, 'dot', 'svg'),
+    () => gv.renderAllBytes(new TextEncoder().encode(syntax), 'dot', 'svg'),
+    () => gv.renderAllBytesWithDiagnostics(new TextEncoder().encode(syntax), 'dot', 'svg'),
+    () => gv.renderSvg(syntax, 'dot'),
+    () => gv.renderJson(syntax, 'dot'),
+    () => gv.inspectGraph(syntax, 'dot'),
+  ]) {
+    expectThrow(gv, fn, 'Syntax', 'syntax error');
+  }
+  expectThrow(gv, () => gv.render('digraph { a -> b }', 'nope', 'svg'), 'UnsupportedEngine', 'nope');
+  expectThrow(gv, () => gv.render('digraph { a -> b }', 'dot', 'png'), 'UnsupportedFormat', 'png');
+  expectThrow(gv, () => gv.renderAll('digraph { a -> b }', 'nope', 'svg'), 'UnsupportedEngine', 'nope');
+  expectThrow(gv, () => gv.inspectGraph('digraph { a -> b }', 'nope'), 'UnsupportedEngine', 'nope');
+
+  // Warnings during the layout, then a layout failure. Render is the raster
+  // crate's kind; this package has no raster format, so nothing here throws it.
+  const layout = `digraph G {
+rank=sink;
+subgraph cluster0 { a; b; c; d }
+subgraph cluster_1 { e; subgraph cluster_2 { f } }
+subgraph cluster_3 { }
+{ d }
+{ e }
+{ }
+f -> e;
+g -> h [minlen=2];
+d -> c;
+i -> h [label=x];
+subgraph s { rank=source; a; h; subgraph cluster_in { } }
+}`;
+  expectThrow(gv, () => gv.render(layout, 'dot', 'svg'), 'Layout', 'Layout computation error', true);
+  expectThrow(gv, () => gv.renderWithDiagnostics(layout, 'dot', 'svg'), 'Layout', 'Layout computation error', true);
+  expectThrow(gv, () => gv.inspectGraph(layout, 'dot'), 'Layout', 'Layout computation error', true);
 
   const bytes = gv.renderAllBytesWithDiagnostics(new TextEncoder().encode('digraph { a -> b }'), 'dot', 'svg');
   if (!(bytes.output instanceof Uint8Array) || bytes.output.length === 0 || !Array.isArray(bytes.diagnostics)) {
@@ -72,17 +107,19 @@ export function checkApi(gv) {
   }
 }
 
-function expectThrow(fn, kind, messagePart) {
+function expectThrow(gv, fn, kind, messagePart, wantsDiagnostics = false) {
   try {
     fn();
   } catch (e) {
-    assertGraphvizError(e, kind, messagePart);
+    assertGraphvizError(gv, e, kind, messagePart, wantsDiagnostics);
     return;
   }
   throw new Error(`${kind} did not throw`);
 }
 
-function assertGraphvizError(e, kind, messagePart) {
+function assertGraphvizError(gv, e, kind, messagePart, wantsDiagnostics) {
+  if (typeof gv.GraphvizError !== 'function') throw new Error('GraphvizError is not exported');
+  if (!(e instanceof gv.GraphvizError)) throw new Error(`${kind}: not instanceof GraphvizError`);
   if (!(e instanceof Error)) throw new Error(`${kind}: not an Error (${typeof e})`);
   if (e.name !== 'GraphvizError') throw new Error(`${kind}: name ${e.name}`);
   if (e.status !== 1) throw new Error(`${kind}: status ${e.status}`);
@@ -91,7 +128,7 @@ function assertGraphvizError(e, kind, messagePart) {
     throw new Error(`${kind}: message ${e.message}`);
   }
   if (!Array.isArray(e.diagnostics)) throw new Error(`${kind}: diagnostics`);
-  if (kind === 'Syntax' && e.diagnostics.length !== 0) {
-    throw new Error(`Syntax diagnostics ${JSON.stringify(e.diagnostics)}`);
+  if (wantsDiagnostics && e.diagnostics.length === 0) {
+    throw new Error(`${kind}: expected diagnostics, got none`);
   }
 }

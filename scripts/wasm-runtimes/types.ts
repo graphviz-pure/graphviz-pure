@@ -15,9 +15,10 @@ import init, {
   supportedEngines,
   supportedFormats,
   version,
+  GraphvizError,
   type Diagnostic,
   type GraphStats,
-  type GraphvizError,
+  type GraphvizErrorKind,
   type RenderedBytes,
   type RenderedText,
   type RenderedTexts,
@@ -52,8 +53,21 @@ const output: string = renderWithDiagnostics("digraph { a -> b }", "dot", "svg")
 const many: string[] = renderAllWithDiagnostics("digraph { a -> b }", "dot", "svg").output;
 const raw: Uint8Array = renderAllBytesWithDiagnostics(new Uint8Array(), "dot", "svg").output;
 
-function readError(err: GraphvizError): string {
-  return `${err.name}:${err.status}:${err.kind}:${err.message}:${err.diagnostics.length}:${level}`;
+const kinds: Record<GraphvizErrorKind, true> = {
+  Syntax: true,
+  UnsupportedEngine: true,
+  UnsupportedFormat: true,
+  Layout: true,
+  Attribute: true,
+  Render: true,
+  Error: true,
+};
+
+function readError(err: unknown): string {
+  if (!(err instanceof GraphvizError)) throw new Error("expected GraphvizError");
+  const built = new GraphvizError("syntax error", 1, "Syntax", []);
+  const kind: GraphvizErrorKind = built.kind;
+  return `${err.name}:${err.status}:${err.kind}:${err.message}:${err.diagnostics.length}:${level}:${kind}:${kinds.Syntax}`;
 }
 
 void width;

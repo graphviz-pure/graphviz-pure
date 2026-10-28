@@ -78,8 +78,8 @@ const docker = `docker run --rm -i ghcr.io/graphviz-pure/graphviz-pure -Tsvg < g
 					<TabItem label="JavaScript">
 						<Code code={js} lang="js" />
 						<p class="note">
-							Also on JSR for Deno. <code>render</code> returns the output string. A failure throws an <code>Error</code> named
-							<code>GraphvizError</code> (<code>message</code>, <code>status</code>, <code>kind</code>, <code>diagnostics</code>).
+							Also on JSR for Deno. <code>render</code> returns the output string. A failure throws the exported
+							<code>GraphvizError</code> class (<code>message</code>, <code>status</code>, <code>kind</code>, <code>diagnostics</code>).
 							<code>supportedEngines()</code> and <code>supportedFormats()</code> are arrays, <code>inspectGraph()</code> is an object
 							(<code>width_pt</code>, <code>height_pt</code>), and <code>renderWithDiagnostics()</code> returns the output with its
 							diagnostics. On Cloudflare Workers, import the <code>.wasm</code> file yourself:

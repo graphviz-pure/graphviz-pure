@@ -15,6 +15,7 @@ CARGO_TARGET_WASM32_UNKNOWN_UNKNOWN_RUSTFLAGS='-C opt-level=z' CARGO_PROFILE_REL
   cargo build --release --target wasm32-unknown-unknown -p graphviz-pure-wasm
 rm -rf "$OUT"
 wasm-bindgen --target web --remove-name-section --remove-producers-section --out-dir "$OUT" target/wasm32-unknown-unknown/release/graphviz_pure_wasm.wasm
+node "$ROOT/scripts/export-graphviz-error.mjs" "$OUT/graphviz_pure_wasm.js"
 # The generated .d.ts types JsValue returns as `any`. The package ships the hand-checked one.
 cp "$ROOT/web/graphviz_pure_wasm.d.ts" "$OUT/graphviz_pure_wasm.d.ts"
 if command -v wasm-opt >/dev/null; then

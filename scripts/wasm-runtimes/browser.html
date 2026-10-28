@@ -4,6 +4,7 @@
 <!-- run.mjs serves the packed package under /pkg/ and calls window.gvRender from Chrome. -->
 <script type="module">
   import init, {
+    GraphvizError,
     inspectGraph,
     render,
     renderAll,
@@ -21,6 +22,7 @@
 
   await init();
   checkApi({
+    GraphvizError,
     inspectGraph,
     render,
     renderAll,

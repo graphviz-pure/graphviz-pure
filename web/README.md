@@ -82,13 +82,13 @@ succeeds and still reports an error-level diagnostic does not throw either: `dot
 exit 1, and the diagnostic is on this object. `render` drops the diagnostics and still
 returns the string.
 
-A failure throws an `Error` with `name` `"GraphvizError"` (`instanceof Error`). `message`
-is the text the command line prints, without the program-name prefix. `status` is `1`,
-the status `dot` uses when a graph fails. This package does not open files, so it does
-not use the command line's status `2` for a missing input. `kind` is `"Syntax"`,
+A failure throws `GraphvizError`, a class the package exports (`extends Error`), so
+`instanceof GraphvizError` is true. `message` is the text the command line prints,
+without the program-name prefix. `status` is a number and is currently always `1`,
+the status C's `dot` exits with when one graph fails. `kind` is `"Syntax"`,
 `"UnsupportedEngine"`, `"UnsupportedFormat"`, `"Layout"`, `"Attribute"` or `"Render"`.
-`diagnostics` is the messages emitted around the failure. A syntax error's array is
-empty, because the failure itself is `message`. The plain functions and the
+`diagnostics` is the `agerr` messages emitted around the failure. The failure's own
+text is `message`, not one of those entries. The plain functions and the
 `*WithDiagnostics` functions throw the same object.
 
 `supportedEngines()` and `supportedFormats()` return arrays of strings.

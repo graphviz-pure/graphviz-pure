@@ -7,6 +7,7 @@
 //   cargo build --release --target wasm32-unknown-unknown -p graphviz-pure-wasm
 //   wasm-bindgen --target nodejs --out-dir /tmp/gvwasm/pkg \
 //     target/wasm32-unknown-unknown/release/graphviz_pure_wasm.wasm
+//   node scripts/export-graphviz-error.mjs /tmp/gvwasm/pkg/graphviz_pure_wasm.js
 // then run from the repository root:
 //   node scripts/wasm-e2e.mjs [--pkg /tmp/gvwasm/pkg] [--baseline FILE] [--filter SUBSTR]
 //                             [--list] [--hashes FILE] [--golden FILE]

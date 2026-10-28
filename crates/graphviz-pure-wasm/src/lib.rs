@@ -1,12 +1,13 @@
 //! WebAssembly bindings (`wasm-bindgen`) for running `graphviz-pure` directly in the browser,
 //! Node.js, Deno, Bun, and Cloudflare Workers.
 //!
-//! Failures throw a `GraphvizError` (`Error`, with `message`, `status`, `kind` and
-//! `diagnostics`). `render` returns the output string; `renderWithDiagnostics` returns
-//! `{output, diagnostics}`. `supportedEngines` and `supportedFormats` return arrays.
-//! `inspectGraph` returns an object whose fields stay snake_case (`width_pt`, `height_pt`).
-//! The hand-checked types live in `web/graphviz_pure_wasm.d.ts` and replace the file
-//! `wasm-bindgen` generates.
+//! Failures throw the exported `GraphvizError` class (`extends Error`, with `message`,
+//! `status`, `kind` and `diagnostics`), so `instanceof GraphvizError` holds. `status` is
+//! currently always 1, the status C's `dot` exits with when one graph fails. `render`
+//! returns the output string; `renderWithDiagnostics` returns `{output, diagnostics}`.
+//! `supportedEngines` and `supportedFormats` return arrays. `inspectGraph` returns an
+//! object whose fields stay snake_case (`width_pt`, `height_pt`). The hand-checked types
+//! live in `web/graphviz_pure_wasm.d.ts` and replace the file `wasm-bindgen` generates.
 
 use std::borrow::Cow;
 
@@ -15,20 +16,28 @@ use graphviz_pure_core::{Diagnostic, DiagnosticLevel, GraphvizError, GraphvizErr
 use serde::Serialize;
 use wasm_bindgen::prelude::*;
 
-/// Exit status of one failed graph. `dot` uses `1` for that. A missing input file is
-/// `2`, and opening files is the command line's job, so this binding does not use it.
+/// Exit status of one failed graph. C's `dot` exits 1 for every kind this package
+/// throws. `status` stays a number so a later release can use another code; today
+/// every thrown error carries this value.
 const FAILURE_STATUS: i32 = 1;
 
 /// The JS object builders. They are the wasm target's glue: a native test that calls
 /// them panics, so the tests assert [`thrown`] instead.
+///
+/// `GraphvizError` is constructed here. `scripts/export-graphviz-error.mjs` re-exports
+/// that same class from the glue, which is what `instanceof GraphvizError` checks.
 #[wasm_bindgen(inline_js = r#"
+export class GraphvizError extends Error {
+    constructor(message, status, kind, diagnostics) {
+        super(message);
+        this.name = "GraphvizError";
+        this.status = status;
+        this.kind = kind;
+        this.diagnostics = diagnostics;
+    }
+}
 export function graphviz_error(message, status, kind, diagnosticsJson) {
-    const error = new Error(message);
-    error.name = "GraphvizError";
-    error.status = status;
-    error.kind = kind;
-    error.diagnostics = JSON.parse(diagnosticsJson);
-    return error;
+    return new GraphvizError(message, status, kind, JSON.parse(diagnosticsJson));
 }
 export function with_string(output, diagnosticsJson) {
     return { output: output, diagnostics: JSON.parse(diagnosticsJson) };
@@ -251,10 +260,12 @@ fn ok_strings(rendered: Rendered<Vec<String>>) -> JsValue {
 /// emitted an error-level diagnostic does not throw: `dot` would exit 1, and
 /// the diagnostic is on that object.
 ///
-/// A failure throws a `GraphvizError` (`Error`, `name` `"GraphvizError"`).
-/// `message` is the text the command line prints. `status` is 1. `kind` is
-/// `Syntax`, `UnsupportedEngine`, `UnsupportedFormat`, `Layout`, `Attribute`
-/// or `Render`. `diagnostics` is the `agerr` messages around the failure.
+/// A failure throws the exported `GraphvizError` class. `message` is the text
+/// the command line prints. `status` is currently always 1, the status C's
+/// `dot` exits with when one graph fails. `kind` is `Syntax`,
+/// `UnsupportedEngine`, `UnsupportedFormat`, `Layout`, `Attribute` or `Render`.
+/// `diagnostics` is the `agerr` messages around the failure. The failure's own
+/// text is `message`, not one of those entries.
 ///
 /// `engine` is `dot`, `neato`, `fdp`, `sfdp`, `twopi`, `circo`, `osage` or
 /// `patchwork`. `format` is a name from [`supported_formats`].
@@ -474,7 +485,6 @@ mod tests {
         assert_eq!(view.status, 1);
         assert_eq!(view.kind, "Syntax");
         assert!(view.message.contains("syntax error"), "{}", view.message);
-        assert!(view.diagnostics.is_empty(), "{:?}", view.diagnostics);
 
         let err = render_text("digraph { a -> b }", "nope", "svg").unwrap_err();
         let view = thrown(&err);
@@ -552,10 +562,54 @@ mod tests {
         let view = thrown(&err);
         assert_eq!(view.status, 1);
         assert_eq!(view.kind, "Syntax");
-        assert!(view.diagnostics.is_empty(), "{:?}", view.diagnostics);
 
         let err = render_all_bytes_decoded(b"digraph { a }", "dot", "nope").unwrap_err();
         assert_eq!(thrown(&err).kind, "UnsupportedFormat");
+    }
+
+    // `Render` is raised by the raster crate, and this package does not rasterize.
+    // `Attribute` has no constructor call outside the error type's own tests.
+    #[test]
+    fn a_layout_failure_throws_and_keeps_the_diagnostics_around_it() {
+        let src = "digraph G {\n\
+            rank=sink;\n\
+            subgraph cluster0 { a; b; c; d }\n\
+            subgraph cluster_1 { e; subgraph cluster_2 { f } }\n\
+            subgraph cluster_3 { }\n\
+            { d }\n\
+            { e }\n\
+            { }\n\
+            f -> e;\n\
+            g -> h [minlen=2];\n\
+            d -> c;\n\
+            i -> h [label=x];\n\
+            subgraph s { rank=source; a; h; subgraph cluster_in { } }\n\
+            }\n";
+        let err = render_text(src, "dot", "svg").unwrap_err();
+        let view = thrown(&err);
+        assert_eq!(view.kind, "Layout");
+        assert_eq!(view.status, 1);
+        assert!(
+            view.message.contains("Layout computation error"),
+            "{}",
+            view.message
+        );
+        assert!(
+            view.diagnostics
+                .iter()
+                .any(|(_, message)| !message.is_empty()),
+            "{:?}",
+            view.diagnostics
+        );
+
+        let err = render_all_text("digraph {", "dot", "svg").unwrap_err();
+        assert_eq!(thrown(&err).kind, "Syntax");
+        assert_eq!(thrown(&err).status, 1);
+        let err = inspect_text("digraph {", "dot").unwrap_err();
+        assert_eq!(thrown(&err).kind, "Syntax");
+        let err = inspect_text("digraph { a -> b }", "nope").unwrap_err();
+        assert_eq!(thrown(&err).kind, "UnsupportedEngine");
+        assert_eq!(thrown(&err).status, 1);
     }
 
     // A JS string is text, so a real U+10FF41 in it is not one of the port's raw
