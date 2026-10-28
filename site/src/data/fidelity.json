@@ -1,8 +1,8 @@
 {
- "generated": "2026-10-28T20:32:11+00:00",
- "commit": "19af77268c1dfcf574a1e7c143f1095340795ad2",
- "commit_short": "19af772",
- "commit_date": "2026-10-28T20:00:13Z",
+ "generated": "2026-10-28T21:52:23+00:00",
+ "commit": "80f8aff61e6167364705599174d8835f64b0bf87",
+ "commit_short": "80f8aff",
+ "commit_date": "2026-10-28T21:52:23Z",
  "source": "baselines",
  "measured_on": null,
  "oracle": {
@@ -3110,6 +3110,22 @@
      "patchwork": 100.0
     },
     "all": 98.8
+   },
+   {
+    "round": "5",
+    "seeds": "40001-46000",
+    "cases": 6000,
+    "engines": {
+     "dot": 99.8,
+     "neato": 99.2,
+     "fdp": 92.4,
+     "sfdp": 99.8,
+     "twopi": 99.8,
+     "circo": 100.0,
+     "osage": 98.5,
+     "patchwork": 100.0
+    },
+    "all": 98.9
    }
   ]
  },
