@@ -155,20 +155,24 @@ In CI, `.github/workflows/fuzz.yml` runs the targets with
 [ClusterFuzzLite](https://google.github.io/clusterfuzzlite/), using
 `.clusterfuzzlite/build.sh` to build them in the OSS-Fuzz Rust image:
 
-* Fuzzing is a pre-release step. `release.yml` calls `fuzz.yml` on the base commit (master at
-  dispatch, `prepare`'s `base_sha`), so it covers everything merged since the last release
-  ([releasing.md](../releasing.md)). It does not run on a schedule or on pull requests.
+* Fuzzing runs weekly, on a schedule, and before every release. `release.yml` calls `fuzz.yml`
+  on the base commit (master at dispatch, `prepare`'s `base_sha`), so it covers everything merged
+  since the last release ([releasing.md](../releasing.md)). It does not run on pull requests.
 * A run fuzzes every target for 6 minutes, starting from the corpus of the previous runs, and
   then prunes the corpus (up to 5 minutes a target). The corpus, the crashes (minimised) and the
-  builds are kept as artifacts of the workflow.
+  builds are kept as artifacts of the workflow. The weekly run saves the corpus again, so it
+  never expires (an artifact is kept for 90 days).
 * A run is skipped when its inputs were already fuzzed: the crates' code, the fuzz workspace,
   `.clusterfuzzlite/` and the test graphs that seed it (`scripts/fuzz-inputs-key.sh`; the
   version, docs, scripts and other tests don't count). A run that passes uploads a
   `fuzzed-<key>` marker, and a later run with the same key stops after a minute, so a release
   whose code is unchanged does not fuzz again. Dispatch the workflow with `force` to fuzz anyway.
+  The weekly run always fuzzes: a skipped run saves no corpus, and the corpus would expire.
 * A crash fails the run, and so the release. The minimised reproducer is the run's
-  `cifuzz-crashes-<target>` artifact. The release workflow does not file an issue. The pull
-  requests merged since the last release are the suspects.
+  `cifuzz-crashes-<target>` artifact. The release workflow does not file an issue; the weekly
+  run opens one labelled `crash,fuzz`, or comments on the open one, and a run that broke
+  before it could fuzz opens one labelled `fuzz`. The pull requests merged since the last
+  release are the suspects.
 * Fuzz locally (above) when a change touches parsing or arithmetic: CI no longer fuzzes it
   before the next release.
 
