@@ -10,13 +10,15 @@ one release version, set in `[workspace.package]` in `Cargo.toml`, `web/package.
   **the JavaScript API** of `@graphviz-pure/wasm`.
   `graphviz-pure-core`, `graphviz-pure-parser`, `graphviz-pure-geom`, `graphviz-pure-layout`
   and `graphviz-pure-render` are implementation crates with no semver promise.
-  The types the facade re-exports (`GraphvizError`, `GraphvizErrorKind`, `Result`,
-  `charset`, `LayoutEngine`, `LayoutOptions`, `LayoutOptionsBuilder`, `GlobalAttrs`,
-  `OutputFormat`) are covered by the facade's promise even though they are defined in an
-  implementation crate. `graphviz-pure-raster` re-exports `GraphvizError` and
-  `GraphvizErrorKind`, and its `RasterFormat` is part of that same promise.
-  `GraphvizError::__map_text` is outside it: a hidden hook the facade uses to rewrite
-  decoded text, free to change in any release.
+  The types the facade re-exports (`GraphvizError`, `GraphvizErrorKind`, `Diagnostic`,
+  `DiagnosticLevel`, `Rendered`, `Result`, `charset`, `LayoutEngine`, `LayoutOptions`,
+  `LayoutOptionsBuilder`, `GlobalAttrs`, `OutputFormat`) are covered by the facade's promise
+  even though they are defined in an implementation crate. `graphviz-pure-raster` re-exports
+  `GraphvizError`, `GraphvizErrorKind`, `Diagnostic`, `DiagnosticLevel` and `Rendered`, and
+  its `RasterFormat` is part of that same promise.
+  `GraphvizError::__map_text`, `GraphvizError::__set_diagnostics`,
+  `Diagnostic::map_message` and `Rendered::from_parts` are outside it: hidden hooks
+  the facade and the raster crate use, free to change in any release.
 - **The command line:** options, accepted `-T` formats, exit status, and the `-V` line's shape:
   `graphviz-pure - graphviz version 16.1.0 (graphviz-pure X.Y.Z)`. Not ported: C's remaining
   core-plugin formats (`cmap`, `eps`, `fig`, `imap`, `imap_np`, `ismap`, `pic`, `pov`, `ps`,

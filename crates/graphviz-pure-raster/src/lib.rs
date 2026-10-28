@@ -21,7 +21,9 @@
 //! at 96 dpi (1pt = 4/3 px); with one, the SVG is already scaled to that resolution and is
 //! rasterized at one pixel per point.
 
-pub use graphviz_pure_core::{GraphvizError, GraphvizErrorKind};
+pub use graphviz_pure_core::{
+    Diagnostic, DiagnosticLevel, GraphvizError, GraphvizErrorKind, Rendered,
+};
 use resvg::{tiny_skia, usvg};
 use std::sync::{Arc, OnceLock};
 
@@ -124,7 +126,23 @@ fn fontdb() -> Arc<usvg::fontdb::Database> {
 
 /// Rasterizes the port's SVG for one graph. `explicit_dpi` says whether the graph set `dpi`
 /// or `resolution` (then the SVG is already scaled and is drawn at one pixel per point).
+///
+/// Diagnostics from the rasterizing call are on the [`Rendered`] value, or on the
+/// error. This writes nothing to stderr.
 pub fn rasterize(
+    svg: &str,
+    format: RasterFormat,
+    explicit_dpi: bool,
+) -> Result<Rendered<Vec<u8>>, GraphvizError> {
+    let (result, diagnostics) =
+        graphviz_pure_core::diag::capture(|| rasterize_inner(svg, format, explicit_dpi));
+    match result {
+        Ok(output) => Ok(Rendered::from_parts(output, diagnostics)),
+        Err(error) => Err(error.__set_diagnostics(diagnostics)),
+    }
+}
+
+fn rasterize_inner(
     svg: &str,
     format: RasterFormat,
     explicit_dpi: bool,
@@ -298,7 +316,7 @@ mod tests {
 <text x="18" y="40" font-family="Times,serif" font-size="16">Été</text>
 </g></svg>"#;
         let png = rasterize(SHAPES, RasterFormat::Png, false).unwrap();
-        let hash: String = Sha256::digest(&png)
+        let hash: String = Sha256::digest(png.output())
             .iter()
             .map(|b| format!("{b:02x}"))
             .collect();

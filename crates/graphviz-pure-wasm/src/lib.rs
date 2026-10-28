@@ -17,13 +17,19 @@ fn js_error(e: impl std::fmt::Display) -> JsValue {
 
 /// [`render`] without the `JsValue`: the root `graphviz_pure` functions take and return text.
 fn render_text(dot_source: &str, engine: &str, format: &str) -> Result<String, String> {
-    graphviz_pure::render_dot(dot_source, engine, format).map_err(|e| e.to_string())
+    // #523 will expose diagnostics to JS. Until then the string (and the thrown
+    // error text) stay what they are today.
+    graphviz_pure::render_dot(dot_source, engine, format)
+        .map(|rendered| rendered.into_output())
+        .map_err(|e| e.to_string())
 }
 
 /// [`render_all`] as [`render_text`] is [`render`].
 fn render_all_text(dot_source: &str, engine: &str, format: &str) -> Result<Vec<String>, String> {
     let globals = graphviz_pure::GlobalAttrs::default();
-    graphviz_pure::render_dot_all(dot_source, engine, format, &globals).map_err(|e| e.to_string())
+    graphviz_pure::render_dot_all(dot_source, engine, format, &globals)
+        .map(|rendered| rendered.into_output())
+        .map_err(|e| e.to_string())
 }
 
 #[derive(Serialize)]

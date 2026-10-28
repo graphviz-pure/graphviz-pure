@@ -11,6 +11,8 @@
 //! escapes. `GVDUMP` debugging traces go through [`dump`].
 //!
 //! The levels are per thread, so concurrent in-process renders do not see each other's errors.
+//! A [`capture`] scope collects `agerr` text for that call instead of writing it; the command
+//! line does not capture, and prints each message as C does.
 
 use std::borrow::Cow;
 use std::cell::{Cell, RefCell};
@@ -97,7 +99,7 @@ pub fn agseterr(lvl: AgErrLevel) -> AgErrLevel {
 /// `agerr(level, msg)` (`agerr_va`): `msg` is the C format output, normally ending in a newline.
 pub fn agerr(level: AgErrLevel, msg: &str) {
     if let Some(bytes) = agerr_va(level, msg) {
-        write_stderr(&bytes);
+        emit_agerr(level, &bytes);
     }
 }
 
@@ -281,6 +283,9 @@ pub fn fmt_f(v: f64, prec: usize) -> String {
 
 /// `fprintf(stderr, msg)`: a message C writes without `agerr`, so with no level, no count and
 /// no escaping. `msg` is written as C's bytes ([`crate::charset::encode`]).
+///
+/// Not a diagnostic. `-v` progress uses this, and it stays on the command line: a
+/// [`capture`] scope drops it instead of returning it.
 pub fn fprintf_stderr(msg: &str) {
     write_stderr(&crate::charset::encode(msg));
 }
@@ -306,9 +311,86 @@ fn usererr_bytes(msg: &str) -> Vec<u8> {
     out
 }
 
+thread_local! {
+    static FRAMES: RefCell<Vec<Vec<crate::error::Diagnostic>>> = const { RefCell::new(Vec::new()) };
+}
+
+/// Pops the [`capture`] frame, including when `f` panics, so a call cannot leave
+/// its messages on the thread for the next one.
+struct FrameGuard;
+
+impl Drop for FrameGuard {
+    fn drop(&mut self) {
+        FRAMES.with(|frames| {
+            frames.borrow_mut().pop();
+        });
+    }
+}
+
+/// Runs `f` and returns the `agerr` messages it wrote, in order, instead of
+/// writing them to stderr.
+///
+/// The frame is this call's alone. A nested [`capture`] keeps its own messages,
+/// and another thread has its own frame, so two layouts cannot mix diagnostics.
+/// `fprintf` to stderr (including `-v`) is dropped for the duration: the command
+/// line does not capture, so its progress and its own messages still go to stderr
+/// as they are written.
+pub fn capture<R>(f: impl FnOnce() -> R) -> (R, Vec<crate::error::Diagnostic>) {
+    FRAMES.with(|frames| frames.borrow_mut().push(Vec::new()));
+    let _guard = FrameGuard;
+    let result = f();
+    let diagnostics = FRAMES.with(|frames| {
+        frames
+            .borrow_mut()
+            .last_mut()
+            .map(std::mem::take)
+            .unwrap_or_default()
+    });
+    (result, diagnostics)
+}
+
+fn capturing() -> bool {
+    FRAMES.with(|frames| !frames.borrow().is_empty())
+}
+
+/// The level a collected message reports. `AGPREV` keeps the level of the
+/// message it continues (`AGMAX` is stored as an error for that purpose).
+fn diagnostic_level(original: AgErrLevel) -> crate::error::DiagnosticLevel {
+    use crate::error::DiagnosticLevel;
+    match original {
+        AgErrLevel::Err => DiagnosticLevel::Error,
+        AgErrLevel::Warn => DiagnosticLevel::Warning,
+        AgErrLevel::Max => DiagnosticLevel::Max,
+        AgErrLevel::Prev => match LAST.with(Cell::get) {
+            AgErrLevel::Warn => DiagnosticLevel::Warning,
+            AgErrLevel::Max => DiagnosticLevel::Max,
+            AgErrLevel::Err | AgErrLevel::Prev => DiagnosticLevel::Error,
+        },
+    }
+}
+
+fn emit_agerr(original: AgErrLevel, bytes: &[u8]) {
+    if capturing() {
+        let message = String::from_utf8_lossy(bytes).into_owned();
+        let diagnostic = crate::error::Diagnostic::new(diagnostic_level(original), message);
+        FRAMES.with(|frames| {
+            if let Some(frame) = frames.borrow_mut().last_mut() {
+                frame.push(diagnostic);
+            }
+        });
+        return;
+    }
+    write_stderr(bytes);
+}
+
 // The one place that writes to stderr (`clippy.toml`).
 #[allow(clippy::disallowed_methods)]
 fn write_stderr(bytes: &[u8]) {
+    // A library call is collecting. stderr belongs to the command line, which
+    // does not capture, so its writes still land here in order.
+    if capturing() {
+        return;
+    }
     let _ = std::io::stderr().write_all(bytes);
 }
 
@@ -414,6 +496,34 @@ mod tests {
         assert_eq!(out(AgErrLevel::Err, "e\n"), None);
         assert_eq!(error_count(), 3);
         agseterr(old);
+    }
+
+    #[test]
+    fn capture_returns_each_call_s_messages_and_not_the_last_call_s() {
+        let ((), first) = capture(|| {
+            agwarningf("alpha\n");
+            agerrorf("bad\n");
+        });
+        let ((), second) = capture(|| agwarningf("beta\n"));
+        assert_eq!(first[0].level(), crate::error::DiagnosticLevel::Warning);
+        assert_eq!(first[0].message(), "Warning: alpha\n");
+        assert_eq!(first[1].level(), crate::error::DiagnosticLevel::Error);
+        assert_eq!(first[1].message(), "Error: bad\n");
+        assert_eq!(second.len(), 1);
+        assert_eq!(second[0].message(), "Warning: beta\n");
+        assert!(second.iter().all(|d| !d.message().contains("alpha")));
+    }
+
+    #[test]
+    fn captures_on_two_threads_do_not_mix() {
+        let left = std::thread::spawn(|| capture(|| agwarningf("from-a\n")).1);
+        let right = std::thread::spawn(|| capture(|| agwarningf("from-b\n")).1);
+        let left = left.join().unwrap();
+        let right = right.join().unwrap();
+        assert!(left.iter().all(|d| d.message().contains("from-a")));
+        assert!(right.iter().all(|d| d.message().contains("from-b")));
+        assert!(!left.iter().any(|d| d.message().contains("from-b")));
+        assert!(!right.iter().any(|d| d.message().contains("from-a")));
     }
 
     #[test]
