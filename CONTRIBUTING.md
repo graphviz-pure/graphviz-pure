@@ -85,6 +85,12 @@ fails if the layout or geom crates gain an `unwrap`, `expect`, index or integer-
   changes to workflows, scripts, build scripts and dependencies ([how pull requests are
   reviewed](docs/pull-requests.md)).
 
+The Semver workflow compares `graphviz-pure` and `graphviz-pure-raster` with the PR branch's
+merge base; breaking changes require `breaking`, and label changes rerun only this check. Release
+readiness checks crates.io and the merged labels for a minor bump while `0.x`, major from `1.0`.
+Implementation pins alone do not fail; merge queues skip the label gate because they lack labels.
+Changes inside re-exported implementation types aren't detected (#574) and need manual API review.
+
 ## Review and maintainers
 
 - **CI waits for a maintainer.** If you are not a maintainer, each CI run on your pull request

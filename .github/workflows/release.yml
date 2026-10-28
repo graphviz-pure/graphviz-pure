@@ -18,8 +18,10 @@ name: Release
 #   branch yet. Later jobs check it out from a git bundle. The checks are the ones in
 #   scripts/release-check.sh: no open priority:p1 or priority:p2 issue, no open
 #   "Cross-platform fails on master", ci.yml and cross-platform.yml succeeded on that commit,
-#   every pull request since the last tag has a changelog entry, the version is the one the
-#   breaking labels ask for and is not tagged yet, and the e2e fidelity count is not lower.
+#   every pull request since the last tag has a changelog entry, the version is at least what
+#   the breaking labels ask for and is not tagged yet, stable Rust API breaks against crates.io
+#   have a sufficient version bump and breaking labels since the published baseline's tag,
+#   and the e2e fidelity count is not lower.
 #   After the commit exists, prepare checks it can land: merge-tree onto current master is
 #   clean, refs/tags/vX.Y.Z does not exist, and no GitHub release (including a draft) does
 #   either. A missing App secret or a ruleset bypass cannot be checked here.
@@ -146,9 +148,12 @@ jobs:
           fi
       - name: Install Rust ${{ env.RUST_VERSION }}
         run: rustup toolchain install "$RUST_VERSION" --profile minimal && rustup default "$RUST_VERSION"
+      - name: Install the pinned API checker for release readiness
+        run: cargo install --locked cargo-semver-checks@0.51.0
       - name: Readiness, changelog and release commit
         id: commit
         env:
+          CARGO_TERM_COLOR: never
           VERSION_INPUT: ${{ inputs.version }}
           INTRO_INPUT: ${{ inputs.intro }}
           GH_TOKEN: ${{ github.token }}

@@ -22,6 +22,7 @@ their parent; a ```markdown fence around the entry is unwrapped, other fenced co
     release-changelog.py render JSON VERSION [--intro TEXT]     the CHANGELOG section
                                                          (no --intro: a line counted from the entries)
     release-changelog.py next-version JSON PREVIOUS             the version the labels ask for
+    release-changelog.py version-at-least SELECTED MINIMUM      exits 0 if SELECTED >= MINIMUM
 
 The version rule (docs/versioning.md): while the version is 0.x, a pull request labelled
 `breaking` bumps the minor version and everything else the patch version; from 1.0 `breaking`
@@ -293,6 +294,16 @@ def next_version(data, previous):
     return f"0.{minor + 1}.0" if major == 0 else f"{major + 1}.0.0"
 
 
+def version_at_least(selected, minimum):
+    """Compare SemVer precedence, including numeric versus alphanumeric prerelease IDs."""
+    def key(version):
+        core, separator, prerelease = version.partition("-")
+        identifiers = tuple((0, int(part)) if part.isdigit() else (1, part)
+                            for part in prerelease.split(".")) if separator else ()
+        return tuple(map(int, core.split("."))), not separator, identifiers
+    return key(selected) >= key(minimum)
+
+
 def main(argv):
     if len(argv) >= 3 and argv[0] == "collect":
         exclude = {int(argv[i + 1]) for i, a in enumerate(argv) if a == "--exclude"}
@@ -303,6 +314,8 @@ def main(argv):
         sys.stdout.write(render(json.load(open(argv[1])), argv[2], intro))
     elif len(argv) == 3 and argv[0] == "next-version":
         print(next_version(json.load(open(argv[1])), argv[2]))
+    elif len(argv) == 3 and argv[0] == "version-at-least":
+        sys.exit(0 if version_at_least(argv[1], argv[2]) else 1)
     else:
         sys.exit(__doc__)
 

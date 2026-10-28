@@ -6,12 +6,13 @@
 #   - ci.yml and cross-platform.yml succeeded on master's head;
 #   - every pull request since the last release has a changelog entry, none is marked
 #     breaking without the breaking label, and the labels ask for the version;
+#   - stable Rust API breaks against crates.io have a merged breaking PR and a matching bump;
 #   - CHANGELOG.md's Unreleased section is empty (entries belong in pull request bodies);
 #   - the version is not tagged yet, and no GitHub release (including a draft) exists for it;
 #   - the e2e fidelity count (tests/golden/e2e-baseline.libm-matched.portable.json) is at
 #     least the last release's, and every input that was identical to C still is.
 #
-# A version given as an argument or as VERSION_INPUT must be the one the labels ask for.
+# A version given as an argument or as VERSION_INPUT must be at least what the labels ask for.
 # With neither, the version is that one. INTRO_INPUT, when set, is the changelog intro;
 # otherwise the intro is a line counted from the entries.
 #
@@ -88,7 +89,24 @@ item() { # item PASS TEXT [DETAIL]
   if [ -n "$unlabelled" ]; then
     item 0 "The \`breaking\` labels ask for $version" "breaking entries without the label: $unlabelled"
   else
-    item "$([ "$computed" = "$version" ] && echo 1)" "The \`breaking\` labels ask for $version (${breaking:-no breaking pull request})" "they ask for $computed"
+    item "$(python3 scripts/release-changelog.py version-at-least "$version" "$computed" && echo 1)" \
+      "The selected $version meets the label-selected minimum $computed (${breaking:-no breaking pull request})" \
+      "the minimum is $computed"
+  fi
+
+  # Check precisely the master revision being released, without changing this checkout.
+  mkdir "$work/api"
+  git archive "$target" | tar -x -C "$work/api"
+  if CARGO_TERM_COLOR=never SEMVER_MANIFEST="$work/api/Cargo.toml" RELEASE_VERSION="$version" \
+    RELEASE_TARGET="$target" \
+    scripts/check-semver.sh release > "$work/semver.txt" 2>&1; then
+    item 1 "Stable Rust API changes against crates.io agree with the merged labels and $version"
+    sed -n '/ API requires a /p' "$work/semver.txt"
+  else
+    item 0 "Stable Rust API changes against crates.io agree with the merged labels and $version"
+    echo '```text'
+    tail -n 30 "$work/semver.txt"
+    echo '```'
   fi
 
   unreleased=$(git show "$target:CHANGELOG.md" | python3 -c '

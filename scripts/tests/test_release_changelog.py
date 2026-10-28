@@ -118,5 +118,27 @@ class RenderTest(unittest.TestCase):
         self.assertRegex(text.splitlines()[0], r"^## \[1\.0\.0\] - \d{4}-\d{2}-\d{2}$")
 
 
+class VersionTest(unittest.TestCase):
+    def test_explicit_major_can_exceed_computed_minor(self):
+        minimum = release_changelog.next_version({"breaking": [1]}, "0.2.3")
+        self.assertEqual(minimum, "0.3.0")
+        self.assertTrue(release_changelog.version_at_least("1.0.0", minimum))
+        self.assertFalse(release_changelog.version_at_least("0.2.4", minimum))
+
+    def test_rc_route_and_semver_precedence(self):
+        self.assertTrue(release_changelog.version_at_least("1.0.0-rc.1", "0.3.0"))
+        minimum = release_changelog.next_version({"breaking": []}, "1.0.0-rc.1")
+        self.assertEqual(minimum, "1.0.0")
+        self.assertTrue(release_changelog.version_at_least("1.0.0", minimum))
+        self.assertFalse(release_changelog.version_at_least("1.0.0-rc.1", minimum))
+        self.assertTrue(release_changelog.version_at_least("1.0.0-rc.10", "1.0.0-rc.2"))
+
+    def test_major_release_never_understates_the_minimum(self):
+        minimum = release_changelog.next_version({"breaking": [1]}, "1.2.3")
+        self.assertEqual(minimum, "2.0.0")
+        self.assertTrue(release_changelog.version_at_least("3.0.0", minimum))
+        self.assertFalse(release_changelog.version_at_least("1.3.0", minimum))
+
+
 if __name__ == "__main__":
     unittest.main()

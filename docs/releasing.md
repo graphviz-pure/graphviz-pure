@@ -8,6 +8,8 @@ To release: dispatch Release (`gh workflow run release.yml [-f version=X.Y.Z]`, 
 gh workflow run release.yml -f dry_run=true
 ```
 
+Cut 1.0.0 directly from 0.2.3 with `-f version=1.0.0`; use the corresponding explicit version for any later major, with no rc required. An explicit version may exceed the label-selected minimum, but must never be smaller.
+
 A dry run, or a check that fails, never asks for the `release` environment. A real release uses the concurrency group `release` (one at a time; a second one waits). A dry run uses `release-dry-run`, so dispatching a dry run cannot cancel a real release that is queued or running. A real release has to be dispatched from `master`. The `release` environment allows deployments from `master` only, so a workflow run from any other branch cannot request it.
 
 ## Before dispatching
@@ -17,6 +19,7 @@ A dry run, or a check that fails, never asks for the `release` environment. A re
 - no open `priority:p1` or `priority:p2` issue, and no open "Cross-platform fails on master";
 - the newest `ci.yml` and `cross-platform.yml` runs on master's head succeeded;
 - every pull request merged since the last tag has a `## Changelog entry`. An entry marked breaking (under a `### Breaking` heading, or a bullet starting `**Breaking:**` or `**Changed (breaking):**`) has to come from a pull request with the `breaking` label. The labels decide the version;
+- the stable Rust APIs (`graphviz-pure` and `graphviz-pure-raster`) are checked against their latest non-yanked stable crates.io releases with cargo-semver-checks 0.51.0. Detected breaks require a merged `breaking` PR and a minor bump while `0.x`, major from `1.0`; this runs before publishing approval;
 - CHANGELOG.md's Unreleased section is empty. Entries belong in pull request bodies;
 - the version is not tagged yet, and no GitHub release, including a draft, exists for it;
 - the release commit merges cleanly onto current master (`git merge-tree --write-tree`). Master moving is fine; a conflict fails the run before any approval is requested;
@@ -43,7 +46,8 @@ their newest `update.yml` run. Attestations come from `release.yml`. The certifi
 
 A pull request that breaks the Rust or JavaScript API, the command line or a format gets the
 `breaking` label when it merges. While the version is `0.x`, a release with one or more such pull
-requests bumps the minor version and any other release the patch version
+requests bumps the minor version; from 1.0 it bumps the major version. Without the label a
+release bumps the patch version
 ([versioning policy](versioning.md)).
 
 ## What the release workflow does

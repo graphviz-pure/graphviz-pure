@@ -1,0 +1,64 @@
+name: Semver
+
+# Separate from CI: changing a label must not restart the workspace tests or affect their
+# result-cache lookup. Do not cache this verdict: labels can change.
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, labeled, unlabeled]
+  merge_group:
+    types: [checks_requested]
+
+permissions:
+  contents: read
+
+# Unrelated label events must neither cancel a check nor hide its failure with a skipped
+# check of the same name (as in perf.yml).
+concurrency:
+  group: >-
+    ${{ github.workflow }}-${{ github.ref }}-${{
+    (github.event.action == 'labeled' || github.event.action == 'unlabeled')
+    && github.event.label.name != 'breaking'
+    && format('label-{0}', github.run_id) || 'check' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  CARGO_TERM_COLOR: always
+  # Pin Rust too: cargo-semver-checks reads rustdoc's unstable JSON format. Update together.
+  RUST_VERSION: "1.99.1"
+
+jobs:
+  semver:
+    name: >-
+      ${{ ((github.event.action != 'labeled' && github.event.action != 'unlabeled')
+      || github.event.label.name == 'breaking')
+      && 'Stable Rust API' || 'Semver (unrelated label change)' }}
+    if: >-
+      (github.event.action != 'labeled' && github.event.action != 'unlabeled')
+      || github.event.label.name == 'breaking'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Merge queue uses the PR's label check
+        if: github.event_name == 'merge_group'
+        run: |
+          echo "Merge-group payloads have no PR labels; API compatibility and breaking-label enforcement run on each pull request." >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: github.event_name == 'pull_request'
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0 # cargo-semver-checks needs the PR base commit's source
+      - name: Install Rust ${{ env.RUST_VERSION }}
+        if: github.event_name == 'pull_request'
+        run: rustup toolchain install "$RUST_VERSION" --profile minimal && rustup default "$RUST_VERSION"
+      - name: Install cargo-semver-checks
+        if: github.event_name == 'pull_request'
+        run: cargo install --locked cargo-semver-checks@0.51.0
+      - name: Check this PR's stable API changes
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          BREAKING: ${{ contains(github.event.pull_request.labels.*.name, 'breaking') }}
+        run: |
+          python3 -m unittest discover -s scripts/tests
+          scripts/check-semver.sh pr
