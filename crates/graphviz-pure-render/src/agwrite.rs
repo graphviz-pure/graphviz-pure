@@ -28,7 +28,10 @@ struct W<'g> {
     /// Nodes (sorted) and edges of each graph.
     members_n: Vec<Vec<usize>>,
     members_e: Vec<BTreeSet<usize>>,
-    /// Out-edges of each node in `agfstout` order.
+    /// Scratch indexes for the graph body currently being written. Only its members
+    /// are reset, so small subgraphs do not scan the root's nodes or edges.
+    has_edges: Vec<bool>,
+    /// Out-edges in the current graph, in `agfstout` order.
     outs: Vec<Vec<usize>>,
     edge_attrs: Vec<AttrMap>,
 }
@@ -281,18 +284,16 @@ impl W<'_> {
         })
     }
 
-    fn has_no_edges(&self, gi: usize, n: usize) -> bool {
-        !self.members_e[gi].iter().any(|&e| {
-            let ed = &self.g.edges[e];
-            ed.tail.0 as usize == n || ed.head.0 as usize == n
-        })
+    /// C: lib/cgraph/write.c:has_no_edges (`agfstin` / `agfstout` in this graph).
+    fn has_no_edges(&self, n: usize) -> bool {
+        !self.has_edges[n]
     }
 
     fn node_test(&self, gi: usize, n: usize) -> bool {
         if self.node_written[n] >= self.pre[gi] {
             return false;
         }
-        self.has_no_edges(gi, n) || self.not_default_attrs(n)
+        self.has_no_edges(n) || self.not_default_attrs(n)
     }
 
     fn write_node(&mut self, gi: usize, n: usize) {
@@ -360,17 +361,31 @@ impl W<'_> {
 
     fn write_body(&mut self, gi: usize) {
         self.write_subgs(gi);
+        // C: lib/cgraph/write.c:write_body walks graph-local adjacency lists.
+        // Build them after the children, allowing every body to reuse the same
+        // storage. Filtering root adjacency per node would repeatedly scan edges
+        // outside a subgraph (e.g. a hub shared by many small subgraphs).
+        for &n in &self.members_n[gi] {
+            self.has_edges[n] = false;
+            self.outs[n].clear();
+        }
+        for &e in &self.members_e[gi] {
+            let ed = &self.g.edges[e];
+            let (t, h) = (ed.tail.0 as usize, ed.head.0 as usize);
+            self.has_edges[t] = true;
+            self.has_edges[h] = true;
+            self.outs[t].push(e);
+        }
+        for &n in &self.members_n[gi] {
+            self.outs[n].sort_by_key(|&e| (self.g.edges[e].head.0, e));
+        }
         for n in self.members_n[gi].clone() {
             if self.node_test(gi, n) {
                 self.write_node(gi, n);
             }
             let mut prev = n;
-            let outs: Vec<usize> = self.outs[n]
-                .iter()
-                .copied()
-                .filter(|e| self.members_e[gi].contains(e))
-                .collect();
-            for e in outs {
+            for ei in 0..self.outs[n].len() {
+                let e = self.outs[n][ei];
                 let h = self.g.edges[e].head.0 as usize;
                 if prev != h && self.node_test(gi, h) {
                     self.write_node(gi, h);
@@ -448,13 +463,6 @@ pub(crate) fn agwrite(g: &Graph) -> String {
         members_n.push(n);
         members_e.push(s.edges.iter().map(|x| x.0 as usize).collect());
     }
-    let mut out = vec![Vec::new(); g.nodes.len()];
-    for (i, e) in g.edges.iter().enumerate() {
-        out[e.tail.0 as usize].push(i);
-    }
-    for l in &mut out {
-        l.sort_by_key(|&e| (g.edges[e].head.0, e));
-    }
     let maxline = g
         .graph_attrs
         .get("linelength")
@@ -479,7 +487,8 @@ pub(crate) fn agwrite(g: &Graph) -> String {
         edge_attrs_written: vec![false; g.edges.len()],
         members_n,
         members_e,
-        outs: out,
+        has_edges: vec![false; g.nodes.len()],
+        outs: vec![Vec::new(); g.nodes.len()],
         edge_attrs: edge_attrs_with_ports(g),
     };
     w.write_hdr(0);
@@ -487,4 +496,67 @@ pub(crate) fn agwrite(g: &Graph) -> String {
     w.level -= 1;
     w.out.push_str("}\n");
     w.out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::agwrite;
+    use graphviz_pure_parser::parse_dot;
+
+    // C 16.1.0 `dot -Tcanon`: adjacency belongs to the written subgraph,
+    // not to the root or to the subgraph last written using the scratch indexes.
+    // Includes incoming-only nodes, loops, parallel keyed edges, and a nested
+    // subgraph whose nodes have edges only in its parent.
+    #[test]
+    fn graph_local_adjacency_preserves_node_statements_and_edge_order() {
+        let input = r#"digraph G {
+            node [color=black, label="\N"];
+            a; b; c; d; isolated;
+            subgraph left {
+                a -> c [key=z];
+                a -> b [key=second];
+                a -> b [key=first];
+                c -> c;
+                subgraph nested { b; c; }
+            }
+            subgraph right { a; b; d -> a; }
+            subgraph empty { a; b; c; }
+            b -> d;
+        }"#;
+        let expected = concat!(
+            "digraph G {\n",
+            "\tnode [color=black,\n\t\tlabel=\"\\N\"\n\t];\n",
+            "\tsubgraph left {\n",
+            "\t\tsubgraph nested {\n\t\t\tb;\n\t\t\tc;\n\t\t}\n",
+            "\t\ta -> b\t[key=second];\n",
+            "\t\ta -> b\t[key=first];\n",
+            "\t\ta -> c\t[key=z];\n\t\tc -> c;\n\t}\n",
+            "\tsubgraph right {\n\t\tb;\n\t\td -> a;\n\t}\n",
+            "\tsubgraph empty {\n\t\ta;\n\t\tb;\n\t\tc;\n\t}\n",
+            "\tb -> d;\n\tisolated;\n}\n",
+        );
+        assert_eq!(agwrite(&parse_dot(input).expect("parse")), expected);
+    }
+
+    #[test]
+    fn undirected_subgraphs_preserve_loops_and_parallel_edge_order() {
+        let input = r#"graph G {
+            node [label="\N"];
+            a; b; c; alone;
+            subgraph connected {
+                a -- c [key=z]; a -- b [key=y]; a -- b [key=x]; b -- b;
+            }
+            subgraph isolated { a; b; c; }
+        }"#;
+        // C 16.1.0 `dot -Tcanon`.
+        let expected = concat!(
+            "graph G {\n\tnode [label=\"\\N\"];\n",
+            "\tsubgraph connected {\n",
+            "\t\ta -- b\t[key=y];\n\t\ta -- b\t[key=x];\n",
+            "\t\ta -- c\t[key=z];\n\t\tb -- b;\n\t}\n",
+            "\tsubgraph isolated {\n\t\ta;\n\t\tb;\n\t\tc;\n\t}\n",
+            "\talone;\n}\n",
+        );
+        assert_eq!(agwrite(&parse_dot(input).expect("parse")), expected);
+    }
 }
