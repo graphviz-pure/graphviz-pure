@@ -64,7 +64,8 @@ export default {
 
 Before serving untrusted requests with this Worker, cap the request-body size and configure
 a [CPU timeout](https://developers.cloudflare.com/workers/wrangler/configuration/#limits),
-for example `limits.cpu_ms = 1000` in `wrangler.toml` on a paid plan (enforced after deployment).
+for example `limits.cpu_ms = 1000` in `wrangler.toml` on a paid plan (enforced after deployment);
+the Free plan allows only [10 ms of CPU time per request](https://developers.cloudflare.com/workers/platform/limits/#cpu-time).
 `render` is synchronous, so `setTimeout` or `Promise.race` on the same thread cannot interrupt it.
 
 `render(dot, engine, format)` lays out the first graph; `renderAll` returns one output per
