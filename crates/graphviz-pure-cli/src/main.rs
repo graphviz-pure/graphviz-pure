@@ -868,7 +868,7 @@ fn dot_main() -> ExitCode {
     } else {
         opts.inputs.iter().cloned().map(Some).collect()
     };
-    let layout = LayoutJobs::new(opts.engine, opts.layout);
+    let layout = LayoutJobs::new(opts.engine, opts.layout.clone());
     let mut run = Run {
         opts: &mut opts,
         layout,

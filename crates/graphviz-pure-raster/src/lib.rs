@@ -21,7 +21,7 @@
 //! at 96 dpi (1pt = 4/3 px); with one, the SVG is already scaled to that resolution and is
 //! rasterized at one pixel per point.
 
-use graphviz_pure_core::GraphvizError;
+pub use graphviz_pure_core::{GraphvizError, GraphvizErrorKind};
 use resvg::{tiny_skia, usvg};
 use std::sync::{Arc, OnceLock};
 
@@ -30,7 +30,7 @@ use std::sync::{Arc, OnceLock};
 /// Non-exhaustive, so a new format can be added in a minor release. A `match`
 /// outside this crate needs a wildcard arm.
 #[non_exhaustive]
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum RasterFormat {
     Png,
     Jpeg,
@@ -255,6 +255,21 @@ mod tests {
     fn jpeg_encodes() {
         let jpg = rasterize(SVG, RasterFormat::Jpeg, false).unwrap();
         assert_eq!(&jpg[..2], &[0xFF, 0xD8]);
+    }
+
+    #[test]
+    fn invalid_svg_is_a_render_error() {
+        let err = rasterize("<not-svg>", RasterFormat::Png, false).unwrap_err();
+        assert_eq!(err.kind(), GraphvizErrorKind::Render);
+        assert_eq!(
+            err.to_string(),
+            format!("Rendering error: {}", err.message())
+        );
+        assert!(
+            err.to_string()
+                .starts_with("Rendering error: rasterizing the SVG: "),
+            "{err}"
+        );
     }
 
     // #339. `Vec2::atan2` is `y.atan2(x)`. Unpatched on Apple Silicon this input is

@@ -61,7 +61,7 @@ use graphviz_pure_core::{Graph, GraphvizError, Result};
 /// Non-exhaustive, so a new format can be added in a minor release. A `match`
 /// outside this crate needs a wildcard arm.
 #[non_exhaustive]
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum OutputFormat {
     Svg,
     SvgInline,

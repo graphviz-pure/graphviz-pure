@@ -26,7 +26,7 @@ use graphviz_pure_core::{Graph, GraphvizError, Result};
 /// Non-exhaustive, so a new engine can be added in a minor release. A `match`
 /// outside this crate needs a wildcard arm.
 #[non_exhaustive]
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum LayoutEngine {
     Dot,
     Neato,
@@ -45,20 +45,23 @@ pub enum LayoutEngine {
 /// Engine options set on the command line (`-n`, `-s`, `-x`, `-L`).
 ///
 /// The fields are private, and the struct is non-exhaustive, so a new option can
-/// be added in a minor release. Build one with [`LayoutOptions::builder`]:
+/// be added in a minor release. It is [`Clone`] but not [`Copy`], so a later
+/// option can hold owned data. Build one with [`LayoutOptions::builder`]:
 ///
 /// ```
 /// use graphviz_pure_layout::LayoutOptions;
 /// let opts = LayoutOptions::builder().nop(2).reduce(true).build();
-/// let _ = opts;
+/// assert_eq!(opts.nop(), 2);
+/// assert!(opts.reduce());
 /// ```
 ///
-/// [`LayoutOptions::set_nop`], [`LayoutOptions::set_inputscale`],
-/// [`LayoutOptions::set_reduce`] and [`LayoutOptions::fdp_mut`] change one option
-/// on a value you already hold. The command line does that as it reads flags,
-/// and a layout run writes `nop` back.
+/// [`LayoutOptions::nop`], [`LayoutOptions::inputscale`] and
+/// [`LayoutOptions::reduce`] read an option back. [`LayoutOptions::set_nop`],
+/// [`LayoutOptions::set_inputscale`] and [`LayoutOptions::set_reduce`] change
+/// one option on a value you already hold. The command line does that as it
+/// reads flags, and a layout run writes `nop` back.
 #[non_exhaustive]
-#[derive(Debug, Clone, Copy, Default, PartialEq)]
+#[derive(Debug, Clone, Default, PartialEq)]
 pub struct LayoutOptions {
     /// `-n[N]`: neato keeps the input positions (`Nop` in C). 0 runs the full layout.
     nop: u8,
@@ -73,8 +76,27 @@ pub struct LayoutOptions {
 
 impl LayoutOptions {
     /// Starts a builder from the default options.
+    #[must_use]
     pub fn builder() -> LayoutOptionsBuilder {
         LayoutOptionsBuilder::default()
+    }
+
+    /// `-n[N]`. `0` runs the full layout.
+    #[must_use]
+    pub fn nop(&self) -> u8 {
+        self.nop
+    }
+
+    /// `-s[v]`. A positive value overrides the `inputscale` attribute.
+    #[must_use]
+    pub fn inputscale(&self) -> f64 {
+        self.inputscale
+    }
+
+    /// `-x`: neato removes singletons and trees.
+    #[must_use]
+    pub fn reduce(&self) -> bool {
+        self.reduce
     }
 
     /// `-n[N]`. `0` runs the full layout.
@@ -93,44 +115,58 @@ impl LayoutOptions {
     }
 
     /// `-L`: fdp's parameters. The command line fills this in as it reads flags.
+    ///
+    /// Not part of the stable API. [`fdpgen::tlayout::FdpParms`] is an
+    /// implementation type.
+    #[doc(hidden)]
     pub fn fdp_mut(&mut self) -> &mut fdpgen::tlayout::FdpParms {
         &mut self.fdp
     }
 }
 
 /// Builds a [`LayoutOptions`]. Every method replaces one option and returns
-/// the builder. [`Self::build`] takes the value.
-#[derive(Debug, Clone, Copy, Default, PartialEq)]
+/// the builder. [`Self::build`] takes the value. The builder is not [`Copy`],
+/// because [`LayoutOptions`] is not.
+#[derive(Debug, Clone, Default, PartialEq)]
 pub struct LayoutOptionsBuilder {
     options: LayoutOptions,
 }
 
 impl LayoutOptionsBuilder {
     /// `-n[N]`. `0` runs the full layout.
+    #[must_use]
     pub fn nop(mut self, nop: u8) -> Self {
         self.options.nop = nop;
         self
     }
 
     /// `-s[v]`. A positive value overrides the `inputscale` attribute.
+    #[must_use]
     pub fn inputscale(mut self, inputscale: f64) -> Self {
         self.options.inputscale = inputscale;
         self
     }
 
     /// `-x`: neato removes singletons and trees.
+    #[must_use]
     pub fn reduce(mut self, reduce: bool) -> Self {
         self.options.reduce = reduce;
         self
     }
 
-    /// `-L`: fdp's parameters.
+    /// `-L`: fdp's parameters. The command line fills this in as it reads flags.
+    ///
+    /// Not part of the stable API. [`fdpgen::tlayout::FdpParms`] is an
+    /// implementation type.
+    #[doc(hidden)]
+    #[must_use]
     pub fn fdp(mut self, fdp: fdpgen::tlayout::FdpParms) -> Self {
         self.options.fdp = fdp;
         self
     }
 
     /// The options.
+    #[must_use]
     pub fn build(self) -> LayoutOptions {
         self.options
     }
@@ -177,7 +213,7 @@ pub fn layout_graph_in_run(
     engine: LayoutEngine,
     options: &mut LayoutOptions,
 ) -> Result<()> {
-    let opts = *options;
+    let opts = options.clone();
     neatogen::neatosplines::with_nop(&mut options.nop, || {
         cutil::in_rand_run(|| layout_in_run(graph, engine, opts))
     })
@@ -273,6 +309,24 @@ mod tests {
     use super::*;
     use graphviz_pure_core::{AttrMap, Graph, GraphKind, Point, SubgraphData, SubgraphId};
 
+    #[test]
+    fn builder_sets_every_field() {
+        let fdp = fdpgen::tlayout::FdpParms {
+            num_iters: 7,
+            ..fdpgen::tlayout::FdpParms::default()
+        };
+        let opts = LayoutOptions::builder()
+            .nop(2)
+            .inputscale(12.5)
+            .reduce(true)
+            .fdp(fdp)
+            .build();
+        assert_eq!(opts.nop(), 2);
+        assert_eq!(opts.inputscale(), 12.5);
+        assert!(opts.reduce());
+        assert_eq!(opts.fdp, fdp);
+    }
+
     fn make_chain_graph() -> Graph {
         let mut g = Graph::new("G", GraphKind::Directed, false);
         let a = g.ensure_node("a");
@@ -328,11 +382,9 @@ mod tests {
 
     fn dot_error(g: &mut Graph) -> String {
         match layout_graph(g, LayoutEngine::Dot) {
-            Err(e) if e.kind() == graphviz_pure_core::GraphvizErrorKind::Layout => e
-                .message()
-                .strip_prefix("Layout computation error in dot: ")
-                .unwrap_or_else(|| panic!("{}", e.message()))
-                .to_string(),
+            Err(e) if e.kind() == graphviz_pure_core::GraphvizErrorKind::Layout => {
+                e.message().to_string()
+            }
             other => panic!("expected a layout error, got {other:?}"),
         }
     }

@@ -13,7 +13,10 @@ share one version number, set in `[workspace.package]` in `Cargo.toml` and in
   The types the facade re-exports (`GraphvizError`, `GraphvizErrorKind`, `Result`,
   `charset`, `LayoutEngine`, `LayoutOptions`, `LayoutOptionsBuilder`, `GlobalAttrs`,
   `OutputFormat`) are covered by the facade's promise even though they are defined in an
-  implementation crate.
+  implementation crate. `graphviz-pure-raster` re-exports `GraphvizError` and
+  `GraphvizErrorKind`, and its `RasterFormat` is part of that same promise.
+  `GraphvizError::__map_text` is outside it: a hidden hook the facade uses to rewrite
+  decoded text, free to change in any release.
 - **The command line:** options, accepted `-T` formats, exit status, and the `-V` line's shape:
   `graphviz-pure - graphviz version 16.1.0 (graphviz-pure X.Y.Z)`. Not ported: C's remaining
   core-plugin formats (`cmap`, `eps`, `fig`, `imap`, `imap_np`, `ismap`, `pic`, `pov`, `ps`,
