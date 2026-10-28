@@ -6,8 +6,10 @@ share one version number, set in `[workspace.package]` in `Cargo.toml` and in
 
 ## What the version covers
 
-- **The Rust API** of the published crates (`graphviz-pure` and `graphviz-pure-*`), and
+- **The Rust API** of the stable crates (`graphviz-pure` and `graphviz-pure-raster`), and
   **the JavaScript API** of `@graphviz-pure/wasm`.
+  `graphviz-pure-core`, `graphviz-pure-parser`, `graphviz-pure-geom`, `graphviz-pure-layout`
+  and `graphviz-pure-render` are implementation crates with no semver promise.
 - **The command line:** options, accepted `-T` formats, exit status.
 - **Output.** Because the project exists to reproduce Graphviz's output exactly, every change
   to the bytes the port writes for an existing input is listed in the changelog, whatever its

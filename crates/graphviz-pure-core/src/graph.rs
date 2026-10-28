@@ -1,15 +1,14 @@
 use crate::geom::{BoundingBox, Point, Spline};
-use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
 use std::collections::{BTreeMap, BTreeSet};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct NodeId(pub u32);
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct EdgeId(pub u32);
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct SubgraphId(pub u32);
 
 /// An object's attributes (cgraph's `agxget`/`agxset` values), by name. The values are
@@ -131,148 +130,19 @@ impl<'a> IntoIterator for &'a AttrMap {
     }
 }
 
-impl Serialize for AttrMap {
-    fn serialize<S: serde::Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
-        use serde::ser::SerializeStruct;
-        let mut st = s.serialize_struct("AttrMap", 2)?;
-        st.serialize_field("values", &self.values)?;
-        st.serialize_field("html", &self.html)?;
-        st.end()
-    }
-}
-
-impl<'de> Deserialize<'de> for AttrMap {
-    /// `{"values": {..}, "html": [..]}`, or the plain map of strings serialized before
-    /// 0.2.0, whose `"\u{1}html:<name>"` keys marked `<name>`'s value as HTML (when it held
-    /// that value).
-    fn deserialize<D: serde::Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
-        use serde::de::{self, MapAccess, SeqAccess, Visitor};
-        use std::fmt;
-
-        enum Field {
-            Str(String),
-            Map(BTreeMap<String, String>),
-            Seq(BTreeSet<String>),
-        }
-        impl<'de> Deserialize<'de> for Field {
-            fn deserialize<D: serde::Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
-                struct V;
-                impl<'de> Visitor<'de> for V {
-                    type Value = Field;
-                    fn expecting(&self, f: &mut fmt::Formatter) -> fmt::Result {
-                        f.write_str("a string, a map of strings or a list of strings")
-                    }
-                    fn visit_str<E: de::Error>(self, v: &str) -> Result<Field, E> {
-                        Ok(Field::Str(v.to_string()))
-                    }
-                    fn visit_string<E: de::Error>(self, v: String) -> Result<Field, E> {
-                        Ok(Field::Str(v))
-                    }
-                    fn visit_map<A: MapAccess<'de>>(self, mut m: A) -> Result<Field, A::Error> {
-                        let mut out = BTreeMap::new();
-                        while let Some((k, v)) = m.next_entry::<String, String>()? {
-                            out.insert(k, v);
-                        }
-                        Ok(Field::Map(out))
-                    }
-                    fn visit_seq<A: SeqAccess<'de>>(self, mut q: A) -> Result<Field, A::Error> {
-                        let mut out = BTreeSet::new();
-                        while let Some(k) = q.next_element::<String>()? {
-                            out.insert(k);
-                        }
-                        Ok(Field::Seq(out))
-                    }
-                }
-                d.deserialize_any(V)
-            }
-        }
-
-        struct V;
-        impl<'de> Visitor<'de> for V {
-            type Value = AttrMap;
-            fn expecting(&self, f: &mut fmt::Formatter) -> fmt::Result {
-                f.write_str(
-                    "an attribute map: {\"values\": {name: value}, \"html\": [name]}, \
-                     or a map of strings (before 0.2.0)",
-                )
-            }
-            fn visit_map<A: MapAccess<'de>>(self, mut m: A) -> Result<AttrMap, A::Error> {
-                let mut fields = Vec::new();
-                while let Some((k, v)) = m.next_entry::<String, Field>()? {
-                    fields.push((k, v));
-                }
-                let typed = !fields.is_empty()
-                    && fields.iter().all(|(k, v)| {
-                        matches!(
-                            (k.as_str(), v),
-                            ("values", Field::Map(_)) | ("html", Field::Seq(_))
-                        )
-                    });
-                if typed {
-                    let mut a = AttrMap::new();
-                    for (_, v) in fields {
-                        match v {
-                            Field::Map(values) => a.values = values,
-                            Field::Seq(html) => a.html = html,
-                            Field::Str(_) => {}
-                        }
-                    }
-                    if let Some(k) = a.html.iter().find(|k| !a.values.contains_key(*k)) {
-                        return Err(de::Error::custom(format!(
-                            "attribute map: \"html\" names `{k}`, which has no value"
-                        )));
-                    }
-                    return Ok(a);
-                }
-                let mut plain = BTreeMap::new();
-                for (k, v) in fields {
-                    match v {
-                        Field::Str(v) => {
-                            plain.insert(k, v);
-                        }
-                        _ => {
-                            return Err(de::Error::custom(format!(
-                                "attribute map: `{k}` is not a string; expected \
-                                 {{\"values\": {{..}}, \"html\": [..]}} or a map of strings"
-                            )));
-                        }
-                    }
-                }
-                let mut a = AttrMap::new();
-                let mut marks = Vec::new();
-                for (k, v) in plain {
-                    match k.strip_prefix("\u{1}html:") {
-                        Some(name) => marks.push((name.to_string(), v)),
-                        None => {
-                            a.values.insert(k, v);
-                        }
-                    }
-                }
-                for (name, marked) in marks {
-                    if a.values.get(&name) == Some(&marked) {
-                        a.html.insert(name);
-                    }
-                }
-                Ok(a)
-            }
-        }
-        d.deserialize_map(V)
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum GraphKind {
     Undirected,
     Directed,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct Port {
     pub name: Option<String>,
     pub compass: Option<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct NodeData {
     pub id: NodeId,
     pub name: String,
@@ -287,14 +157,12 @@ pub struct NodeData {
     pub order: usize,
     /// The name was an HTML string (`<b>`): `name` holds its inner text, and cgraph's
     /// `aghtmlstr` is set on it. Writers print it as `<b>`; everything else sees `b`.
-    #[serde(default)]
     pub html_name: bool,
     /// The layout's result beyond the position and size.
-    #[serde(default)]
     pub layout: NodeLayout,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct EdgeData {
     pub id: EdgeId,
     pub tail: NodeId,
@@ -306,19 +174,15 @@ pub struct EdgeData {
     pub label_pos: Option<Point>,
     /// The layout could not place the label (`ED_label(e)->set` is false):
     /// `lp` is still printed, but renderers do not draw it.
-    #[serde(default)]
     pub label_unplaced: bool,
     /// The cgraph name of the edge: the `key` of the statement that made it (`agedge`'s
     /// `name`). Defaults never name an edge (`edge [key=…]`, `-Ekey=…`), although `-E`
     /// gives every edge a `key` attribute.
-    #[serde(default)]
     pub key: Option<String>,
     /// The key is an HTML string (`<...>`): cgraph's string identity includes the flag, so
     /// `key=<k>` and `key="k"` name two edges, and `agwrite` prints it back as `<k>`.
-    #[serde(default)]
     pub key_html: bool,
     /// The layout's result beyond the spline and the main label.
-    #[serde(default)]
     pub layout: EdgeLayout,
 }
 
@@ -332,7 +196,7 @@ pub fn has_cluster_prefix(name: &str) -> bool {
         .is_some_and(|p| p.eq_ignore_ascii_case(b"cluster"))
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct SubgraphData {
     pub id: SubgraphId,
     pub name: String,
@@ -349,14 +213,11 @@ pub struct SubgraphData {
     pub subgraphs: Vec<SubgraphId>,
     pub bb: BoundingBox,
     /// The name was an HTML string; `name` holds its inner text (see [`NodeData::html_name`]).
-    #[serde(default)]
     pub html_name: bool,
     /// The subgraph is named by the empty string (`subgraph "" {…}`), which cgraph keeps
     /// as a name: only a missing name makes a subgraph anonymous (grammar.y `opensubg`).
-    #[serde(default)]
     pub empty_name: bool,
     /// The layout's result beyond the bounding box.
-    #[serde(default)]
     pub layout: GraphLayout,
 }
 
@@ -369,7 +230,7 @@ impl SubgraphData {
 
 /// A label a layout positioned (`textlabel_t`'s `pos` and `set`): `set` is false where the
 /// layout could not place it, and C still prints the position but draws nothing.
-#[derive(Debug, Clone, Copy, PartialEq, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub struct LabelPlace {
     pub pos: Point,
     pub set: bool,
@@ -378,7 +239,7 @@ pub struct LabelPlace {
 /// What a layout leaves on a node for the renderers and writers, beyond [`NodeData::pos`]
 /// and the size: the `Agnodeinfo_t` fields C reads in `emit.c` and `attach_attrs_and_arrows`.
 /// It is kept out of the node's attributes, which hold only what the user and cgraph set.
-#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq)]
 pub struct NodeLayout {
     /// `AGSEQ(n)`, where it is not the node's index + 1 (after [`Graph::delete_nodes`], and
     /// in fdp's [`Graph::render_view`]). Renderers print it in object ids.
@@ -397,7 +258,7 @@ pub struct NodeLayout {
 }
 
 /// Where an edge's final port names come from ([`EdgeLayout::port_names`]).
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub enum PortNames {
     /// The layout keeps the input's ports, so renderers read the edge's own `tailport` and
     /// `headport`: every engine but dot, and dot's `phase` outputs, which stop before
@@ -411,7 +272,7 @@ pub enum PortNames {
 
 /// What a layout leaves on an edge for the renderers and writers, beyond the spline and the
 /// main label ([`EdgeData::spline`], [`EdgeData::label_pos`]).
-#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq)]
 pub struct EdgeLayout {
     /// `AGSEQ(e)`, as [`NodeLayout::seq`].
     pub seq: Option<usize>,
@@ -433,7 +294,7 @@ pub struct EdgeLayout {
 
 /// Whether a layout put a cluster in its parent's `GD_clust`, which `emit_clusters` and
 /// `rec_attach_bb` walk.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum ClusterReg {
     /// The layout said nothing: a cluster with a box is drawn.
     #[default]
@@ -447,13 +308,12 @@ pub enum ClusterReg {
 
 /// What a layout leaves on a cluster or the root graph for the renderers and writers,
 /// beyond the bounding box ([`Graph::bb`], [`SubgraphData::bb`]).
-#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq)]
 pub struct GraphLayout {
     /// The cluster's place in `GD_clust` (always [`ClusterReg::Unknown`] on the root).
     pub reg: ClusterReg,
     /// `AGSEQ(g)` of a subgraph, where it is not its index + 1 (after
     /// [`Graph::agdelete_subgraphs`]). Renderers print it in cluster ids.
-    #[serde(default)]
     pub seq: Option<usize>,
     /// `GD_label(g)` stays NULL: the layout registered the cluster without making its label
     /// (patchwork's `mkClusters`), so renderers neither draw nor size it.
@@ -471,10 +331,8 @@ pub struct GraphLayout {
     /// Root only: `GD_odim(g)`, the output dimension neato and sfdp set from `dimen`.
     pub odim: usize,
     /// Root only: the image files and epsf shapes the layout found, which the renderers draw.
-    #[serde(default)]
     pub usershapes: crate::usershape::UserShapes,
     /// Root only: `GD_drawing(g)->xdots`, the `_background` ops `graph_init` parsed.
-    #[serde(default)]
     pub background: Option<crate::xdot::Background>,
 }
 
@@ -542,7 +400,7 @@ pub fn node_name_is_buffer(name: &str, local_node_names_kept: bool) -> bool {
 }
 
 /// Arena-backed Graph representation (Fixes GV-BUG-008 and GV-BUG-010).
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Graph {
     pub name: String,
     pub strict: bool,
@@ -558,64 +416,53 @@ pub struct Graph {
     /// cgraph's internal ids of anonymous subgraphs (subgraph index -> id); the root graph,
     /// anonymous subgraphs and edges draw odd ids from one counter in creation order. C
     /// prints an anonymous subgraph's name as `%<id>`.
-    #[serde(default)]
     pub anon_subgraph_ids: BTreeMap<u32, u64>,
     /// cgraph attribute dictionaries (`Agdatadict_t`) as built while parsing: index 0 is the
     /// root graph, index `i + 1` subgraph `i`. Writers that reproduce `agwrite` use them to
     /// tell local declarations from inherited values.
-    #[serde(default)]
     pub dicts: Vec<AttrDicts>,
     /// The graph as renderers that run before `undoClusterEdges` see it: fdp leaves its
     /// cluster nodes (`__0:cluster`) and cloned cluster edges in the graph it lays out, and
     /// only the output writers (dot, xdot, json, canon, plain) undo them. `-Tsvg` draws this
     /// graph when it is set.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub render_view: Option<Box<Graph>>,
     /// The root is named by the empty string (`digraph "" {…}`); an empty `name` is
     /// otherwise an anonymous root (`agopen(NULL)`), which cgraph calls `%1`.
-    #[serde(default)]
     pub empty_name: bool,
     /// The graph is one a layout made after parsing (dot's `auxg`): `agnode(auxg,
     /// agnameof(orig), 1)` stores a `%` name in its internal map, so agnameof returns that
     /// string, not its static buffer.
-    #[serde(default)]
     pub local_node_names_kept: bool,
     /// The subgraphs are ccomps' projections (`projectG`'s `agsubg(g, agnameof(subg), 1)`),
     /// which keep an anonymous original's `%<id>` as a string in the internal map.
-    #[serde(default)]
     pub local_subgraph_names_kept: bool,
     /// The layout's result beyond the bounding box.
-    #[serde(default)]
     pub layout: GraphLayout,
 }
 
 /// One declared attribute (`Agsym_t`): its default value and whether a root attribute
 /// statement set it (`sym->print`).
-#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct AttrSym {
     pub defval: String,
     pub print: bool,
     /// `sym->id`: declaration order in the root dictionary (cgraph's ProtoGraph
     /// `label` first). A subgraph's local symbol has its root symbol's id, as `agnewsym`
     /// gives it.
-    #[serde(default)]
     pub id: usize,
     /// `aghtmlstr(sym->name)`: the attribute was first named by an HTML string (`<zzz>=1`).
     /// The name is its inner text, which is how cgraph looks attributes up.
-    #[serde(default)]
     pub html: bool,
     /// `aghtmlstr(sym->defval)`: the default is an HTML string (its inner text).
-    #[serde(default)]
     pub html_defval: bool,
     /// Declared on cgraph's ProtoGraph (the node `label`, `-G`/`-N`/`-E`), which every root
     /// graph copies with its ids: a graph made later, like dot's aux graph, numbers these
     /// symbols the same way.
-    #[serde(default)]
     pub proto: bool,
 }
 
 /// The local graph, node and edge dictionaries of one graph or subgraph.
-#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct AttrDicts {
     pub graph: BTreeMap<String, AttrSym>,
     pub node: BTreeMap<String, AttrSym>,
@@ -1264,34 +1111,6 @@ mod attr_map_tests {
             assert_eq!(ed.attrs.get("color").map(String::as_str), Some("red"));
             assert_eq!(e == e2, strict);
         }
-    }
-
-    #[test]
-    fn serde_keeps_the_flag_and_reads_the_old_mark_keys() {
-        let mut a = AttrMap::new();
-        a.set("label", "x".into(), true);
-        a.insert("\u{1}html:shape".into(), "box".into());
-        let json = serde_json::to_string(&a).unwrap();
-        assert_eq!(
-            json,
-            r#"{"values":{"\u0001html:shape":"box","label":"x"},"html":["label"]}"#
-        );
-        let back: AttrMap = serde_json::from_str(&json).unwrap();
-        assert_eq!(back, a);
-        // a plain map is data serialized before 0.2.0, whose mark keys were the flag
-        let old: AttrMap = serde_json::from_str(
-            r#"{"label":"x","\u0001html:label":"x","xlabel":"y","\u0001html:xlabel":"z"}"#,
-        )
-        .unwrap();
-        assert!(old.is_html("label") && !old.is_html("xlabel"));
-        assert_eq!(old.keys().collect::<Vec<_>>(), ["label", "xlabel"]);
-        let err = serde_json::from_str::<AttrMap>(r#"{"label":1}"#).unwrap_err();
-        assert!(
-            err.to_string().contains("a string, a map of strings"),
-            "{err}"
-        );
-        let err = serde_json::from_str::<AttrMap>(r#"{"values":{},"html":["a"]}"#).unwrap_err();
-        assert!(err.to_string().contains("`a`, which has no value"), "{err}");
     }
 }
 

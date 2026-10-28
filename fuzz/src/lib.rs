@@ -11,12 +11,12 @@ pub const MAX_NODES: usize = 50;
 pub const MAX_EDGES: usize = 100;
 pub const MAX_SUBGRAPHS: usize = 25;
 
-/// DOT is read as bytes and decoded as the CLI decodes a file ([`graphviz_pure::charset::decode_slice`]:
+/// DOT is read as bytes and decoded as the CLI decodes a file ([`graphviz_pure_core::charset::decode_slice`]:
 /// bytes that are not UTF-8 stay raw bytes). The targets parse it as the CLI reads a file
 /// ([`graphviz_pure_parser::reading_file`]: `fgets`, where a NUL hides the rest of its line),
 /// not as a library string, which ends at its first NUL.
-fn source(data: &[u8]) -> Option<graphviz_pure::decoded::Decoded> {
-    (data.len() <= MAX_INPUT).then(|| graphviz_pure::decoded::Decoded::decode_slice(data))
+fn source(data: &[u8]) -> Option<graphviz_pure_core::charset::Decoded> {
+    (data.len() <= MAX_INPUT).then(|| graphviz_pure_core::charset::Decoded::decode_slice(data))
 }
 
 /// The DOT parser and the canonical writer on every graph read before an error.
@@ -25,7 +25,7 @@ pub fn parse(data: &[u8]) {
     let (graphs, _err) = graphviz_pure_parser::reading_file("fuzz", || {
         graphviz_pure_parser::parse_dot_all_partial(
             src.as_str(),
-            &graphviz_pure::GlobalAttrs::default(),
+            &graphviz_pure_parser::GlobalAttrs::default(),
         )
     });
     for graph in &graphs {
@@ -45,8 +45,8 @@ pub fn render(data: &[u8], engine: &str) {
     graphviz_pure_parser::reading_file("fuzz", || render_source(&src, engine));
 }
 
-fn render_source(src: &graphviz_pure::decoded::Decoded, engine: &str) {
-    let Ok(graph) = graphviz_pure::decoded::parse_dot(src) else {
+fn render_source(src: &graphviz_pure_core::charset::Decoded, engine: &str) {
+    let Ok(graph) = graphviz_pure_render::decoded::parse_dot(src) else {
         return;
     };
     if graph.nodes.len() > MAX_NODES
@@ -55,5 +55,5 @@ fn render_source(src: &graphviz_pure::decoded::Decoded, engine: &str) {
     {
         return;
     }
-    let _ = graphviz_pure::decoded::render_dot(src, engine, "svg");
+    let _ = graphviz_pure_render::decoded::render_dot(src, engine, "svg");
 }

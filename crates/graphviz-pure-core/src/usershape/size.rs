@@ -93,7 +93,7 @@ impl<R: Read + Seek> CFile<R> {
 }
 
 /// `imagetype_t`, with the `stringtype` C gives each.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ImageType {
     Null,
     Png,

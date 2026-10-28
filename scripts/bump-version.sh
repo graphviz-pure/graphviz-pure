@@ -40,10 +40,20 @@ section = open(os.environ["VERSION_FILE"]).read().strip("\n") + "\n"
 heading = f"## [{new}] - "
 if not section.startswith(heading):
     sys.exit(f"the section does not start with {heading!r}")
+def bump_reqs(text, new):
+    # Keep a leading '=' so the facade's exact pins stay exact.
+    return re.sub(
+        r'(graphviz-pure[\w-]* = \{ path = "[^"]+", version = ")(=?)[^"]+(")',
+        rf"\g<1>\g<2>{new}\g<3>",
+        text,
+    )
+
 toml = open("Cargo.toml").read()
 toml = re.sub(r'(\[workspace\.package\][^\[]*?\nversion = ")[^"]+(")', rf"\g<1>{new}\g<2>", toml, count=1)
-toml = re.sub(r'(graphviz-pure[\w-]* = \{ path = "[^"]+", version = ")[^"]+(")', rf"\g<1>{new}\g<2>", toml)
+toml = bump_reqs(toml, new)
 open("Cargo.toml", "w").write(toml)
+facade = "crates/graphviz-pure/Cargo.toml"
+open(facade, "w").write(bump_reqs(open(facade).read(), new))
 for path in ("web/package.json", "web/jsr.json"):
     pkg = json.load(open(path))
     pkg["version"] = new

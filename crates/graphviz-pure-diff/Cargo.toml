@@ -15,7 +15,8 @@ path = "src/main.rs"
 [dependencies]
 graphviz-pure-core.workspace = true
 graphviz-pure-parser.workspace = true
-graphviz-pure.workspace = true
+graphviz-pure-layout.workspace = true
+graphviz-pure-render.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 roxmltree = "0.21.1"

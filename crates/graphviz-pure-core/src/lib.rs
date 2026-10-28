@@ -1,3 +1,6 @@
+//! Implementation crate of graphviz-pure, with no semver promise. The stable crates are
+//! `graphviz-pure` and `graphviz-pure-raster`.
+//!
 //! Core data structures, error types, geometry primitives, and tables for `graphviz-pure`.
 
 pub mod arrows;

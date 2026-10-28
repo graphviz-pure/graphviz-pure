@@ -1,3 +1,6 @@
+//! Implementation crate of graphviz-pure, with no semver promise. The stable crates are
+//! `graphviz-pure` and `graphviz-pure-raster`.
+//!
 //! Node and label geometry (the init half of `shapes.c`, `labels.c`,
 //! `htmltable.c`) and `lib/pathplan` (`graphviz-pure-geom`).
 

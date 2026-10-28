@@ -13,9 +13,10 @@ cargo-fuzz = true
 
 [dependencies]
 libfuzzer-sys = "0.4"
-graphviz-pure = { path = "../crates/graphviz-pure" }
+graphviz-pure-core = { path = "../crates/graphviz-pure-core" }
 graphviz-pure-parser = { path = "../crates/graphviz-pure-parser" }
 graphviz-pure-geom = { path = "../crates/graphviz-pure-geom" }
+graphviz-pure-render = { path = "../crates/graphviz-pure-render" }
 
 [workspace]
 members = ["."]

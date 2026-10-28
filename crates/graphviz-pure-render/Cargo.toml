@@ -13,6 +13,7 @@ description = "Graphviz output formats in pure Rust: svg, json, json0, dot, xdot
 [dependencies]
 graphviz-pure-core.workspace = true
 graphviz-pure-geom.workspace = true
+graphviz-pure-layout.workspace = true
 graphviz-pure-parser.workspace = true
 serde.workspace = true
 serde_json.workspace = true

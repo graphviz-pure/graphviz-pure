@@ -44,25 +44,10 @@ dependencies = [
 ]
 
 [[package]]
-name = "graphviz-pure"
-version = "0.1.2"
-dependencies = [
- "graphviz-pure-core",
- "graphviz-pure-geom",
- "graphviz-pure-layout",
- "graphviz-pure-parser",
- "graphviz-pure-render",
- "serde",
- "serde_json",
- "thiserror",
-]
-
-[[package]]
 name = "graphviz-pure-core"
-version = "0.1.2"
+version = "0.2.3"
 dependencies = [
  "libm",
- "serde",
  "thiserror",
 ]
 
@@ -70,22 +55,23 @@ dependencies = [
 name = "graphviz-pure-fuzz"
 version = "0.0.0"
 dependencies = [
- "graphviz-pure",
+ "graphviz-pure-core",
  "graphviz-pure-geom",
  "graphviz-pure-parser",
+ "graphviz-pure-render",
  "libfuzzer-sys",
 ]
 
 [[package]]
 name = "graphviz-pure-geom"
-version = "0.1.2"
+version = "0.2.3"
 dependencies = [
  "graphviz-pure-core",
 ]
 
 [[package]]
 name = "graphviz-pure-layout"
-version = "0.1.2"
+version = "0.2.3"
 dependencies = [
  "graphviz-pure-core",
  "graphviz-pure-geom",
@@ -93,18 +79,18 @@ dependencies = [
 
 [[package]]
 name = "graphviz-pure-parser"
-version = "0.1.2"
+version = "0.2.3"
 dependencies = [
  "graphviz-pure-core",
- "thiserror",
 ]
 
 [[package]]
 name = "graphviz-pure-render"
-version = "0.1.2"
+version = "0.2.3"
 dependencies = [
  "graphviz-pure-core",
  "graphviz-pure-geom",
+ "graphviz-pure-layout",
  "graphviz-pure-parser",
  "serde",
  "serde_json",

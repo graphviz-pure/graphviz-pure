@@ -1,3 +1,6 @@
+//! Implementation crate of graphviz-pure, with no semver promise. The stable crates are
+//! `graphviz-pure` and `graphviz-pure-raster`.
+//!
 //! Graphviz layout engines in pure Rust (`dot`, `neato`, `fdp`, `sfdp`, `twopi`, `circo`, `osage`, `patchwork`).
 
 pub use graphviz_pure_core::cdt;

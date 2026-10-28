@@ -3,7 +3,6 @@
 //! and `lib/common/labels.c`).
 
 use crate::charset::{self, Charset};
-use serde::{Deserialize, Serialize};
 
 /// Default font family name in Graphviz (`Times-Roman`).
 pub const DEFAULT_FONT_NAME: &str = "Times-Roman";
@@ -21,7 +20,7 @@ pub const MIN_FONT_SIZE: f64 = 1.0;
 pub const LINESPACING: f64 = 1.20;
 
 /// Horizontal justification of a single line in a Graphviz label.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum TextJustify {
     /// Centered line (`\n`, default).
     #[default]
@@ -55,7 +54,7 @@ impl TextJustify {
 }
 
 /// Measured layout of a single line within a multiline text label.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct TextLineLayout {
     /// Unescaped text content of the line.
     pub text: String,
@@ -68,7 +67,6 @@ pub struct TextLineLayout {
     /// The size of the line's interned font (`span->font->size`): the label's font size,
     /// except where C's font dictionary hands a NaN size another font (see
     /// [`textfont_intern`]). An empty line has no font and keeps the label's size.
-    #[serde(default)]
     pub font_size: f64,
 }
 
@@ -319,7 +317,7 @@ pub fn textfont_dict_reset() {
 }
 
 /// Measured layout of a multiline Graphviz label in points.
-#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Default)]
 pub struct TextLabelLayout {
     /// Measured lines in top-to-bottom order.
     pub lines: Vec<TextLineLayout>,
@@ -335,7 +333,6 @@ pub struct TextLabelLayout {
     pub font_size: f64,
     /// The label text after object-escape substitution and entity conversion (C's
     /// `lp->text`), still containing the `\\n`/`\\l`/`\\r` line escapes.
-    #[serde(default)]
     pub source: String,
 }
 

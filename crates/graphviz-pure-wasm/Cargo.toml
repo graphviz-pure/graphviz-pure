@@ -13,6 +13,9 @@ crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 graphviz-pure-core.workspace = true
+graphviz-pure-parser.workspace = true
+graphviz-pure-layout.workspace = true
+graphviz-pure-render.workspace = true
 graphviz-pure.workspace = true
 wasm-bindgen.workspace = true
 serde.workspace = true

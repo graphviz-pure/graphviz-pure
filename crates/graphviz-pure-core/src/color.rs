@@ -2,11 +2,10 @@
 //! Graphviz 16.1.0 (`lib/common/colxlate.c`, `lib/common/colortbl.h`, `lib/common/color.h`).
 
 use crate::color_table::COLOR_LIB;
-use serde::{Deserialize, Serialize};
 use std::fmt;
 
 /// Resolved 8-bit RGBA color (`r`, `g`, `b`, `a`).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct RgbaColor {
     pub r: u8,
     pub g: u8,

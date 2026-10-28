@@ -1,11 +1,12 @@
-use graphviz_pure::decoded::{Decoded, GraphJobs, LayoutJobs, graph_stream};
-use graphviz_pure::plugins;
-use graphviz_pure::{
-    DEVICE_PLUGINS, FdpParms, GlobalAttrs, LAYOUT_PLUGINS, LayoutEngine, LayoutOptions,
-    OutputFormat,
-};
-use graphviz_pure_core::charset::decode_slice;
+use graphviz_pure_core::Graph;
+use graphviz_pure_core::charset::{Decoded, decode_slice};
 use graphviz_pure_core::diag::{AgErrLevel, agerrorf, agseterr, agwarningf, fprintf_stderr};
+use graphviz_pure_layout::fdpgen::tlayout::FdpParms;
+use graphviz_pure_layout::{LayoutEngine, LayoutOptions};
+use graphviz_pure_parser::GlobalAttrs;
+use graphviz_pure_render::decoded::{self, GraphJobs, LayoutJobs, graph_stream};
+use graphviz_pure_render::plugins::{self, DEVICE_PLUGINS, LAYOUT_PLUGINS};
+use graphviz_pure_render::{OutputFormat, set_y_invert};
 use std::borrow::Cow;
 use std::env;
 use std::ffi::{OsStr, OsString};
@@ -441,7 +442,7 @@ fn parse_args(argv0: &str, os_args: &[OsString]) -> Parsed {
                         // `dotneato_args_initialize` writes these with `fprintf`.
                         fprintf_stderr(&format!(
                             "Format: \"{v}\" not recognized. Use one of:{}\n",
-                            graphviz_pure::plugin_list(&DEVICE_PLUGINS, &v)
+                            plugins::plugin_list(&DEVICE_PLUGINS, &v)
                         ));
                         return Parsed::Exit(ExitCode::FAILURE);
                     }
@@ -450,12 +451,12 @@ fn parse_args(argv0: &str, os_args: &[OsString]) -> Parsed {
                     let Some(v) = flag_value(os_args, &mut i) else {
                         return missing('K');
                     };
-                    match graphviz_pure::layout_select(&v) {
+                    match plugins::layout_select(&v) {
                         Some(e) => opts.engine = e,
                         None => {
                             fprintf_stderr(&format!(
                                 "There is no layout engine support for \"{v}\"\n Use one of:{}\n",
-                                graphviz_pure::plugin_list(&LAYOUT_PLUGINS, &v)
+                                plugins::plugin_list(&LAYOUT_PLUGINS, &v)
                             ));
                             return Parsed::Exit(ExitCode::FAILURE);
                         }
@@ -535,11 +536,11 @@ fn parse_args(argv0: &str, os_args: &[OsString]) -> Parsed {
     // Without `-K`, the layout is the command's name, `dot` for any other name (as C's
     // `dot_static` and `dot_builtins` are), selected as `gvlayout_select` does.
     if !kflag {
-        let layout = match graphviz_pure::plugin_load(&LAYOUT_PLUGINS, &opts.cmdname) {
+        let layout = match plugins::plugin_load(&LAYOUT_PLUGINS, &opts.cmdname) {
             Some(_) => opts.cmdname.as_str(),
             None => "dot",
         };
-        opts.engine = graphviz_pure::layout_select(layout).unwrap_or(LayoutEngine::Dot);
+        opts.engine = plugins::layout_select(layout).unwrap_or(LayoutEngine::Dot);
     }
     // Without `-T`, the first job writes `dot`; a job with no `-T` repeats the one before
     // it (`gvjobs_next`).
@@ -576,7 +577,7 @@ fn read_input(path: Option<&OsStr>) -> io::Result<Decoded> {
 }
 
 /// `FINISH()` in `gvRenderJobs` (`lib/common/emit.c`, at `line`): the `-v` timing.
-fn render_jobs_finish(graph: &graphviz_pure::Graph, line: u32) {
+fn render_jobs_finish(graph: &Graph, line: u32) {
     graphviz_pure_core::gv_info!(
         "emit.c",
         line,
@@ -620,7 +621,7 @@ fn auto_output_filename(input: Option<&OsStr>, graph_index: usize, langname: &st
 fn render_job(
     jobs: &mut GraphJobs<'_>,
     job: usize,
-    graph: &graphviz_pure::Graph,
+    graph: &Graph,
     langname: &str,
 ) -> Result<Vec<u8>, graphviz_pure_core::GraphvizError> {
     let typ = langname.split(':').next().unwrap_or("");
@@ -671,7 +672,7 @@ impl Run<'_> {
     /// `gvRenderJobs` for one graph. `Err` is a write error.
     fn render_jobs(
         &mut self,
-        graph: &graphviz_pure::Graph,
+        graph: &Graph,
         input: Option<&OsStr>,
         graph_index: usize,
         name: &str,
@@ -680,7 +681,7 @@ impl Run<'_> {
             graphviz_pure_core::diag::start_timer();
         }
         // FINISH() on every way out
-        struct Finish<'g>(&'g graphviz_pure::Graph);
+        struct Finish<'g>(&'g Graph);
         impl Drop for Finish<'_> {
             fn drop(&mut self) {
                 render_jobs_finish(self.0, 4323);
@@ -759,7 +760,7 @@ impl Run<'_> {
     /// where C exits or crashes, which ends the run; `Err` is a write error.
     fn graph(
         &mut self,
-        graph: &mut graphviz_pure::Graph,
+        graph: &mut Graph,
         input: Option<&OsStr>,
         graph_index: usize,
         name: &str,
@@ -786,8 +787,7 @@ impl Run<'_> {
     /// instead of the inputs, which are not read.
     fn plugin_graph(&mut self, globals: &GlobalAttrs) -> io::Result<bool> {
         // The port's tables are fixed and all quotable (`plugin_graph`'s test).
-        let Some(mut graph) = graphviz_pure::decoded::plugin_graph(&plugins::PORT_PLUGINS, globals)
-        else {
+        let Some(mut graph) = decoded::plugin_graph(&plugins::PORT_PLUGINS, globals) else {
             agerrorf("the plugin graph could not be made\n");
             return Ok(true);
         };
@@ -863,7 +863,7 @@ fn dot_main() -> ExitCode {
         Parsed::Run(o) => o,
         Parsed::Exit(code) => return code,
     };
-    graphviz_pure::set_y_invert(opts.y_invert);
+    set_y_invert(opts.y_invert);
     // `-P` reads no input.
     let inputs: Vec<Option<OsString>> = if opts.plugin_graph.is_some() {
         Vec::new()

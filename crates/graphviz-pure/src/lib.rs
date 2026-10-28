@@ -4,32 +4,37 @@
 //! [`GlobalAttrs`] values, outputs and error messages. The port reads every string in a
 //! decoded form ([`charset`]), where U+10FF00..=U+10FFFF stands for an input byte that is not
 //! UTF-8; these functions convert at the boundary, so a real U+10FFxx character in the source
-//! is that character, as its UTF-8 bytes are to C. A parsed [`Graph`] holds its names and
-//! values in the decoded form.
+//! is that character, as its UTF-8 bytes are to C.
 //!
 //! Output that is not valid UTF-8 reaches the caller with U+FFFD in place of the bytes that
 //! aren't ([`charset::to_text`]); C writes them as they are. Some writers cut a value at a byte
-//! count (a `%.80s` excerpt in a message) or split it at a byte (a multi-byte `layersep`). For
-//! C's exact bytes, and for a file's bytes as input, use the same entry points in [`decoded`]
-//! with [`charset::encode`].
+//! count (a `%.80s` excerpt in a message) or split it at a byte (a multi-byte `layersep`).
 //!
-//! Before 0.2.0 these functions took and returned the decoded form: code that called
-//! [`charset::decode`] before [`render_dot`] calls [`decoded::render_dot`] with a
-//! [`decoded::Decoded`] instead.
-
-pub mod decoded;
-pub mod plugins;
+//! A [`Graph`] is an opaque handle. Parse it, lay it out and render it. Read its structure
+//! from the `json` and `json0` output.
 
 use std::borrow::Cow;
 
-pub use graphviz_pure_core::{Graph, GraphvizError, Result, charset};
-pub use graphviz_pure_layout::cutil::{RandState, in_rand_run, with_rand_state};
-pub use graphviz_pure_layout::fdpgen::tlayout::FdpParms;
+pub use graphviz_pure_core::{GraphvizError, Result, charset};
 pub use graphviz_pure_layout::{LayoutEngine, LayoutOptions};
 pub use graphviz_pure_parser::GlobalAttrs;
-pub use graphviz_pure_render::{OutputFormat, loadimage_installed, set_y_invert};
+pub use graphviz_pure_render::OutputFormat;
 
-use decoded::Decoded;
+use graphviz_pure_core::charset::Decoded;
+use graphviz_pure_render::decoded;
+
+/// A parsed graph. It has no public fields: parse it, lay it out and render it. Its
+/// structure is the `json` and `json0` output.
+#[derive(Clone)]
+pub struct Graph {
+    inner: graphviz_pure_core::Graph,
+}
+
+impl Graph {
+    fn from_inner(inner: graphviz_pure_core::Graph) -> Self {
+        Self { inner }
+    }
+}
 
 /// End-to-end DOT rendering pipeline for any supported engine and output format. Renders the
 /// first graph in `dot_source`.
@@ -120,22 +125,23 @@ pub fn render_svg_all_partial(
     (outs, err.map(error_text))
 }
 
-/// Parses the first graph in `dot_source`. The graph holds its names and values in decoded
-/// form ([`charset`]).
+/// Parses the first graph in `dot_source`.
 pub fn parse_dot(dot_source: &str) -> Result<Graph> {
-    decoded::parse_dot(&Decoded::from_text(dot_source)).map_err(error_text)
+    decoded::parse_dot(&Decoded::from_text(dot_source))
+        .map(Graph::from_inner)
+        .map_err(error_text)
 }
 
-/// Parses every graph in `dot_source`, applying `globals` before each graph body. The graphs
-/// hold their names and values in decoded form ([`charset`]).
+/// Parses every graph in `dot_source`, applying `globals` before each graph body.
 pub fn parse_dot_all(dot_source: &str, globals: &GlobalAttrs) -> Result<Vec<Graph>> {
     decoded::parse_dot_all(&Decoded::from_text(dot_source), &globals_from_text(globals))
+        .map(|graphs| graphs.into_iter().map(Graph::from_inner).collect())
         .map_err(error_text)
 }
 
 /// Lays `graph` out with `engine`.
 pub fn layout_graph(graph: &mut Graph, engine: LayoutEngine) -> Result<()> {
-    decoded::layout_graph(graph, engine).map_err(error_text)
+    graphviz_pure_layout::layout_graph(&mut graph.inner, engine).map_err(error_text)
 }
 
 /// [`layout_graph`] with engine options such as `-n` (keep input positions).
@@ -144,22 +150,23 @@ pub fn layout_graph_with_options(
     engine: LayoutEngine,
     options: LayoutOptions,
 ) -> Result<()> {
-    decoded::layout_graph_with_options(graph, engine, options).map_err(error_text)
+    graphviz_pure_layout::layout_graph_with_options(&mut graph.inner, engine, options)
+        .map_err(error_text)
 }
 
 /// [`layout_graph_with_options`] inside a run of several layouts, which share the generator
-/// states and `Nop` ([`in_rand_run`]).
+/// states and `Nop`.
 pub fn layout_graph_in_run(
     graph: &mut Graph,
     engine: LayoutEngine,
     options: &mut LayoutOptions,
 ) -> Result<()> {
-    decoded::layout_graph_in_run(graph, engine, options).map_err(error_text)
+    graphviz_pure_layout::layout_graph_in_run(&mut graph.inner, engine, options).map_err(error_text)
 }
 
 /// Renders a laid-out graph in `format`.
 pub fn render_graph(graph: &Graph, format: OutputFormat) -> Result<String> {
-    decoded::render_graph(graph, format)
+    graphviz_pure_render::render_graph(&graph.inner, format)
         .map(text)
         .map_err(error_text)
 }
@@ -167,7 +174,7 @@ pub fn render_graph(graph: &Graph, format: OutputFormat) -> Result<String> {
 /// [`render_graph`] for the format named `name` (an alias such as `gv` for `dot`), which the
 /// render diagnostics print.
 pub fn render_graph_named(graph: &Graph, format: OutputFormat, name: &str) -> Result<String> {
-    decoded::render_graph_named(graph, format, &charset::from_text(name))
+    graphviz_pure_render::render_graph_named(&graph.inner, format, &charset::from_text(name))
         .map(text)
         .map_err(error_text)
 }
@@ -214,94 +221,6 @@ fn error_text(e: GraphvizError) -> GraphvizError {
     }
 }
 
-/// The layout plugins, as `gvplugin_list(gvc, API_layout, "")` lists them, with their
-/// packages.
-pub const LAYOUT_PLUGINS: [(&str, &str); 11] = [
-    ("circo", "neato_layout"),
-    ("dot", "dot_layout"),
-    ("fdp", "neato_layout"),
-    ("neato", "neato_layout"),
-    ("nop", "neato_layout"),
-    ("nop1", "neato_layout"),
-    ("nop2", "neato_layout"),
-    ("osage", "neato_layout"),
-    ("patchwork", "neato_layout"),
-    ("sfdp", "neato_layout"),
-    ("twopi", "neato_layout"),
-];
-
-/// The output device plugins: type (`format:render`) and package, in `gvplugin_list` order.
-pub const DEVICE_PLUGINS: [(&str, &str); 17] = [
-    ("canon:dot", "core"),
-    ("dot:dot", "core"),
-    ("dot_json:json", "core"),
-    ("gv:dot", "core"),
-    ("jpe:cairo", "cairo"),
-    ("jpeg:cairo", "cairo"),
-    ("jpg:cairo", "cairo"),
-    ("json:json", "core"),
-    ("json0:json", "core"),
-    ("plain:dot", "core"),
-    ("plain-ext:dot", "core"),
-    ("png:cairo", "cairo"),
-    ("svg:svg", "core"),
-    ("xdot:xdot", "core"),
-    ("xdot1.2:xdot", "core"),
-    ("xdot1.4:xdot", "core"),
-    ("xdot_json:json", "core"),
-];
-
-/// `gvplugin_load`'s match of a requested `type[:dependency[:package]]` against `plugins`:
-/// the index of the first match. Names compare as C's `strcmp` does, case and all.
-pub fn plugin_load(plugins: &[(&str, &str)], req: &str) -> Option<usize> {
-    let mut parts = req.splitn(3, ':');
-    let reqtyp = parts.next().unwrap_or("");
-    let reqdep = parts.next();
-    let reqpkg = parts.next();
-    plugins.iter().position(|&(typestr, package)| {
-        let (typ, dep) = match typestr.split_once(':') {
-            Some((t, d)) => (t, Some(d)),
-            None => (typestr, None),
-        };
-        typ == reqtyp
-            && !matches!((dep, reqdep), (Some(d), Some(r)) if d != r)
-            && reqpkg.is_none_or(|p| p == package)
-    })
-}
-
-/// `gvplugin_list(gvc, api, str)`: `" type:package"` for each plugin of the requested type
-/// when `str` names one with a `:`, else `" type"` for each type.
-pub fn plugin_list(plugins: &[(&str, &str)], req: &str) -> String {
-    let mut out = String::new();
-    if let Some((typ, _)) = req.split_once(':') {
-        for &(typestr, package) in plugins {
-            let t = typestr.split(':').next().unwrap_or("");
-            if typ.is_empty() || typ.eq_ignore_ascii_case(t) {
-                out.push_str(&format!(" {typestr}:{package}"));
-            }
-        }
-        if !out.is_empty() {
-            return out;
-        }
-    }
-    let mut last: Option<&str> = None;
-    for &(typestr, _) in plugins {
-        let t = typestr.split(':').next().unwrap_or("");
-        if last.is_none_or(|l| !l.eq_ignore_ascii_case(t)) {
-            out.push(' ');
-            out.push_str(t);
-        }
-        last = Some(t);
-    }
-    out
-}
-
-/// `gvlayout_select`: the engine a layout name (`-K`, the `layout` attribute) selects.
-pub fn layout_select(name: &str) -> Option<LayoutEngine> {
-    let i = plugins::load_layout(name)?;
-    LayoutEngine::parse(LAYOUT_PLUGINS[i].0).ok()
-}
-
 #[cfg(test)]
 mod tests {
 
@@ -317,7 +236,8 @@ mod tests {
     }
 
     use super::*;
-    use crate::decoded::{Decoded, GraphJobs, LayoutJobs};
+    use graphviz_pure_layout::cutil::{RandState, with_rand_state};
+    use graphviz_pure_render::decoded::{self, Decoded, GraphJobs, LayoutJobs};
     use std::fs;
     use std::path::PathBuf;
 
@@ -369,11 +289,11 @@ mod tests {
 
         let mut jobs = LayoutJobs::new(LayoutEngine::Neato, opts);
         let mut first = parse_dot(g).unwrap();
-        jobs.layout(&mut first).unwrap();
+        jobs.layout(&mut first.inner).unwrap();
         let mut graph = parse_dot(g).unwrap();
         let mut carried = LayoutJobs::continuing(LayoutEngine::Neato, opts, jobs.rand_state());
-        carried.layout(&mut graph).unwrap();
-        let z = |g: &Graph| g.nodes[1].attrs["z"].clone();
+        carried.layout(&mut graph.inner).unwrap();
+        let z = |g: &Graph| g.inner.nodes[1].attrs["z"].clone();
         assert_eq!(z(&graph), "121.029893");
         let mut alone = parse_dot(g).unwrap();
         layout_graph_with_options(&mut alone, LayoutEngine::Neato, opts).unwrap();
@@ -413,10 +333,11 @@ mod tests {
             assert_eq!(svgs[1], alone[0]);
 
             let mut jobs = LayoutJobs::new(LayoutEngine::Neato, opts);
-            jobs.layout(&mut parse_dot(a).unwrap()).unwrap();
+            let mut parsed = parse_dot(a).unwrap();
+            jobs.layout(&mut parsed.inner).unwrap();
             let mut graph = parse_dot(b).unwrap();
-            jobs.layout(&mut graph).unwrap();
-            assert!(graph.nodes[0].pos != graph.nodes[1].pos);
+            jobs.layout(&mut graph.inner).unwrap();
+            assert!(graph.inner.nodes[0].pos != graph.inner.nodes[1].pos);
         }
         // fdp with line edges leaves `Nop`.
         let src = format!("graph A {{ layout=fdp; a -- x }}\n{b}");
@@ -492,7 +413,10 @@ mod tests {
         assert!(canon.contains("\tnode [label=\u{10FF41}];\n"), "{canon}");
         // a parsed graph holds the decoded form, and renders back to text
         let mut g = parse_dot(src).unwrap();
-        assert_eq!(charset::encode(&g.nodes[0].name), "x\u{10FF41}y".as_bytes());
+        assert_eq!(
+            charset::encode(&g.inner.nodes[0].name),
+            "x\u{10FF41}y".as_bytes()
+        );
         layout_graph(&mut g, LayoutEngine::Dot).unwrap();
         let plain = render_graph_named(&g, OutputFormat::Plain, "plain").unwrap();
         assert_eq!(plain, want);
@@ -529,7 +453,7 @@ mod tests {
             }
         "#;
         let g = parse_dot(b7).unwrap();
-        assert_eq!(g.subgraphs.len(), 3);
+        assert_eq!(g.inner.subgraphs.len(), 3);
         let j0 = render_dot(b7, "dot", "json0").unwrap();
         assert!(j0.contains("\"_subgraph_cnt\": 3"));
     }
@@ -595,8 +519,12 @@ mod tests {
         let svg_and_raster = |src: &str| {
             let mut g = parse_dot(src).unwrap();
             layout_graph(&mut g, LayoutEngine::Dot).unwrap();
-            let svg = GraphJobs::new(&g).render(OutputFormat::Svg, "svg").unwrap();
-            let raster = GraphJobs::new(&g).render_raster_svg_as(0, "png").unwrap();
+            let svg = GraphJobs::new(&g.inner)
+                .render(OutputFormat::Svg, "svg")
+                .unwrap();
+            let raster = GraphJobs::new(&g.inner)
+                .render_raster_svg_as(0, "png")
+                .unwrap();
             (svg, raster)
         };
         let (svg, raster) = svg_and_raster(
@@ -636,7 +564,7 @@ mod tests {
         graphviz_pure_render::reset_render_state();
         let mut g = parse_dot(src).unwrap();
         layout_graph(&mut g, LayoutEngine::Dot).unwrap();
-        let mut jobs = GraphJobs::new(&g);
+        let mut jobs = GraphJobs::new(&g.inner);
         jobs.write_output_file_text(true);
         jobs.render(OutputFormat::Dot, "dot").unwrap()
     }
@@ -717,7 +645,7 @@ mod tests {
         graphviz_pure_render::reset_render_state();
         let mut g = parse_dot(&src).unwrap();
         layout_graph(&mut g, LayoutEngine::Dot).unwrap();
-        let mut jobs = GraphJobs::new(&g);
+        let mut jobs = GraphJobs::new(&g.inner);
         let first = jobs.render_as(0, OutputFormat::Svg, "svg").unwrap();
         let second = jobs.render_as(1, OutputFormat::Svg, "svg").unwrap();
         assert_eq!(first, second);
