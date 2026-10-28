@@ -43,7 +43,8 @@ their newest `update.yml` run. Attestations come from `release.yml`. The certifi
 
 A pull request that breaks the Rust or JavaScript API, the command line or a format gets the
 `breaking` label when it merges. While the version is `0.x`, a release with one or more such pull
-requests bumps the minor version and any other release the patch version
+requests bumps the minor version; from 1.0 it bumps the major version. Without the label a
+release bumps the patch version
 ([versioning policy](versioning.md)).
 
 ## What the release workflow does

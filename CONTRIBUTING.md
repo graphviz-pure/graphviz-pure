@@ -85,6 +85,13 @@ fails if the layout or geom crates gain an `unwrap`, `expect`, index or integer-
   changes to workflows, scripts, build scripts and dependencies ([how pull requests are
   reviewed](docs/pull-requests.md)).
 
+The Semver workflow checks `graphviz-pure` and `graphviz-pure-raster` against their latest
+non-yanked stable crates.io releases. Breaking Rust API changes require `breaking`, including
+the deliberate 1.0 changes; adding or removing that label reruns only this check. The release
+bumps minor while `0.x`, major from `1.0`. Changing only the facade's exact implementation
+dependency pins does not fail the check. Merge-queue runs skip this label gate because their
+payload has no PR labels; each PR is checked before entering the queue.
+
 ## Review and maintainers
 
 - **CI waits for a maintainer.** If you are not a maintainer, each CI run on your pull request
