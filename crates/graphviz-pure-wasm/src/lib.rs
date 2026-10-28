@@ -39,7 +39,7 @@ struct GraphStats {
 }
 
 /// Renders a DOT string using the specified layout engine (`dot`, `neato`, `fdp`, `sfdp`, `twopi`, `circo`, `osage`, `patchwork`)
-/// and output format (`svg`, `svg_inline`, `cmapx`, `json`, `json0`, `dot`, `xdot`, `canon`, `plain`).
+/// and an output format listed by `supportedFormats()` (a JSON array string).
 #[wasm_bindgen]
 pub fn render(
     dot_source: &str,
@@ -135,21 +135,70 @@ pub fn supported_engines() -> String {
     r#"["dot","neato","fdp","sfdp","twopi","circo","osage","patchwork"]"#.to_string()
 }
 
-/// Returns the list of supported output formats as a JSON array.
+/// Returns every output format name accepted by `render()`, including aliases, as a JSON
+/// array string. Raster formats (`png`, `jpg`, `jpeg`) are not supported by this package.
 #[wasm_bindgen(js_name = supportedFormats)]
 pub fn supported_formats() -> String {
-    r#"["svg","svg_inline","cmapx","json","json0","dot","xdot","canon","plain"]"#.to_string()
+    serde_json::to_string(&graphviz_pure::OutputFormat::names().collect::<Vec<_>>())
+        .expect("format names serialize as JSON strings")
 }
 
-/// Returns the version of `graphviz-pure` (compatible with Graphviz 16.1.0).
+/// Returns `graphviz version 16.1.0 (graphviz-pure X.Y.Z)`, where `X.Y.Z` is this
+/// package's version. Like the CLI's `-V` line, without the command name prefix.
 #[wasm_bindgen]
 pub fn version() -> String {
-    "graphviz-pure 0.1.0 (Rust port of Graphviz 16.1.0)".to_string()
+    concat!(
+        "graphviz version 16.1.0 (graphviz-pure ",
+        env!("CARGO_PKG_VERSION"),
+        ")"
+    )
+    .to_string()
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn version_reports_the_package_version() {
+        assert_eq!(
+            version(),
+            format!(
+                "graphviz version 16.1.0 (graphviz-pure {})",
+                env!("CARGO_PKG_VERSION")
+            )
+        );
+    }
+
+    #[test]
+    fn every_supported_format_renders() {
+        let formats: Vec<String> = serde_json::from_str(&supported_formats()).unwrap();
+        assert_eq!(
+            formats,
+            [
+                "svg",
+                "svg_inline",
+                "cmapx",
+                "json",
+                "json0",
+                "dot",
+                "xdot",
+                "canon",
+                "plain",
+                "cmapx_np",
+                "gv",
+                "xdot1.2",
+                "xdot1.4",
+                "dot_json",
+                "xdot_json",
+                "plain-ext",
+            ]
+        );
+        for format in formats {
+            let out = render("digraph { a -> b }", "dot", &format).unwrap();
+            assert!(!out.is_empty(), "{format}");
+        }
+    }
 
     // Issue #151: a JS string is text, so a real U+10FF41 in it is not one of the port's raw
     // bytes: it goes in and comes back out as itself, in output and in error messages.

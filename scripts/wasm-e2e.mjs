@@ -18,6 +18,7 @@
 // two can be compared with `cmp`.
 
 import { createRequire } from 'node:module';
+import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 
@@ -44,6 +45,15 @@ const require = createRequire(import.meta.url);
 const gv = require(path.resolve(pkg, 'graphviz_pure_wasm.js'));
 
 const root = process.cwd();
+const packageVersion = JSON.parse(fs.readFileSync(path.join(root, 'web/package.json'), 'utf8')).version;
+assert.equal(gv.version(), `graphviz version 16.1.0 (graphviz-pure ${packageVersion})`);
+const formats = JSON.parse(gv.supportedFormats());
+assert.ok(Array.isArray(formats) && formats.length > 0);
+for (const format of formats) {
+  assert.ok(gv.render('digraph { a -> b }', 'dot', format).length > 0, format);
+}
+console.log(`wasm API: version ${packageVersion}; ${formats.length} supported formats render`);
+
 const golden = JSON.parse(fs.readFileSync(path.resolve(root, goldenPath), 'utf8')).files;
 const baseline = new Set(
   JSON.parse(fs.readFileSync(path.resolve(root, baselinePath), 'utf8')).identical,
