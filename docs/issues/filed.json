@@ -1,7 +1,8 @@
 {
   "_notes": {
     "dot-pack-node-in-two-clusters": "Issue #101 was closed as not planned: C's error path (a node of two non-nested clusters), documented in docs/porting/crashes.md. This URL keeps scripts/file-issues.py from opening a second issue.",
-    "pack-filledge-one-point-spline": "Issue #37 was filed as wontfix on the claim that fillEdge reads heap garbage past a one-point spline. list[1] is the zero gv_calloc left, C is deterministic, and both repros match the port after #456. This URL stays so file-issues.py does not open a second issue."
+    "pack-filledge-one-point-spline": "Issue #37 was filed as wontfix on the claim that fillEdge reads heap garbage past a one-point spline. list[1] is the zero gv_calloc left, C is deterministic, and both repros match the port after #456 (PR #478), so the case is not a difference any more and its directory and manifest entry are gone. This URL stays so scripts/file-issues.py does not open a second issue.",
+    "stderr-missing-warnings": "Issue #30 was closed as completed: the port prints C's warnings now. The case's directory and its manifest entry are gone; this URL stays so scripts/file-issues.py does not open a second issue."
   },
   "dot-cluster-rank-max-build-skeleton-panic": "https://github.com/graphviz-pure/graphviz-pure/issues/10",
   "dot-flat-adj-labelfloat": "https://github.com/graphviz-pure/graphviz-pure/issues/21",

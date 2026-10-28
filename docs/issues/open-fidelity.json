@@ -1,0 +1,11 @@
+{
+  "_note": "The issues in graphviz-pure/graphviz-pure that are open and labelled `fidelity`. The What's left page lists them, so that F5 holds: every open fidelity issue is on the page, next to the accepted differences. Keep it in step with the label: add an entry when an issue gets `fidelity`, remove it when the issue is closed. scripts/file-issues.py does not read it.",
+  "issues": [
+    {
+      "number": 511,
+      "title": "Differential fuzz round 5 on the 1.0 candidate",
+      "url": "https://github.com/graphviz-pure/graphviz-pure/issues/511",
+      "note": "The fuzzing round that may still find a difference in the port. Every case it finds is fixed, or filed and triaged into one of the classes below."
+    }
+  ]
+}

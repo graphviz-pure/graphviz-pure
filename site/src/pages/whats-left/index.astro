@@ -1,7 +1,7 @@
 ---
 import StarlightPage from '@astrojs/starlight/components/StarlightPage.astro';
 import IssueRow from '../../components/IssueRow.astro';
-import { ENGINES, fidelity, fmt, issues, severityRank, url } from '../../lib/data';
+import { ENGINES, fidelity, fmt, issues, openFidelity, severityRank, url } from '../../lib/data';
 import { CLASSES, accepted, acceptedIn, portBugs, skipped } from '../../lib/issues';
 
 const engines = ENGINES.filter((e) => issues.some((i) => i.engine === e)).concat(
@@ -14,7 +14,7 @@ const lastFuzz = fidelity.fuzz.rounds[fidelity.fuzz.rounds.length - 1];
 const byClass = CLASSES.map((c) => ({ ...c, list: acceptedIn(c.key) }));
 ---
 
-<StarlightPage frontmatter={{ title: "What's left", description: 'Open differences between graphviz-pure and C Graphviz 16.1.0: bugs in the port, and C behaviour the port does not or should not reproduce.' }} headings={[{ depth: 2, slug: 'port', text: 'In the port' }, { depth: 2, slug: 'accepted', text: 'Accepted differences' }, { depth: 2, slug: 'skipped', text: 'The inputs the full check skips' }, { depth: 2, slug: 'known', text: 'In numbers' }]}>
+<StarlightPage frontmatter={{ title: "What's left", description: 'Open differences between graphviz-pure and C Graphviz 16.1.0: bugs in the port, and C behaviour the port does not or should not reproduce.' }} headings={[{ depth: 2, slug: 'port', text: 'In the port' }, { depth: 2, slug: 'open', text: 'Open fidelity issues' }, { depth: 2, slug: 'accepted', text: 'Accepted differences' }, { depth: 2, slug: 'skipped', text: 'The inputs the full check skips' }, { depth: 2, slug: 'known', text: 'In numbers' }]}>
 	<p class="intro">
 		Everything known not to match, each with a minimised reproducer, C's output and the port's. <strong>In the port</strong> means the port
 		should change. <strong>Accepted differences</strong> means C's output comes from undefined behaviour, a crash path or nondeterminism, so it
@@ -34,7 +34,25 @@ const byClass = CLASSES.map((c) => ({ ...c, list: acceptedIn(c.key) }));
 	)}
 
 	<h2 id="port">In the port <span class="n">{portBugs.length}</span></h2>
-	{portBugs.length ? <ul class="list">{portBugs.map((i) => <IssueRow i={i} />)}</ul> : <p class="empty">No open difference in the port: every case the fuzzing rounds found is fixed or accepted. The fuzzing round on the 1.0 candidate (<a href="https://github.com/graphviz-pure/graphviz-pure/issues/511">issue #511</a>) is what may still find one.</p>}
+	{portBugs.length ? <ul class="list">{portBugs.map((i) => <IssueRow i={i} />)}</ul> : <p class="empty">No open difference in the port: every case the fuzzing rounds found is fixed or accepted.</p>}
+
+	<h2 id="open">Open fidelity issues <span class="n">{openFidelity.length}</span></h2>
+	<p class="intro">
+		The issues in the repository that are open and labelled <code>fidelity</code>. A difference in the port that is not listed
+		here yet is one the fuzzing rounds have not found.
+	</p>
+	<ul class="list">
+		{openFidelity.map((o) => (
+			<li class="irow">
+				<span class="sev">issue</span>
+				<div class="main">
+					<a href={o.url}>#{o.number} — {o.title}</a>
+					<span class="sub">{o.note}</span>
+				</div>
+				<span class="filed"><a href={o.url}>GitHub issue</a></span>
+			</li>
+		))}
+	</ul>
 
 	<h2 id="accepted">Accepted differences <span class="n">{accepted.length}</span></h2>
 	{byClass.map((c) => (

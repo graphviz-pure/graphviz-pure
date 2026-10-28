@@ -26,9 +26,11 @@ const opt = (name, dflt) => {
 const manifestPath = opt('--manifest', join(root, 'docs/issues/manifest.json'));
 const filedPath = opt('--filed', join(root, 'docs/issues/filed.json'));
 const skipsPath = opt('--skips', join(root, 'docs/issues/e2e-skips.json'));
+const openPath = opt('--open', join(root, 'docs/issues/open-fidelity.json'));
 const goldenPath = opt('--golden', join(root, 'tests/golden/e2e.libm-matched.json'));
 const outData = join(root, 'site/src/data/issues.json');
 const outSkips = join(root, 'site/src/data/e2e-skips.json');
+const outOpen = join(root, 'site/src/data/open-fidelity.json');
 const outPublic = join(root, 'site/public/whats-left');
 
 const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
@@ -97,3 +99,9 @@ console.log(
 		`${Object.keys(filed).length ? `, ${out.filter((i) => i.issue_url).length} filed` : ''}` +
 		`, ${skips.length} skipped e2e inputs`,
 );
+
+// The open issues labelled `fidelity`, so that the page lists every one of them (F5).
+const open = JSON.parse(readFileSync(openPath, 'utf8'));
+if (!Array.isArray(open.issues)) throw new Error(`${openPath}: expected an "issues" array`);
+writeFileSync(outOpen, JSON.stringify(open.issues, null, 1) + '\n');
+console.log(`site-issues: ${open.issues.length} open fidelity issues`);

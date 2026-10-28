@@ -2,6 +2,7 @@ import fidelityJson from '../data/fidelity.json';
 import samplesJson from '../data/samples.json';
 import issuesJson from '../data/issues.json';
 import e2eSkipsJson from '../data/e2e-skips.json';
+import openFidelityJson from '../data/open-fidelity.json';
 
 export const BASE = import.meta.env.BASE_URL.replace(/\/?$/, '/');
 /** A root-relative URL under the site's base: url('gallery/') -> /graphviz-pure/gallery/ */
@@ -58,6 +59,15 @@ export interface E2eSkip {
 	where: string;
 }
 export const e2eSkips: E2eSkip[] = e2eSkipsJson as E2eSkip[];
+
+/** An issue in the repository that is open and labelled `fidelity`. */
+export interface OpenFidelity {
+	number: number;
+	title: string;
+	url: string;
+	note: string;
+}
+export const openFidelity: OpenFidelity[] = openFidelityJson as OpenFidelity[];
 
 export const ENGINES = ['dot', 'neato', 'fdp', 'sfdp', 'circo', 'twopi', 'osage', 'patchwork'];
 const SEVERITY = ['crash', 'critical', 'high', 'major', 'medium', 'minor', 'low', 'cosmetic'];

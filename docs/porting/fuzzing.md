@@ -464,7 +464,8 @@ Robustness (debug overflow and panics)
   `clip_and_install` allocates `pn` points with `gv_calloc` and then sets `size`, so
   `fillEdge`'s `list[1]` is the zero that allocation left. `fill_edge` models that
   zeroed slot. Issue #456; tested by `sfdp_one_point_polyline_packs_like_c` in the same
-  file. Case `028-pack-filledge-one-point-spline` matches C on both repros.
+  file. Case `028-pack-filledge-one-point-spline` matched C on both repros, so its
+  directory and its manifest entry are gone.
 * Unknown shapes are boxes for compass ports (`IS_BOX`).
 * A component taller or wider than INT_MAX polyomino steps (`height="1e30"`,
   `quantum="1e40"`) saturates `computeStep`'s step, and C never finishes filling the cells.
@@ -568,7 +569,8 @@ separate difference that appeared while minimising one of them. The other 24 fal
 issues: undefined behaviour, crashes, address- or clock-dependent output. These are
 proposed as wontfix, with an explanation of what the port does instead. Case `028` was
 filed in that set as heap garbage. `list[1]` is the zero `gv_calloc` left, C is
-deterministic, and both repros match the port (#456). Further issues cover gaps that
+deterministic, and both repros match the port (#456), so it is not a difference any more
+and its directory and manifest entry are gone. Further issues cover gaps that
 are not from fuzzing: stderr wording, Linux/WASM portable math, the twopi arrows
 graphs and Latin-1 `-Tplain`. One correction to earlier
 notes: the circo/neato "record port 0.1pt off" difference is the record obstacle being
@@ -584,7 +586,6 @@ itself. The ortho variant also no longer has a gap: with a longer timeout, C fin
 | [`025-fdp-cluster-address-dependent-layout`](../../tests/fuzz-open/025-fdp-cluster-address-dependent-layout) | medium | C nondeterminism | 3 | accepted (#34) |
 | [`026-neato-multispline-face-order`](../../tests/fuzz-open/026-neato-multispline-face-order) | medium | C nondeterminism | 3 | accepted (#35) |
 | [`027-dot-sameport-record-uninit-pathend`](../../tests/fuzz-open/027-dot-sameport-record-uninit-pathend) | medium | C nondeterminism | 2 | accepted (#36) |
-| [`028-pack-filledge-one-point-spline`](../../tests/fuzz-open/028-pack-filledge-one-point-spline) | medium | C nondeterminism | 2 | accepted (#37), matches C now (#456) |
 | [`029-neato-fdp-start-time-seeded`](../../tests/fuzz-open/029-neato-fdp-start-time-seeded) | low | C nondeterminism | 11 | accepted (#38) |
 | [`030-sfdp-smoothing-rng-c-unstable`](../../tests/fuzz-open/030-sfdp-smoothing-rng-c-unstable) | low | C nondeterminism | 1 | accepted (#39) |
 | [`031-platform-libm-apple`](../../tests/fuzz-open/031-platform-libm-apple) | medium | platform libm | — | accepted (#40) |
@@ -654,5 +655,6 @@ interposed as well. The instability is in C, not in the input:
   (`call_tri`, `lib/neatogen/call_tri.c:35`), which shifts the summation order of the CG
   solve by an ulp; the tries amplify it into a different layout.
 
-The port reproduces macOS's stock C byte for byte on the sfdp input (the hash of
-`tests/golden/e2e.json`), so the difference is C's, not the port's.
+The port draws one of C's layouts. `docs/porting/sfdp.md` records the same file matching its
+golden in only 6 of 10 runs of C on the reference build, and the order GTS returns the
+edges in is what changes between them.

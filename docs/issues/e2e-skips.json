@@ -93,7 +93,7 @@
   {
     "input": "sfdp/wild_gv16_linux_x86_neatosplines_neato1_448ced",
     "class": "c-nondeterminism",
-    "cause": "GTS returns the Delaunay edges of the same points in a different order on every run (the surface's face hash is keyed by pointers). The input sets `overlap=false`, so sfdp runs the prism overlap removal with 1000 tries, and every try adds the entries of the overlap matrix in that order (`call_tri`, `lib/neatogen/call_tri.c:35`; `delaunay_tri`, `lib/neatogen/delaunay.c:334-347`), which changes the summation order of the CG solve by an ulp. The 1000 tries amplify that into a different layout.",
+    "cause": "GTS returns the Delaunay edges of the same points in a different order on every run (the surface's face hash is keyed by pointers). The input sets `overlap=false`, so sfdp runs the prism overlap removal with 1000 tries, and every try adds the entries of the overlap matrix in that order (`call_tri`, `lib/neatogen/call_tri.c:35`; `delaunay_tri`, `lib/neatogen/delaunay.c:334-347`), which changes the summation order of the CG solve by an ulp. The 1000 tries amplify that into a different layout. `docs/porting/sfdp.md` records the same file matching its golden in only 6 of 10 runs of C on the reference build.",
     "issue": null,
     "where": "docs/porting/sfdp.md"
   }

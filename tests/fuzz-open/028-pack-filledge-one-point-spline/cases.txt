@@ -1,2 +1,0 @@
-r3/diff/s20914.gv seed=20914
-r3/diff/s21147.gv seed=21147  # its earlier minimised form was the star obstacle issue (issue #17, fixed); the full case still differs from this cause

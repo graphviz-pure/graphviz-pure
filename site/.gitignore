@@ -5,6 +5,7 @@ dist/
 src/content/docs/porting/
 src/data/issues.json
 src/data/e2e-skips.json
+src/data/open-fidelity.json
 public/whats-left/
 public/wasm/
 .starlight-links-validator/

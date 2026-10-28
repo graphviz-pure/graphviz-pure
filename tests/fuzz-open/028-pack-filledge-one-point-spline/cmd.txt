@@ -1,6 +1,0 @@
-C:    GVBINDIR=<pango-free plugins> dot -Ksfdp -Tsvg repro.gv
-port: graphviz-pure -Ksfdp -Tsvg repro.gv
-
-neato variant (repro-neato.gv):
-C:    GVBINDIR=<pango-free plugins> dot -Kneato -Tsvg repro.gv
-port: graphviz-pure -Kneato -Tsvg repro.gv
