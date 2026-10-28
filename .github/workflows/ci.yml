@@ -74,6 +74,25 @@ jobs:
       - name: Check WASI Target
         run: cargo check --target wasm32-wasip1 -p graphviz-pure-cli
 
+  msrv:
+    name: MSRV
+    needs: lookup
+    if: needs.lookup.outputs.hit != 'true'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install the declared MSRV (rustup is on every runner)
+        shell: bash
+        run: |
+          msrv=$(awk -F '"' '/^rust-version = / { print $2; exit }' Cargo.toml)
+          test -n "$msrv"
+          rustup toolchain install "$msrv" --profile minimal && rustup default "$msrv"
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      - name: Check the workspace on the declared MSRV
+        run: cargo check --workspace --locked
+
   wasm-e2e:
     name: WASM end-to-end (Node)
     needs: lookup
@@ -266,11 +285,11 @@ jobs:
             echo "The base branch has no scripts/pr-risk.py yet." | tee -a "$GITHUB_STEP_SUMMARY"
           fi
 
-  # Records that these inputs passed, so a later run with the same inputs skips verify, wasm-e2e
-  # and wasm-runtimes.
+  # Records that these inputs passed, so a later run with the same inputs skips verify, msrv,
+  # wasm-e2e and wasm-runtimes.
   record:
     name: Record the result for these inputs
-    needs: [verify, wasm-e2e, wasm-runtimes]
+    needs: [verify, msrv, wasm-e2e, wasm-runtimes]
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
