@@ -2830,6 +2830,37 @@ c -- d;
     );
 }
 
+/// Issue #582: C/GTS splits and legalizes faces in an order that fixes each
+/// face's vertex rotation. `triCenter` must sum in that order: rounding the
+/// same triangles from different first vertices picked the upper corridor,
+/// where `Pshortestpath` rejected the destination and drew a straight edge.
+#[test]
+fn neato_regular_port_spline_uses_c_triangle_centres() {
+    let src = r#"graph G {
+layout=neato;
+splines=true;
+overlap=oscale;
+sep=0.2;
+node [penwidth=0.88, regular=true, pos="-12,-247!"];
+n6;
+n13;
+n14 [width=2.5];
+n10:w -- n11;
+n11 -- n12;
+}
+"#;
+    let (out, err, ok) = run(&["-Tdot"], src);
+    assert!(ok, "{err}");
+    assert_eq!(err, "");
+    // C Graphviz 16.1.0 with fused multiply-add and portable libm.
+    assert!(
+        out.contains(
+            "n10:w -- n11\t[pos=\"344.3,89.902 344.3,89.902 344.03,76.94 350.17,70.13 356.57,63.028 360.53,62.899 370.04,61.899 390.02,59.798 396.7,60.789 414.48,\\\n70.13 415.17,70.491 415.85,70.885 416.52,71.306\"];"
+        ),
+        "{out}"
+    );
+}
+
 /// Issue #452: neato `splines=compound` passes the original edge type into
 /// `makeMultiSpline` (`lib/neatogen/neatosplines.c`). The polyline flag is
 /// `edgetype == EDGETYPE_PLINE`, false for `EDGETYPE_COMPOUND`, so a two-edge
@@ -5628,14 +5659,11 @@ fn nop3_without_splines_keeps_the_input_edge_attributes() {
 /// points, so `tweakEnd` (`multispline.c:658`) leaves the head on the node centre:
 /// `e,29.16,36.482 29.126,71.526 ...`.
 ///
-/// Actual (port): the port's constrained Delaunay triangulation has the same triangles but
-/// a different vertex rotation per face (GTS's `gts_triangle_vertices` order follows its
-/// incremental construction behind `tri`/`mkSurface`, `lib/neatogen/delaunay.c:140,454`),
-/// so the centres differ by an ulp, the right head edge is 1 ulp shorter and the path
-/// takes the right sleeve. Its last bend is the obstacle's top corner, so `tweakEnd` moves
-/// the head 0.1pt right: `e,29.26,36.483 29.026,71.859 ...`.
+/// Before #582, Bowyer–Watson built the same triangles with different vertex
+/// rotations, so centres differed by an ulp and the path took the right sleeve.
+/// Splitting and legalizing faces in GTS's order preserves the centres and the
+/// left sleeve, leaving the endpoint at C's node centre.
 #[test]
-#[ignore = "issue #28: triangle-path tie decided by GTS's face vertex order, which the port's CDT does not reproduce"]
 fn neato_polyline_compass_port_routes_like_c() {
     let src = "digraph G { splines=\"polyline\"; \"10\" [width=0.81, pos=\"100,18\"]; \"9\" [pos=\"100,90\"]; \"9\" -> \"10\":\"n\"; }";
     let (out, err, ok) = run(&["-Kneato", "-n", "-Tdot"], src);
