@@ -1540,6 +1540,30 @@ fn plain_label_field_is_empty_where_c_reads_freed_memory() {
     );
 }
 
+// C: lib/common/output.c:canon, lib/cgraph/refstr.c:agstrdup. HTML node names
+// leave their default labels dependent on a plain attribute value or subgraph name.
+// HTML labels retain their original attribute representation. Expected lines were
+// checked against C 16.1.0 with `dot -Tplain`.
+#[test]
+fn plain_label_string_index_keeps_attribute_values_and_subgraph_names() {
+    let (out, err, ok) = run(
+        &["-Tplain"],
+        "digraph { a [extra=held]; <held>; subgraph named { <named>; } \
+         b [extra=<htmlonly>, label=<htmlonly>]; }",
+    );
+    assert!(ok, "{err}");
+    assert_eq!(err, "");
+    assert_eq!(
+        out,
+        "graph 1 4.5682 0.5\n\
+         node a 0.375 0.25 0.75 0.5 a solid ellipse black lightgrey\n\
+         node <held> 1.3889 0.25 0.76841 0.5 held solid ellipse black lightgrey\n\
+         node <named> 2.5278 0.25 1.0216 0.5 named solid ellipse black lightgrey\n\
+         node b 3.9306 0.25 1.2753 0.5 <htmlonly> solid ellipse black lightgrey\n\
+         stop\n"
+    );
+}
+
 // Issue #541: C's output.c:canon uses the root string dictionary. Looking up every
 // label by scanning the graph makes plain and plain-ext quadratic. Keep a generous
 // budget for the linear writer on 20,000 labelled nodes in small osage clusters.
