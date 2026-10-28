@@ -859,6 +859,105 @@ mod tests {
         assert!(syntax.diagnostics().is_empty());
     }
 
+    /// Two calls of the same input. Returns the first call's diagnostic text.
+    /// A once-only warning has to appear on both, and a success has to draw the same.
+    fn same_call(src: &str, engine: &str) -> Vec<String> {
+        let first = render_dot(src, engine, "svg");
+        let second = render_dot(src, engine, "svg");
+        match (&first, &second) {
+            (Ok(a), Ok(b)) => {
+                assert_eq!(a.output(), b.output(), "{src}");
+                assert_eq!(
+                    messages(a.diagnostics()),
+                    messages(b.diagnostics()),
+                    "{src}"
+                );
+                messages(a.diagnostics())
+                    .into_iter()
+                    .map(str::to_string)
+                    .collect()
+            }
+            (Err(a), Err(b)) => {
+                assert_eq!(a, b, "{src}");
+                assert_eq!(
+                    messages(a.diagnostics()),
+                    messages(b.diagnostics()),
+                    "{src}"
+                );
+                messages(a.diagnostics())
+                    .into_iter()
+                    .map(str::to_string)
+                    .collect()
+            }
+            _ => panic!("the two calls disagree on success: {src}"),
+        }
+    }
+
+    // The non-ASCII width flag and the missing-font warning, on the input that
+    // used to warn only the first time the process measured it.
+    #[test]
+    fn a_non_ascii_width_warning_is_reported_on_every_call() {
+        let msgs = same_call("digraph { a [label=\"é\" fontname=\"nosuchfont\"] }", "dot");
+        assert!(
+            msgs.iter().any(|m| m.contains("non-ASCII character 195")),
+            "{msgs:?}"
+        );
+        assert!(
+            msgs.iter()
+                .any(|m| m.contains("no hard-coded metrics for 'nosuchfont'")),
+            "{msgs:?}"
+        );
+    }
+
+    #[test]
+    fn a_missing_ascii_width_warning_is_reported_on_every_call() {
+        let msgs = same_call("digraph { a [label=\"a\tb\"] }", "dot");
+        assert!(
+            msgs.iter().any(|m| m.contains("ASCII character 9")),
+            "{msgs:?}"
+        );
+    }
+
+    #[test]
+    fn a_bad_user_spline_warning_is_reported_on_every_call() {
+        let msgs = same_call(
+            "digraph { a [pos=\"0,0\"]; b [pos=\"30,30\"]; \
+             a -> b [pos=\"0,0 10,10 20,20 30,30é\"] }",
+            "nop2",
+        );
+        assert!(
+            msgs.iter()
+                .any(|m| m.contains("pos attribute for edge (a,b) doesn't have 3n+1 points")),
+            "{msgs:?}"
+        );
+    }
+
+    #[test]
+    fn a_flat_record_edge_warning_is_reported_on_every_call() {
+        let msgs = same_call(
+            "graph { {rank=same; a -- b [label=x]; c -- d [label=y];} \
+             b [shape=record]; c [shape=Mrecord] }",
+            "dot",
+        );
+        assert!(
+            msgs.iter()
+                .any(|m| m.contains("flat edge between adjacent nodes")),
+            "{msgs:?}"
+        );
+    }
+
+    #[test]
+    fn a_bad_color_spec_is_reported_on_every_call() {
+        let msgs = same_call(
+            "digraph { a [style=filled fillcolor=\"red;0.8:blue;0.7\"] }",
+            "dot",
+        );
+        assert!(
+            msgs.iter().any(|m| m.contains("Total size > 1")),
+            "{msgs:?}"
+        );
+    }
+
     // The warning belongs to the call that failed, on the error, in order.
     #[test]
     fn a_failed_call_returns_the_diagnostics_from_before_it_failed() {

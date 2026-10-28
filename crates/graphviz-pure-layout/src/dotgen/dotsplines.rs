@@ -1046,10 +1046,10 @@ impl Dot<'_> {
     fn make_flat_adj_edges(&mut self, edges: &[E], e0: E, et: EdgeType) -> Result<(), String> {
         let (tn, hn) = (self.edges[e0].tail, self.edges[e0].head);
         if self.nodes[tn].is_record || self.nodes[hn].is_record {
-            // dotsplines.c:1144-1151: a `static atomic_flag`, so once per process.
-            static WARNED: std::sync::atomic::AtomicBool =
-                std::sync::atomic::AtomicBool::new(false);
-            if !WARNED.swap(true, std::sync::atomic::Ordering::Relaxed) {
+            // dotsplines.c:1144-1151: C's `static atomic_flag` warns once per process.
+            // [`diag::emit_once`] does that on the command line and again on the next
+            // library call.
+            if graphviz_pure_core::diag::emit_once("\0dot\0flat-adj-record") {
                 graphviz_pure_core::diag::agwarningf(
                     "flat edge between adjacent nodes one of which has a record shape - replace \
                      records with HTML-like labels\n",

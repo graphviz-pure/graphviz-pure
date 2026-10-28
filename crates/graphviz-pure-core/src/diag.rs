@@ -388,8 +388,12 @@ impl Drop for FrameGuard {
 /// and its own once-only set, and another thread has its own frame, so two
 /// layouts cannot mix diagnostics. `fprintf` to stderr (including `-v`) is
 /// dropped for the duration: the command line does not capture, so its progress
-/// and its own messages still go to stderr as they are written, and a warning
-/// there is still printed only the first time on that thread.
+/// and its own messages still go to stderr as they are written.
+///
+/// A warning C prints once per process stays once per process on the command
+/// line, which does not capture: the key stays seen for the rest of that
+/// thread. A library call captures, so the same warning is reported again on
+/// the next call.
 pub fn capture<R>(f: impl FnOnce() -> R) -> (R, Vec<crate::error::Diagnostic>) {
     push_frame();
     let _guard = FrameGuard;
