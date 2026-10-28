@@ -70,20 +70,39 @@ pub enum OutputFormat {
 }
 
 impl OutputFormat {
+    // All accepted names, including aliases and variants selected by render_graph_named.
+    // Keep parsing and format discovery together so embedders report exactly what works.
+    const FORMATS: &'static [(&'static str, Self)] = &[
+        ("svg", Self::Svg),
+        ("svg_inline", Self::SvgInline),
+        ("cmapx", Self::Cmapx),
+        ("json", Self::Json),
+        ("json0", Self::Json0),
+        ("dot", Self::Dot),
+        ("xdot", Self::Xdot),
+        ("canon", Self::Canon),
+        ("plain", Self::Plain),
+        ("cmapx_np", Self::Cmapx),
+        ("gv", Self::Dot),
+        ("xdot1.2", Self::Xdot),
+        ("xdot1.4", Self::Xdot),
+        ("dot_json", Self::Json),
+        ("xdot_json", Self::Json),
+        ("plain-ext", Self::Plain),
+    ];
+
+    /// Every output format name accepted by [`Self::parse`], including aliases.
+    /// Raster formats are handled separately by `graphviz-pure-raster`.
+    pub fn names() -> impl Iterator<Item = &'static str> {
+        Self::FORMATS.iter().map(|&(name, _)| name)
+    }
+
     pub fn parse(name: &str) -> Result<Self> {
-        match name.trim().to_ascii_lowercase().as_str() {
-            "svg" => Ok(Self::Svg),
-            "svg_inline" => Ok(Self::SvgInline),
-            "cmapx" | "cmapx_np" => Ok(Self::Cmapx),
-            "json" => Ok(Self::Json),
-            "json0" => Ok(Self::Json0),
-            "dot" | "gv" => Ok(Self::Dot),
-            "xdot" | "xdot1.2" | "xdot1.4" => Ok(Self::Xdot),
-            "dot_json" | "xdot_json" => Ok(Self::Json),
-            "canon" => Ok(Self::Canon),
-            "plain" | "plain-ext" => Ok(Self::Plain),
-            other => Err(GraphvizError::UnsupportedFormat(other.to_string())),
-        }
+        let name = name.trim().to_ascii_lowercase();
+        Self::FORMATS
+            .iter()
+            .find_map(|&(candidate, format)| (candidate == name).then_some(format))
+            .ok_or(GraphvizError::UnsupportedFormat(name))
     }
 }
 
@@ -538,6 +557,39 @@ mod tests {
     use super::*;
     use graphviz_pure_core::{BezierSegment, BoundingBox, Point, Spline};
     use graphviz_pure_parser::parse_dot;
+
+    #[test]
+    fn output_format_names_preserve_aliases_and_normalization() {
+        for (name, expected) in [
+            ("svg", OutputFormat::Svg),
+            ("svg_inline", OutputFormat::SvgInline),
+            ("cmapx", OutputFormat::Cmapx),
+            ("cmapx_np", OutputFormat::Cmapx),
+            ("json", OutputFormat::Json),
+            ("json0", OutputFormat::Json0),
+            ("dot", OutputFormat::Dot),
+            ("gv", OutputFormat::Dot),
+            ("xdot", OutputFormat::Xdot),
+            ("xdot1.2", OutputFormat::Xdot),
+            ("xdot1.4", OutputFormat::Xdot),
+            ("dot_json", OutputFormat::Json),
+            ("xdot_json", OutputFormat::Json),
+            ("canon", OutputFormat::Canon),
+            ("plain", OutputFormat::Plain),
+            ("plain-ext", OutputFormat::Plain),
+        ] {
+            assert!(OutputFormat::names().any(|candidate| candidate == name));
+            assert_eq!(OutputFormat::parse(name).unwrap(), expected);
+            assert_eq!(
+                OutputFormat::parse(&format!(" {} ", name.to_ascii_uppercase())).unwrap(),
+                expected
+            );
+        }
+        assert!(matches!(
+            OutputFormat::parse(" PNG "),
+            Err(GraphvizError::UnsupportedFormat(name)) if name == "png"
+        ));
+    }
 
     // The model accepts only clusters below a graph from its exported `GD_clust` list,
     // once each below the root: a bad list from a caller that skipped layout cannot

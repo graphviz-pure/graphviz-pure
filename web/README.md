@@ -72,6 +72,16 @@ the Free plan allows only [10 ms of CPU time per request](https://developers.clo
 graph; `renderAllBytes` takes and returns raw bytes, including non-UTF-8 input, as the
 command line does.
 
+`supportedFormats()` returns a JSON array **string** of every format name `render` accepts,
+including aliases: `svg`, `svg_inline`, `cmapx`, `json`, `json0`, `dot`, `xdot`, `canon`,
+`plain`, `cmapx_np`, `gv`, `xdot1.2`, `xdot1.4`, `dot_json`, `xdot_json` and `plain-ext`.
+Use `JSON.parse(supportedFormats())` to get the array. Raster formats (`png`, `jpg`, `jpeg`)
+are not available in this package.
+
+`version()` returns `graphviz version 16.1.0 (graphviz-pure X.Y.Z)`, where `X.Y.Z` is the
+package version compiled into the WebAssembly module. This follows the CLI's `-V` format
+without the command name prefix.
+
 Each release is built by GitHub Actions and published with npm provenance; check it with
 `npm audit signatures`. Documentation, fidelity evidence and the source:
 https://graphviz-pure.github.io/ and https://github.com/graphviz-pure/graphviz-pure. Licence: EPL-2.0 AND MIT.
