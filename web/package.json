@@ -11,6 +11,7 @@
     "pkg/graphviz_pure_wasm.d.ts",
     "pkg/graphviz_pure_wasm_bg.wasm",
     "pkg/graphviz_pure_wasm_bg.wasm.d.ts",
+    "pkg/snippets",
     "README.md",
     "LICENSE",
     "NOTICE",
@@ -28,7 +29,7 @@
     "./graphviz_pure_wasm_bg.wasm": "./pkg/graphviz_pure_wasm_bg.wasm"
   },
   "scripts": {
-    "build:wasm": "cd .. && CARGO_TARGET_WASM32_UNKNOWN_UNKNOWN_RUSTFLAGS='-C opt-level=z' CARGO_PROFILE_RELEASE_LTO=fat cargo build --release --target wasm32-unknown-unknown -p graphviz-pure-wasm && wasm-bindgen --target web --remove-name-section --remove-producers-section --out-dir web/pkg target/wasm32-unknown-unknown/release/graphviz_pure_wasm.wasm && if command -v wasm-opt >/dev/null; then wasm-opt -Oz --enable-bulk-memory --enable-nontrapping-float-to-int --enable-sign-ext --enable-mutable-globals web/pkg/graphviz_pure_wasm_bg.wasm -o web/pkg/graphviz_pure_wasm_bg.wasm; fi",
+    "build:wasm": "cd .. && CARGO_TARGET_WASM32_UNKNOWN_UNKNOWN_RUSTFLAGS='-C opt-level=z' CARGO_PROFILE_RELEASE_LTO=fat cargo build --release --target wasm32-unknown-unknown -p graphviz-pure-wasm && wasm-bindgen --target web --remove-name-section --remove-producers-section --out-dir web/pkg target/wasm32-unknown-unknown/release/graphviz_pure_wasm.wasm && node scripts/export-graphviz-error.mjs web/pkg/graphviz_pure_wasm.js && cp web/graphviz_pure_wasm.d.ts web/pkg/graphviz_pure_wasm.d.ts && if command -v wasm-opt >/dev/null; then wasm-opt -Oz --enable-bulk-memory --enable-nontrapping-float-to-int --enable-sign-ext --enable-mutable-globals web/pkg/graphviz_pure_wasm_bg.wasm -o web/pkg/graphviz_pure_wasm_bg.wasm; fi",
     "prepack": "cp ../LICENSE ../NOTICE ../THIRD-PARTY-LICENSES.md . && mkdir -p LICENSES && cp ../LICENSES/MIT-CORE-MATH.txt ../LICENSES/MIT-EXPAT.txt LICENSES/",
     "serve": "python3 -m http.server 8765"
   },

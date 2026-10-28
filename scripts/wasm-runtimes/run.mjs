@@ -67,6 +67,8 @@ const checks = {
     });
     try {
       await worker.ready;
+      const check = await worker.fetch('http://localhost/?check=1');
+      if (!check.ok) throw new Error(`worker api: ${await check.text()}`);
       let slowest = 0;
       const bad = await differing(samples, async (input, engine) => {
         const t = performance.now();
@@ -85,10 +87,10 @@ const checks = {
 
   async browser(samples) {
     const { chromium } = await import('playwright-core');
-    const types = { '.html': 'text/html', '.js': 'text/javascript', '.wasm': 'application/wasm' };
+    const types = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript', '.wasm': 'application/wasm' };
     const server = http.createServer((req, res) => {
       const url = new URL(req.url, 'http://x').pathname;
-      const file = url === '/' ? path.join(here, 'browser.html') : url.startsWith('/pkg/') ? path.join(installed, url.slice(5)) : null;
+      const file = url === '/' ? path.join(here, 'browser.html') : url === '/api-check.mjs' ? path.join(here, 'api-check.mjs') : url.startsWith('/pkg/') ? path.join(installed, url.slice(5)) : null;
       if (url === '/favicon.ico') return res.writeHead(204).end();
       if (!file || !file.startsWith(here) || !fs.existsSync(file)) return res.writeHead(404).end();
       res.writeHead(200, { 'content-type': types[path.extname(file)] ?? 'application/octet-stream' });

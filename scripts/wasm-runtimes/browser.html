@@ -3,9 +3,39 @@
 <title>graphviz-pure wasm check</title>
 <!-- run.mjs serves the packed package under /pkg/ and calls window.gvRender from Chrome. -->
 <script type="module">
-  import init, { renderAllBytes } from '/pkg/pkg/graphviz_pure_wasm.js';
+  import init, {
+    GraphvizError,
+    inspectGraph,
+    render,
+    renderAll,
+    renderAllBytes,
+    renderAllBytesWithDiagnostics,
+    renderAllWithDiagnostics,
+    renderJson,
+    renderSvg,
+    renderWithDiagnostics,
+    supportedEngines,
+    supportedFormats,
+    version,
+  } from '/pkg/pkg/graphviz_pure_wasm.js';
+  import { checkApi } from '/api-check.mjs';
 
   await init();
+  checkApi({
+    GraphvizError,
+    inspectGraph,
+    render,
+    renderAll,
+    renderAllBytes,
+    renderAllBytesWithDiagnostics,
+    renderAllWithDiagnostics,
+    renderJson,
+    renderSvg,
+    renderWithDiagnostics,
+    supportedEngines,
+    supportedFormats,
+    version,
+  });
   window.gvRender = (input, engine) => Array.from(renderAllBytes(new Uint8Array(input), engine, 'svg'));
   document.title = 'ready';
 </script>

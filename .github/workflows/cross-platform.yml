@@ -188,6 +188,7 @@ jobs:
         run: |
           cargo build --release --target wasm32-unknown-unknown -p graphviz-pure-wasm
           wasm-bindgen --target nodejs --out-dir "$RUNNER_TEMP/pkg" target/wasm32-unknown-unknown/release/graphviz_pure_wasm.wasm
+          node scripts/export-graphviz-error.mjs "$RUNNER_TEMP/pkg/graphviz_pure_wasm.js"
       - name: Render the corpus and the samples
         run: |
           node scripts/cross-platform-wasm.mjs "$RUNNER_TEMP/pkg" out/wasm32

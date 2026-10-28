@@ -7,6 +7,7 @@
 //   cargo build --release --target wasm32-unknown-unknown -p graphviz-pure-wasm
 //   wasm-bindgen --target nodejs --out-dir /tmp/gvwasm/pkg \
 //     target/wasm32-unknown-unknown/release/graphviz_pure_wasm.wasm
+//   node scripts/export-graphviz-error.mjs /tmp/gvwasm/pkg/graphviz_pure_wasm.js
 // then run from the repository root:
 //   node scripts/wasm-e2e.mjs [--pkg /tmp/gvwasm/pkg] [--baseline FILE] [--filter SUBSTR]
 //                             [--list] [--hashes FILE] [--golden FILE]
@@ -21,6 +22,7 @@ import { createRequire } from 'node:module';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
+import { checkApi } from './wasm-runtimes/api-check.mjs';
 
 const args = process.argv.slice(2);
 let pkg = '/tmp/gvwasm/pkg';
@@ -47,7 +49,8 @@ const gv = require(path.resolve(pkg, 'graphviz_pure_wasm.js'));
 const root = process.cwd();
 const packageVersion = JSON.parse(fs.readFileSync(path.join(root, 'web/package.json'), 'utf8')).version;
 assert.equal(gv.version(), `graphviz version 16.1.0 (graphviz-pure ${packageVersion})`);
-const formats = JSON.parse(gv.supportedFormats());
+checkApi(gv);
+const formats = gv.supportedFormats();
 assert.ok(Array.isArray(formats) && formats.length > 0);
 for (const format of formats) {
   assert.ok(gv.render('digraph { a -> b }', 'dot', format).length > 0, format);
