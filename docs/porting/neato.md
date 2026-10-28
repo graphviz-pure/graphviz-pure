@@ -274,7 +274,7 @@ with the bump allocator C gives the port's output, and with macOS's allocator C 
 it too (2 of 30 runs gave another output). Ordering later objects at lower addresses, as
 reusing freed chunks would, was also measured: it matches C's most frequent output on some
 inputs and loses on others. The port keeps creation order, the same on every platform
-(`issue225_vpsc_ties_follow_creation_order`, `node_key_breaks_position_ties_in_creation_order`).
+(`issue225_vpsc_ties_follow_creation_order`, `node_key_breaks_position_ties_in_creation_order`). Differential fuzz round 5 (`40001–46000`) hit 5 cases in this class — `neato` seeds `41455`, `43156`, `44394`, `45025` and `twopi` seed `40901` — all 5 of which match the port byte for byte when C runs with `scripts/c-bump-malloc.c`.
 
 ### `mode=hier` (DiG-CoLa) and `mode=ipsep` — `neatogen::digcola`, `neatogen::cola`
 
