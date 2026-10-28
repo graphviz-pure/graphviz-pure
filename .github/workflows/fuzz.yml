@@ -4,12 +4,11 @@ name: Fuzzing
 # (.clusterfuzzlite/): panics, hangs and running out of memory on crafted DOT. No C oracle; the
 # differential fuzzer against C Graphviz is separate (docs/porting/fuzzing.md).
 #
-# Fuzzing is a pre-release step, run once per release: scripts/release-prep.sh dispatches it on
-# the release branch, which holds everything merged since the last release, and
-# scripts/release-ready.sh requires it to have passed on the commit to be tagged. It does not run
-# on a schedule or on pull requests: a run takes over an hour, and the tests, the C differential
-# corpora and the compiler already gate every change, so fuzzing each pull request (25 minutes
-# a push, one crash in 141 runs) or each day only slowed the agents fixing bugs.
+# Fuzzing is a pre-release step. release.yml calls this workflow on the base commit (master at
+# dispatch); a person can also dispatch it. It does not run on a schedule or on pull requests: a
+# run takes over an hour, and the tests, the C differential corpora and the compiler already
+# gate every change, so fuzzing each pull request (25 minutes a push, one crash in 141 runs) or
+# each day only slowed the agents fixing bugs.
 #
 # - A run fuzzes every target from the corpus of the earlier runs (kept as this workflow's
 #   artifacts, with the crashes and the builds), then prunes the corpus.
@@ -18,8 +17,8 @@ name: Fuzzing
 #   fuzz workspace and the test graphs, not the version, docs, scripts or other tests. A run that
 #   passes uploads a `fuzzed-<key>` marker, and the `inputs` job looks for one, so dispatching
 #   again after a changelog-only push takes a minute. Dispatch with `force` to fuzz anyway.
-# - A crash fails the run; the agent driving the release files it as an issue labelled `crash`,
-#   with the minimised reproducer from the run's cifuzz-crashes-<target> artifact.
+# - A crash fails the run. The minimised reproducer is the run's cifuzz-crashes-<target>
+#   artifact. The release workflow does not open an issue for it.
 
 on:
   workflow_dispatch:
@@ -27,6 +26,18 @@ on:
       force:
         description: Fuzz even if these inputs were already fuzzed
         type: boolean
+        default: false
+  workflow_call:
+    inputs:
+      ref:
+        description: Commit to fuzz. Empty fuzzes the workflow's own commit.
+        type: string
+        required: false
+        default: ""
+      force:
+        description: Fuzz even if these inputs were already fuzzed
+        type: boolean
+        required: false
         default: false
 
 permissions:
@@ -54,6 +65,16 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      # release.yml passes the base commit. The fuzzed-inputs key ignores the version, so a
+      # release whose code is unchanged reuses the marker. A dispatch with no ref fuzzes this run's commit.
+      - name: Check out the commit to fuzz
+        if: inputs.ref != '' && inputs.ref != null
+        env:
+          REF: ${{ inputs.ref }}
+        run: |
+          [[ "$REF" =~ ^[0-9a-f]{40}$ ]] || { echo "::error::ref must be a 40-character commit sha"; exit 1; }
+          git fetch --no-tags --depth=1 origin "$REF"
+          git checkout --detach "$REF"
       # Only markers from runs of this repository count. Artifacts expire after 90 days, after
       # which the same inputs are fuzzed again.
       - name: Look for a run that fuzzed the same inputs
@@ -90,12 +111,17 @@ jobs:
     steps:
       - name: Build the fuzz targets
         uses: google/clusterfuzzlite/actions/build_fuzzers@884713a6c30a92e5e8544c39945cd7cb630abcd1 # v1
+        env:
+          # ClusterFuzzLite clones GITHUB_SHA rather than using the checkout above.
+          GITHUB_SHA: ${{ inputs.ref || github.sha }}
         with:
           language: rust
           github-token: ${{ github.token }}
           sanitizer: address
       - name: Fuzz every target (6 min each)
         uses: google/clusterfuzzlite/actions/run_fuzzers@884713a6c30a92e5e8544c39945cd7cb630abcd1 # v1
+        env:
+          GITHUB_SHA: ${{ inputs.ref || github.sha }}
         with:
           github-token: ${{ github.token }}
           mode: batch
@@ -115,6 +141,8 @@ jobs:
         if: ${{ !cancelled() }}
         continue-on-error: true
         uses: google/clusterfuzzlite/actions/run_fuzzers@884713a6c30a92e5e8544c39945cd7cb630abcd1 # v1
+        env:
+          GITHUB_SHA: ${{ inputs.ref || github.sha }}
         with:
           github-token: ${{ github.token }}
           mode: prune
@@ -130,7 +158,7 @@ jobs:
         if: success() && steps.prune.outcome == 'success'
         env:
           KEY: ${{ needs.inputs.outputs.key }}
-          COMMIT: ${{ github.sha }}
+          COMMIT: ${{ inputs.ref || github.sha }}
         run: |
           mkdir -p "$RUNNER_TEMP/marker"
           echo "fuzzed $COMMIT, inputs $KEY" > "$RUNNER_TEMP/marker/fuzzed.txt"

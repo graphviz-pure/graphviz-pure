@@ -1,80 +1,28 @@
 # Releasing graphviz-pure
 
-A release is prepared, checked and announced by an agent. The owner does four things: approve the
-release pull request, sign and push the tag, approve one `release` deployment, and approve the
-staged npm version. Everything the owner runs arrives in one issue, "Release X.Y.Z ready".
+To release: dispatch Release (`gh workflow run release.yml [-f version=X.Y.Z]`, or ask any agent); approve the `release` deployment when GitHub notifies you. That's it.
 
-## The owner's four steps
+`version` is optional. Empty means the next version: while the version is `0.x`, a pull request labelled `breaking` bumps the minor version and anything else the patch version; from 1.0, `breaking` bumps the major version ([versioning policy](versioning.md)). After a pre-release tag the next version is the version it pre-released. `intro` is optional changelog text; empty means a line counted from the entries (`3 changes: 1 added, 2 fixed.`). `dry_run` (default false) builds, fuzzes, smoke-tests and attests, and does not publish:
 
-1. **Approve the release pull request** (`gh pr review N --approve`). The agent adds it to the
-   merge queue.
-2. **Sign and push the tag** on the merge commit, which the agent comments in the issue:
-   `git tag -s vX.Y.Z -m vX.Y.Z SHA && git push origin vX.Y.Z`. Only maintainers can create
-   `v*` tags (tag ruleset), and the workflow refuses a tag that is not on `master` or not signed
-   with a key in [`.github/allowed_signers`](../.github/allowed_signers) (read from `master`, not
-   from the tagged commit). To sign with SSH:
-   `git config gpg.format ssh`, `git config user.signingkey ~/.ssh/id_ed25519.pub`; add the key to
-   GitHub as a signing key and, in a reviewed pull request, to `.github/allowed_signers`.
-3. **Approve the `release` deployment** of the release run, once: every publishing job waits for
-   it together. The agent comments the run's link and a `gh api` command that approves it.
-4. **Approve the staged npm version** with 2FA: `npm stage approve <id>` (the agent comments the
-   id from the npm job's log), then `npm logout`.
+```sh
+gh workflow run release.yml -f dry_run=true
+```
 
-## What the agent does
+A dry run, or a check that fails, never asks for the `release` environment. A real release uses the concurrency group `release` (one at a time; a second one waits). A dry run uses `release-dry-run`, so dispatching a dry run cannot cancel a real release that is queued or running. A real release has to be dispatched from `master`. The `release` environment allows deployments from `master` only, so a workflow run from any other branch cannot request it.
 
-The agent pushes and opens pull requests and issues as a bot account, never as the owner
-(GitHub does not let anyone approve their own pull request): `GH` names that account's gh in
-every command below.
+## Before dispatching
 
-1. **When the release's gates are met** (no open `priority:p1` or `priority:p2` issue, master's
-   CI green), preview the release: `scripts/release-prep.sh --dry-run`. It reads the
-   `## Changelog entry` of every pull request merged since the last tag and prints the version,
-   the CHANGELOG section and what is missing:
-   - a pull request with no entry: add one to its body (`Not user-visible.` when there is
-     nothing to say), with `$GH pr edit N --body-file ...`;
-   - an entry marked breaking (under a `### Breaking` heading, or a bullet starting
-     `**Breaking:**` or `**Changed (breaking):**`) from a pull request without the `breaking`
-     label: label it, or unmark the entry. The labels decide the version;
-   - prose beside an entry's bullets, which is not copied: check that nothing is lost.
+`scripts/release-check.sh` prints the checklist the workflow runs, and changes nothing:
 
-   Entries that a later pull request superseded are fixed in the CHANGELOG on the release branch.
-2. **Open the release pull request:** `GH=... scripts/release-prep.sh` (or with the version, which
-   must be the one the labels ask for). It writes the entries under "Unreleased", runs
-   `scripts/bump-version.sh X.Y.Z --pr` (sets the version in `Cargo.toml`, `Cargo.lock`,
-   `web/package.json` and `web/jsr.json`, dates the section, pushes `release/vX.Y.Z`, opens the
-   pull request with `$GH`), and starts the release workflow's dry run and the fuzzing workflow on
-   the branch. Write the release's intro paragraph where the script left its placeholder and fix
-   superseded entries, in one push. A push restarts CI but not the dry run or fuzzing: start
-   `release.yml` and `fuzz.yml` on the branch again (`$GH workflow run release.yml --ref
-   release/vX.Y.Z`, the same for `fuzz.yml`). Fuzzing is the release's pre-release step: the
-   only fuzzing CI does, once per release, over everything merged since the last one. The first
-   run takes over an hour; a later dispatch whose code is unchanged (a changelog-only push)
-   reuses its result in a minute. `release-prep.sh` and `release-ping.sh` refuse to write as the
-   owner.
-3. **Check readiness:** `scripts/release-ready.sh X.Y.Z PR` prints a Markdown checklist and exits
-   0 only when it all passes: no open `priority:p1`/`priority:p2` issue and no open
-   "Cross-platform fails on master" issue; the newest runs of `ci.yml`, `cross-platform.yml`,
-   `fuzz.yml` and the release dry run on the pull request's head succeeded; nothing merged to
-   master after the branch's base (else run `release-prep.sh` again); every pull request since
-   the last tag has an entry and the labels ask for X.Y.Z; CHANGELOG.md has the section and its
-   intro; the three manifests say X.Y.Z; every e2e input identical to C at the last release
-   still is.
-4. **Ping the owner:** `GH=... scripts/release-ping.sh X.Y.Z PR` opens "Release X.Y.Z ready",
-   assigned to the owner and mentioning them, with the pull request, the dry run, the checklist and
-   the four steps.
-5. **Drive it through**, adding each next command to the issue as the owner gets to it:
-   - after the approval, add the pull request to the merge queue; once it merged,
-     `scripts/release-ready.sh X.Y.Z PR` again (it now checks the merge commit: master's own
-     `ci.yml` and `cross-platform.yml` runs on it decide; for fuzzing and the dry run, the pull
-     request head's runs count when the trees are the same), then
-     `GH=... scripts/release-ping.sh X.Y.Z tag` comments the tag command with the merge commit;
-   - when the release run waits for the environment, `GH=... scripts/release-ping.sh X.Y.Z deploy`;
-   - when the npm job has staged the package, `GH=... scripts/release-ping.sh X.Y.Z npm`;
-   - after the owner's npm approval, start the tap and bucket updates rather than waiting for
-     their 6-hourly schedule: `$GH workflow run update.yml --repo graphviz-pure/homebrew-tap`, and
-     the same for `graphviz-pure/scoop-bucket`. When they finish,
-     `GH=... scripts/release-ping.sh X.Y.Z done` runs `scripts/release-verify.sh X.Y.Z`, comments
-     the result and closes the issue if every channel passes.
+- no open `priority:p1` or `priority:p2` issue, and no open "Cross-platform fails on master";
+- the newest `ci.yml` and `cross-platform.yml` runs on master's head succeeded;
+- every pull request merged since the last tag has a `## Changelog entry`. An entry marked breaking (under a `### Breaking` heading, or a bullet starting `**Breaking:**` or `**Changed (breaking):**`) has to come from a pull request with the `breaking` label. The labels decide the version;
+- CHANGELOG.md's Unreleased section is empty. Entries belong in pull request bodies;
+- the version is not tagged yet, and no GitHub release, including a draft, exists for it;
+- the release commit merges cleanly onto current master (`git merge-tree --write-tree`). Master moving is fine; a conflict fails the run before any approval is requested;
+- every e2e input that was byte-identical to C at the last release still is, and the count is not lower.
+
+A pull request with no entry: add one to its body (`Not user-visible.` when there is nothing to say). An entry marked breaking without the label: label it, or unmark the entry.
 
 `scripts/release-verify.sh X.Y.Z` checks, and prints pass or fail for, each channel: the GitHub
 release's assets against their attestations and `SHA256SUMS`; the eight publishable crates on
@@ -89,18 +37,14 @@ newest version); npm's
 `latest` dist-tag, an install pinned to the attested release tarball's integrity (`npm ci`
 against a lockfile the script writes from it), and `npm audit signatures`; the tap's formula,
 the bucket's manifest and
-their newest `update.yml` run. Attestations must come from `release.yml` run for the tag, not a
-dry run. The release workflow's `verify` job runs it with `--ci` (all but npm and the tap and
-bucket) once the publishing jobs finish, and reports a channel whose publishing job failed
-without polling it.
+their newest `update.yml` run. Attestations come from `release.yml`. The certificate's source ref is `refs/heads/master`. Its subject digest is the dispatch SHA, master's HEAD when the run started, not the release commit. Releases through 0.2.3 were attested for the tag. The `verify` job runs the script with `--ci` (every channel but the tap and bucket) once the publishing jobs finish, and reports a channel whose publishing job failed without polling it.
 
 ### The `breaking` label
 
 A pull request that breaks the Rust or JavaScript API, the command line or a format gets the
 `breaking` label when it merges. While the version is `0.x`, a release with one or more such pull
 requests bumps the minor version and any other release the patch version
-([versioning policy](versioning.md)); `scripts/release-prep.sh` creates the label if it is
-missing.
+([versioning policy](versioning.md)).
 
 ## What the release workflow does
 
@@ -137,15 +81,14 @@ toolchain and `cargo build --locked`:
 - it dry-runs the JSR and npm publishes, and builds and runs the Wasmer package
   (`scripts/wasmer-package.sh`, `wasmer package build`; `wasmer publish --dry-run` needs a login).
 
-On a tag push, the seven publishing jobs then wait together for one approval of the `release`
+On a real run, the seven publishing jobs then wait together for one approval of the `release`
 environment, and each publishes on its own:
 
 - `github-release` creates the GitHub release with all files;
 - `crates-io` publishes the eight crates to crates.io (trusted publishing,
   `cargo publish --workspace`, leaving out any crate whose version is already there);
-- `npm` stages `@graphviz-pure/wasm` on npm (trusted publishing, with npm provenance). The
-  trusted publisher may only stage, so the version goes live only when a maintainer approves it
-  with 2FA: the package's **Staged Packages** tab on npmjs.com, or `npm stage approve <stage-id>`;
+- `npm` publishes `@graphviz-pure/wasm` (`npm publish --provenance --access public`). The
+  trusted publisher has to allow `npm publish`. The version is live when the job finishes;
 - `pypi` publishes the six attested wheels to PyPI as `graphviz-pure` with a pinned uv
   (trusted publishing, OIDC: the job exchanges the run's token for a short-lived PyPI token, as
   PyPI documents, and `uv publish` uses it). PyPI has no staging: the version is live when the
@@ -168,37 +111,45 @@ environment, and each publishes on its own:
   (the registry would show it as the latest version), the job publishes nothing and succeeds,
   and `verify` leaves the channel out.
 
-Then `verify` checks what they published (`scripts/release-verify.sh --ci`). Within hours,
-`graphviz-pure/homebrew-tap` and `graphviz-pure/scoop-bucket` pull the release, verify each
-asset's attestation and checksum, and commit the new formula and manifest.
+Then `verify` checks what they published (`scripts/release-verify.sh --ci`) and closes a milestone
+titled X.Y.Z if one is open and every publishing job that ran succeeded. A skipped job does not
+block that; a failed one leaves the milestone open. The same approval's `github-release` job
+dispatches `update.yml` in `graphviz-pure/homebrew-tap` and `graphviz-pure/scoop-bucket`; those
+workflows verify each asset and commit the new formula and manifest. Their verifiers accept an
+attestation whose source ref is the tag or `refs/heads/master` (the dispatch SHA is the subject
+digest).
 `graphviz-pure/graphviz-pure.github.io` deploys the site from `master` builds the same way. No
-repository holds a credential for another.
+repository holds a long-lived credential for another: the dispatch uses a GitHub App token minted
+in the `github-release` job and discarded with it.
 
-Run the workflow by hand (Actions → Release → Run workflow, or
-`$GH workflow run release.yml --ref BRANCH`) to build, smoke-test and attest everything, the
-container image included, without publishing anything: the publishing jobs run only on a tag
-push, and the `release` environment accepts only `v*` tags.
+`gh workflow run release.yml -f dry_run=true` builds, fuzzes, smoke-tests and attests everything,
+the container image included, without publishing anything.
 
-### One approval: the trade-off
+### One approval
 
-Through 0.1.2, the registries' jobs waited for the GitHub release, so a release took two approvals:
-the GitHub release, then the publishing jobs. The owner could look at the published GitHub
-release before anything irreversible went to crates.io or JSR. Now one approval starts all seven
-jobs at once, and the checks that the second look stood for run before the approval instead:
-every smoke test of the run, a dry run of the same workflow on the same commit, and the readiness
-checklist. npm still needs its own 2FA approval. What is given up: a registry can publish even if
-the GitHub release fails, and nothing is left to stop between the GitHub release and the
-registries. Keep `environment: release` on every publishing job (the crates.io, npm and PyPI
-trusted publishers are bound to it) and keep its approval manual: JSR and PyPI have no staging.
+Through 0.1.2, the registries' jobs waited for the GitHub release, so a release took two approvals.
+One approval now starts all seven publishing jobs at once. The checks that used to sit between
+those approvals run first: the readiness checklist, fuzzing, and every smoke test. npm publishes
+in that same approval. What is given up: a registry can publish even if the GitHub release fails,
+and nothing is left to stop between the GitHub release and the registries. Keep
+`environment: release` on every publishing job (the crates.io, npm and PyPI trusted publishers
+are bound to it) and keep its approval manual: JSR and PyPI have no staging. Its deployment
+branch policy stays `master` only.
+
+Before that approval, `prepare` checks the release can land, with the job's read-only token:
+`git merge-tree --write-tree` of current master and the release commit is clean, `refs/tags/vX.Y.Z`
+does not exist, and no GitHub release, including a draft, exists for that tag. A missing App
+secret, or a ruleset bypass that does not let the App push, cannot be checked then. Those are
+confirmed once, when the environment secrets and the ruleset bypass are applied.
 
 ### If a publishing job fails
 
 The publishing jobs are independent, so a failure leaves the other channels published. Fix the
 cause (an expired trusted-publisher configuration, a registry outage), then **Re-run failed
-jobs** on the same run: never push a new tag for the same version. A re-run runs `release.yml`
-as it was in the tagged commit, and the release's tag cannot move, so a bug in the workflow
-itself is fixed on `master` and ships with the next version. A re-run asks for the approval
-again.
+jobs** on the same run. A re-run uses that dispatch: the workflow file and the SHA of master
+when the run was started. There is no tag until `github-release` creates it, and the re-run
+does not look up a pre-existing tag to decide what to build. A bug in the workflow itself is
+fixed on `master` and ships with the next dispatch. A re-run asks for the approval again.
 
 - `crates-io`: safe to re-run, also after a partial publish. The job asks crates.io which
   crates already have the version (`scripts/crates-to-publish.py`) and publishes only the
@@ -208,19 +159,21 @@ again.
   identical ones are skipped (PyPI itself answers a re-upload with 400), so only what is missing
   goes up, and a file that differs from PyPI's fails the job.
 - `npm`, `jsr`: a re-run is safe if the job failed before publishing. If the version went up,
-  there is nothing to re-run.
+  there is nothing to re-run: the registries keep a published version.
 - `wasmer`: safe to re-run. A version already in the registry is left as it is (versions there
   cannot be replaced), and `release-verify.sh` checks that it holds the attested module.
 - `ghcr`: safe to re-run. Pushing the same image again changes nothing, and `X.Y`/`latest`
   only ever move forward: they follow the highest stable version among the image's tags on
   ghcr.io, so a `v*` tag whose release was rejected never holds them.
 - `github-release`: the release is immutable once published. If the job failed before
-  publishing, delete the draft release, then re-run.
+  publishing, delete the draft release, then re-run. A re-run fast-forwards or merges the same
+  release commit, and leaves a tag that already points at it. A conflict with commits that landed
+  on master during the run fails the job before it pushes, tags or publishes.
 - `verify`: re-run it after fixing a channel, or run `scripts/release-verify.sh X.Y.Z` locally.
 
 **First release from a new trusted-publisher configuration:** npm drops a configuration that
 has not published within 48 hours of its creation. If it is older than that, delete and recreate
-it (same fields, see [npm](#npm-organization-graphviz-pure)) just before pushing the tag.
+it (same fields, see [npm](#npm-organization-graphviz-pure)) just before dispatching the release.
 
 ## Verifying a download
 
@@ -288,16 +241,16 @@ once with placeholder releases:
    `@graphviz-pure/wasm`, and deprecates it.
 3. Package settings → Trusted publishers → GitHub Actions: organization `graphviz-pure`,
    repository `graphviz-pure`, workflow `release.yml`, environment `release`. Under **Allowed
-   actions**, leave both `npm publish` and `npm dist-tag` unchecked: the workflow can then only
-   stage a release, and each one waits for your 2FA approval.
+   actions**, allow `npm publish`. Leave `npm dist-tag` unchecked: `npm publish` sets the
+   `latest` tag for a stable version. The `release` environment's approval is the only gate.
 4. Package settings → Publishing access → **"Require two-factor authentication and disallow
    tokens"**. `npm logout`.
 
 Since 2026-10-02 npm expires a trusted-publisher configuration 48 hours after it is created
-unless it has published by then; the first successful (staged) publish validates it for good
+unless it has published by then; the first successful publish validates it for good
 ([changelog](https://github.blog/changelog/2026-10-02-unvalidated-npm-trusted-publishing-configurations-now-expire/)).
 If the configuration was created well before the first release, delete it and recreate it with
-the same fields just before pushing the first tag, then release within 48 hours.
+the same fields just before dispatching, then release within 48 hours.
 
 ### PyPI (project `graphviz-pure`)
 
@@ -328,12 +281,14 @@ description is `packaging/pypi/README.md`.
 1. Log in to jsr.io with GitHub and create the scope `@graphviz-pure`, then the package `wasm`.
 2. Package settings → **GitHub repository**: link `graphviz-pure/graphviz-pure`. JSR accepts an
    OIDC publish only from a workflow in the linked repository.
-3. Scope settings: keep publishing from GitHub Actions restricted to scope members (on by
-   default), so a release publishes only when a member pushed the tag. Once the first version
-   is out, also consider requiring every version to be published from CI.
+3. Scope settings: publishing from GitHub Actions can stay restricted to scope members. The
+   workflow run's actor is whoever dispatched it. A dispatch by the release App is that App,
+   which is not a scope member, so JSR refuses the publish until the restriction is off or the
+   App is accepted. Once the first version is out, also consider requiring every version to be
+   published from CI.
 
-JSR has no staged-approval step like npm's: `deno publish` makes the version live, and the
-`release` environment's approval is the only gate. The JSR package holds the npm tarball's
+`deno publish` makes the version live, and the `release` environment's approval is the only
+gate. The JSR package holds the npm tarball's
 files as listed in `web/jsr.json` (README.md, LICENSE, NOTICE, THIRD-PARTY-LICENSES.md,
 `LICENSES/MIT-CORE-MATH.txt`, `LICENSES/MIT-EXPAT.txt` and `pkg/`), so both registries show `web/README.md`; npm's
 `package.json` is not part of it.
@@ -392,7 +347,10 @@ Other WASI runtimes take the release's `graphviz-pure-X.Y.Z-wasm32-wasip1.tar.gz
 
 ### Homebrew and Scoop
 
-Nothing to set up: the tap and bucket repositories update themselves after each release.
+Nothing to set up in this repository. After the GitHub release is published, the release
+workflow dispatches `update.yml` in the tap and the bucket; both also run on a 6-hour
+schedule. Their update scripts accept an attestation whose source ref is the tag or
+`refs/heads/master`. The certificate's subject digest is the dispatch SHA.
 Users run `brew install graphviz-pure/tap/graphviz-pure` and
 `scoop bucket add graphviz-pure https://github.com/graphviz-pure/scoop-bucket` then
 `scoop install graphviz-pure/graphviz-pure`. Submitting to homebrew-core and the Scoop main

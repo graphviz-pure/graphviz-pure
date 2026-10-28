@@ -96,5 +96,27 @@ class SectionTest(unittest.TestCase):
         self.assertTrue(release_changelog.NOT_VISIBLE.match(prose[0]))
 
 
+class RenderTest(unittest.TestCase):
+    def test_default_intro_counts_sections_in_changelog_order(self):
+        data = {"entries": [
+            {"section": "Fixed", "text": "Two. (#2)"},
+            {"section": "Added", "text": "One. (#1)"},
+            {"section": "Fixed", "text": "Three. (#3)"},
+        ]}
+        text = release_changelog.render(data, "0.2.4", None)
+        self.assertIn("3 changes: 1 added, 2 fixed.", text)
+        self.assertLess(text.index("### Added"), text.index("### Fixed"))
+
+    def test_explicit_intro_replaces_the_counted_line(self):
+        text = release_changelog.render({"entries": []}, "0.2.4", "Hello.")
+        self.assertIn("Hello.", text)
+        self.assertNotIn("No user-visible changes.", text)
+
+    def test_no_entries_says_so(self):
+        text = release_changelog.render({"entries": []}, "1.0.0", "")
+        self.assertIn("No user-visible changes.", text)
+        self.assertRegex(text.splitlines()[0], r"^## \[1\.0\.0\] - \d{4}-\d{2}-\d{2}$")
+
+
 if __name__ == "__main__":
     unittest.main()

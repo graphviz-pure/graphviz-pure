@@ -27,7 +27,7 @@ not be confirmed from the channel's documentation.
 | :--- | :--- | :--- |
 | GitHub releases | `release.yml`, attested archives and `SHA256SUMS` | job token |
 | crates.io | `release.yml` | OIDC |
-| npm `@graphviz-pure/wasm` | `release.yml`, staged, owner approves with 2FA | OIDC |
+| npm `@graphviz-pure/wasm` | `release.yml`, `npm publish --provenance` | OIDC |
 | JSR `@graphviz-pure/wasm` | `release.yml` | OIDC |
 | ghcr.io image | `release.yml` | job token |
 | Homebrew tap, Scoop bucket | pull repositories | none here |

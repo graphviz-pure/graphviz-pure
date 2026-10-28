@@ -1,0 +1,61 @@
+name: Use the release commit
+description: Check out the release commit carried by the release-commit bundle.
+
+inputs:
+  base-sha:
+    description: Parent of the release commit. The bundle requires it to be present.
+    required: true
+  release-sha:
+    description: The release commit the bundle must contain.
+    required: true
+  path:
+    description: Relative path to check out into. Empty checks out into the workspace.
+    required: false
+    default: ""
+  fetch-depth:
+    description: Passed to actions/checkout. 0 keeps full history (the job that merges onto master).
+    required: false
+    default: "1"
+
+runs:
+  using: composite
+  steps:
+    - if: inputs.path == ''
+      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      with:
+        persist-credentials: false
+        fetch-depth: ${{ inputs.fetch-depth }}
+    - if: inputs.path != ''
+      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      with:
+        persist-credentials: false
+        fetch-depth: ${{ inputs.fetch-depth }}
+        path: ${{ inputs.path }}
+    # After the checkout: a checkout into the workspace would wipe a bundle downloaded first.
+    # A relative path, never RUNNER_TEMP (on Windows that is a path git's bash will not use).
+    - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+      with:
+        name: release-commit
+        path: ${{ inputs.path == '' && 'release-bundle' || format('{0}/release-bundle', inputs.path) }}
+    - name: Check out the release commit
+      shell: bash
+      env:
+        BASE_SHA: ${{ inputs.base-sha }}
+        RELEASE_SHA: ${{ inputs.release-sha }}
+        CHECKOUT_PATH: ${{ inputs.path }}
+        FETCH_DEPTH: ${{ inputs.fetch-depth }}
+      run: |
+        set -euo pipefail
+        [[ "$BASE_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo "::error::base-sha is not a commit sha"; exit 1; }
+        [[ "$RELEASE_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo "::error::release-sha is not a commit sha"; exit 1; }
+        [[ "$FETCH_DEPTH" =~ ^[0-9]+$ ]] || { echo "::error::fetch-depth is not a number"; exit 1; }
+        root=${CHECKOUT_PATH:-.}
+        if [ "$FETCH_DEPTH" = 0 ]; then
+          git -C "$root" fetch --unshallow --no-tags origin || true
+        fi
+        git -C "$root" fetch --no-tags --depth=1 origin "$BASE_SHA"
+        bundle=$(cd "$root/release-bundle" && pwd)/release.bundle
+        git -C "$root" fetch "$bundle" HEAD:refs/release-commit
+        test "$(git -C "$root" rev-parse refs/release-commit)" = "$RELEASE_SHA"
+        git -C "$root" checkout --detach refs/release-commit
+        rm -rf "$root/release-bundle"

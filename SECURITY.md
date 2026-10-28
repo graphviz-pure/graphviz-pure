@@ -28,11 +28,14 @@ Only the latest release receives fixes.
 
 ## Releases
 
-A release starts only from a signed tag on `master`. Every artifact is built on GitHub-hosted
-runners from the tagged commit, without caches, and gets a signed build-provenance attestation:
+A release starts from a workflow dispatch on `master`. Every artifact is built on GitHub-hosted
+runners from the release commit, without caches, and gets a signed build-provenance attestation:
 
     gh attestation verify FILE --repo graphviz-pure/graphviz-pure
 
-crates.io, npm and JSR are published through trusted publishing (OIDC), so no registry token
-exists. Publishing needs a maintainer's approval. The full model is at the top of
+The certificate's source ref is `refs/heads/master` (the workflow run's ref). Its subject
+digest is the dispatch SHA, not the release commit. Releases through
+0.2.3 were attested for their tag. crates.io, npm, PyPI and JSR are published through trusted
+publishing (OIDC), so no registry token exists for them. Publishing needs one approval of the
+`release` environment. The full model is at the top of
 [`.github/workflows/release.yml`](.github/workflows/release.yml).

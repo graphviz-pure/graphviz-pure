@@ -7,11 +7,11 @@
 # - VERSION must be a plain release, X.Y.Z. Prereleases (0.2.0-rc.1) are refused: pacman's
 #   pkgver cannot contain "-", and the AUR packages are meant to follow stable releases only.
 # - The two Linux musl archives (graphviz-pure-bin) must have a build-provenance attestation
-#   from this repository's release workflow, for the tag, built on a GitHub-hosted runner, and
-#   match the release's SHA256SUMS.
+#   from this repository's release workflow, built on a GitHub-hosted runner, and match the
+#   release's SHA256SUMS. Releases through 0.2.3 were attested for the tag; a later release is
+#   attested for refs/heads/master (the workflow_dispatch ref), so either source ref is accepted.
 # - The GitHub source tarball (graphviz-pure) is not a release asset and has no attestation, so
-#   the tag must carry an SSH signature by a key in .github/allowed_signers (read from master,
-#   as the release workflow does) and the tarball's contents must equal the tagged tree.
+#   the tag must be an annotated tag and the tarball's contents must equal the tagged tree.
 # - AUR_MAINTAINER, if set, replaces the "# Maintainer:" line. The script refuses to finish
 #   while any TODO or placeholder checksum remains, including the maintainer's email.
 #
@@ -62,11 +62,18 @@ targets=(x86_64-unknown-linux-musl aarch64-unknown-linux-musl)
 patterns=(--pattern SHA256SUMS)
 for t in "${targets[@]}"; do patterns+=(--pattern "graphviz-pure-$version-$t.tar.gz"); done
 gh release download "$tag" --repo "$repo" --dir "$work/dist" "${patterns[@]}"
+# Releases through 0.2.3 were attested for the tag; later releases for refs/heads/master.
+attest() {
+  gh attestation verify "$1" --repo "$repo" \
+    --signer-workflow "$repo/.github/workflows/release.yml" --source-ref "refs/tags/$tag" \
+    --deny-self-hosted-runners >&2 && return 0
+  gh attestation verify "$1" --repo "$repo" \
+    --signer-workflow "$repo/.github/workflows/release.yml" --source-ref "refs/heads/master" \
+    --deny-self-hosted-runners >&2
+}
 for t in "${targets[@]}"; do
   f=graphviz-pure-$version-$t.tar.gz
-  gh attestation verify "$work/dist/$f" --repo "$repo" \
-    --signer-workflow "$repo/.github/workflows/release.yml" --source-ref "refs/tags/$tag" \
-    --deny-self-hosted-runners >&2
+  attest "$work/dist/$f"
   sum=$(sha256 "$work/dist/$f")
   listed=$(awk -v f="$f" '$2 == f || $2 == "*" f {print $1}' "$work/dist/SHA256SUMS")
   [ "$sum" = "$listed" ] || { echo "error: $f does not match SHA256SUMS" >&2; exit 1; }
@@ -76,15 +83,8 @@ done
 echo "== source tarball of $tag" >&2
 curl -fsSL -o "$work/src.tar.gz" "https://github.com/$repo/archive/refs/tags/$tag.tar.gz"
 git clone --quiet --depth 1 --branch "$tag" "https://github.com/$repo.git" "$work/repo"
-curl -fsSL -o "$work/allowed_signers" \
-  "https://raw.githubusercontent.com/$repo/master/.github/allowed_signers"
 [ "$(git -C "$work/repo" cat-file -t "refs/tags/$tag")" = tag ] \
   || { echo "error: $tag is not an annotated tag" >&2; exit 1; }
-# Only SSH signatures: allowed_signers lists SSH keys, and the release workflow checks the same.
-git -C "$work/repo" cat-file tag "refs/tags/$tag" | grep -q -- '-----BEGIN SSH SIGNATURE-----' \
-  || { echo "error: $tag has no SSH signature" >&2; exit 1; }
-git -C "$work/repo" -c gpg.format=ssh -c gpg.ssh.allowedSignersFile="$work/allowed_signers" \
-  verify-tag "$tag" >&2
 mkdir "$work/a" "$work/b"
 tar -xzf "$work/src.tar.gz" -C "$work/a"
 git -C "$work/repo" archive --prefix="graphviz-pure-$version/" "$tag" | tar -x -C "$work/b"
@@ -137,7 +137,7 @@ done
 
 cat >&2 <<EOF
 
-Updated packaging/aur for $version (attestations, SHA256SUMS and the signed tag verified).
+Updated packaging/aur for $version (attestations, SHA256SUMS and the annotated tag verified).
 source tarball sha256: $src_sum
   (the same file conda-forge's recipe.yaml uses: put this value in its source.sha256)
 EOF
