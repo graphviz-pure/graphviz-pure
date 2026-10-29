@@ -1,44 +1,84 @@
 //! dot's binding of `lib/common/ns.c` (network simplex, `rank`/`rank2`).
 //!
 //! The algorithm lives in [`crate::common::ns`], generic over [`NsGraph`].
-//! This adapter copies the hot `NodeInfo`/`EdgeInfo` fields into flat arrays
-//! and gives the mutable tree lists fixed-capacity storage in the same order
-//! as `ND_in`/`ND_out`. It writes the results back when `rank2` returns.
+//! This adapter copies each ranked graph's hot `NodeInfo`/`EdgeInfo` fields
+//! into reusable flat arrays and gives the mutable tree lists fixed-capacity
+//! storage. It writes the results back when `rank2` returns.
 
 use super::Dot;
 use super::types::*;
 use super::utils::atoi;
 use crate::common::ns::{self, NsGraph, SEARCHSIZE};
 
+#[derive(Default)]
 struct Adjacency {
-    offsets: Vec<usize>,
+    offsets: Vec<u32>,
+    capacities: Vec<u32>,
     tree: Vec<E>,
-    tree_len: Vec<usize>,
+    tree_len: Vec<u32>,
 }
 
-fn adjacency_scratch(nodes: &[NodeInfo], incoming: bool) -> Adjacency {
-    let mut offsets = Vec::with_capacity(nodes.len().wrapping_add(1));
-    let mut tree_len = Vec::with_capacity(nodes.len());
-    let mut total = 0usize;
-    offsets.push(0);
-    for node in nodes {
-        let list = if incoming { &node.in_ } else { &node.out };
-        total = total.wrapping_add(list.len());
-        tree_len.push(0);
-        offsets.push(total);
+impl Adjacency {
+    fn resize_nodes(&mut self, n: usize) {
+        self.offsets.resize(n, 0);
+        self.capacities.resize(n, 0);
+        self.tree_len.resize(n, 0);
     }
-    Adjacency {
-        offsets,
-        tree: vec![0; total],
-        tree_len,
+
+    fn prepare(&mut self, n: usize, capacity: usize) {
+        if (self.capacities[n] as usize) < capacity {
+            let start = self.tree.len();
+            let required = start.wrapping_add(capacity);
+            if self.tree.capacity() < required {
+                let current = self.tree.capacity();
+                let target = required.max(current.wrapping_add(current / 8));
+                self.tree.reserve_exact(target.wrapping_sub(start));
+            }
+            self.offsets[n] = start as u32;
+            self.tree.resize(required, 0);
+            self.capacities[n] = capacity as u32;
+        }
+        self.tree_len[n] = 0;
+    }
+
+    fn edges(&self, n: usize) -> &[E] {
+        let start = self.offsets[n] as usize;
+        &self.tree[start..start.wrapping_add(self.tree_len[n] as usize)]
+    }
+
+    fn push(&mut self, n: usize, e: E) -> bool {
+        let len = self.tree_len[n] as usize;
+        if len >= self.capacities[n] as usize {
+            return false;
+        }
+        let i = (self.offsets[n] as usize).wrapping_add(len);
+        self.tree[i] = e;
+        self.tree_len[n] = len.wrapping_add(1) as u32;
+        true
+    }
+
+    fn remove(&mut self, n: usize, e: E) {
+        let start = self.offsets[n] as usize;
+        let len = self.tree_len[n] as usize;
+        let end = start.wrapping_add(len);
+        if let Some(i) = self.tree[start..end].iter().position(|&x| x == e) {
+            self.tree.swap(
+                start.wrapping_add(i),
+                start.wrapping_add(len.wrapping_sub(1)),
+            );
+            self.tree_len[n] = len.wrapping_sub(1) as u32;
+        }
+    }
+
+    fn clear(&mut self, n: usize) {
+        self.tree_len[n] = 0;
     }
 }
 
-/// `graph_t *g` as seen by `ns.c`: dot's arenas plus the graph being ranked.
-struct DotNs<'x, 'a> {
-    d: &'x mut Dot<'a>,
-    g: G,
+#[derive(Default)]
+pub(super) struct NsScratch {
     nlist: Vec<N>,
+    edges: Vec<E>,
     rank: Vec<i32>,
     mark: Vec<usize>,
     priority: Vec<i32>,
@@ -56,109 +96,110 @@ struct DotNs<'x, 'a> {
     tree_index: Vec<i32>,
 }
 
-#[inline]
-fn scratch_get<T: Copy>(values: &[T], n: usize) -> T {
-    values[n]
+impl NsScratch {
+    fn resize(&mut self, nodes: usize, edges: usize) {
+        if self.rank.len() != nodes || self.tail.len() != edges {
+            self.incoming.tree = Vec::new();
+            self.incoming.offsets.fill(0);
+            self.incoming.capacities.fill(0);
+            self.incoming.tree_len.fill(0);
+            self.outgoing.tree = Vec::new();
+            self.outgoing.offsets.fill(0);
+            self.outgoing.capacities.fill(0);
+            self.outgoing.tree_len.fill(0);
+        }
+        self.rank.resize(nodes, 0);
+        self.mark.resize(nodes, 0);
+        self.priority.resize(nodes, 0);
+        self.low.resize(nodes, 0);
+        self.lim.resize(nodes, 0);
+        self.par.resize(nodes, None);
+        self.subtree.resize(nodes, None);
+        self.incoming.resize_nodes(nodes);
+        self.outgoing.resize_nodes(nodes);
+        self.tail.resize(edges, 0);
+        self.head.resize(edges, 0);
+        self.minlen.resize(edges, 0);
+        self.weight.resize(edges, 0);
+        self.cutvalue.resize(edges, 0);
+        self.tree_index.resize(edges, 0);
+    }
+
+    pub(super) fn clear(&mut self) {
+        *self = Self::default();
+    }
 }
 
-#[inline]
-fn scratch_set<T>(values: &mut [T], n: usize, value: T) {
-    values[n] = value;
+/// `graph_t *g` as seen by `ns.c`: dot's arenas plus the graph being ranked.
+struct DotNs<'x, 'a> {
+    d: &'x mut Dot<'a>,
+    g: G,
+    scratch: &'x mut NsScratch,
 }
 
 impl<'x, 'a> DotNs<'x, 'a> {
-    fn new(d: &'x mut Dot<'a>, g: G) -> Self {
-        let mut nlist = Vec::new();
+    fn new(d: &'x mut Dot<'a>, g: G, scratch: &'x mut NsScratch) -> Self {
+        scratch.nlist.clear();
+        scratch.edges.clear();
         let mut n = d.graphs[g].nlist;
         while let Some(x) = n {
-            nlist.push(x);
+            scratch.nlist.push(x);
             n = d.nodes[x].next;
         }
-        let incoming = adjacency_scratch(&d.nodes, true);
-        let outgoing = adjacency_scratch(&d.nodes, false);
-        Self {
-            nlist,
-            rank: d.nodes.iter().map(|n| n.rank).collect(),
-            mark: d.nodes.iter().map(|n| n.mark).collect(),
-            priority: d.nodes.iter().map(|n| n.priority).collect(),
-            low: d.nodes.iter().map(|n| n.low).collect(),
-            lim: d.nodes.iter().map(|n| n.lim).collect(),
-            par: d.nodes.iter().map(|n| n.par).collect(),
-            subtree: d.nodes.iter().map(|n| n.subtree).collect(),
-            incoming,
-            outgoing,
-            tail: d.edges.iter().map(|e| e.tail).collect(),
-            head: d.edges.iter().map(|e| e.head).collect(),
-            minlen: d.edges.iter().map(|e| e.minlen).collect(),
-            weight: d.edges.iter().map(|e| e.weight).collect(),
-            cutvalue: d.edges.iter().map(|e| e.cutvalue).collect(),
-            tree_index: d.edges.iter().map(|e| e.tree_index).collect(),
-            d,
-            g,
+        scratch.resize(d.nodes.len(), d.edges.len());
+        for &n in &scratch.nlist {
+            let node = &d.nodes[n];
+            scratch.rank[n] = node.rank;
+            scratch.mark[n] = node.mark;
+            scratch.priority[n] = node.priority;
+            scratch.low[n] = node.low;
+            scratch.lim[n] = node.lim;
+            scratch.par[n] = node.par;
+            scratch.subtree[n] = node.subtree;
+            scratch.incoming.prepare(n, node.in_.len());
+            scratch.outgoing.prepare(n, node.out.len());
+            scratch.edges.extend_from_slice(&node.in_);
         }
+        for &e in &scratch.edges {
+            let edge = &d.edges[e];
+            scratch.tail[e] = edge.tail;
+            scratch.head[e] = edge.head;
+            scratch.minlen[e] = edge.minlen;
+            scratch.weight[e] = edge.weight;
+            scratch.cutvalue[e] = edge.cutvalue;
+            scratch.tree_index[e] = edge.tree_index;
+        }
+        Self { d, g, scratch }
     }
 
     fn finish(self) {
-        for &n in &self.nlist {
-            let in_start = scratch_get(&self.incoming.offsets, n);
-            let in_len = scratch_get(&self.incoming.tree_len, n);
-            let out_start = scratch_get(&self.outgoing.offsets, n);
-            let out_len = scratch_get(&self.outgoing.tree_len, n);
-            let tree_in = self
-                .incoming
-                .tree
-                .get(in_start..in_start.wrapping_add(in_len))
-                .unwrap_or_default();
-            let tree_out = self
-                .outgoing
-                .tree
-                .get(out_start..out_start.wrapping_add(out_len))
-                .unwrap_or_default();
-            let Some(node) = self.d.nodes.get_mut(n) else {
-                continue;
-            };
-            node.rank = scratch_get(&self.rank, n);
-            node.mark = scratch_get(&self.mark, n);
-            node.priority = scratch_get(&self.priority, n);
-            node.low = scratch_get(&self.low, n);
-            node.lim = scratch_get(&self.lim, n);
-            node.par = scratch_get(&self.par, n);
-            node.subtree = scratch_get(&self.subtree, n);
+        for &n in &self.scratch.nlist {
+            let tree_in = self.scratch.incoming.edges(n);
+            let tree_out = self.scratch.outgoing.edges(n);
+            let node = &mut self.d.nodes[n];
+            node.rank = self.scratch.rank[n];
+            node.mark = self.scratch.mark[n];
+            node.priority = self.scratch.priority[n];
+            node.low = self.scratch.low[n];
+            node.lim = self.scratch.lim[n];
+            node.par = self.scratch.par[n];
+            node.subtree = self.scratch.subtree[n];
             node.tree_in.clear();
             node.tree_in.extend_from_slice(tree_in);
             node.tree_out.clear();
             node.tree_out.extend_from_slice(tree_out);
         }
-        for (i, edge) in self.d.edges.iter_mut().enumerate() {
-            edge.cutvalue = scratch_get(&self.cutvalue, i);
-            edge.tree_index = scratch_get(&self.tree_index, i);
+        for &e in &self.scratch.edges {
+            let edge = &mut self.d.edges[e];
+            edge.cutvalue = self.scratch.cutvalue[e];
+            edge.tree_index = self.scratch.tree_index[e];
         }
-    }
-
-    fn tree_remove(tree: &mut [E], offsets: &[usize], lens: &mut [usize], n: usize, e: E) {
-        let start = scratch_get(offsets, n);
-        let len = scratch_get(lens, n);
-        let end = start.wrapping_add(len);
-        if let Some(i) = tree
-            .get(start..end)
-            .and_then(|list| list.iter().position(|&x| x == e))
-        {
-            tree.swap(
-                start.wrapping_add(i),
-                start.wrapping_add(len.wrapping_sub(1)),
-            );
-            scratch_set(lens, n, len.wrapping_sub(1));
-        }
-    }
-
-    fn tree_clear(lens: &mut [usize], n: usize) {
-        scratch_set(lens, n, 0);
     }
 }
 
 impl NsGraph for DotNs<'_, '_> {
-    fn nlist(&self) -> Vec<usize> {
-        self.nlist.clone()
+    fn nlist(&self) -> &[usize] {
+        &self.scratch.nlist
     }
     fn attr(&self, name: &str) -> Option<String> {
         self.d.agget(self.g, name).map(str::to_string)
@@ -177,43 +218,43 @@ impl NsGraph for DotNs<'_, '_> {
         }
     }
     fn rank(&self, n: usize) -> i32 {
-        scratch_get(&self.rank, n)
+        self.scratch.rank[n]
     }
     fn set_rank(&mut self, n: usize, r: i32) {
-        scratch_set(&mut self.rank, n, r);
+        self.scratch.rank[n] = r;
     }
     fn set_mark(&mut self, n: usize, m: bool) {
-        scratch_set(&mut self.mark, n, m as usize);
+        self.scratch.mark[n] = m as usize;
     }
     fn priority(&self, n: usize) -> i32 {
-        scratch_get(&self.priority, n)
+        self.scratch.priority[n]
     }
     fn set_priority(&mut self, n: usize, p: i32) {
-        scratch_set(&mut self.priority, n, p);
+        self.scratch.priority[n] = p;
     }
     fn low(&self, n: usize) -> i32 {
-        scratch_get(&self.low, n)
+        self.scratch.low[n]
     }
     fn set_low(&mut self, n: usize, v: i32) {
-        scratch_set(&mut self.low, n, v);
+        self.scratch.low[n] = v;
     }
     fn lim(&self, n: usize) -> i32 {
-        scratch_get(&self.lim, n)
+        self.scratch.lim[n]
     }
     fn set_lim(&mut self, n: usize, v: i32) {
-        scratch_set(&mut self.lim, n, v);
+        self.scratch.lim[n] = v;
     }
     fn par(&self, n: usize) -> Option<usize> {
-        scratch_get(&self.par, n)
+        self.scratch.par[n]
     }
     fn set_par(&mut self, n: usize, e: Option<usize>) {
-        scratch_set(&mut self.par, n, e);
+        self.scratch.par[n] = e;
     }
     fn subtree(&self, n: usize) -> Option<usize> {
-        scratch_get(&self.subtree, n)
+        self.scratch.subtree[n]
     }
     fn set_subtree(&mut self, n: usize, s: Option<usize>) {
-        scratch_set(&mut self.subtree, n, s);
+        self.scratch.subtree[n] = s;
     }
     fn in_edges(&self, n: usize) -> &[usize] {
         &self.d.nodes[n].in_
@@ -222,74 +263,52 @@ impl NsGraph for DotNs<'_, '_> {
         &self.d.nodes[n].out
     }
     fn tree_in(&self, n: usize) -> &[usize] {
-        let start = scratch_get(&self.incoming.offsets, n);
-        let len = scratch_get(&self.incoming.tree_len, n);
-        &self.incoming.tree[start..start.wrapping_add(len)]
+        self.scratch.incoming.edges(n)
     }
     fn tree_out(&self, n: usize) -> &[usize] {
-        let start = scratch_get(&self.outgoing.offsets, n);
-        let len = scratch_get(&self.outgoing.tree_len, n);
-        &self.outgoing.tree[start..start.wrapping_add(len)]
+        self.scratch.outgoing.edges(n)
     }
-    fn tree_in_push(&mut self, n: usize, e: usize) {
-        let len = scratch_get(&self.incoming.tree_len, n);
-        let i = scratch_get(&self.incoming.offsets, n).wrapping_add(len);
-        scratch_set(&mut self.incoming.tree, i, e);
-        scratch_set(&mut self.incoming.tree_len, n, len.wrapping_add(1));
+    fn tree_in_push(&mut self, n: usize, e: usize) -> bool {
+        self.scratch.incoming.push(n, e)
     }
-    fn tree_out_push(&mut self, n: usize, e: usize) {
-        let len = scratch_get(&self.outgoing.tree_len, n);
-        let i = scratch_get(&self.outgoing.offsets, n).wrapping_add(len);
-        scratch_set(&mut self.outgoing.tree, i, e);
-        scratch_set(&mut self.outgoing.tree_len, n, len.wrapping_add(1));
+    fn tree_out_push(&mut self, n: usize, e: usize) -> bool {
+        self.scratch.outgoing.push(n, e)
     }
     fn tree_in_remove(&mut self, n: usize, e: usize) {
-        Self::tree_remove(
-            &mut self.incoming.tree,
-            &self.incoming.offsets,
-            &mut self.incoming.tree_len,
-            n,
-            e,
-        );
+        self.scratch.incoming.remove(n, e);
     }
     fn tree_out_remove(&mut self, n: usize, e: usize) {
-        Self::tree_remove(
-            &mut self.outgoing.tree,
-            &self.outgoing.offsets,
-            &mut self.outgoing.tree_len,
-            n,
-            e,
-        );
+        self.scratch.outgoing.remove(n, e);
     }
     fn tree_in_clear(&mut self, n: usize) {
-        Self::tree_clear(&mut self.incoming.tree_len, n);
+        self.scratch.incoming.clear(n);
     }
     fn tree_out_clear(&mut self, n: usize) {
-        Self::tree_clear(&mut self.outgoing.tree_len, n);
+        self.scratch.outgoing.clear(n);
     }
     fn tail(&self, e: usize) -> usize {
-        scratch_get(&self.tail, e)
+        self.scratch.tail[e]
     }
     fn head(&self, e: usize) -> usize {
-        scratch_get(&self.head, e)
+        self.scratch.head[e]
     }
     fn minlen(&self, e: usize) -> i32 {
-        scratch_get(&self.minlen, e)
+        self.scratch.minlen[e]
     }
     fn weight(&self, e: usize) -> i32 {
-        scratch_get(&self.weight, e)
+        self.scratch.weight[e]
     }
     fn cutvalue(&self, e: usize) -> i32 {
-        scratch_get(&self.cutvalue, e)
+        self.scratch.cutvalue[e]
     }
     fn set_cutvalue(&mut self, e: usize, v: i32) {
-        scratch_set(&mut self.cutvalue, e, v);
+        self.scratch.cutvalue[e] = v;
     }
     fn tree_index(&self, e: usize) -> i32 {
-        scratch_get(&self.tree_index, e)
+        self.scratch.tree_index[e]
     }
     fn set_tree_index(&mut self, e: usize, v: i32) {
-        scratch_set(&mut self.tree_index, e, v);
+        self.scratch.tree_index[e] = v;
     }
 }
 
@@ -302,9 +321,14 @@ impl Dot<'_> {
         maxiter: i32,
         search_size: i32,
     ) -> Result<i32, String> {
-        let mut ns = DotNs::new(self, g);
-        let result = ns::rank2(&mut ns, balance, maxiter, search_size);
-        ns.finish();
+        let mut scratch = std::mem::take(&mut self.ns_scratch);
+        let result = {
+            let mut ns = DotNs::new(self, g, &mut scratch);
+            let result = ns::rank2(&mut ns, balance, maxiter, search_size);
+            ns.finish();
+            result
+        };
+        self.ns_scratch = scratch;
         result
     }
 
@@ -315,5 +339,69 @@ impl Dot<'_> {
             None => SEARCHSIZE,
         };
         self.rank2(g, balance, maxiter, search_size)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use graphviz_pure_core::{Graph, GraphKind};
+
+    #[test]
+    fn tree_list_preserves_swap_remove_order_and_capacity() {
+        let mut adjacency = Adjacency::default();
+        adjacency.resize_nodes(1);
+        adjacency.prepare(0, 3);
+        for e in [10, 20, 30] {
+            assert!(adjacency.push(0, e));
+        }
+        assert!(!adjacency.push(0, 40));
+        adjacency.remove(0, 20);
+        assert_eq!(adjacency.edges(0), &[10, 30]);
+    }
+
+    #[test]
+    fn rank_error_still_writes_back_scratch() {
+        let input = Graph::new("G", GraphKind::Directed, false);
+        let mut d = Dot::empty(&input);
+        d.graphs.push(GraphInfo {
+            nlist: Some(0),
+            ..GraphInfo::default()
+        });
+        d.nodes = vec![NodeInfo::default(); 4];
+        for (i, node) in d.nodes.iter_mut().enumerate() {
+            node.node_type = NORMAL;
+            node.next = (i < 3).then_some(i + 1);
+        }
+        d.nodes[0].out = vec![0, 1];
+        d.nodes[1].in_ = vec![0];
+        d.nodes[1].out = vec![2];
+        d.nodes[2].in_ = vec![1];
+        d.nodes[2].out = vec![3];
+        d.nodes[3].in_ = vec![2, 3];
+        for (tail, head) in [(0, 1), (0, 2), (1, 3), (2, 3)] {
+            d.edges.push(EdgeInfo {
+                tail,
+                head,
+                minlen: 1,
+                weight: 2_000_000_000,
+                ..EdgeInfo::default()
+            });
+        }
+
+        let result = d.rank2(0, 0, i32::MAX, SEARCHSIZE);
+        assert_eq!(result, Err(ns::OVERFLOW_EDGE_WEIGHT_SUM.to_string()));
+        for (i, node) in d.nodes.iter().enumerate() {
+            assert_eq!(node.rank, d.ns_scratch.rank[i]);
+            assert_eq!(node.low, d.ns_scratch.low[i]);
+            assert_eq!(node.lim, d.ns_scratch.lim[i]);
+            assert_eq!(node.par, d.ns_scratch.par[i]);
+            assert_eq!(node.tree_in.as_slice(), d.ns_scratch.incoming.edges(i));
+            assert_eq!(node.tree_out.as_slice(), d.ns_scratch.outgoing.edges(i));
+        }
+        for (i, edge) in d.edges.iter().enumerate() {
+            assert_eq!(edge.cutvalue, d.ns_scratch.cutvalue[i]);
+            assert_eq!(edge.tree_index, d.ns_scratch.tree_index[i]);
+        }
     }
 }

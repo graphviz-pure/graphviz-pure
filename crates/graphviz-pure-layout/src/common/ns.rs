@@ -27,7 +27,7 @@ pub const SEARCHSIZE: i32 = 30;
 /// indices; `nlist` is `GD_nlist(g)` in order.
 pub trait NsGraph {
     /// `GD_nlist(g)` walked via `ND_next`.
-    fn nlist(&self) -> Vec<usize>;
+    fn nlist(&self) -> &[usize];
     /// `agget(g, name)` on the graph being ranked.
     fn attr(&self, name: &str) -> Option<String>;
     /// `ND_node_type(n) == NORMAL`.
@@ -59,8 +59,8 @@ pub trait NsGraph {
     fn out_edges(&self, n: usize) -> &[usize];
     fn tree_in(&self, n: usize) -> &[usize];
     fn tree_out(&self, n: usize) -> &[usize];
-    fn tree_in_push(&mut self, n: usize, e: usize);
-    fn tree_out_push(&mut self, n: usize, e: usize);
+    fn tree_in_push(&mut self, n: usize, e: usize) -> bool;
+    fn tree_out_push(&mut self, n: usize, e: usize) -> bool;
     fn tree_in_remove(&mut self, n: usize, e: usize);
     fn tree_out_remove(&mut self, n: usize, e: usize);
     fn tree_in_clear(&mut self, n: usize);
@@ -111,8 +111,8 @@ pub struct NsEdge {
 }
 
 impl NsGraph for NsData {
-    fn nlist(&self) -> Vec<usize> {
-        self.nlist.clone()
+    fn nlist(&self) -> &[usize] {
+        &self.nlist
     }
     fn attr(&self, _name: &str) -> Option<String> {
         None
@@ -171,35 +171,25 @@ impl NsGraph for NsData {
     fn tree_out(&self, n: usize) -> &[usize] {
         &self.nodes[n].tree_out
     }
-    fn tree_in_push(&mut self, n: usize, e: usize) {
-        if let Some(node) = self.nodes.get_mut(n) {
-            node.tree_in.push(e);
-        }
+    fn tree_in_push(&mut self, n: usize, e: usize) -> bool {
+        self.nodes[n].tree_in.push(e);
+        true
     }
-    fn tree_out_push(&mut self, n: usize, e: usize) {
-        if let Some(node) = self.nodes.get_mut(n) {
-            node.tree_out.push(e);
-        }
+    fn tree_out_push(&mut self, n: usize, e: usize) -> bool {
+        self.nodes[n].tree_out.push(e);
+        true
     }
     fn tree_in_remove(&mut self, n: usize, e: usize) {
-        if let Some(node) = self.nodes.get_mut(n) {
-            zapinlist(&mut node.tree_in, e);
-        }
+        zapinlist(&mut self.nodes[n].tree_in, e);
     }
     fn tree_out_remove(&mut self, n: usize, e: usize) {
-        if let Some(node) = self.nodes.get_mut(n) {
-            zapinlist(&mut node.tree_out, e);
-        }
+        zapinlist(&mut self.nodes[n].tree_out, e);
     }
     fn tree_in_clear(&mut self, n: usize) {
-        if let Some(node) = self.nodes.get_mut(n) {
-            node.tree_in.clear();
-        }
+        self.nodes[n].tree_in.clear();
     }
     fn tree_out_clear(&mut self, n: usize) {
-        if let Some(node) = self.nodes.get_mut(n) {
-            node.tree_out.clear();
-        }
+        self.nodes[n].tree_out.clear();
     }
     fn tail(&self, e: usize) -> usize {
         self.edges[e].tail
@@ -289,15 +279,13 @@ fn add_tree_edge<G: NsGraph + ?Sized>(g: &mut G, ctx: &mut Ctx, e: usize) -> i32
     ctx.tree_edge.push(e);
     let t = g.tail(e);
     g.set_mark(t, true);
-    g.tree_out_push(t, e);
-    if g.out_edges(t).len() < g.tree_out(t).len() {
+    if !g.tree_out_push(t, e) || g.out_edges(t).len() < g.tree_out(t).len() {
         graphviz_pure_core::diag::agerrorf("add_tree_edge: empty outedge list\n");
         return -1;
     }
     let h = g.head(e);
     g.set_mark(h, true);
-    g.tree_in_push(h, e);
-    if g.in_edges(h).len() < g.tree_in(h).len() {
+    if !g.tree_in_push(h, e) || g.in_edges(h).len() < g.tree_in(h).len() {
         graphviz_pure_core::diag::agerrorf("add_tree_edge: empty inedge list\n");
         return -1;
     }
@@ -341,7 +329,7 @@ fn exchange_tree_edges<G: NsGraph + ?Sized>(g: &mut G, ctx: &mut Ctx, e: usize, 
 
 fn init_rank<G: NsGraph + ?Sized>(g: &mut G) {
     let mut q = std::collections::VecDeque::new();
-    for v in g.nlist() {
+    for v in g.nlist().to_vec() {
         if g.priority(v) == 0 {
             q.push_back(v);
         }
@@ -370,7 +358,7 @@ fn init_rank<G: NsGraph + ?Sized>(g: &mut G) {
     let nlist = g.nlist();
     if ctr != nlist.len() {
         graphviz_pure_core::diag::agerrorf("trouble in init_rank\n");
-        for v in nlist {
+        for &v in nlist {
             if g.priority(v) != 0 {
                 graphviz_pure_core::diag::agerr_prev(&format!(
                     "\t{} {}\n",
@@ -832,7 +820,7 @@ fn merge_trees<G: NsGraph + ?Sized>(g: &mut G, ctx: &mut Ctx, e: usize) -> Optio
 }
 
 fn feasible_tree<G: NsGraph + ?Sized>(g: &mut G, ctx: &mut Ctx) -> Result<i32, String> {
-    let nl = g.nlist();
+    let nl = g.nlist().to_vec();
     for &n in &nl {
         g.set_subtree(n, None);
     }
@@ -977,7 +965,7 @@ fn update<G: NsGraph + ?Sized>(g: &mut G, ctx: &mut Ctx, e: usize, f: usize) -> 
 fn scan_and_normalize<G: NsGraph + ?Sized>(g: &mut G) -> i32 {
     let mut minrank = i32::MAX;
     let mut maxrank = i32::MIN;
-    let nl = g.nlist();
+    let nl = g.nlist().to_vec();
     for &n in &nl {
         if g.is_normal(n) {
             minrank = minrank.min(g.rank(n));
@@ -992,7 +980,7 @@ fn scan_and_normalize<G: NsGraph + ?Sized>(g: &mut G) -> i32 {
 }
 
 fn free_tree_list<G: NsGraph + ?Sized>(g: &mut G, ctx: &mut Ctx) {
-    for n in g.nlist() {
+    for n in g.nlist().to_vec() {
         g.tree_in_clear(n);
         g.tree_out_clear(n);
         g.set_mark(n, false);
@@ -1036,7 +1024,7 @@ fn tb_balance<G: NsGraph + ?Sized>(g: &mut G) -> Result<(), String> {
             adj = 2;
         }
         if adj != 0 {
-            for n in g.nlist() {
+            for n in g.nlist().to_vec() {
                 if g.is_normal(n) {
                     if g.in_edges(n).is_empty() && adj == 1 {
                         g.set_rank(n, 0);
@@ -1050,7 +1038,7 @@ fn tb_balance<G: NsGraph + ?Sized>(g: &mut G) -> Result<(), String> {
     }
     let nsz = (maxrank.max(0) as usize) + 1;
     let mut nrank = vec![0i32; nsz];
-    let mut tree_node = g.nlist();
+    let mut tree_node = g.nlist().to_vec();
     let dump = std::env::var_os("GVDUMP").is_some();
     let dump_line = |g: &G, tag: &str, nodes: &[usize]| {
         let mut l = String::from(tag);
@@ -1149,7 +1137,7 @@ fn tb_balance<G: NsGraph + ?Sized>(g: &mut G) -> Result<(), String> {
 }
 
 fn init_graph<G: NsGraph + ?Sized>(g: &mut G) -> bool {
-    let nl = g.nlist();
+    let nl = g.nlist().to_vec();
     for &n in &nl {
         g.set_mark(n, false);
     }

@@ -11,6 +11,8 @@ Shapes:
   graph has long ranks and crossings to remove; every 7th node has a label of two words.
 - sparse_N (neato, fdp, sfdp, circo): a random spanning tree plus N/2 extra edges.
 - tree_N (twopi): a random tree, each node's parent among the previous nodes.
+- components_N (dot): N independent two-node components.
+- small_clusters_N (dot): N independent clusters containing one two-node component each.
 - clustered_N (osage, patchwork): N nodes in nested clusters of about 20.
 """
 import argparse
@@ -64,6 +66,22 @@ def tree(n, engine="twopi"):
     return "\n".join(out) + "\n"
 
 
+def components(n):
+    out = [f"digraph components_{n} {{", "layout=dot;"]
+    for i in range(n):
+        out.append(f"a{i} -> b{i};")
+    out.append("}")
+    return "\n".join(out) + "\n"
+
+
+def small_clusters(n):
+    out = [f"digraph small_clusters_{n} {{", "layout=dot;"]
+    for i in range(n):
+        out.append(f"subgraph cluster_{i} {{ a{i} -> b{i}; }}")
+    out.append("}")
+    return "\n".join(out) + "\n"
+
+
 def clustered(n, engine):
     r = Lcg(n * 13)
     out = [f"graph clustered_{n} {{", f"layout={engine};"]
@@ -94,6 +112,9 @@ for n in (1000, 5000, 20000):
     GRAPHS[f"twopi_tree_{n}"] = lambda n=n: tree(n)
     GRAPHS[f"osage_clustered_{n}"] = lambda n=n: clustered(n, "osage")
     GRAPHS[f"patchwork_clustered_{n}"] = lambda n=n: clustered(n, "patchwork")
+for n in (1000, 3000, 10000):
+    GRAPHS[f"dot_components_{n}"] = lambda n=n: components(n)
+    GRAPHS[f"dot_small_clusters_{n}"] = lambda n=n: small_clusters(n)
 # circo, fdp and neato grow much faster than linearly (circo_sparse_1000 takes the port 130 s
 # and C more than 8 minutes), so their curves stop lower.
 for n in (100, 200, 400):
