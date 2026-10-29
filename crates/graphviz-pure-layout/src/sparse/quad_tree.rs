@@ -101,8 +101,9 @@ fn span(i: usize, dim: usize) -> Range<usize> {
 
 impl QuadTree {
     /// Appends a cell whose center the caller has just pushed onto `center`.
-    fn push_cell(&mut self, width: f64) -> usize {
+    fn push_cell<const DIM: usize>(&mut self, width: f64) -> usize {
         debug_assert!(width > 0.0);
+        let dim = if DIM == 0 { self.dim } else { DIM };
         let q = self.cells.len();
         self.cells.push(Cell {
             n: 0,
@@ -111,8 +112,8 @@ impl QuadTree {
             qts: None,
             l: None,
         });
-        self.average.extend(iter::repeat_n(0.0, self.dim));
-        self.force.extend(iter::repeat_n(0.0, self.dim));
+        self.average.extend(iter::repeat_n(0.0, dim));
+        self.force.extend(iter::repeat_n(0.0, dim));
         q
     }
 
@@ -125,7 +126,7 @@ impl QuadTree {
             ..QuadTree::default()
         };
         q.center.extend_from_slice(&center[..dim]);
-        q.push_cell(width);
+        q.push_cell::<0>(width);
         q
     }
 
@@ -139,6 +140,23 @@ impl QuadTree {
     /// `QuadTree_new_from_point_list(dim, n, max_level, coord)` into this
     /// tree's arenas, replacing the tree.
     pub fn rebuild_from_point_list(&mut self, dim: usize, n: usize, max_level: i32, coord: &[f64]) {
+        if dim == 2 {
+            self.rebuild_dim::<2>(dim, n, max_level, coord);
+        } else {
+            self.rebuild_dim::<0>(dim, n, max_level, coord);
+        }
+    }
+
+    /// C: lib/sparse/QuadTree.c:QuadTree_new_from_point_list
+    /// DIM=0 retains arbitrary dimensions; DIM=2 makes the ordinary cell spans fixed.
+    fn rebuild_dim<const DIM: usize>(
+        &mut self,
+        dim: usize,
+        n: usize,
+        max_level: i32,
+        coord: &[f64],
+    ) {
+        let dim = if DIM == 0 { dim } else { DIM };
         self.dim = dim;
         self.nq = 1 << dim;
         self.max_level = max_level;
@@ -167,16 +185,16 @@ impl QuadTree {
         }
         width = width.max(0.00001);
         width *= 0.52;
-        self.push_cell(width);
+        self.push_cell::<DIM>(width);
         for i in 0..n {
-            self.add(&coord[span(i, dim)], 1.0, i);
+            self.add_dim::<DIM>(&coord[span(i, dim)], 1.0, i);
         }
     }
 
     /// `QuadTree_get_quadrant(dim, center, coord)` for the point `p` in the
     /// cell `q`.
-    fn get_quadrant(&self, q: usize, p: usize) -> usize {
-        let dim = self.dim;
+    fn get_quadrant<const DIM: usize>(&self, q: usize, p: usize) -> usize {
+        let dim = if DIM == 0 { self.dim } else { DIM };
         let center = &self.center[span(q, dim)];
         let coord = &self.coords[span(p, dim)];
         let mut d = 0usize;
@@ -192,8 +210,9 @@ impl QuadTree {
 
     /// `QuadTree_new_in_quadrant(dim, center, width, max_level, i)` with the
     /// center of the cell `q`.
-    fn new_in_quadrant(&mut self, q: usize, width: f64, mut i: usize) -> usize {
-        for k in span(q, self.dim) {
+    fn new_in_quadrant<const DIM: usize>(&mut self, q: usize, width: f64, mut i: usize) -> usize {
+        let dim = if DIM == 0 { self.dim } else { DIM };
+        for k in span(q, dim) {
             let c = self.center[k];
             self.center.push(if i.is_multiple_of(2) {
                 c - width
@@ -202,17 +221,23 @@ impl QuadTree {
             });
             i = (i - i % 2) / 2;
         }
-        self.push_cell(width)
+        self.push_cell::<DIM>(width)
     }
 
     /// The child of the cell `q`, whose children start at `first`, in the
     /// quadrant of the point `p`, created with width `half` if missing.
-    fn child_for(&mut self, q: usize, first: usize, p: usize, half: f64) -> usize {
-        let ii = self.get_quadrant(q, p);
+    fn child_for<const DIM: usize>(
+        &mut self,
+        q: usize,
+        first: usize,
+        p: usize,
+        half: f64,
+    ) -> usize {
+        let ii = self.get_quadrant::<DIM>(q, p);
         match self.children[first..][ii] {
             Some(c) => c,
             None => {
-                let c = self.new_in_quadrant(q, half, ii);
+                let c = self.new_in_quadrant::<DIM>(q, half, ii);
                 self.children[first..][ii] = Some(c);
                 c
             }
@@ -221,8 +246,8 @@ impl QuadTree {
 
     /// `QuadTree_add_internal(q, coord, weight, id, level)` for the point `p`
     /// of the arena.
-    fn add_internal(&mut self, q: usize, p: usize, level: i32) {
-        let dim = self.dim;
+    fn add_internal<const DIM: usize>(&mut self, q: usize, p: usize, level: i32) {
+        let dim = if DIM == 0 { self.dim } else { DIM };
         // C checks that `coord` is inside the box but only reports it.
         let _ = MACHINEACC;
         let weight = self.points[p].node_weight;
@@ -252,12 +277,12 @@ impl QuadTree {
                 }
             };
             let half = c.width / 2.0;
-            let child = self.child_for(q, first, p, half);
-            self.add_internal(child, p, level + 1);
+            let child = self.child_for::<DIM>(q, first, p, half);
+            self.add_internal::<DIM>(child, p, level + 1);
             if let Some(old) = self.cells[q].l.take() {
                 debug_assert_eq!(self.cells[q].n, 1);
-                let child = self.child_for(q, first, old, half);
-                self.add_internal(child, old, level + 1);
+                let child = self.child_for::<DIM>(q, first, old, half);
+                self.add_internal::<DIM>(child, old, level + 1);
             }
             self.cells[q].n += 1;
         } else {
@@ -277,14 +302,24 @@ impl QuadTree {
 
     /// `QuadTree_add(q, coord, weight, id)`.
     pub fn add(&mut self, coord: &[f64], weight: f64, id: usize) {
+        if self.dim == 2 {
+            self.add_dim::<2>(coord, weight, id);
+        } else {
+            self.add_dim::<0>(coord, weight, id);
+        }
+    }
+
+    /// C: lib/sparse/QuadTree.c:QuadTree_add
+    fn add_dim<const DIM: usize>(&mut self, coord: &[f64], weight: f64, id: usize) {
+        let dim = if DIM == 0 { self.dim } else { DIM };
         let p = self.points.len();
-        self.coords.extend_from_slice(&coord[..self.dim]);
+        self.coords.extend_from_slice(&coord[..dim]);
         self.points.push(NodeData {
             node_weight: weight,
             id,
             next: None,
         });
-        self.add_internal(0, p, 0);
+        self.add_internal::<DIM>(0, p, 0);
     }
 
     /// The children of a cell whose first child slot is `first`.
@@ -600,6 +635,272 @@ mod supernode_tests {
                         ),
                         capacity
                     );
+                }
+            }
+        }
+    }
+}
+
+// Test-only pre-specialization build methods. Apart from the reference_ prefix,
+// these are the old builder; they do not invoke the specialized build chain.
+#[cfg(test)]
+impl QuadTree {
+    fn reference_push_cell(&mut self, width: f64) -> usize {
+        debug_assert!(width > 0.0);
+        let q = self.cells.len();
+        self.cells.push(Cell {
+            n: 0,
+            total_weight: 0.0,
+            width,
+            qts: None,
+            l: None,
+        });
+        self.average.extend(iter::repeat_n(0.0, self.dim));
+        self.force.extend(iter::repeat_n(0.0, self.dim));
+        q
+    }
+
+    fn reference_rebuild_from_point_list(
+        &mut self,
+        dim: usize,
+        n: usize,
+        max_level: i32,
+        coord: &[f64],
+    ) {
+        self.dim = dim;
+        self.nq = 1 << dim;
+        self.max_level = max_level;
+        self.cells.clear();
+        self.center.clear();
+        self.average.clear();
+        self.force.clear();
+        self.children.clear();
+        self.points.clear();
+        self.coords.clear();
+        self.bounds.clear();
+        self.bounds.extend_from_slice(&coord[..dim]);
+        self.bounds.extend_from_slice(&coord[..dim]);
+        let (xmin, xmax) = self.bounds.split_at_mut(dim);
+        for i in 1..n {
+            let pt = &coord[span(i, dim)];
+            for k in 0..dim {
+                xmin[k] = xmin[k].min(pt[k]);
+                xmax[k] = xmax[k].max(pt[k]);
+            }
+        }
+        let mut width = xmax[0] - xmin[0];
+        for i in 0..dim {
+            self.center.push((xmin[i] + xmax[i]) * 0.5);
+            width = width.max(xmax[i] - xmin[i]);
+        }
+        width = width.max(0.00001);
+        width *= 0.52;
+        self.reference_push_cell(width);
+        for i in 0..n {
+            self.reference_add(&coord[span(i, dim)], 1.0, i);
+        }
+    }
+
+    /// `QuadTree_get_quadrant(dim, center, coord)` for the point `p` in the
+    /// cell `q`.
+    fn reference_get_quadrant(&self, q: usize, p: usize) -> usize {
+        let dim = self.dim;
+        let center = &self.center[span(q, dim)];
+        let coord = &self.coords[span(p, dim)];
+        let mut d = 0usize;
+        for i in (0..dim).rev() {
+            if coord[i] - center[i] < 0.0 {
+                d *= 2;
+            } else {
+                d = 2 * d + 1;
+            }
+        }
+        d
+    }
+
+    /// `QuadTree_new_in_quadrant(dim, center, width, max_level, i)` with the
+    /// center of the cell `q`.
+    fn reference_new_in_quadrant(&mut self, q: usize, width: f64, mut i: usize) -> usize {
+        for k in span(q, self.dim) {
+            let c = self.center[k];
+            self.center.push(if i.is_multiple_of(2) {
+                c - width
+            } else {
+                c + width
+            });
+            i = (i - i % 2) / 2;
+        }
+        self.reference_push_cell(width)
+    }
+
+    /// The child of the cell `q`, whose children start at `first`, in the
+    /// quadrant of the point `p`, created with width `half` if missing.
+    fn reference_child_for(&mut self, q: usize, first: usize, p: usize, half: f64) -> usize {
+        let ii = self.reference_get_quadrant(q, p);
+        match self.children[first..][ii] {
+            Some(c) => c,
+            None => {
+                let c = self.reference_new_in_quadrant(q, half, ii);
+                self.children[first..][ii] = Some(c);
+                c
+            }
+        }
+    }
+
+    /// `QuadTree_add_internal(q, coord, weight, id, level)` for the point `p`
+    /// of the arena.
+    fn reference_add_internal(&mut self, q: usize, p: usize, level: i32) {
+        let dim = self.dim;
+        // C checks that `coord` is inside the box but only reports it.
+        let _ = MACHINEACC;
+        let weight = self.points[p].node_weight;
+        let coord = &self.coords[span(p, dim)];
+        let average = &mut self.average[span(q, dim)];
+        if self.cells[q].n == 0 {
+            let c = &mut self.cells[q];
+            c.n = 1;
+            c.total_weight = weight;
+            average.copy_from_slice(coord);
+            self.points[p].next = None;
+            c.l = Some(p);
+        } else if level < self.max_level {
+            let c = &mut self.cells[q];
+            c.total_weight += weight;
+            let n = f64::from(c.n);
+            for i in 0..dim {
+                average[i] = average[i].mul_add(n, coord[i]) / (n + 1.0);
+            }
+            let first = match c.qts {
+                Some(first) => first,
+                None => {
+                    let first = self.children.len();
+                    self.children.extend(iter::repeat_n(None, self.nq));
+                    c.qts = Some(first);
+                    first
+                }
+            };
+            let half = c.width / 2.0;
+            let child = self.reference_child_for(q, first, p, half);
+            self.reference_add_internal(child, p, level + 1);
+            if let Some(old) = self.cells[q].l.take() {
+                debug_assert_eq!(self.cells[q].n, 1);
+                let child = self.reference_child_for(q, first, old, half);
+                self.reference_add_internal(child, old, level + 1);
+            }
+            self.cells[q].n += 1;
+        } else {
+            let c = &mut self.cells[q];
+            debug_assert!(c.qts.is_none());
+            c.n += 1;
+            c.total_weight += weight;
+            // C increments n before averaging with n + 1.
+            let n = f64::from(c.n);
+            for i in 0..dim {
+                average[i] = average[i].mul_add(n, coord[i]) / (n + 1.0);
+            }
+            self.points[p].next = c.l;
+            c.l = Some(p);
+        }
+    }
+
+    /// `QuadTree_add(q, coord, weight, id)`.
+    fn reference_add(&mut self, coord: &[f64], weight: f64, id: usize) {
+        let p = self.points.len();
+        self.coords.extend_from_slice(&coord[..self.dim]);
+        self.points.push(NodeData {
+            node_weight: weight,
+            id,
+            next: None,
+        });
+        self.reference_add_internal(0, p, 0);
+    }
+}
+
+#[cfg(test)]
+mod build_specialization_tests {
+    use super::*;
+
+    fn same_arenas(a: &QuadTree, b: &QuadTree) {
+        assert_eq!((a.dim, a.nq, a.max_level), (b.dim, b.nq, b.max_level));
+        assert_eq!(a.children, b.children);
+        assert_eq!(
+            a.cells
+                .iter()
+                .map(|c| (c.n, c.total_weight.to_bits(), c.width.to_bits(), c.qts, c.l))
+                .collect::<Vec<_>>(),
+            b.cells
+                .iter()
+                .map(|c| (c.n, c.total_weight.to_bits(), c.width.to_bits(), c.qts, c.l))
+                .collect::<Vec<_>>()
+        );
+        assert_eq!(
+            a.points
+                .iter()
+                .map(|p| (p.node_weight.to_bits(), p.id, p.next))
+                .collect::<Vec<_>>(),
+            b.points
+                .iter()
+                .map(|p| (p.node_weight.to_bits(), p.id, p.next))
+                .collect::<Vec<_>>()
+        );
+        for (a, b) in [
+            (&a.center, &b.center),
+            (&a.average, &b.average),
+            (&a.force, &b.force),
+            (&a.coords, &b.coords),
+            (&a.bounds, &b.bounds),
+        ] {
+            assert_eq!(
+                a.iter().map(|x| x.to_bits()).collect::<Vec<_>>(),
+                b.iter().map(|x| x.to_bits()).collect::<Vec<_>>()
+            );
+        }
+    }
+
+    #[test]
+    fn fixed_build_matches_old_builder_field_for_field_and_reuses_arenas() {
+        let mut seed = 0x539a_3b71_f481_220du64;
+        let mut actual = QuadTree::default();
+        let mut expected = QuadTree::default();
+        for dim in [2, 1, 3, 2] {
+            for n in [1, 67, 250] {
+                for depth in [0, 1, 4, 17] {
+                    for scale in [0.0, 1e-150, 1.0, 1e150] {
+                        let coords: Vec<_> = (0..n * dim)
+                            .map(|_| {
+                                seed = seed.wrapping_mul(6364136223846793005).wrapping_add(1);
+                                (((seed >> 32) % 1024) as f64 / 512.0 - 1.0) * scale
+                            })
+                            .collect();
+                        actual.rebuild_from_point_list(dim, n, depth, &coords);
+                        expected.reference_rebuild_from_point_list(dim, n, depth, &coords);
+                        same_arenas(&actual, &expected);
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn fixed_weighted_insertion_keeps_point_relocation_and_leaf_list_order() {
+        for dim in [1, 2, 3] {
+            for depth in [0, 1, 10] {
+                let mut actual = QuadTree::new(dim, &vec![0.0; dim], 2.0, depth);
+                let mut expected = QuadTree::new(dim, &vec![0.0; dim], 2.0, depth);
+                for id in 0..67 {
+                    let pt: Vec<_> = (0..dim)
+                        .map(|k| {
+                            if id % 3 == 0 {
+                                -0.0
+                            } else {
+                                ((id * 17 + k * 7) % 29) as f64 / 15.0 - 1.0
+                            }
+                        })
+                        .collect();
+                    let weight = (id % 5 + 1) as f64 * 0.25;
+                    actual.add(&pt, weight, id);
+                    expected.reference_add(&pt, weight, id);
+                    same_arenas(&actual, &expected);
                 }
             }
         }
