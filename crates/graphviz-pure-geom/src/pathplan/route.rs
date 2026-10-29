@@ -884,13 +884,30 @@ mod tests {
         let rootn = splineintersectsline(&sps, &lps, &mut scratch);
         assert_eq!(rootn, 4);
         assert_eq!(scratch.roots, [0.5; 4]);
-        // The caller's answer is C's: C returns nine roots, checks each of them, finds
-        // that the spline passes through the barrier's point, and says the edge is not
-        // inside; the port skips the edge on the four roots and says the same.
+        // The caller's answer is C's. C loops over all nine roots, reading past its own
+        // array, and each of them hits the `DISTSQ < EPSILON1` continue, so it ends at
+        // `return 1`. The port returns four roots and skips the edge on `rootn == 4`,
+        // which gives the same answer by a different path.
         let edge = Pedge {
             a: Ppoint::new(0.0, 0.0),
             b: Ppoint::new(0.0, 0.0),
         };
         assert!(splineisinside(&[edge], &sps));
+    }
+
+    /// #635: a double root gives five `addroot` calls, one more than C's buffer holds, so
+    /// C writes one double past the end of it and the port keeps the four roots.
+    #[test]
+    fn the_point_barrier_with_a_double_root_keeps_the_four_roots() {
+        // The x and the y coordinates are the same cubic, `512(t - 1/8)^2 (t - 7/8)`,
+        // whose discriminant is exactly zero: `solve3` returns the simple root `7/8` and
+        // the double root `1/8` twice, so the point-barrier branch compares five matching
+        // pairs instead of three.
+        let sps = [-7.0, 33.0, -119.0, 49.0].map(|v| Ppoint::new(v, v));
+        let lps = [Ppoint::new(0.0, 0.0); 2];
+        let mut scratch = SplineScratch::default();
+        let rootn = splineintersectsline(&sps, &lps, &mut scratch);
+        assert_eq!(rootn, 4);
+        assert_eq!(scratch.roots, [0.875, 0.125, 0.125, 0.125]);
     }
 }

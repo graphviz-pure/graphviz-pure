@@ -8,7 +8,7 @@ All notable changes are listed here. The format follows
 
 ### Fixed
 
-- splines no longer panic when a spline passes through a point barrier three times. The root
+- splines no longer panic when a spline meets a point barrier more than four times: the root
   buffer keeps the four roots C's buffer holds, where C writes past the end of its own array
   (#635).
 
