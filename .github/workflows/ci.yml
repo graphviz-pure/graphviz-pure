@@ -435,8 +435,9 @@ jobs:
           fi
 
   # The `parallel` feature is off in verify. This job turns it on for neato's mat-vec,
-  # checks that one thread and four threads render tests/neato to the same bytes, and
-  # refuses the feature on wasm32.
+  # checks that one thread and four threads render the same bytes (tests/neato, plus one
+  # generated 1400-node graph with pinned nodes, which is large enough to take the
+  # parallel kernel), and refuses the feature on wasm32.
   parallel-neato:
     name: Parallel neato bytes
     needs: lookup

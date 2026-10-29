@@ -24,9 +24,11 @@
 //!
 //! Eight chains, not four. One dependent FMA chain retires about one FMA
 //! every four cycles, and four chains were still short of two FMA pipes.
-//! `GRAPHVIZ_PURE_THREADS=1` stays on the sequential kernel. Conjugate
-//! gradient keeps one worker set for the solve; spawning on every mat-vec
-//! was most of the system time.
+//! `GRAPHVIZ_PURE_THREADS=1` stays on the sequential kernel. Unset, the count
+//! is [`DEFAULT_THREADS`], and no count exceeds `available_parallelism`.
+//! Conjugate gradient keeps one worker set for the solve; spawning on every
+//! mat-vec was most of the system time. A spawn the OS refuses runs on the
+//! caller.
 
 use std::ops::Range;
 use std::sync::{Arc, OnceLock, mpsc};
@@ -48,6 +50,13 @@ pub(super) const MAX_N: usize = 8192;
 
 /// Eight independent chains, one per output. Four left the FMA pipes short.
 const BLOCK: usize = 8;
+
+/// Threads used when `GRAPHVIZ_PURE_THREADS` is unset.
+///
+/// Four beat eight on rnd2000-as-neato (4.35 s against 4.58 s median wall).
+/// An explicit count may be higher, and both are capped by
+/// `available_parallelism`.
+const DEFAULT_THREADS: usize = 4;
 
 pub(super) fn use_parallel(n: usize) -> bool {
     (MIN_N..=MAX_N).contains(&n) && configured_threads() > 1
@@ -88,6 +97,10 @@ pub(super) struct MatvecTeam<'a> {
     lower: &'a [f32],
     n: usize,
     ranges: Vec<Range<usize>>,
+    /// Worker chunks that actually spawned, parallel to `txs`.
+    worker_ranges: Vec<Range<usize>>,
+    /// Worker chunks the OS would not spawn. The main thread runs these.
+    inline: Vec<Range<usize>>,
     txs: Vec<mpsc::Sender<Job>>,
     dones: Vec<mpsc::Receiver<Vec<f32>>>,
     slots: Vec<Vec<f32>>,
@@ -117,6 +130,8 @@ pub(super) fn with_team<R>(
             lower,
             n,
             ranges: Vec::new(),
+            worker_ranges: Vec::new(),
+            inline: Vec::new(),
             txs: Vec::new(),
             dones: Vec::new(),
             slots: Vec::new(),
@@ -126,22 +141,35 @@ pub(super) fn with_team<R>(
     }
     let ranges = chunk_ranges(n, threads);
     std::thread::scope(|scope| {
+        let mut joins = Vec::new();
         let mut txs = Vec::new();
         let mut dones = Vec::new();
         let mut slots = Vec::new();
-        for range in ranges.iter().skip(1) {
+        let mut worker_ranges = Vec::new();
+        let mut inline = Vec::new();
+        for range in ranges.iter().skip(1).cloned() {
             let (tx, rx) = mpsc::channel();
             let (done_tx, done_rx) = mpsc::channel();
-            scope.spawn(move || matvec_worker(rx, done_tx, upper, lower, n));
-            txs.push(tx);
-            dones.push(done_rx);
-            slots.push(vec![0.0f32; range.len()]);
+            let handle = super::par::try_spawn(scope, move || {
+                matvec_worker(rx, done_tx, upper, lower, n);
+            });
+            if let Some(handle) = handle {
+                joins.push(handle);
+                slots.push(vec![0.0f32; range.len()]);
+                worker_ranges.push(range);
+                txs.push(tx);
+                dones.push(done_rx);
+            } else {
+                inline.push(range);
+            }
         }
         let mut team = MatvecTeam {
             upper,
             lower,
             n,
             ranges,
+            worker_ranges,
+            inline,
             txs,
             dones,
             slots,
@@ -151,6 +179,9 @@ pub(super) fn with_team<R>(
         for tx in &team.txs {
             let _ = tx.send(Job::Stop);
         }
+        // Join after Stop. Dropping a handle earlier would wait out the worker
+        // before the solve had sent it any work.
+        drop(joins);
         result
     })
 }
@@ -169,7 +200,8 @@ impl MatvecTeam<'_> {
         self.vector_buf[..n].copy_from_slice(&vector[..n]);
         let shared = Arc::new(std::mem::take(&mut self.vector_buf));
         let slots = std::mem::take(&mut self.slots);
-        let worker_ranges: Vec<Range<usize>> = self.ranges.iter().skip(1).cloned().collect();
+        let worker_ranges = self.worker_ranges.clone();
+        let inline = self.inline.clone();
         for (tx, (range, slot)) in self.txs.iter().zip(worker_ranges.iter().zip(slots)) {
             tx.send(Job::Run {
                 j0: range.start,
@@ -190,6 +222,16 @@ impl MatvecTeam<'_> {
             &mut result[main.start..main.end],
             main.start,
         );
+        for range in inline {
+            owned_rows(
+                upper,
+                lower,
+                n,
+                shared.as_slice(),
+                &mut result[range.start..range.end],
+                range.start,
+            );
+        }
         let workers = worker_ranges.len();
         for i in 0..workers {
             let slot = self.dones[i].recv().expect("worker stopped");
@@ -230,8 +272,8 @@ fn matvec_worker(
     }
 }
 
-/// Same split as `graphviz_pure_core::par`. The earliest chunk takes the
-/// remainder, so `n = 10`, `threads = 3` is `4 + 3 + 3`.
+/// Same split as [`super::par`]. The earliest chunk takes the remainder, so
+/// `n = 10`, `threads = 3` is `4 + 3 + 3`.
 fn chunk_ranges(n: usize, threads: usize) -> Vec<Range<usize>> {
     let threads = threads.max(1).min(n.max(1));
     let mut ranges = Vec::with_capacity(threads);
@@ -280,7 +322,7 @@ fn right_mult_with_lower(
     debug_assert!(upper.len() >= n * (n + 1) / 2);
     let vector = &vector[..n];
     let result = &mut result[..n];
-    graphviz_pure_core::par::for_each_chunk_mut(result, threads, |range, slot| {
+    super::par::for_each_chunk_mut(result, threads, |range, slot| {
         owned_rows(upper, lower, n, vector, slot, range.start);
     });
 }
@@ -462,13 +504,15 @@ fn configured_threads() -> usize {
     })
 }
 
-/// `None` uses `available`. `1` is the sequential path. `0` and any other
-/// unreadable value are sequential too, so a bad setting does not spawn.
+/// `None` is [`DEFAULT_THREADS`], capped by `available`. An explicit count is
+/// capped by `available` too. `0` and any other unreadable value are
+/// sequential, so a bad setting does not spawn.
 fn parse_threads(value: Option<&str>, available: usize) -> usize {
+    let available = available.max(1);
     match value {
-        None => available.max(1),
+        None => DEFAULT_THREADS.min(available),
         Some(text) => match text.trim().parse::<usize>() {
-            Ok(count) if count >= 1 => count,
+            Ok(count) if count >= 1 => count.min(available),
             _ => 1,
         },
     }
@@ -480,10 +524,13 @@ mod tests {
 
     #[test]
     fn parse_threads_treats_one_as_sequential_and_rejects_garbage() {
-        assert_eq!(parse_threads(None, 8), 8);
+        assert_eq!(parse_threads(None, 8), DEFAULT_THREADS);
+        assert_eq!(parse_threads(None, 2), 2);
         assert_eq!(parse_threads(None, 0), 1);
         assert_eq!(parse_threads(Some("1"), 8), 1);
         assert_eq!(parse_threads(Some("4"), 8), 4);
+        assert_eq!(parse_threads(Some("8"), 4), 4);
+        assert_eq!(parse_threads(Some("100000"), 8), 8);
         assert_eq!(parse_threads(Some("  3  "), 8), 3);
         assert_eq!(parse_threads(Some("0"), 8), 1);
         assert_eq!(parse_threads(Some(""), 8), 1);
@@ -518,6 +565,49 @@ mod tests {
         });
         for (i, (got, expect)) in via_team.iter().zip(&direct).enumerate() {
             assert_eq!(got.to_bits(), expect.to_bits(), "i={i}");
+        }
+    }
+
+    #[test]
+    fn refused_spawn_matches_the_gather_including_a_nan() {
+        let n = 40;
+        let mut state = 0x51u32;
+        let len = n * (n + 1) / 2;
+        let mut upper: Vec<f32> = (0..len)
+            .map(|_| {
+                state = state.wrapping_mul(1664525).wrapping_add(1013904223);
+                f32::from_bits(state | 0x3f80_0000)
+            })
+            .collect();
+        upper[10] = f32::from_bits(0x7fc0_0001);
+        let mut vector: Vec<f32> = (0..n)
+            .map(|_| {
+                state = state.wrapping_mul(1664525).wrapping_add(1013904223);
+                f32::from_bits(state | 0x3f80_0000)
+            })
+            .collect();
+        vector[4] = f32::from_bits(0x7fc0_0000);
+        let lower = pack_lower(&upper, n);
+        let mut sequential = vec![1.0f32; n];
+        right_mult_ff_with_threads(&upper, n, &vector, &mut sequential, 1);
+        for limit in [0usize, 1] {
+            let _limit = super::super::par::SpawnLimit::at_most(limit);
+            let mut got = vec![1.0f32; n];
+            right_mult_ff_with_threads(&upper, n, &vector, &mut got, 4);
+            for (i, (got, expect)) in got.iter().zip(&sequential).enumerate() {
+                assert_eq!(
+                    got.to_bits(),
+                    expect.to_bits(),
+                    "gather limit={limit} i={i}"
+                );
+            }
+            let mut via_team = vec![1.0f32; n];
+            with_team(&upper, &lower, n, |team| {
+                team.multiply(&vector, &mut via_team);
+            });
+            for (i, (got, expect)) in via_team.iter().zip(&sequential).enumerate() {
+                assert_eq!(got.to_bits(), expect.to_bits(), "team limit={limit} i={i}");
+            }
         }
     }
 
