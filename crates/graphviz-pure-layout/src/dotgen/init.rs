@@ -8,7 +8,7 @@ use super::Dot;
 use super::types::*;
 use super::utils::*;
 use graphviz_pure_core::strtod::{atof, sscanf};
-use graphviz_pure_core::{Graph, GraphKind, Point};
+use graphviz_pure_core::{Graph, GraphKind, GraphvizError, Point};
 
 const GAP: f64 = 4.0;
 
@@ -251,23 +251,24 @@ impl<'a> Dot<'a> {
     }
 
     /// `dot_init_node_edge`
-    pub fn dot_init_node_edge(&mut self) {
+    pub fn dot_init_node_edge(&mut self) -> Result<(), String> {
         let flip = self.graphs[0].flip();
         for n in self.nodes_of(0) {
-            self.dot_init_node(n, flip);
+            self.dot_init_node(n, flip)?;
         }
         for n in self.nodes_of(0) {
             for e in self.out_edges(0, n) {
-                self.dot_init_edge(e);
+                self.dot_init_edge(e)?;
             }
         }
+        Ok(())
     }
 
-    fn dot_init_node(&mut self, n: N, flip: bool) {
+    fn dot_init_node(&mut self, n: N, flip: bool) -> Result<(), String> {
         let r = self.nodes[n].real.unwrap();
         let nd = &self.input.nodes[r];
         let env = graphviz_pure_geom::NodeSizeEnv::from_graph(self.input);
-        let geom = graphviz_pure_geom::node_geometry(nd, &env);
+        let geom = graphviz_pure_geom::node_geometry(nd, &env).map_err(super::fatal)?;
         // lp->text, which addXLabels' -v trace prints
         let xlabel_text = geom.xlabel.as_ref().map(|xl| {
             graphviz_pure_geom::label_text(xl, nd.attrs.get("xlabel").map_or("", String::as_str))
@@ -276,7 +277,7 @@ impl<'a> Dot<'a> {
         let mut sized = nd.clone();
         sized.width = geom.width;
         sized.height = geom.height;
-        let mut shape = crate::common::shapes::NodeShape::new(&sized);
+        let mut shape = crate::common::shapes::NodeShape::new(&sized).map_err(super::fatal)?;
         shape.apply_geometry(&geom);
         let rec_fields = geom
             .record
@@ -298,10 +299,11 @@ impl<'a> Dot<'a> {
             self.nodes[n].xlabel = Some(l);
             self.graphs[0].has_labels |= NODE_XLABEL;
         }
+        Ok(())
     }
 
-    fn dot_init_edge(&mut self, e: E) {
-        self.common_init_edge(e);
+    fn dot_init_edge(&mut self, e: E) -> Result<(), String> {
+        self.common_init_edge(e)?;
         let mut weight = late_int(self.edge_attr(e, "weight"), 1, 0);
         let (t, h) = (self.edges[e].tail, self.edges[e].head);
         let tg = self.node_attr(t, "group").unwrap_or("");
@@ -330,9 +332,10 @@ impl<'a> Dot<'a> {
         ed.xpenalty = xpenalty;
         ed.weight = weight;
         ed.minlen = minlen;
+        Ok(())
     }
 
-    fn common_init_edge(&mut self, e: E) {
+    fn common_init_edge(&mut self, e: E) -> Result<(), String> {
         let label_text =
             |lg: &graphviz_pure_geom::LabelGeometry, a: &graphviz_pure_core::AttrMap, key: &str| {
                 graphviz_pure_geom::label_text(lg, a.get(key).map_or("", String::as_str))
@@ -383,7 +386,7 @@ impl<'a> Dot<'a> {
         if !tail_str.is_empty() {
             self.nodes[t].has_port = true;
         }
-        let mut port = self.chk_port(t, &tp);
+        let mut port = self.chk_port(t, &tp).map_err(super::fatal)?;
         if no_clip(self.edge_attr(e, "tailclip")) {
             port.clip = false;
         }
@@ -392,15 +395,16 @@ impl<'a> Dot<'a> {
         if !head_str.is_empty() {
             self.nodes[h].has_port = true;
         }
-        let mut port = self.chk_port(h, &hp);
+        let mut port = self.chk_port(h, &hp).map_err(super::fatal)?;
         if no_clip(self.edge_attr(e, "headclip")) {
             port.clip = false;
         }
         self.edges[e].head_port = port;
+        Ok(())
     }
 
     /// `chkPort(ND_shape(n)->fns->portfn, n, s)`.
-    fn chk_port(&self, n: N, p: &graphviz_pure_core::Port) -> Port {
+    fn chk_port(&self, n: N, p: &graphviz_pure_core::Port) -> Result<Port, GraphvizError> {
         crate::common::ports::chk_port(self, n, p)
     }
 }

@@ -1248,7 +1248,8 @@ impl Dot<'_> {
         // htmlEntityUTF8 is called for auxg from here on: its invalid UTF-8 warning names
         // auxg, and can print again (lastg).
         let _charset = graphviz_pure_core::charset::enter_graph(&aux.name);
-        graphviz_pure_core::diag::quietly(|| graphviz_pure_geom::size_graph_nodes(&mut aux));
+        graphviz_pure_core::diag::quietly(|| graphviz_pure_geom::size_graph_nodes(&mut aux))
+            .map_err(super::fatal)?;
 
         let mut d = Dot::new(&aux);
         d.graphs[0].rankdir = if flip { RANKDIR_TB } else { RANKDIR_LR };
@@ -1259,7 +1260,7 @@ impl Dot<'_> {
         d.null_syms = (&AuxSyms::NULL_NODE, &AuxSyms::NULL_EDGE);
         d.et = et;
         d.dot_init_subg();
-        d.dot_init_node_edge();
+        d.dot_init_node_edge()?;
         d.dot_rank()?;
         d.dot_mincross()?;
         d.dot_position()?;

@@ -304,6 +304,24 @@ mod tests {
     use std::fs;
     use std::path::PathBuf;
 
+    // Issue #583: C's `gv_calloc` (`lib/util/alloc.h`) reports a failed allocation and
+    // exits; the library stops the run with the error C writes, instead of aborting the
+    // process as the Rust allocator did.
+    #[test]
+    fn an_allocation_c_refuses_is_an_error() {
+        // 2^31 peripheries of 2^28 sides: 2^59 vertices of 16 bytes, 2^63 bytes.
+        let src = "digraph G { node [peripheries=\"2147483647\", sides=\"268435456\"];\n  a [shape=polygon]; a -> b }";
+        let err = render_dot(src, "dot", "svg").unwrap_err();
+        assert_eq!(
+            err.kind(),
+            graphviz_pure_core::GraphvizErrorKind::Allocation
+        );
+        assert_eq!(
+            err.message(),
+            "out of memory when trying to allocate 9223372036854775808 bytes"
+        );
+    }
+
     // Issue #290: the graphs of one call share the C library's generator state, as in one C
     // process; each call (and each layout on its own) starts fresh, so results don't depend
     // on earlier calls; a caller can carry a state across calls through `LayoutJobs`.

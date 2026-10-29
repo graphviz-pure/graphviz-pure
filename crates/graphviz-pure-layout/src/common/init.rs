@@ -7,7 +7,7 @@ use super::types::*;
 use super::utils::{late_double, map_bool, mapbool};
 use graphviz_pure_core::font::{LabelSubstContext, measure_multiline_label_with_context};
 use graphviz_pure_core::strtod::{atof, sscanf};
-use graphviz_pure_core::{AttrMap, BoundingBox, Graph, GraphKind, NodeData, Point};
+use graphviz_pure_core::{AttrMap, BoundingBox, Graph, GraphKind, NodeData, Point, Result};
 
 pub const DEFAULT_FONTSIZE: f64 = 14.0;
 pub const MIN_FONTSIZE: f64 = 1.0;
@@ -133,7 +133,7 @@ pub fn do_graph_label(g: &mut LGraph<'_>, c: usize) {
 impl<'a> LGraph<'a> {
     /// `graph_init` + `common_init_node` + `common_init_edge` for `graph`,
     /// with `ndim` layout dimensions and `default_edge_type` for `setEdgeType`.
-    pub fn new(graph: &'a Graph, ndim: usize, default_edge_type: EdgeType) -> Self {
+    pub fn new(graph: &'a Graph, ndim: usize, default_edge_type: EdgeType) -> Result<Self> {
         Self::new_with(graph, ndim, default_edge_type, |_, _| {})
     }
 
@@ -145,16 +145,16 @@ impl<'a> LGraph<'a> {
         ndim: usize,
         default_edge_type: EdgeType,
         node_init: impl FnMut(&NodeData, &mut LNode),
-    ) -> Self {
-        let mut lg = Self::new_unported_with(graph, ndim, default_edge_type, node_init);
-        lg.common_init_edges();
-        lg
+    ) -> Result<Self> {
+        let mut lg = Self::new_unported_with(graph, ndim, default_edge_type, node_init)?;
+        lg.common_init_edges()?;
+        Ok(lg)
     }
 
     /// `common_init_edge` for every edge in the engines' `agfstnode`/`agfstout` order, which
     /// is the order of its diagnostics: the edge's labels, then its ports (`chkPort`, keeping
     /// `*clip=false`).
-    fn common_init_edges(&mut self) {
+    fn common_init_edges(&mut self) -> graphviz_pure_core::Result<()> {
         let graph = self.src;
         let directed = graph.kind == GraphKind::Directed;
         let env = graphviz_pure_geom::NodeSizeEnv::from_graph(graph);
@@ -187,14 +187,19 @@ impl<'a> LGraph<'a> {
             e.xlabel = conv("xlabel", &lg.xlabel);
             e.head_label = conv("headlabel", &lg.head_label);
             e.tail_label = conv("taillabel", &lg.tail_label);
-            super::ports::resolve_edge_ports(self, ei);
+            super::ports::resolve_edge_ports(self, ei)?;
         }
+        Ok(())
     }
 
     /// [`Self::new`] without `common_init_edge`: the edges have no labels and keep centre
     /// ports, and no label or port diagnostics are printed (`patchwork_init_edge` only binds
     /// the edge record).
-    pub fn new_unported(graph: &'a Graph, ndim: usize, default_edge_type: EdgeType) -> Self {
+    pub fn new_unported(
+        graph: &'a Graph,
+        ndim: usize,
+        default_edge_type: EdgeType,
+    ) -> Result<Self> {
         Self::new_unported_with(graph, ndim, default_edge_type, |_, _| {})
     }
 
@@ -203,7 +208,7 @@ impl<'a> LGraph<'a> {
         ndim: usize,
         default_edge_type: EdgeType,
         mut node_init: impl FnMut(&NodeData, &mut LNode),
-    ) -> Self {
+    ) -> Result<Self> {
         let gattrs = &graph.graph_attrs;
         // `GD_nodesep = POINTS(…)`, an `int`: 1e300 inches saturates at INT_MAX points.
         let nodesep = i64::from(graphviz_pure_core::cnum::c_round_mul(
@@ -248,11 +253,11 @@ impl<'a> LGraph<'a> {
         let env = graphviz_pure_geom::NodeSizeEnv::from_graph_attrs(graph, gattrs);
         let mut nodes = Vec::with_capacity(graph.nodes.len());
         for nd in &graph.nodes {
-            let geom = graphviz_pure_geom::node_geometry(nd, &env);
+            let geom = graphviz_pure_geom::node_geometry(nd, &env)?;
             let mut n = nd.clone();
             n.width = geom.width;
             n.height = geom.height;
-            let mut shape = NodeShape::new(&n);
+            let mut shape = NodeShape::new(&n)?;
             shape.apply_geometry(&geom);
             let (lw, rw, ht) = geom.nodesize(false);
             let xlabel = geom.xlabel.as_ref().map(|l| TextLabel {
@@ -334,7 +339,7 @@ impl<'a> LGraph<'a> {
         for list in inn.iter_mut() {
             list.sort_by_key(|&e| (graph.edges[e].tail.0, e));
         }
-        LGraph {
+        Ok(LGraph {
             src: graph,
             nodes,
             edges,
@@ -353,7 +358,7 @@ impl<'a> LGraph<'a> {
             concentrate,
             has_labelangle,
             has_labeldistance,
-        }
+        })
     }
 
     /// Writes positions, splines, label positions and bounding boxes back

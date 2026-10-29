@@ -47,10 +47,10 @@ pub fn render_json(graph: &Graph, json0: bool) -> Result<String> {
 pub use emit::{reset_render_state, set_y_invert};
 
 /// Renders `graph` as SVG (`-Tsvg`).
-pub fn render_svg(graph: &Graph) -> String {
+pub fn render_svg(graph: &Graph) -> Result<String> {
     graphviz_pure_core::usershape::rendering(&graph.layout.usershapes, || {
-        let m = emit::model::Model::build(graph);
-        emit::run(&m, svg_engine::SvgEngine::default()).out
+        let m = emit::model::Model::build(graph)?;
+        Ok(emit::run(&m, svg_engine::SvgEngine::default()).out)
     })
 }
 
@@ -441,7 +441,7 @@ impl<'g> GraphJobs<'g> {
         let unattached =
             format == OutputFormat::Canon || lname == "dot_json" || lname == "xdot_json";
         if unattached {
-            let m = emit::model::Model::build(graph);
+            let m = emit::model::Model::build(graph)?;
             let pre = if format == OutputFormat::Canon {
                 emit_null(&m, DOT_FEATURES, "dot", name, opts)
             } else {
@@ -473,7 +473,7 @@ impl<'g> GraphJobs<'g> {
             (OutputFormat::Svg | OutputFormat::SvgInline | OutputFormat::Cmapx, Some(v)) => v,
             _ => graph,
         };
-        let m = emit::model::Model::build(drawn);
+        let m = emit::model::Model::build(drawn)?;
         // what `emit_graph` wrote straight into the output file comes before the writer's
         // output, which the writers below write at the end
         let mut pre = String::new();

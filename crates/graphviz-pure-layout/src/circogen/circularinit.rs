@@ -414,7 +414,7 @@ pub fn circo_layout(graph: &mut Graph) -> Result<()> {
     }
     let src = graph.clone();
     // circo_init_graph: EDGETYPE_LINE by default, 2 dimensions.
-    let mut g = LGraph::new(&src, 2, EdgeType::Line);
+    let mut g = LGraph::new(&src, 2, EdgeType::Line)?;
     circo_layout_main(&mut g);
     let mut root = g.root_sub();
     spline_edges(&mut g, &mut root, true);

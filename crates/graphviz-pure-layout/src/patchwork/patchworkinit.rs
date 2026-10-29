@@ -57,7 +57,7 @@ pub fn patchwork_layout(graph: &mut Graph) -> Result<()> {
     // LGraph's own sizing below does not repeat them.
     let env = graphviz_pure_geom::NodeSizeEnv::from_graph(&src);
     for &n in &res.walk_order {
-        let _ = graphviz_pure_geom::node_geometry(&src.nodes[n], &env);
+        let _ = graphviz_pure_geom::node_geometry(&src.nodes[n], &env)?;
         if graphviz_pure_core::diag::verbose_on()
             && let Some(Some((center, size))) = res.nodes.get(n)
         {
@@ -75,7 +75,8 @@ pub fn patchwork_layout(graph: &mut Graph) -> Result<()> {
             ));
         }
     }
-    let mut g = graphviz_pure_core::diag::quietly(|| LGraph::new_unported(&src, 2, EdgeType::Line));
+    let mut g =
+        graphviz_pure_core::diag::quietly(|| LGraph::new_unported(&src, 2, EdgeType::Line))?;
     // patchwork_init_edge binds the edge record without common_init_edge, so
     // edges carry no labels (new_unported makes none).
     for (i, r) in res.nodes.iter().enumerate() {

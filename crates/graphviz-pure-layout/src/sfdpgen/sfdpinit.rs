@@ -151,7 +151,7 @@ pub fn sfdp_layout(graph: &mut Graph) -> Result<()> {
     let outdim = late_int(attrs, "dimen", 2, 2);
     let ndim = late_int(attrs, "dim", outdim, 2).min(MAXDIM as i32) as usize;
     let src = graph.clone();
-    let mut g = LGraph::new(&src, ndim, EdgeType::Line);
+    let mut g = LGraph::new(&src, ndim, EdgeType::Line)?;
     let mut do_adjust = ndim == 2;
 
     if !g.nodes.is_empty() {

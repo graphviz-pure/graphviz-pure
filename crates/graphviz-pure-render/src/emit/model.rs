@@ -257,16 +257,16 @@ impl<'g> Model<'g> {
 
     /// The render model of `g`. Its node, edge and cluster labels are sized again here
     /// (`diag::quietly`): C made them in layout, and reported their diagnostics there.
-    pub fn build(g: &'g Graph) -> Self {
+    pub fn build(g: &'g Graph) -> graphviz_pure_core::Result<Self> {
         // The labels were measured by layout; measure them again as C measured them then.
         graphviz_pure_core::font::textfont_remeasuring(|| Self::build_measured(g))
     }
 
-    fn build_measured(g: &'g Graph) -> Self {
+    fn build_measured(g: &'g Graph) -> graphviz_pure_core::Result<Self> {
         graphviz_pure_core::diag::quietly(|| Self::build_quiet(g))
     }
 
-    fn build_quiet(g: &'g Graph) -> Self {
+    fn build_quiet(g: &'g Graph) -> graphviz_pure_core::Result<Self> {
         let directed = g.kind == GraphKind::Directed;
         let env = NodeSizeEnv::from_graph(g);
         let ga = Attrs(&g.graph_attrs);
@@ -274,7 +274,7 @@ impl<'g> Model<'g> {
         let mut has_labels = 0u32;
         let mut nodes = Vec::with_capacity(g.nodes.len());
         for n in &g.nodes {
-            let geom = node_geometry(n, &env);
+            let geom = node_geometry(n, &env)?;
             let a = Attrs(&n.attrs);
             let fontcolor = a.late_nnstring("fontcolor", "black");
             let raw = a.get("label").unwrap_or("\\N");
@@ -589,7 +589,7 @@ impl<'g> Model<'g> {
             l
         });
 
-        Model {
+        Ok(Model {
             g,
             node_penwidth_declared: g.node_attr_declared("penwidth"),
             directed,
@@ -601,6 +601,6 @@ impl<'g> Model<'g> {
             clusters,
             root_clusters,
             has_labels,
-        }
+        })
     }
 }
