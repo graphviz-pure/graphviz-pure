@@ -994,37 +994,37 @@ impl Engine for SvgEngine {
         let originy = (b.ur.y + b.ll.y + height) / 2.0;
         self.put("<image xlink:href=\"");
         self.put(&us.name);
-        // The numbers go into the attributes as they are written, without a `String` each.
-        let mut attrs = String::new();
+        // The attributes go into the output as they are written, without a `String` each.
         if j.rotation != 0 {
             // C's own FIXME: the size is exchanged and the position is not rotated
-            attrs.push_str("\" width=\"");
-            fmt_g_into(&mut attrs, height, 6);
-            attrs.push_str("px\" height=\"");
-            fmt_g_into(&mut attrs, width, 6);
-            attrs.push_str("px\" preserveAspectRatio=\"xMidYMid meet\" x=\"");
-            fmt_g_into(&mut attrs, originx, 6);
-            attrs.push_str("\" y=\"");
-            fmt_g_into(&mut attrs, -originy, 6);
-            attrs.push('"');
-            attrs.push_str(" transform=\"rotate(");
-            let _ = write!(attrs, "{} ", j.rotation);
-            fmt_g_into(&mut attrs, originx, 6);
-            attrs.push(' ');
-            fmt_g_into(&mut attrs, -originy, 6);
-            attrs.push_str(")\"");
+            self.out.push_str("\" width=\"");
+            fmt_g_into(&mut self.out, height, 6);
+            self.out.push_str("px\" height=\"");
+            fmt_g_into(&mut self.out, width, 6);
+            self.out
+                .push_str("px\" preserveAspectRatio=\"xMidYMid meet\" x=\"");
+            fmt_g_into(&mut self.out, originx, 6);
+            self.out.push_str("\" y=\"");
+            fmt_g_into(&mut self.out, -originy, 6);
+            self.out.push('"');
+            self.out.push_str(" transform=\"rotate(");
+            let _ = write!(self.out, "{} ", j.rotation);
+            fmt_g_into(&mut self.out, originx, 6);
+            self.out.push(' ');
+            fmt_g_into(&mut self.out, -originy, 6);
+            self.out.push_str(")\"");
         } else {
-            attrs.push_str("\" width=\"");
-            fmt_g_into(&mut attrs, width, 6);
-            attrs.push_str("px\" height=\"");
-            fmt_g_into(&mut attrs, height, 6);
-            attrs.push_str("px\" preserveAspectRatio=\"xMinYMin meet\" x=\"");
-            fmt_g_into(&mut attrs, originx, 6);
-            attrs.push_str("\" y=\"");
-            fmt_g_into(&mut attrs, -originy, 6);
-            attrs.push('"');
+            self.out.push_str("\" width=\"");
+            fmt_g_into(&mut self.out, width, 6);
+            self.out.push_str("px\" height=\"");
+            fmt_g_into(&mut self.out, height, 6);
+            self.out
+                .push_str("px\" preserveAspectRatio=\"xMinYMin meet\" x=\"");
+            fmt_g_into(&mut self.out, originx, 6);
+            self.out.push_str("\" y=\"");
+            fmt_g_into(&mut self.out, -originy, 6);
+            self.out.push('"');
         }
-        self.put(&attrs);
         self.put("/>\n");
     }
 

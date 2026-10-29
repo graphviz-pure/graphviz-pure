@@ -69,12 +69,17 @@ pub fn fmt_g_into(out: &mut String, v: f64, prec: usize) {
         return;
     }
     // The exponent after rounding to `p` significant digits. Rust's `LowerExp` writes it as
-    // `d.dddde<exp>`; C writes the exponent with a sign and two digits.
+    // `d.dddde<exp>`; C writes the exponent with a sign and two digits. The exponent is read
+    // as the code before this one read it: the text after the last `e`, and 0 when there is
+    // no `e` or it does not parse. Rust's `LowerExp` always writes one, so the fallback is
+    // the fixed form, as it was.
     let start = out.len();
     let _ = write!(out, "{:.*e}", p - 1, v);
-    let epos = start + out[start..].find('e').expect("LowerExp writes an exponent");
-    let exp: i32 = out[epos + 1..].parse().unwrap_or(0);
+    let epos = out[start..].rfind('e').map(|p| start + p);
+    let exp: i32 = epos.and_then(|p| out[p + 1..].parse().ok()).unwrap_or(0);
     if exp < -4 || exp >= p as i32 {
+        // The mantissa is what came before the `e`; with no `e` it is the whole text.
+        let epos = epos.unwrap_or(out.len());
         out.truncate(epos);
         trim_zeros_from(out, start);
         out.push('e');
@@ -349,9 +354,21 @@ pub fn fmt_f(v: f64, prec: usize) -> String {
 
 #[cfg(test)]
 mod tests {
-    /// The `%g` the port printed before [`fmt_g_into`] existed, as the differential test's
-    /// reference: the same digits, each in its own `String`.
-    fn fmt_g_reference(v: f64, prec: usize) -> String {
+    /// The `fmt_f` the port printed before [`fmt_f_into`] existed, kept verbatim as the
+    /// differential test's oracle: the same digits, each in its own `String`.
+    fn fmt_f_oracle(v: f64, prec: usize) -> String {
+        if v.is_nan() {
+            "nan".to_string()
+        } else if v.is_infinite() {
+            if v > 0.0 { "inf" } else { "-inf" }.to_string()
+        } else {
+            format!("{v:.prec$}")
+        }
+    }
+
+    /// The `%g` the port printed before [`fmt_g_into`] existed, kept verbatim as the
+    /// differential test's oracle: the same digits, each in its own `String`.
+    fn fmt_g_oracle(v: f64, prec: usize) -> String {
         fn trim(mut s: String) -> String {
             if s.contains('.') {
                 while s.ends_with('0') {
@@ -440,11 +457,15 @@ mod tests {
         v
     }
 
+    /// The prefixes a writer may find in the buffer: the text before the number must not be
+    /// touched by the in-place trimming.
+    const PREFIXES: [&str; 5] = ["0.", "10", "1.00", "-", " "];
+
     #[test]
-    fn fmt_g_into_prints_what_fmt_g_printed() {
+    fn fmt_g_into_prints_what_the_old_fmt_g_printed() {
         for v in doubles() {
             for prec in 1..=17 {
-                let want = fmt_g_reference(v, prec);
+                let want = fmt_g_oracle(v, prec);
                 let mut got = String::new();
                 fmt_g_into(&mut got, v, prec);
                 assert_eq!(got, want, "fmt_g_into({v:?}, {prec})");
@@ -454,13 +475,50 @@ mod tests {
     }
 
     #[test]
-    fn fmt_f_into_prints_what_fmt_f_printed() {
+    fn fmt_f_into_prints_what_the_old_fmt_f_printed() {
         for v in doubles() {
             for prec in 0..=17 {
-                let want = fmt_f(v, prec);
+                let want = fmt_f_oracle(v, prec);
                 let mut got = String::new();
                 let _ = fmt_f_into(&mut got, v, prec);
                 assert_eq!(got, want, "fmt_f_into({v:?}, {prec})");
+                assert_eq!(fmt_f(v, prec), want, "fmt_f({v:?}, {prec})");
+            }
+        }
+    }
+
+    #[test]
+    fn fmt_f_into_appends_after_a_prefix() {
+        for v in doubles() {
+            for prec in [0, 1, 2, 6, 17] {
+                let want = fmt_f_oracle(v, prec);
+                for prefix in PREFIXES {
+                    let mut s = String::from(prefix);
+                    let _ = fmt_f_into(&mut s, v, prec);
+                    assert_eq!(
+                        s,
+                        format!("{prefix}{want}"),
+                        "fmt_f_into({v:?}, {prec}) after {prefix:?}"
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn fmt_g_into_appends_after_a_prefix() {
+        for v in doubles() {
+            for prec in [1, 2, 6, 17] {
+                let want = fmt_g_oracle(v, prec);
+                for prefix in PREFIXES {
+                    let mut s = String::from(prefix);
+                    fmt_g_into(&mut s, v, prec);
+                    assert_eq!(
+                        s,
+                        format!("{prefix}{want}"),
+                        "fmt_g_into({v:?}, {prec}) after {prefix:?}"
+                    );
+                }
             }
         }
     }
