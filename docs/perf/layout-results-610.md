@@ -27,8 +27,11 @@ See [the allocation-stage ranking](allocation-stages-610.md) and
 Musl x86-64-v1 release builds on the three 20,000-node inputs, `-Tsvg`. Before is saved
 master `b35ebbe2`; the supplied 1.0 reference is `f89e21d9` (identical Rust sources).
 Before/after heap counts use matching argument lengths and identical input paths.
+The saved-master column measures this PR’s own effect; “vs 1.0” is a separate comparison.
+Each stage was measured alone against master; the gains from #623, #624 and #627 do not add up exactly.
 
-| input | 1.0/master allocations → after | Δ | allocated bytes before → after | peak heap B before → after |
+
+| input | saved master allocations → after | Δ | allocated bytes before → after | peak heap B before → after |
 | :-- | --: | --: | --: | --: |
 | `osage_clustered_20000` | 3,603,164 → 3,442,669 | -4.45% | 295,483,525 → 274,592,933 | 87,382,226 → 87,382,226 |
 | `patchwork_clustered_20000` | 3,521,797 → 3,321,297 | -5.69% | 309,831,744 → 288,767,208 | 89,862,688 → 89,862,688 |

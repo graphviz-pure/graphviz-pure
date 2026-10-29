@@ -364,7 +364,7 @@ impl<'a> LGraph<'a> {
     /// C: lib/common/postproc.c:gv_postprocess
     /// The finished layout without its source graph or construction/routing scratch.
     /// This ends the immutable source borrow before the result is applied to that graph.
-    pub fn into_layout_result(self) -> LayoutResult {
+    pub(crate) fn into_layout_result(self) -> LayoutResult {
         LayoutResult {
             odim: self.odim,
             nodes: self.nodes,
@@ -393,7 +393,7 @@ impl<'a> LGraph<'a> {
 /// C: lib/common/postproc.c:gv_postprocess
 /// Owned layout fields to apply after the source borrow and layout scratch have ended.
 /// C keeps these values in its node/edge records; the port transfers its working fields.
-pub struct LayoutResult {
+pub(crate) struct LayoutResult {
     odim: usize,
     nodes: Vec<LNode>,
     edges: Vec<LEdge>,
