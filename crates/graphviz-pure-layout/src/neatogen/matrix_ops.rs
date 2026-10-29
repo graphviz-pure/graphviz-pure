@@ -630,7 +630,7 @@ mod tests {
     #[test]
     fn parallel_right_mult_matches_scalar_chain_for_every_thread_count() {
         // Odd widths, and widths that are not a multiple of the thread count
-        // or of the 4-wide gather. `threads == 1` still runs the gather, not
+        // or of the 8-wide gather. `threads == 1` still runs the gather, not
         // the sequential kernel.
         let widths = [0, 1, 2, 3, 5, 7, 8, 9, 17, 37, 63, 64, 65, 127, 128];
         let threads = [1usize, 2, 3, 8];

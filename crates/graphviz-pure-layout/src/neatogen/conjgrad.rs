@@ -66,12 +66,27 @@ pub fn conjugate_gradient_mkernel(
 }
 
 /// Same solver as [`conjugate_gradient_mkernel`], reusing a lower triangle
-/// built once for this matrix. The public function builds that copy itself
-/// when the caller does not have one.
+/// built once for this matrix. The workers stay up for the solve and wait
+/// between mat-vecs. The public function builds that copy itself when the
+/// caller does not have one.
 #[cfg(all(feature = "parallel", not(target_family = "wasm")))]
 pub(super) fn conjugate_gradient_mkernel_prepared(
     a: &[f32],
     lower: &[f32],
+    x: &mut [f32],
+    b: &mut [f32],
+    n: usize,
+    tol: f64,
+    max_iterations: usize,
+) -> Result<(), super::SolverError> {
+    super::matvec_parallel::with_team(a, lower, n, |team| {
+        conjugate_gradient_mkernel_on_team(team, x, b, n, tol, max_iterations)
+    })
+}
+
+#[cfg(all(feature = "parallel", not(target_family = "wasm")))]
+fn conjugate_gradient_mkernel_on_team(
+    team: &mut super::matvec_parallel::MatvecTeam<'_>,
     x: &mut [f32],
     b: &mut [f32],
     n: usize,
@@ -84,7 +99,7 @@ pub(super) fn conjugate_gradient_mkernel_prepared(
     let mut ax = vec![0.0f32; n];
     orthog1f(&mut x[..n]);
     orthog1f(&mut b[..n]);
-    super::matvec_parallel::right_mult_prepared(a, lower, n, x, &mut ax);
+    team.multiply(x, &mut ax);
     orthog1f(&mut ax);
     for ((ri, &bi), &axi) in r.iter_mut().zip(&b[..n]).zip(ax.iter()) {
         *ri = bi - axi;
@@ -96,7 +111,7 @@ pub(super) fn conjugate_gradient_mkernel_prepared(
         orthog1f(&mut p);
         orthog1f(&mut x[..n]);
         orthog1f(&mut r);
-        super::matvec_parallel::right_mult_prepared(a, lower, n, &p, &mut ap);
+        team.multiply(&p, &mut ap);
         orthog1f(&mut ap);
         let p_ap = vectors_inner_productf(n, &p, &ap);
         if p_ap == 0.0 {

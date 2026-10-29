@@ -15,26 +15,30 @@
 //! the gather would change the IEEE sequence.
 //!
 //! Each output does `j` gather FMAs and `n - j` dot FMAs, so `n` in total.
-//! Equal `j` counts are equal work. A split by lower-triangle area gives the
-//! first of four threads about half the rows, and that was slower. Several
-//! outputs run together so their chains stay independent; nothing is
-//! reordered inside one chain.
+//! Equal `j` counts are equal work. Threads run eight consecutive outputs
+//! together: the chains for `j` through `j + 7` advance over the same `i`,
+//! and each chain stays in increasing `i`. Those rows of the lower copy are
+//! adjacent, so the loads stream. The in-block tail (row `j + k` has `k`
+//! extra gather terms, and `8 - k` dot terms before the shared tail) is the
+//! same shape as the blocked kernel's triangle.
 //!
-//! The gather is experimental. It is a scalar chain per output, and it reads
-//! both triangles, so it does more work than the blocked kernel. On
-//! rnd2000-as-neato, one thread took 6.5 s and four threads took 20.0 s, with
-//! user cycles rising from 20.5e9 to 53.6e9. `GRAPHVIZ_PURE_THREADS=1` stays
-//! on the sequential kernel.
+//! Eight chains, not four. One dependent FMA chain retires about one FMA
+//! every four cycles, and four chains were still short of two FMA pipes.
+//! `GRAPHVIZ_PURE_THREADS=1` stays on the sequential kernel. Conjugate
+//! gradient keeps one worker set for the solve; spawning on every mat-vec
+//! was most of the system time.
 
-use std::sync::OnceLock;
+use std::ops::Range;
+use std::sync::{Arc, OnceLock, mpsc};
 
 /// Sequential below this.
 ///
-/// Two threads did not beat one thread at any timed width (256 through 4000
-/// in the kernel, and the 1000- and 2000-node graphs end to end). Below 1000
-/// the kernel loss was larger still, so those graphs stay on the blocked
-/// kernel. This is not a measured crossover.
-pub(super) const MIN_N: usize = 1000;
+/// Two threads of the 8-wide gather beat the blocked kernel at n = 1300
+/// (0.29 ms against 0.32 ms) and at every larger width that was timed. At
+/// n = 1200 the edge was about 3%, at n = 1100 the two matched, and at
+/// n = 1000 two threads lost. Four threads win from about n = 1000. The
+/// threshold follows the two-thread win.
+pub(super) const MIN_N: usize = 1300;
 
 /// Sequential above this. The lower copy is `n*(n+1)/2` extra `f32`s:
 /// 8_004_000 bytes at `n = 2000`, 134_250_496 bytes at this cap, and
@@ -42,8 +46,8 @@ pub(super) const MIN_N: usize = 1000;
 /// sequential.
 pub(super) const MAX_N: usize = 8192;
 
-/// Four independent chains. Wider blocks raised the cycle count.
-const BLOCK: usize = 4;
+/// Eight independent chains, one per output. Four left the FMA pipes short.
+const BLOCK: usize = 8;
 
 pub(super) fn use_parallel(n: usize) -> bool {
     (MIN_N..=MAX_N).contains(&n) && configured_threads() > 1
@@ -69,6 +73,179 @@ pub(super) fn right_mult_prepared(
     result: &mut [f32],
 ) {
     right_mult_with_lower(upper, lower, n, vector, result, configured_threads());
+}
+
+/// One worker set for many mat-vecs of the same matrix.
+///
+/// `right_mult_prepared` spawns and joins on every call. A conjugate-gradient
+/// solve does that thousands of times; the threads here stay up for the solve
+/// and wait on a channel between mat-vecs. The main thread owns chunk 0 and
+/// the workers own the rest. Each worker writes a private buffer, and the main
+/// thread copies it back after the barrier, so the output floats are the same
+/// ones `owned_rows` produced.
+pub(super) struct MatvecTeam<'a> {
+    upper: &'a [f32],
+    lower: &'a [f32],
+    n: usize,
+    ranges: Vec<Range<usize>>,
+    txs: Vec<mpsc::Sender<Job>>,
+    dones: Vec<mpsc::Receiver<Vec<f32>>>,
+    slots: Vec<Vec<f32>>,
+    vector_buf: Vec<f32>,
+}
+
+enum Job {
+    Run {
+        j0: usize,
+        count: usize,
+        vector: Arc<Vec<f32>>,
+        slot: Vec<f32>,
+    },
+    Stop,
+}
+
+pub(super) fn with_team<R>(
+    upper: &[f32],
+    lower: &[f32],
+    n: usize,
+    body: impl FnOnce(&mut MatvecTeam<'_>) -> R,
+) -> R {
+    let threads = configured_threads().max(1).min(n.max(1));
+    if n == 0 || threads == 1 {
+        let mut team = MatvecTeam {
+            upper,
+            lower,
+            n,
+            ranges: Vec::new(),
+            txs: Vec::new(),
+            dones: Vec::new(),
+            slots: Vec::new(),
+            vector_buf: Vec::new(),
+        };
+        return body(&mut team);
+    }
+    let ranges = chunk_ranges(n, threads);
+    std::thread::scope(|scope| {
+        let mut txs = Vec::new();
+        let mut dones = Vec::new();
+        let mut slots = Vec::new();
+        for range in ranges.iter().skip(1) {
+            let (tx, rx) = mpsc::channel();
+            let (done_tx, done_rx) = mpsc::channel();
+            scope.spawn(move || matvec_worker(rx, done_tx, upper, lower, n));
+            txs.push(tx);
+            dones.push(done_rx);
+            slots.push(vec![0.0f32; range.len()]);
+        }
+        let mut team = MatvecTeam {
+            upper,
+            lower,
+            n,
+            ranges,
+            txs,
+            dones,
+            slots,
+            vector_buf: vec![0.0f32; n],
+        };
+        let result = body(&mut team);
+        for tx in &team.txs {
+            let _ = tx.send(Job::Stop);
+        }
+        result
+    })
+}
+
+impl MatvecTeam<'_> {
+    pub(super) fn multiply(&mut self, vector: &[f32], result: &mut [f32]) {
+        let n = self.n;
+        if n == 0 {
+            return;
+        }
+        debug_assert!(vector.len() >= n && result.len() >= n);
+        if self.txs.is_empty() {
+            owned_rows(self.upper, self.lower, n, vector, &mut result[..n], 0);
+            return;
+        }
+        self.vector_buf[..n].copy_from_slice(&vector[..n]);
+        let shared = Arc::new(std::mem::take(&mut self.vector_buf));
+        let slots = std::mem::take(&mut self.slots);
+        let worker_ranges: Vec<Range<usize>> = self.ranges.iter().skip(1).cloned().collect();
+        for (tx, (range, slot)) in self.txs.iter().zip(worker_ranges.iter().zip(slots)) {
+            tx.send(Job::Run {
+                j0: range.start,
+                count: range.len(),
+                vector: Arc::clone(&shared),
+                slot,
+            })
+            .expect("worker stopped");
+        }
+        let upper = self.upper;
+        let lower = self.lower;
+        let main = self.ranges[0].clone();
+        owned_rows(
+            upper,
+            lower,
+            n,
+            shared.as_slice(),
+            &mut result[main.start..main.end],
+            main.start,
+        );
+        let workers = worker_ranges.len();
+        for i in 0..workers {
+            let slot = self.dones[i].recv().expect("worker stopped");
+            let range = worker_ranges[i].clone();
+            result[range.start..range.end].copy_from_slice(&slot[..range.len()]);
+            self.slots.push(slot);
+        }
+        self.vector_buf = match Arc::try_unwrap(shared) {
+            Ok(buf) => buf,
+            Err(arc) => (*arc).clone(),
+        };
+    }
+}
+
+fn matvec_worker(
+    rx: mpsc::Receiver<Job>,
+    done: mpsc::Sender<Vec<f32>>,
+    upper: &[f32],
+    lower: &[f32],
+    n: usize,
+) {
+    while let Ok(job) = rx.recv() {
+        match job {
+            Job::Stop => break,
+            Job::Run {
+                j0,
+                count,
+                vector,
+                mut slot,
+            } => {
+                owned_rows(upper, lower, n, vector.as_slice(), &mut slot[..count], j0);
+                drop(vector);
+                if done.send(slot).is_err() {
+                    break;
+                }
+            }
+        }
+    }
+}
+
+/// Same split as `graphviz_pure_core::par`. The earliest chunk takes the
+/// remainder, so `n = 10`, `threads = 3` is `4 + 3 + 3`.
+fn chunk_ranges(n: usize, threads: usize) -> Vec<Range<usize>> {
+    let threads = threads.max(1).min(n.max(1));
+    let mut ranges = Vec::with_capacity(threads);
+    let mut base = 0;
+    let mut left = n;
+    let mut remaining = threads;
+    while remaining > 0 && left > 0 {
+        let len = left / remaining + usize::from(!left.is_multiple_of(remaining));
+        ranges.push(base..base + len);
+        base += len;
+        left -= len;
+        remaining -= 1;
+    }
+    ranges
 }
 
 /// `threads == 1` still runs the gather, so tests can compare that kernel
@@ -112,73 +289,140 @@ fn owned_rows(upper: &[f32], lower: &[f32], n: usize, vector: &[f32], slot: &mut
     let mut local = 0;
     let mut j = j0;
     while local + BLOCK <= slot.len() {
-        gather_block::<BLOCK>(upper, lower, n, vector, &mut slot[local..], j);
+        gather_block8(upper, lower, n, vector, &mut slot[local..], j);
         local += BLOCK;
         j += BLOCK;
     }
     while local < slot.len() {
-        gather_block::<1>(upper, lower, n, vector, &mut slot[local..], j);
+        gather_row(upper, lower, n, vector, &mut slot[local..], j);
         local += 1;
         j += 1;
     }
 }
 
-#[inline(always)]
-fn gather_block<const W: usize>(
+/// Eight outputs starting at `j`. Gather from the lower copy, then the upper
+/// dot, each chain in increasing column order.
+fn gather_block8(
     upper: &[f32],
     lower: &[f32],
     n: usize,
     vector: &[f32],
     slot: &mut [f32],
-    j0: usize,
+    j: usize,
 ) {
-    debug_assert!(slot.len() >= W);
-    debug_assert!(j0 + W <= n);
-    let mut acc = [0.0f32; W];
-    let mut lower_at = [0usize; W];
-    let mut upper_at = [0usize; W];
-    for k in 0..W {
-        let col = j0 + k;
-        lower_at[k] = tri(col);
-        upper_at[k] = upper_row(n, col);
-    }
-    // Common gather prefix. Column `j0 + k` still has `k` entries after this.
-    for i in 0..j0 {
-        let scale = vector[i];
-        for k in 0..W {
-            acc[k] = lower[lower_at[k] + i].mul_add(scale, acc[k]);
-        }
-    }
-    for k in 1..W {
-        for i in j0..(j0 + k) {
-            acc[k] = lower[lower_at[k] + i].mul_add(vector[i], acc[k]);
-        }
-    }
-    let mut res = [0.0f32; W];
-    for k in 0..W {
-        res[k] = upper[upper_at[k]].mul_add(vector[j0 + k], 0.0);
-    }
-    // Shortest remaining dot, then the longer rows finish alone.
-    let short_tail = n - j0 - W;
-    for t in 0..short_tail {
-        for k in 0..W {
-            res[k] = upper[upper_at[k] + 1 + t].mul_add(vector[j0 + k + 1 + t], res[k]);
-        }
-    }
-    for k in 0..W {
-        let tail = n - (j0 + k) - 1;
-        for t in short_tail..tail {
-            res[k] = upper[upper_at[k] + 1 + t].mul_add(vector[j0 + k + 1 + t], res[k]);
-        }
-    }
-    for k in 0..W {
+    debug_assert!(slot.len() >= BLOCK);
+    debug_assert!(j + BLOCK <= n);
+    let (acc, dot) = chains8(upper, lower, n, vector, j);
+    for k in 0..BLOCK {
         // Store the gather, then add the dot in another function. Doing both
-        // here lets LLVM turn them into one commutative `fadd`.
+        // in one function lets LLVM turn them into one commutative `fadd`.
         if let Some(cell) = slot[k..].first_mut() {
             *cell = acc[k];
         }
-        add_dot(&mut slot[k..], res[k]);
+        add_dot(&mut slot[k..], dot[k]);
     }
+}
+
+fn chains8(
+    upper: &[f32],
+    lower: &[f32],
+    n: usize,
+    vector: &[f32],
+    j: usize,
+) -> ([f32; BLOCK], [f32; BLOCK]) {
+    let mut rows: [&[f32]; BLOCK] = [&[]; BLOCK];
+    let mut cursor = &lower[tri(j)..];
+    for (k, row_slot) in rows.iter_mut().enumerate() {
+        let (row, rest) = cursor.split_at(j + 1 + k);
+        *row_slot = row;
+        cursor = rest;
+    }
+    let mut pre: [&[f32]; BLOCK] = [&[]; BLOCK];
+    let mut tail: [&[f32]; BLOCK] = [&[]; BLOCK];
+    for (k, row) in rows.iter().enumerate() {
+        let (prefix, rest) = row.split_at(j);
+        // `rest` is the gather tail plus the diagonal. The diagonal stays in
+        // the dot, so the tail length is `k`.
+        pre[k] = prefix;
+        tail[k] = &rest[..k];
+    }
+    let v_pre = &vector[..j];
+    let mut acc = [0.0f32; BLOCK];
+    for i in 0..v_pre.len() {
+        let vi = v_pre[i];
+        acc[0] = pre[0][i].mul_add(vi, acc[0]);
+        acc[1] = pre[1][i].mul_add(vi, acc[1]);
+        acc[2] = pre[2][i].mul_add(vi, acc[2]);
+        acc[3] = pre[3][i].mul_add(vi, acc[3]);
+        acc[4] = pre[4][i].mul_add(vi, acc[4]);
+        acc[5] = pre[5][i].mul_add(vi, acc[5]);
+        acc[6] = pre[6][i].mul_add(vi, acc[6]);
+        acc[7] = pre[7][i].mul_add(vi, acc[7]);
+    }
+    for k in 1..BLOCK {
+        for t in 0..k {
+            acc[k] = tail[k][t].mul_add(vector[j + t], acc[k]);
+        }
+    }
+
+    let mut urows: [&[f32]; BLOCK] = [&[]; BLOCK];
+    let mut cursor = &upper[upper_row(n, j)..];
+    let n_from = n - j;
+    for (k, row_slot) in urows.iter_mut().enumerate() {
+        let (row, rest) = cursor.split_at(n_from - k);
+        *row_slot = row;
+        cursor = rest;
+    }
+    let mut heads: [&[f32]; BLOCK] = [&[]; BLOCK];
+    let mut dtails: [&[f32]; BLOCK] = [&[]; BLOCK];
+    for (k, row) in urows.iter().enumerate() {
+        // Columns `j+k .. j+7`, diagonal first. The shared tail then starts
+        // at column `j+8` for every row.
+        let (head, rest) = row.split_at(BLOCK - k);
+        heads[k] = head;
+        dtails[k] = rest;
+    }
+    let mut dot = [0.0f32; BLOCK];
+    for k in 0..BLOCK {
+        let mut res = heads[k][0].mul_add(vector[j + k], 0.0);
+        for t in 1..heads[k].len() {
+            res = heads[k][t].mul_add(vector[j + k + t], res);
+        }
+        dot[k] = res;
+    }
+    let ntail = dtails[0].len();
+    let v_tail = &vector[j + BLOCK..j + BLOCK + ntail];
+    for t in 0..ntail {
+        let vj = v_tail[t];
+        dot[0] = dtails[0][t].mul_add(vj, dot[0]);
+        dot[1] = dtails[1][t].mul_add(vj, dot[1]);
+        dot[2] = dtails[2][t].mul_add(vj, dot[2]);
+        dot[3] = dtails[3][t].mul_add(vj, dot[3]);
+        dot[4] = dtails[4][t].mul_add(vj, dot[4]);
+        dot[5] = dtails[5][t].mul_add(vj, dot[5]);
+        dot[6] = dtails[6][t].mul_add(vj, dot[6]);
+        dot[7] = dtails[7][t].mul_add(vj, dot[7]);
+    }
+    (acc, dot)
+}
+
+fn gather_row(upper: &[f32], lower: &[f32], n: usize, vector: &[f32], slot: &mut [f32], j: usize) {
+    debug_assert!(!slot.is_empty());
+    debug_assert!(j < n);
+    let mut acc = 0.0f32;
+    let grow = &lower[tri(j)..tri(j) + j];
+    for (i, &coefficient) in grow.iter().enumerate() {
+        acc = coefficient.mul_add(vector[i], acc);
+    }
+    let urow = &upper[upper_row(n, j)..upper_row(n, j) + (n - j)];
+    let mut dot = urow[0].mul_add(vector[j], 0.0);
+    for (t, &coefficient) in urow[1..].iter().enumerate() {
+        dot = coefficient.mul_add(vector[j + 1 + t], dot);
+    }
+    if let Some(cell) = slot.first_mut() {
+        *cell = acc;
+    }
+    add_dot(slot, dot);
 }
 
 /// `slot[0] += term`, a plain add, not an FMA.
@@ -244,6 +488,37 @@ mod tests {
         assert_eq!(parse_threads(Some("0"), 8), 1);
         assert_eq!(parse_threads(Some(""), 8), 1);
         assert_eq!(parse_threads(Some("nope"), 8), 1);
+    }
+
+    #[test]
+    fn team_matches_the_direct_gather_including_a_nan() {
+        let n = 37;
+        let mut state = 0x51u32;
+        let len = n * (n + 1) / 2;
+        let mut upper: Vec<f32> = (0..len)
+            .map(|_| {
+                state = state.wrapping_mul(1664525).wrapping_add(1013904223);
+                f32::from_bits(state | 0x3f80_0000)
+            })
+            .collect();
+        upper[10] = f32::from_bits(0x7fc0_0001);
+        let mut vector: Vec<f32> = (0..n)
+            .map(|_| {
+                state = state.wrapping_mul(1664525).wrapping_add(1013904223);
+                f32::from_bits(state | 0x3f80_0000)
+            })
+            .collect();
+        vector[4] = f32::from_bits(0x7fc0_0000);
+        let lower = pack_lower(&upper, n);
+        let mut direct = vec![1.0f32; n + 2];
+        let mut via_team = direct.clone();
+        right_mult_ff_with_threads(&upper, n, &vector, &mut direct, 3);
+        with_team(&upper, &lower, n, |team| {
+            team.multiply(&vector, &mut via_team);
+        });
+        for (i, (got, expect)) in via_team.iter().zip(&direct).enumerate() {
+            assert_eq!(got.to_bits(), expect.to_bits(), "i={i}");
+        }
     }
 
     #[test]
