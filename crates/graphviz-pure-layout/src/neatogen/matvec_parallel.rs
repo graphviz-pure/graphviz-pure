@@ -496,12 +496,25 @@ fn configured_threads() -> usize {
         let available = std::thread::available_parallelism()
             .map(|count| count.get())
             .unwrap_or(1);
-        match std::env::var("GRAPHVIZ_PURE_THREADS") {
-            Ok(value) => parse_threads(Some(&value), available),
-            Err(std::env::VarError::NotPresent) => available.max(1),
-            Err(std::env::VarError::NotUnicode(_)) => 1,
-        }
+        // The cache stores the first answer for the process. The decision
+        // itself is [`threads_from_env`], which tests can call with
+        // `NotPresent` without racing that cache.
+        threads_from_env(std::env::var("GRAPHVIZ_PURE_THREADS"), available)
     })
+}
+
+/// What [`configured_threads`] stores.
+///
+/// `NotPresent` is [`DEFAULT_THREADS`], capped by `available`. Returning
+/// `available` here would ignore that cap: this is the arm the `OnceLock`
+/// runs when the variable was never set. An explicit count is capped the
+/// same way. `0`, garbage, and a non-Unicode value stay on one thread.
+fn threads_from_env(value: Result<String, std::env::VarError>, available: usize) -> usize {
+    match value {
+        Ok(value) => parse_threads(Some(&value), available),
+        Err(std::env::VarError::NotPresent) => parse_threads(None, available),
+        Err(std::env::VarError::NotUnicode(_)) => 1,
+    }
 }
 
 /// `None` is [`DEFAULT_THREADS`], capped by `available`. An explicit count is
@@ -535,6 +548,34 @@ mod tests {
         assert_eq!(parse_threads(Some("0"), 8), 1);
         assert_eq!(parse_threads(Some(""), 8), 1);
         assert_eq!(parse_threads(Some("nope"), 8), 1);
+    }
+
+    /// The `OnceLock` used to return every core on `NotPresent`. `parse_threads(None)`
+    /// was already the cap, and that test did not call the arm the cache runs.
+    #[test]
+    fn unset_threads_is_min_of_available_and_default() {
+        use std::env::VarError;
+        use std::ffi::OsString;
+
+        assert_eq!(
+            threads_from_env(Err(VarError::NotPresent), 8),
+            DEFAULT_THREADS
+        );
+        assert_eq!(
+            threads_from_env(Err(VarError::NotPresent), 28),
+            DEFAULT_THREADS
+        );
+        assert_eq!(threads_from_env(Err(VarError::NotPresent), 2), 2);
+        assert_eq!(threads_from_env(Err(VarError::NotPresent), 0), 1);
+        assert_ne!(threads_from_env(Err(VarError::NotPresent), 8), 8);
+        assert_ne!(threads_from_env(Err(VarError::NotPresent), 28), 28);
+        assert_eq!(threads_from_env(Ok("6".to_string()), 28), 6);
+        assert_eq!(threads_from_env(Ok("100".to_string()), 8), 8);
+        assert_eq!(threads_from_env(Ok("0".to_string()), 8), 1);
+        assert_eq!(
+            threads_from_env(Err(VarError::NotUnicode(OsString::from("x"))), 8),
+            1
+        );
     }
 
     #[test]
