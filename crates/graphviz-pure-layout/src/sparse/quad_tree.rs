@@ -768,7 +768,7 @@ impl QuadTree {
             c.total_weight += weight;
             let n = f64::from(c.n);
             for i in 0..dim {
-                average[i] = average[i].mul_add(n, coord[i]) / (n + 1.0);
+                average[i] = math::fma(average[i], n, coord[i]) / (n + 1.0);
             }
             let first = match c.qts {
                 Some(first) => first,
@@ -796,7 +796,7 @@ impl QuadTree {
             // C increments n before averaging with n + 1.
             let n = f64::from(c.n);
             for i in 0..dim {
-                average[i] = average[i].mul_add(n, coord[i]) / (n + 1.0);
+                average[i] = math::fma(average[i], n, coord[i]) / (n + 1.0);
             }
             self.points[p].next = c.l;
             c.l = Some(p);
