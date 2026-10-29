@@ -13,7 +13,7 @@ use crate::common::geom::{add, sub as psub};
 use crate::common::types::{Bezier, LGraph, P_PIN, Sub};
 use crate::common::utils::{compute_bb, coord, scan_d};
 use crate::cutil::qsort_by;
-use graphviz_pure_core::diag::{fmt_f, fprintf_stderr, verbose_byte, verbose_on};
+use graphviz_pure_core::diag::{fmt_f, fprintf_stderr, verbose_byte, verbose_gt1, verbose_on};
 use graphviz_pure_core::math;
 
 pub mod cccomps;
@@ -746,16 +746,19 @@ fn verbose_box_cells(
         let m = 2.0 * f64::from(margin);
         let w = grid(bb0.ur.x - bb0.ll.x + m, ssize);
         let h = grid(bb0.ur.y - bb0.ll.y + m, ssize);
-        verbose_cells(&name(), &info.cells, w, h);
+        verbose_cells(name, &info.cells, w, h);
     }
 }
 
 /// genBox's and genPoly's `Verbose > 2` dump: the cells in the PointSet's (x, y) order.
-fn verbose_cells(name: &str, cells: &[(i64, i64)], w: i32, h: i32) {
+///
+/// The name is built by `name` only when the dump is on, as C formats it under
+/// `if (Verbose > 2)`.
+fn verbose_cells(name: impl FnOnce() -> String, cells: &[(i64, i64)], w: i32, h: i32) {
     if verbose_byte() > 2 {
         let mut sorted = cells.to_vec();
         sorted.sort_unstable();
-        let mut m = format!("{name} no. cells {} W {w} H {h}\n", cells.len());
+        let mut m = format!("{} no. cells {} W {w} H {h}\n", name(), cells.len());
         for (x, y) in sorted {
             m.push_str(&format!("  {x} {y} cell\n"));
         }
@@ -852,7 +855,7 @@ fn gen_poly<P: PackGraph + ?Sized>(
     let w = grid(gbb.ur.x - gbb.ll.x + 2.0 * margin, ssize);
     let h = grid(gbb.ur.y - gbb.ll.y + 2.0 * margin, ssize);
     let cells: Vec<(i64, i64)> = ps.into_iter().collect();
-    verbose_cells(&g.pk_name(gi), &cells, w, h);
+    verbose_cells(|| g.pk_name(gi), &cells, w, h);
     Some(GInfo {
         perim: w.wrapping_add(h),
         cells,
@@ -1124,7 +1127,7 @@ fn poly_graphs<P: PackGraph + ?Sized>(g: &mut P, pinfo: &PackInfo) -> Option<Vec
 
 /// polyRects' and polyGraphs' `Verbose > 1` list of the translations.
 fn verbose_places(places: &[Point]) {
-    if verbose_byte() > 1 {
+    if verbose_gt1() {
         let mut m = String::new();
         for (i, p) in places.iter().enumerate() {
             m.push_str(&format!("pos[{i}] {} {}\n", fmt_f(p.x, 0), fmt_f(p.y, 0)));

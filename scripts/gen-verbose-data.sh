@@ -24,6 +24,7 @@ cases=(
   "osage|-v -Kosage|digraph{a->b; b->c; a->c; d}"
   "patchwork|-v -Kpatchwork|digraph{a->b; b->c; a->c; d}"
   "fdp-v2|-v2 -Kfdp|graph{subgraph cluster_a{a--b} b--c; d [xlabel=\"d-\N\"]}"
+  "osage-v2|-v2 -Kosage|digraph{a->b; b->c; a->c; d}"
 )
 for c in "${cases[@]}"; do
   IFS='|' read -r name opts input <<<"$c"

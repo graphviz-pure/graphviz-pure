@@ -167,7 +167,7 @@ fn real_intersect(vs: &Verts<'_>, first: usize, second: usize, p: Point) -> bool
     let real = (vft.x != avft.x && vsd.x != avsd.x)
         || (vft.x == avft.x && vft != p && avft != p)
         || (vsd.x == avsd.x && vsd != p && avsd != p);
-    if real && graphviz_pure_core::diag::verbose_byte() > 1 {
+    if real && graphviz_pure_core::diag::verbose_gt1() {
         let f = |v: f64| graphviz_pure_core::diag::fmt_f(v, 3);
         // putSeg(1, firstv), putSeg(2, secondv)
         let seg = |i: i32, a: Point, b: Point| {

@@ -176,6 +176,14 @@ pub fn verbose_on() -> bool {
     verbose_byte() != 0
 }
 
+/// `if (Verbose > 1)`: whether the level-2 trace (`-v2` and up) is on.
+///
+/// C guards its level-2 traces with this test and formats their lines inside it; the
+/// port's callers do the same, so a trace line costs nothing when it is off.
+pub fn verbose_gt1() -> bool {
+    verbose_byte() > 1
+}
+
 /// `fprintf(stderr, ...)` under `if (Verbose)`: the layouts' progress messages. The arguments
 /// are `format!`'s, formatted only when `-v` is on.
 #[macro_export]

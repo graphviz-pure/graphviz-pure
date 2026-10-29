@@ -463,7 +463,7 @@ fn issue416_verbose_layout_messages_follow_c() {
     let data = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/data/verbose");
     // scripts/gen-verbose-data.sh's cases
     let g = "digraph{a->b; b->c; a->c; d}";
-    let cases: [(&str, &[&str], &str); 10] = [
+    let cases: [(&str, &[&str], &str); 11] = [
         ("dot", &["-v", "-Kdot"], g),
         ("neato", &["-v", "-Kneato"], g),
         ("fdp", &["-v", "-Kfdp"], g),
@@ -484,6 +484,8 @@ fn issue416_verbose_layout_messages_follow_c() {
             &["-v2", "-Kfdp"],
             "graph{subgraph cluster_a{a--b} b--c; d [xlabel=\"d-\\N\"]}",
         ),
+        // level 2: osage's own `Verbose > 1` trace, the layout and the cluster boxes (#595)
+        ("osage-v2", &["-v2", "-Kosage"], g),
     ];
     for (name, opts, input) in cases {
         let want = std::fs::read_to_string(data.join(format!("{name}.txt")))

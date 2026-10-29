@@ -1022,7 +1022,7 @@ fn count_overlap(info: &mut [Info], iter: u32) -> u32 {
             }
         }
     }
-    if graphviz_pure_core::diag::verbose_byte() > 1 {
+    if graphviz_pure_core::diag::verbose_gt1() {
         graphviz_pure_core::diag::fprintf_stderr(&format!("overlap [{iter}] : {count}\n"));
     }
     count
