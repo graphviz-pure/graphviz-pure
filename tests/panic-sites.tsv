@@ -59,7 +59,7 @@ layout/fdpgen/fdpinit.rs	0	0	6	0
 layout/fdpgen/layout.rs	1	0	165	24
 layout/fdpgen/mod.rs	0	0	5	2
 layout/fdpgen/tlayout.rs	0	0	53	10
-layout/fdpgen/xlayout.rs	0	0	26	9
+layout/fdpgen/xlayout.rs	0	0	20	8
 layout/neatogen/adjust.rs	0	0	34	0
 layout/neatogen/bfs.rs	5	0	78	14
 layout/neatogen/call_tri.rs	0	0	2	2
