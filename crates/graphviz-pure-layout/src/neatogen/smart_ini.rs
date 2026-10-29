@@ -11,6 +11,7 @@ use super::matrix_ops::*;
 use super::stress::{TOLERANCE_CG, with_new_weights};
 use super::{NeatoParams, SolverError};
 use crate::cutil::{RAND_MAX, qsort_by};
+use graphviz_pure_core::math;
 
 /// `embed_graph(graph, n, dim, &coords, reweight_graph)`: distances to
 /// `dim` pivots chosen by max-min.
@@ -183,7 +184,7 @@ fn pca_alloc(
         for i in 0..n {
             let mut sum = 0.0f64;
             for k in 0..dim {
-                sum = f64::from(coords[k][i]).mul_add(eigs[j][k], sum);
+                sum = math::fma(f64::from(coords[k][i]), eigs[j][k], sum);
             }
             new_coords[j][i] = sum;
         }
@@ -370,7 +371,7 @@ fn iterative_pca_1d(
         for j in 0..dim {
             let mut sum = 0.0f64;
             for (k, &e) in lap[i].edges.iter().enumerate() {
-                sum = f64::from(w[k]).mul_add(coords[j][e as usize], sum);
+                sum = math::fma(f64::from(w[k]), coords[j][e as usize], sum);
             }
             mat1[i][j] = sum as f32;
         }
@@ -381,7 +382,7 @@ fn iterative_pca_1d(
         for j in 0..dim {
             let mut sum = 0.0f64;
             for k in 0..n {
-                sum = coords[i][k].mul_add(f64::from(mat1[k][j]), sum);
+                sum = math::fma(coords[i][k], f64::from(mat1[k][j]), sum);
             }
             mat[i][j] = sum;
         }
@@ -396,7 +397,7 @@ fn distance_kd(coords: &[Vec<f64>], dim: usize, i: usize, j: usize) -> f64 {
     let mut sum = 0.0f64;
     for c in coords.iter().take(dim) {
         let t = c[i] - c[j];
-        sum = t.mul_add(t, sum);
+        sum = math::fma(t, t, sum);
     }
     sum.sqrt()
 }
@@ -578,7 +579,7 @@ pub fn sparse_stress_subspace_majorization_kd(
         for j in 0..subspace_dim {
             let mut sum = 0.0f64;
             for (k, &e) in lap[i].edges.iter().enumerate() {
-                sum = f64::from(w[k]).mul_add(subspace[j][e as usize], sum);
+                sum = math::fma(f64::from(w[k]), subspace[j][e as usize], sum);
             }
             tmp_mat[i][j] = sum as f32;
         }
@@ -588,7 +589,7 @@ pub fn sparse_stress_subspace_majorization_kd(
         for j in 0..subspace_dim {
             let mut sum = 0.0f64;
             for k in 0..n {
-                sum = subspace[i][k].mul_add(f64::from(tmp_mat[k][j]), sum);
+                sum = math::fma(subspace[i][k], f64::from(tmp_mat[k][j]), sum);
             }
             matrix[i][j] = sum as f32;
         }
@@ -611,10 +612,10 @@ pub fn sparse_stress_subspace_majorization_kd(
                         // -ewgts[j] * dist_list[j] is a float product.
                         let l_ij = f64::from(-w[j] * distances[i].edist[j - 1] as f32) / dist_ij;
                         degree -= l_ij;
-                        b[i] = l_ij.mul_add(coords[k][node], b[i]);
+                        b[i] = math::fma(l_ij, coords[k][node], b[i]);
                     }
                 }
-                b[i] = degree.mul_add(coords[k][i], b[i]);
+                b[i] = math::fma(degree, coords[k][i], b[i]);
             }
             right_mult_with_vector_d(&subspace, subspace_dim, n, &b, &mut b_restricted);
             conjugate_gradient_f(

@@ -1,6 +1,7 @@
 //! `lib/pathplan/triang.c`: orientation tests and ear-clipping triangulation.
 
 use super::Ppoint;
+use graphviz_pure_core::math;
 
 pub const ISCCW: i32 = 1;
 pub const ISCW: i32 = 2;
@@ -8,7 +9,7 @@ pub const ISON: i32 = 3;
 
 /// `ccw(p1, p2, p3)`.
 pub fn ccw(p1: Ppoint, p2: Ppoint, p3: Ppoint) -> i32 {
-    let d = (p1.y - p2.y).mul_add(p3.x - p2.x, -((p3.y - p2.y) * (p1.x - p2.x)));
+    let d = math::fma(p1.y - p2.y, p3.x - p2.x, -((p3.y - p2.y) * (p1.x - p2.x)));
     if d > 0.0 {
         ISCW
     } else if d < 0.0 {
@@ -24,8 +25,8 @@ fn between(pa: Ppoint, pb: Ppoint, pc: Ppoint) -> bool {
     if ccw(pa, pb, pc) != ISON {
         return false;
     }
-    pca.x.mul_add(pba.x, pca.y * pba.y) >= 0.0
-        && pca.x.mul_add(pca.x, pca.y * pca.y) <= pba.x.mul_add(pba.x, pba.y * pba.y)
+    math::fma(pca.x, pba.x, pca.y * pba.y) >= 0.0
+        && math::fma(pca.x, pca.x, pca.y * pca.y) <= math::fma(pba.x, pba.x, pba.y * pba.y)
 }
 
 fn intersects(pa: Ppoint, pb: Ppoint, pc: Ppoint, pd: Ppoint) -> bool {

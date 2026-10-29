@@ -716,7 +716,7 @@ impl Fdp<'_, '_> {
                 ERec {
                     e,
                     alpha: math::atan2(dy, dx),
-                    dist2: dx.mul_add(dx, dy * dy),
+                    dist2: math::fma(dx, dx, dy * dy),
                 }
             })
             .collect();
@@ -777,7 +777,7 @@ impl Fdp<'_, '_> {
         let (mut i, inc): (isize, isize) = if dg.nodes[n].addr < dg.nodes[other].addr {
             (idx as isize, 1)
         } else {
-            angle = delta.mul_add((cnt - 1) as f64, angle);
+            angle = math::fma(delta, (cnt - 1) as f64, angle);
             delta = -delta;
             ((idx + cnt - 1) as isize, -1)
         };

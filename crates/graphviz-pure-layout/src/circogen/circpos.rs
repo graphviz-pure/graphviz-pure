@@ -74,8 +74,8 @@ fn apply_delta(c: &mut Circ, sn: usize, x: f64, y: f64, rotate: f64) {
         let cos_r = math::cos(rotate);
         let sin_r = math::sin(rotate);
         // clang contracts `a*b - c*d` / `a*b + c*d` into one fused multiply-add.
-        let big_x = tmp_x.mul_add(cos_r, -(tmp_y * sin_r));
-        let big_y = tmp_x.mul_add(sin_r, tmp_y * cos_r);
+        let big_x = math::fma(tmp_x, cos_r, -(tmp_y * sin_r));
+        let big_y = math::fma(tmp_x, sin_r, tmp_y * cos_r);
         c.pos[n] = [big_x + x, big_y + y];
     }
     for child in c.blocks[sn].children.clone() {
@@ -128,9 +128,7 @@ fn get_info(c: &Circ, pi: &mut PosInfo, stp: &PosState, min_dist: f64) -> f64 {
 
 /// `setInfo(p0, p1, delta)`.
 fn set_info(p0: &mut PosInfo, p1: &mut PosInfo, delta: f64) {
-    let mut t = p0
-        .diameter
-        .mul_add(p1.min_radius, p1.diameter * p0.min_radius);
+    let mut t = math::fma(p0.diameter, p1.min_radius, p1.diameter * p0.min_radius);
     t /= 2.0 * delta * p0.min_radius * p1.min_radius;
     t = t.max(1.0);
     p0.scale = p0.scale.max(t);
@@ -158,7 +156,7 @@ fn position_children(
         child_angle = 0.0;
         let d = info.diameter / (2.0 * PI);
         child_radius = child_radius.max(d);
-        let d = (2.0 * PI).mul_add(child_radius, -info.diameter);
+        let d = math::fma(2.0 * PI, child_radius, -info.diameter);
         if d > 0.0 {
             min_dist += d / f64::from(info.child_count);
         }

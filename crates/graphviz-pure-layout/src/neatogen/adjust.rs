@@ -341,8 +341,8 @@ pub fn normalize(g: &mut LGraph<'_>, sub: &Sub) -> bool {
         for &v in &sub.nodes {
             let px = g.nodes[v].pos[0] - orig.0;
             let py = g.nodes[v].pos[1] - orig.1;
-            g.nodes[v].pos[0] = px.mul_add(cosv, -(py * sinv)) + orig.0;
-            g.nodes[v].pos[1] = px.mul_add(sinv, py * cosv) + orig.1;
+            g.nodes[v].pos[0] = math::fma(px, cosv, -(py * sinv)) + orig.0;
+            g.nodes[v].pos[1] = math::fma(px, sinv, py * cosv) + orig.1;
         }
         return true;
     }

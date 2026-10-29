@@ -12,6 +12,7 @@ use super::adjust::{AdjustMode, sep_factor};
 use crate::common::ns::{self, NsData, NsEdge, NsNode};
 use crate::common::types::{LGraph, Sub};
 use crate::cutil::DtTree;
+use graphviz_pure_core::math;
 
 /// `SCALE`: for precision, scale up before the algorithms, then down.
 const SCALE: i32 = 10;
@@ -318,9 +319,9 @@ fn points_fma(f: f64) -> i32 {
 /// scalar conversion of `w2`/`h2` does (#240).
 fn points_wrapping(f: f64) -> i32 {
     let v = if f * 72.0 >= 0.0 {
-        f.mul_add(72.0, 0.5)
+        math::fma(f, 72.0, 0.5)
     } else {
-        f.mul_add(72.0, -0.5)
+        math::fma(f, 72.0, -0.5)
     };
     (v as i64) as i32
 }

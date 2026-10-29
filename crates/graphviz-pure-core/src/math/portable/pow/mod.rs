@@ -72,7 +72,7 @@ fn is_signaling(x: f64) -> bool {
 
 #[inline]
 fn fma(a: f64, b: f64, c: f64) -> f64 {
-    a.mul_add(b, c)
+    super::fma(a, b, c)
 }
 
 /// `hi + lo = a + b`, assuming `|a| >= |b|`.

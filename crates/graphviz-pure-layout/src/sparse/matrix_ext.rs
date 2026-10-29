@@ -4,6 +4,7 @@
 //! `SparseMatrix_decompose_to_supervariables`, and a CSR constructor.
 
 use super::{Format, SparseMatrix};
+use graphviz_pure_core::math;
 
 impl SparseMatrix {
     /// A CSR matrix from its arrays (what C builds with `SparseMatrix_new`
@@ -74,7 +75,7 @@ impl SparseMatrix {
                         nz += 1;
                     } else {
                         let t = mask[col] as usize;
-                        c[t] = av[j].mul_add(bv[k], c[t]);
+                        c[t] = math::fma(av[j], bv[k], c[t]);
                     }
                 }
             }
@@ -115,7 +116,7 @@ impl SparseMatrix {
                             nz += 1;
                         } else {
                             let t = mask[col] as usize;
-                            d[t] = (av[j] * bv[l]).mul_add(cv[k], d[t]);
+                            d[t] = math::fma(av[j] * bv[l], cv[k], d[t]);
                         }
                     }
                 }

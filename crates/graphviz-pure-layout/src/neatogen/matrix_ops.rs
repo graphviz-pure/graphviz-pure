@@ -7,6 +7,7 @@
 //! across the conversion).
 
 use super::graphdata::VtxData;
+use graphviz_pure_core::math;
 
 /// `orthog1`: subtract the mean.
 pub fn orthog1(vec: &mut [f64]) {
@@ -68,7 +69,7 @@ pub fn vectors_inner_productf(n: usize, v1: &[f32], v2: &[f32]) -> f64 {
 pub fn vectors_inner_product(n: usize, v1: &[f64], v2: &[f64]) -> f64 {
     let mut result = 0.0f64;
     for i in 0..n {
-        result = v1[i].mul_add(v2[i], result);
+        result = math::fma(v1[i], v2[i], result);
     }
     result
 }
@@ -138,7 +139,7 @@ pub fn right_mult_with_vector(matrix: &[VtxData], n: usize, vector: &[f64], resu
         let mut res = 0.0f64;
         let w = matrix[i].ewgts.as_ref().expect("weights");
         for (j, &e) in matrix[i].edges.iter().enumerate() {
-            res = f64::from(w[j]).mul_add(vector[e as usize], res);
+            res = math::fma(f64::from(w[j]), vector[e as usize], res);
         }
         result[i] = res;
     }
@@ -149,7 +150,7 @@ pub fn right_mult_with_vector_f(matrix: &[Vec<f32>], n: usize, vector: &[f64], r
     for i in 0..n {
         let mut res = 0.0f64;
         for j in 0..n {
-            res = f64::from(matrix[i][j]).mul_add(vector[j], res);
+            res = math::fma(f64::from(matrix[i][j]), vector[j], res);
         }
         result[i] = res;
     }
@@ -167,7 +168,7 @@ pub fn right_mult_with_vector_transpose(
     for i in 0..dim1 {
         let mut res = 0.0f64;
         for j in 0..dim2 {
-            res = matrix[j][i].mul_add(vector[j], res);
+            res = math::fma(matrix[j][i], vector[j], res);
         }
         result[i] = res;
     }
@@ -184,7 +185,7 @@ pub fn right_mult_with_vector_d(
     for i in 0..dim1 {
         let mut res = 0.0f64;
         for j in 0..dim2 {
-            res = matrix[i][j].mul_add(vector[j], res);
+            res = math::fma(matrix[i][j], vector[j], res);
         }
         result[i] = res;
     }
@@ -193,7 +194,7 @@ pub fn right_mult_with_vector_d(
 /// `scadd`: `vec1[0..=end] += fac * vec2`.
 pub fn scadd(vec1: &mut [f64], end: usize, fac: f64, vec2: &[f64]) {
     for i in 0..=end {
-        vec1[i] = fac.mul_add(vec2[i], vec1[i]);
+        vec1[i] = math::fma(fac, vec2[i], vec1[i]);
     }
 }
 

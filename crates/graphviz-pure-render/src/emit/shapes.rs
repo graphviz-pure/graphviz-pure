@@ -157,7 +157,7 @@ fn add(a: Point, b: Point) -> Point {
 /// Apple clang contracts into a fused multiply-add (`fmla.2d` in
 /// `alloc_interpolation_points`), so the port fuses it explicitly.
 fn interpolate(t: f64, p: Point, q: Point) -> Point {
-    Point::new(t.mul_add(q.x - p.x, p.x), t.mul_add(q.y - p.y, p.y))
+    Point::new(math::fma(t, q.x - p.x, p.x), math::fma(t, q.y - p.y, p.y))
 }
 
 impl<E: Engine> Emitter<'_, E> {
@@ -338,8 +338,8 @@ impl<E: Engine> Emitter<'_, E> {
                 let p = poly.vertices[i + j * sides];
                 // C (clang) fuses `P.x * xsize + ND_coord(n).x` (`fmla.2d`).
                 *a = Point::new(
-                    p.x.mul_add(xsize, nd.coord.x),
-                    p.y.mul_add(ysize, nd.coord.y),
+                    math::fma(p.x, xsize, nd.coord.x),
+                    math::fma(p.y, ysize, nd.coord.y),
                 );
             }
             if sides <= 2 {
@@ -389,8 +389,8 @@ impl<E: Engine> Emitter<'_, E> {
             for (i, a) in af.iter_mut().enumerate() {
                 let p = poly.vertices[i];
                 *a = Point::new(
-                    p.x.mul_add(xsize, nd.coord.x),
-                    p.y.mul_add(ysize, nd.coord.y),
+                    math::fma(p.x, xsize, nd.coord.x),
+                    math::fma(p.y, ysize, nd.coord.y),
                 );
             }
             let imagescale = nd.attrs.late_string("imagescale", "false");
@@ -432,7 +432,7 @@ impl<E: Engine> Emitter<'_, E> {
                 2.0 * std::f64::consts::PI
             } else {
                 // C (clang) fuses `angle0 + 2 * M_PI * s.t`.
-                (2.0 * std::f64::consts::PI).mul_add(s.t, angle0)
+                math::fma(2.0 * std::f64::consts::PI, s.t, angle0)
             };
             let pp = super::geom::elliptic_wedge(ctr, semi.x, semi.y, angle0, angle1);
             self.bezier(&pp, 1);
@@ -601,7 +601,7 @@ impl<E: Engine> Emitter<'_, E> {
             if rounded {
                 // `1.0 - RBCURVE * t`, which clang contracts to `fmadd(t, -0.5, 1.0)`. `0.5 * t`
                 // is exact, so the result is the same unfused; the fma only mirrors C.
-                b.push(interpolate(t.mul_add(-0.5, 1.0), p0, p1));
+                b.push(interpolate(math::fma(t, -0.5, 1.0), p0, p1));
             }
         }
         b.push(b[0]);

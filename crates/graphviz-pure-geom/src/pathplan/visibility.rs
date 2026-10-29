@@ -4,10 +4,11 @@
 use super::cvt::Vconfig;
 use super::inpoly::in_poly;
 use super::{POLYID_UNKNOWN, Ppoint};
+use graphviz_pure_core::math;
 
 /// `area2(a, b, c)`: twice the signed area of `abc`.
 pub fn area2(a: Ppoint, b: Ppoint, c: Ppoint) -> f64 {
-    (a.y - b.y).mul_add(c.x - b.x, -((c.y - b.y) * (a.x - b.x)))
+    math::fma(a.y - b.y, c.x - b.x, -((c.y - b.y) * (a.x - b.x)))
 }
 
 /// `wind(a, b, c)`: 1 counter-clockwise, -1 clockwise, 0 collinear (with tolerance).
@@ -58,7 +59,7 @@ fn in_cone(a0: Ppoint, a1: Ppoint, a2: Ppoint, b: Ppoint) -> bool {
 pub fn dist2(a: Ppoint, b: Ppoint) -> f64 {
     let dx = a.x - b.x;
     let dy = a.y - b.y;
-    dx.mul_add(dx, dy * dy)
+    math::fma(dx, dx, dy * dy)
 }
 
 fn dist(a: Ppoint, b: Ppoint) -> f64 {

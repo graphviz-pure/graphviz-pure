@@ -8,10 +8,12 @@ disallowed-macros = [
 ]
 # Every transcendental function goes through `graphviz_pure_core::math`, which calls the same
 # portable implementations on every target, so no build computes with a platform libm. Only
-# `math::portable` itself (and the test comparing it with the system libm) may use them.
-# `sqrt` and `mul_add` are correctly rounded everywhere and stay allowed.
+# `math` itself (and the test comparing it with the system libm) may use them.
+# `sqrt` is correctly rounded and fast everywhere and stays allowed; `f64::mul_add` goes through
+# `math::fma` so wasm32 and x86-64 musl without `fma` use the inlined Boldo–Melquiond fast path.
 disallowed-methods = [
     { path = "std::io::stderr", reason = "write diagnostics through graphviz_pure_core::diag" },
+    { path = "f64::mul_add", reason = "call graphviz_pure_core::math::fma (docs/porting/libm.md)" },
     { path = "f64::sin", reason = "call graphviz_pure_core::math, the same portable functions on every platform (docs/porting/libm.md)" },
     { path = "f64::cos", reason = "call graphviz_pure_core::math, the same portable functions on every platform (docs/porting/libm.md)" },
     { path = "f64::tan", reason = "call graphviz_pure_core::math, the same portable functions on every platform (docs/porting/libm.md)" },

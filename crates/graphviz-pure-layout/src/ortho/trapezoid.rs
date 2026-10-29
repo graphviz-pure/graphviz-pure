@@ -79,7 +79,7 @@ const S_LEFT: i32 = 1;
 const S_RIGHT: i32 = 2;
 
 fn cross(v0: Point, v1: Point, v2: Point) -> f64 {
-    (v1.x - v0.x).mul_add(v2.y - v0.y, -((v1.y - v0.y) * (v2.x - v0.x)))
+    math::fma(v1.x - v0.x, v2.y - v0.y, -((v1.y - v0.y) * (v2.x - v0.x)))
 }
 
 /// `qnode_t`.
@@ -588,7 +588,7 @@ fn add_segment(
             } else {
                 let y0 = tr.at(t)?.lo.y;
                 let yt = (y0 - s.v0.y) / (s.v1.y - s.v0.y);
-                let tmppt = Point::new(yt.mul_add(s.v1.x - s.v0.x, s.v0.x), y0);
+                let tmppt = Point::new(math::fma(yt, s.v1.x - s.v0.x, s.v0.x), y0);
                 if less_than(tmppt, tr.at(t)?.lo) {
                     i_d0 = true;
                 }

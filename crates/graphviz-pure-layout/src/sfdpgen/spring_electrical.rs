@@ -225,7 +225,7 @@ pub fn average_edge_length(a: &SparseMatrix, dim: usize, coord: &[f64]) -> f64 {
             let mut d = 0.0f64;
             for k in 0..dim {
                 let t = coord[dim * i + k] - coord[dim * c];
-                d = t.mul_add(t, d);
+                d = math::fma(t, t, d);
             }
             dist += d.sqrt();
         }
@@ -253,8 +253,8 @@ fn node_degree(a: &SparseMatrix, i: usize) -> i32 {
 
 /// `set_leaves(x, dim, dist, ang, i, j)`.
 fn set_leaves(x: &mut [f64], dim: usize, dist: f64, ang: f64, i: usize, j: usize) {
-    x[dim * j] = math::cos(ang).mul_add(dist, x[dim * i]);
-    x[dim * j + 1] = math::sin(ang).mul_add(dist, x[dim * i + 1]);
+    x[dim * j] = math::fma(math::cos(ang), dist, x[dim * i]);
+    x[dim * j + 1] = math::fma(math::sin(ang), dist, x[dim * i + 1]);
 }
 
 /// `beautify_leaves(dim, A, x)`: spread the leaves of each node evenly around it.
@@ -340,7 +340,7 @@ fn attractive(a: &SparseMatrix, dim: usize, x: &[f64], i: usize, crk: f64, f: &m
         let dist = distance(x, dim, i, c);
         for k in 0..dim {
             let t = crk * (x[i * dim + k] - x[c * dim + k]);
-            f[k] = (-t).mul_add(dist, f[k]);
+            f[k] = math::fma(-t, dist, f[k]);
         }
     }
 }
@@ -349,7 +349,7 @@ fn attractive(a: &SparseMatrix, dim: usize, x: &[f64], i: usize, crk: f64, f: &m
 fn move_node(dim: usize, x: &mut [f64], i: usize, f: &mut [f64], step: f64) -> f64 {
     let mut ff = 0.0f64;
     for k in 0..dim {
-        ff = f[k].mul_add(f[k], ff);
+        ff = math::fma(f[k], f[k], ff);
     }
     ff = ff.sqrt();
     if ff > 0.0 {
@@ -358,7 +358,7 @@ fn move_node(dim: usize, x: &mut [f64], i: usize, f: &mut [f64], step: f64) -> f
         }
     }
     for k in 0..dim {
-        x[i * dim + k] = step.mul_add(f[k], x[i * dim + k]);
+        x[i * dim + k] = math::fma(step, f[k], x[i * dim + k]);
     }
     ff
 }
@@ -410,7 +410,11 @@ fn spring_electrical_embedding_fast(
         for i in 0..n {
             fnorm += move_node(dim, x, i, &mut force[i * dim..i * dim + dim], step);
         }
-        opt.train(3.3f64.mul_add(counts[2], 0.85f64.mul_add(counts[1], counts[0])));
+        opt.train(math::fma(
+            3.3,
+            counts[2],
+            math::fma(0.85, counts[1], counts[0]),
+        ));
         step = update_step(adaptive_cooling, step, fnorm, fnorm0);
         if !(step > TOL && f64::from(iter) < maxiter) {
             break;
@@ -598,7 +602,7 @@ fn spring_electrical_embedding(
         if qt.is_some() {
             nsuper_avg /= n as f64;
             counts_avg /= n as f64;
-            opt.train(5.0f64.mul_add(nsuper_avg, counts_avg));
+            opt.train(math::fma(5.0, nsuper_avg, counts_avg));
         }
         step = update_step(adaptive_cooling, step, fnorm, fnorm0);
         if !(step > TOL && f64::from(iter) < maxiter) {
@@ -713,7 +717,7 @@ fn interpolate_coord(dim: usize, a: &SparseMatrix, x: &mut [f64]) {
         if nz > 0 {
             let beta = (1.0 - alpha) / f64::from(nz);
             for k in 0..dim {
-                x[i * dim + k] = alpha.mul_add(x[i * dim + k], beta * y[k]);
+                x[i * dim + k] = math::fma(alpha, x[i * dim + k], beta * y[k]);
             }
         }
     }
@@ -736,7 +740,7 @@ fn prolongate(
             let c = r.ja[j as usize] as usize;
             for k in 0..dim {
                 let d = drand() - 0.5;
-                y[c * dim + k] = delta.mul_add(d, y[c * dim + k]);
+                y[c * dim + k] = math::fma(delta, d, y[c * dim + k]);
             }
         }
     }
@@ -781,7 +785,7 @@ fn pcp_rotate(n: usize, dim: usize, x: &mut [f64]) {
     for i in 0..n {
         for k in 0..dim {
             for l in 0..dim {
-                y[dim * k + l] = x[i * dim + k].mul_add(x[i * dim + l], y[dim * k + l]);
+                y[dim * k + l] = math::fma(x[i * dim + k], x[i * dim + l], y[dim * k + l]);
             }
         }
     }
@@ -789,18 +793,18 @@ fn pcp_rotate(n: usize, dim: usize, x: &mut [f64]) {
     if y[1] == 0.0 {
         axis = [0.0, 1.0];
     } else {
-        let s = y[0].mul_add(y[0], 4.0 * y[1] * y[1]);
-        let s = (-(2.0 * y[0])).mul_add(y[3], s);
-        let s = y[3].mul_add(y[3], s);
+        let s = math::fma(y[0], y[0], 4.0 * y[1] * y[1]);
+        let s = math::fma(-(2.0 * y[0]), y[3], s);
+        let s = math::fma(y[3], y[3], s);
         axis[0] = -(-y[0] + y[3] - s.sqrt()) / (2.0 * y[1]);
         axis[1] = 1.0;
     }
-    let dist = axis[0].mul_add(axis[0], 1.0).sqrt();
+    let dist = math::fma(axis[0], axis[0], 1.0).sqrt();
     axis[0] /= dist;
     axis[1] /= dist;
     for i in 0..n {
-        let x0 = x[dim * i].mul_add(axis[0], x[dim * i + 1] * axis[1]);
-        let x1 = (-x[dim * i]).mul_add(axis[1], x[dim * i + 1] * axis[0]);
+        let x0 = math::fma(x[dim * i], axis[0], x[dim * i + 1] * axis[1]);
+        let x1 = math::fma(-x[dim * i], axis[1], x[dim * i + 1] * axis[0]);
         x[dim * i] = x0;
         x[dim * i + 1] = x1;
     }
@@ -827,8 +831,8 @@ fn rotate(n: usize, dim: usize, x: &mut [f64], angle: f64) {
     }
     let axis = [math::cos(-angle * radian), math::sin(-angle * radian)];
     for i in 0..n {
-        let x0 = x[dim * i].mul_add(axis[0], x[dim * i + 1] * axis[1]);
-        let x1 = (-x[dim * i]).mul_add(axis[1], x[dim * i + 1] * axis[0]);
+        let x0 = math::fma(x[dim * i], axis[0], x[dim * i + 1] * axis[1]);
+        let x1 = math::fma(-x[dim * i], axis[1], x[dim * i + 1] * axis[0]);
         x[dim * i] = x0;
         x[dim * i + 1] = x1;
     }

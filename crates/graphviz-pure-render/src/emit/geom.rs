@@ -11,7 +11,7 @@ use graphviz_pure_core::math;
 /// `DIST2(a, b)`: C (clang) fuses `SQR(dx) + SQR(dy)` into `fma(dx, dx, dy * dy)`.
 fn dist2(a: Point, b: Point) -> f64 {
     let (dx, dy) = (a.x - b.x, a.y - b.y);
-    dx.mul_add(dx, dy * dy)
+    math::fma(dx, dx, dy * dy)
 }
 
 fn dist(a: Point, b: Point) -> f64 {
@@ -107,7 +107,7 @@ pub(crate) fn split_bspline(list: &[Point], t: f64) -> (Vec<Point>, Vec<Point>) 
 pub(crate) fn computeoffset_p(p: Point, q: Point, d: f64) -> Point {
     let (x, y) = (p.x - q.x, p.y - q.y);
     // C (clang) fuses `x * x + y * y`.
-    let d = d / (x.mul_add(x, y * y) + 0.0001).sqrt();
+    let d = d / (math::fma(x, x, y * y) + 0.0001).sqrt();
     Point::new(y * d, -x * d)
 }
 
@@ -119,7 +119,7 @@ pub(crate) fn computeoffset_qr(p: Point, q: Point, r: Point, s: Point, d: f64) -
         x = p.x - s.x;
         y = p.y - s.y;
         // C (clang) fuses `x * x + y * y`.
-        len = (x.mul_add(x, y * y) + 0.0001).sqrt();
+        len = (math::fma(x, x, y * y) + 0.0001).sqrt();
     }
     let d = d / len;
     Point::new(y * d, -x * d)
@@ -165,14 +165,14 @@ pub(crate) fn gradient_points(a: &[Point], angle: f64, flags: i32) -> [Point; 2]
         let (sina, cosa) = (math::sin(angle), math::cos(angle));
         // C (clang) fuses each `±center ± half * sin/cos`.
         if rhs {
-            g[0].y = (-half_y).mul_add(sina, center.y);
-            g[1].y = half_y.mul_add(sina, center.y);
+            g[0].y = math::fma(-half_y, sina, center.y);
+            g[1].y = math::fma(half_y, sina, center.y);
         } else {
-            g[0].y = (max.y - center.y).mul_add(math::sin(angle), -center.y);
-            g[1].y = (-(center.y - min.y)).mul_add(math::sin(angle), -center.y);
+            g[0].y = math::fma(max.y - center.y, math::sin(angle), -center.y);
+            g[1].y = math::fma(-(center.y - min.y), math::sin(angle), -center.y);
         }
-        g[0].x = (-half_x).mul_add(cosa, center.x);
-        g[1].x = half_x.mul_add(cosa, center.x);
+        g[0].x = math::fma(-half_x, cosa, center.x);
+        g[1].x = math::fma(half_x, cosa, center.x);
     }
     g
 }
@@ -204,8 +204,8 @@ fn bezier_point_fma(v: &[Point; 4], t: f64) -> Point {
     for i in 1..=3 {
         for j in 0..=(3 - i) {
             vt[j] = Point::new(
-                (1.0 - t).mul_add(vt[j].x, t * vt[j + 1].x),
-                (1.0 - t).mul_add(vt[j].y, t * vt[j + 1].y),
+                math::fma(1.0 - t, vt[j].x, t * vt[j + 1].x),
+                math::fma(1.0 - t, vt[j].y, t * vt[j + 1].y),
             );
         }
     }
@@ -226,7 +226,7 @@ pub(crate) fn taper(list: &[Point], dir: TaperDir, initwid: f64) -> Vec<Point> {
     let mymod = |o: f64, m: f64| {
         if o < 0.0 || o >= m {
             // C (clang) fuses `v * modulus + original`.
-            (-(o / m).floor()).mul_add(m, o)
+            math::fma(-(o / m).floor(), m, o)
         } else {
             o
         }
@@ -316,21 +316,21 @@ pub(crate) fn taper(list: &[Point], dir: TaperDir, initwid: f64) -> Vec<Point> {
         lineout = lo;
         // C (clang) fuses each `x + cos(dir) * lineout` of `taper` and `drawbevel`.
         out.push(Point::new(
-            math::cos(d).mul_add(lo, x),
-            math::sin(d).mul_add(lo, y),
+            math::fma(math::cos(d), lo, x),
+            math::fma(math::sin(d), lo, y),
         ));
         if bevel {
             // drawbevel (C uses x for both coordinates)
             out.push(Point::new(
-                lo.mul_add(math::cos(d2), x),
-                lo.mul_add(math::sin(d2), x),
+                math::fma(lo, math::cos(d2), x),
+                math::fma(lo, math::sin(d2), x),
             ));
         }
     }
     direction += d2r(180.0);
     out.push(Point::new(
-        math::cos(direction).mul_add(lineout, x),
-        math::sin(direction).mul_add(lineout, y),
+        math::fma(math::cos(direction), lineout, x),
+        math::fma(math::sin(direction), lineout, y),
     ));
     for i in (0..n.saturating_sub(1)).rev() {
         let (px, py) = (pts[i].0.x, pts[i].0.y);
@@ -338,13 +338,13 @@ pub(crate) fn taper(list: &[Point], dir: TaperDir, initwid: f64) -> Vec<Point> {
         let dir = d + d2r(180.0);
         let dir2 = d2 + d2r(180.0);
         out.push(Point::new(
-            math::cos(dir2).mul_add(lo, px),
-            math::sin(dir2).mul_add(lo, py),
+            math::fma(math::cos(dir2), lo, px),
+            math::fma(math::sin(dir2), lo, py),
         ));
         if bevel {
             out.push(Point::new(
-                lo.mul_add(math::cos(dir), px),
-                lo.mul_add(math::sin(dir), px),
+                math::fma(lo, math::cos(dir), px),
+                math::fma(lo, math::sin(dir), px),
             ));
         }
     }
@@ -360,7 +360,7 @@ pub(crate) fn elliptic_wedge(ctr: Point, a: f64, b: f64, lambda1: f64, lambda2: 
     let mut eta2 = math::atan2(math::sin(lambda2) / b, math::cos(lambda2) / a);
     // C (clang) fuses `eta2 -= TWOPI * floor(…)`, the polynomials of `RationalFunction`
     // and `estimateError`, `4 + 3 * t * t` and the control points of `curveTo`.
-    eta2 = (-twopi).mul_add(((eta2 - eta1) / twopi).floor(), eta2);
+    eta2 = math::fma(-twopi, ((eta2 - eta1) / twopi).floor(), eta2);
     if lambda2 - lambda1 > PI && eta2 - eta1 < PI {
         eta2 += twopi;
     }
@@ -393,7 +393,7 @@ pub(crate) fn elliptic_wedge(ctr: Point, a: f64, b: f64, lambda1: f64, lambda2: 
         ],
     ];
     const SAFETY: [f64; 4] = [0.001, 4.98, 0.207, 0.0067];
-    let rf = |x: f64, c: &[f64; 4]| x.mul_add(x.mul_add(c[0], c[1]), c[2]) / (x + c[3]);
+    let rf = |x: f64, c: &[f64; 4]| math::fma(x, math::fma(x, c[0], c[1]), c[2]) / (x + c[3]);
     let estimate = |eta_a: f64, eta_b: f64| {
         let eta = 0.5 * (eta_a + eta_b);
         let x = b / a;
@@ -404,21 +404,25 @@ pub(crate) fn elliptic_wedge(ctr: Point, a: f64, b: f64, lambda1: f64, lambda2: 
             math::cos(6.0 * eta),
         );
         let c = if x < 0.25 { &LOW } else { &HIGH };
-        let c0 = cos6.mul_add(
+        let c0 = math::fma(
+            cos6,
             rf(x, &c[0][3]),
-            cos4.mul_add(
+            math::fma(
+                cos4,
                 rf(x, &c[0][2]),
-                cos2.mul_add(rf(x, &c[0][1]), rf(x, &c[0][0])),
+                math::fma(cos2, rf(x, &c[0][1]), rf(x, &c[0][0])),
             ),
         );
-        let c1 = cos6.mul_add(
+        let c1 = math::fma(
+            cos6,
             rf(x, &c[1][3]),
-            cos4.mul_add(
+            math::fma(
+                cos4,
                 rf(x, &c[1][2]),
-                cos2.mul_add(rf(x, &c[1][1]), rf(x, &c[1][0])),
+                math::fma(cos2, rf(x, &c[1][1]), rf(x, &c[1][0])),
             ),
         );
-        rf(x, &SAFETY) * a * math::exp(c1.mul_add(d_eta, c0))
+        rf(x, &SAFETY) * a * math::exp(math::fma(c1, d_eta, c0))
     };
     let mut found = false;
     let mut n: i32 = 1;
@@ -450,7 +454,7 @@ pub(crate) fn elliptic_wedge(ctr: Point, a: f64, b: f64, lambda1: f64, lambda2: 
     };
     line_to(&mut path, xb, yb);
     let t = math::tan(0.5 * d_eta);
-    let alpha = math::sin(d_eta) * ((3.0 * t).mul_add(t, 4.0).sqrt() - 1.0) / 3.0;
+    let alpha = math::sin(d_eta) * (math::fma(3.0 * t, t, 4.0).sqrt() - 1.0) / 3.0;
     for _ in 0..n {
         let (xa, ya, xad, yad) = (xb, yb, xbd, ybd);
         eta_b += d_eta;
@@ -459,10 +463,13 @@ pub(crate) fn elliptic_wedge(ctr: Point, a: f64, b: f64, lambda1: f64, lambda2: 
         yb = ctr.y + b * s;
         xbd = -a * s;
         ybd = b * c;
-        path.push(Point::new(alpha.mul_add(xad, xa), alpha.mul_add(yad, ya)));
         path.push(Point::new(
-            (-alpha).mul_add(xbd, xb),
-            (-alpha).mul_add(ybd, yb),
+            math::fma(alpha, xad, xa),
+            math::fma(alpha, yad, ya),
+        ));
+        path.push(Point::new(
+            math::fma(-alpha, xbd, xb),
+            math::fma(-alpha, ybd, yb),
         ));
         path.push(Point::new(xb, yb));
     }

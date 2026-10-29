@@ -86,7 +86,7 @@ fn calculate_stress(pos: &[f64], terms: &[TermSgd]) -> f64 {
         let dx = at(i, 0) - at(j, 0);
         let dy = at(i, 1) - at(j, 1);
         let r = math::hypot(dx, dy) - f64::from(t.d);
-        stress = f64::from(t.w).mul_add(r * r, stress);
+        stress = math::fma(f64::from(t.w), r * r, stress);
     }
     stress
 }

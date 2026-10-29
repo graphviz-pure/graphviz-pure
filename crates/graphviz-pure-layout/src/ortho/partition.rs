@@ -99,7 +99,7 @@ fn generate_random_ordering(n: usize, permute: &mut [i32]) {
         *p = i as i32 + 1;
     }
     for i in 0..n {
-        let j = crate::cutil::drand48().mul_add((n - i) as f64, i as f64) as usize;
+        let j = math::fma(crate::cutil::drand48(), (n - i) as f64, i as f64) as usize;
         if j != i {
             permute.swap(i, j);
         }
@@ -126,8 +126,8 @@ fn inside_polygon(t: &Trap, seg: &[SegmentT]) -> OResult<bool> {
 fn get_angle(vp0: Point, vpnext: Point, vp1: Point) -> f64 {
     let v0 = Point::new(vpnext.x - vp0.x, vpnext.y - vp0.y);
     let v1 = Point::new(vp1.x - vp0.x, vp1.y - vp0.y);
-    let dot = v0.x.mul_add(v1.x, v0.y * v1.y);
-    let cross_sine = v0.x.mul_add(v1.y, -(v1.x * v0.y));
+    let dot = math::fma(v0.x, v1.x, v0.y * v1.y);
+    let cross_sine = math::fma(v0.x, v1.y, -(v1.x * v0.y));
     let l0 = math::hypot(v0.x, v0.y);
     let l1 = math::hypot(v1.x, v1.y);
     if cross_sine >= 0.0 {

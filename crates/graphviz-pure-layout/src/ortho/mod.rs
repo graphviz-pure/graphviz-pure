@@ -31,6 +31,7 @@ use crate::cdt::Cdt;
 use crate::common::splines::{SplineGraph, SplineInfo, clip_and_install_info};
 use fail::{At, Fail, Need, OResult, ensure};
 use graphviz_pure_core::Point;
+use graphviz_pure_core::math;
 use maze::{Cell, M_BOTTOM, M_LEFT, M_RIGHT, M_TOP, MZ_HSCAN, MZ_VSCAN, Maze, mk_maze, update_wts};
 use rawgraph::RawGraph;
 use sgraph::{Pq, SGraph};
@@ -996,7 +997,7 @@ impl Ortho {
         let chp = self.vchans.chan(k);
         let f = f64::from(s.track_no.need()?) / (chp.seg_list.len() as f64 + 1.0);
         let bb = self.mp.cell(chp.cp)?.bb;
-        Ok(f.mul_add(bb.ur.x - bb.ll.x, bb.ll.x))
+        Ok(math::fma(f, bb.ur.x - bb.ll.x, bb.ll.x))
     }
 
     /// `htrack(seg, m)`.
@@ -1007,7 +1008,7 @@ impl Ortho {
         let f = 1.0 - f64::from(s.track_no.need()?) / (chp.seg_list.len() as f64 + 1.0);
         let bb = self.mp.cell(chp.cp)?.bb;
         let (lo, hi) = (bb.ll.y, bb.ur.y);
-        Ok(f.mul_add(hi - lo, lo).round())
+        Ok(math::fma(f, hi - lo, lo).round())
     }
 }
 
@@ -1168,7 +1169,7 @@ fn route_edges<S: OrthoGraph + ?Sized>(
             }
             let p = g.coord(g.tail(e));
             let q = g.coord(g.head(e));
-            let d = (p.x - q.x).mul_add(p.x - q.x, (p.y - q.y) * (p.y - q.y));
+            let d = math::fma(p.x - q.x, p.x - q.x, (p.y - q.y) * (p.y - q.y));
             es.push((d, e));
         }
     }

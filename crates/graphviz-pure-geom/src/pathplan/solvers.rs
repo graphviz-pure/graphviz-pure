@@ -20,12 +20,12 @@ pub fn solve3(coeff: &[f64; 4], roots: &mut [f64; 3]) -> usize {
     let c_over_a = c / a;
     let d_over_a = d / a;
     let mut p = b_over_3a * b_over_3a;
-    let q = (2.0 * b_over_3a).mul_add(p, -(b_over_3a * c_over_a)) + d_over_a;
+    let q = math::fma(2.0 * b_over_3a, p, -(b_over_3a * c_over_a)) + d_over_a;
     p = c_over_a / 3.0 - p;
-    let disc = q.mul_add(q, 4.0 * p * p * p);
+    let disc = math::fma(q, q, 4.0 * p * p * p);
     let rootn;
     if disc < 0.0 {
-        let r = 0.5 * q.mul_add(q, -disc).sqrt();
+        let r = 0.5 * math::fma(q, q, -disc).sqrt();
         let theta = math::atan2((-disc).sqrt(), -q);
         let temp = 2.0 * math::cbrt(r);
         roots[0] = temp * math::cos(theta / 3.0);
@@ -57,12 +57,12 @@ fn solve2(coeff: &[f64; 3], roots: &mut [f64; 3]) -> usize {
     }
     let b_over_2a = b / (2.0 * a);
     let c_over_a = c / a;
-    let disc = b_over_2a.mul_add(b_over_2a, -c_over_a);
+    let disc = math::fma(b_over_2a, b_over_2a, -c_over_a);
     if disc < 0.0 {
         0
     } else if disc > 0.0 {
         roots[0] = -b_over_2a + disc.sqrt();
-        roots[1] = (-2.0f64).mul_add(b_over_2a, -roots[0]);
+        roots[1] = math::fma(-2.0, b_over_2a, -roots[0]);
         2
     } else {
         roots[0] = -b_over_2a;

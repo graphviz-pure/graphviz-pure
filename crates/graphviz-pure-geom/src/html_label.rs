@@ -15,6 +15,7 @@ use graphviz_pure_core::cnum::{c_max, c_round};
 use graphviz_pure_core::font::{
     LINESPACING, LabelSubstContext, estimate_text_size_styled, strdup_and_subst_obj,
 };
+use graphviz_pure_core::math;
 use graphviz_pure_core::{BoundingBox, Point};
 use std::collections::HashSet;
 
@@ -1933,8 +1934,8 @@ fn size_html_tbl(tbl: &mut HtmlTbl, _parent: Option<&HtmlData>, env: &mut Env<'_
     let space = f64::from(tbl.data.space);
     let border = f64::from(tbl.data.border);
     // C (clang) fuses `(count + 1) * space + 2 * border`.
-    let mut wd = (tbl.column_count as f64 + 1.0).mul_add(space, 2.0 * border);
-    let mut ht = (tbl.row_count as f64 + 1.0).mul_add(space, 2.0 * border);
+    let mut wd = math::fma(tbl.column_count as f64 + 1.0, space, 2.0 * border);
+    let mut ht = math::fma(tbl.row_count as f64 + 1.0, space, 2.0 * border);
     for w in &tbl.widths[..tbl.column_count] {
         wd += w;
     }
@@ -2126,7 +2127,7 @@ fn pos_html_tbl(tbl: &mut HtmlTbl, mut pos: BoundingBox, sides: u8, parent_pen: 
     let ncols = tbl.column_count as f64;
     let extra = delx / ncols;
     // C (clang) fuses `delx - extra * column_count` (and the rows' below).
-    let plus = c_round((-extra).mul_add(ncols, delx));
+    let plus = c_round(math::fma(-extra, ncols, delx));
     for i in 0..=tbl.column_count {
         let d = tbl.widths[i]
             + extra
@@ -2141,7 +2142,7 @@ fn pos_html_tbl(tbl: &mut HtmlTbl, mut pos: BoundingBox, sides: u8, parent_pen: 
     let mut y = pos.ur.y - border - space;
     let nrows = tbl.row_count as f64;
     let extra = dely / nrows;
-    let plus = c_round((-extra).mul_add(nrows, dely));
+    let plus = c_round(math::fma(-extra, nrows, dely));
     for i in 0..=tbl.row_count {
         let d = tbl.heights[i]
             + extra

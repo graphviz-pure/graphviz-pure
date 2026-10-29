@@ -7,6 +7,7 @@ use crate::common::utils::late_double;
 use crate::cutil::qsort_by;
 use crate::fdpgen::{ClusterTree, subgraph_member_nodes};
 use graphviz_pure_core::cnum::is_exactly_zero;
+use graphviz_pure_core::math;
 use graphviz_pure_core::{AttrMap, BoundingBox, Graph, Point};
 
 const DFLT_SZ: f64 = 1.0;
@@ -155,7 +156,7 @@ impl Builder<'_> {
         let w = tree.r.size[0];
         let delta = h - w;
         // C (clang) fuses this multiply-add.
-        let disc = delta.mul_add(delta, 4.0 * tree.child_area).sqrt();
+        let disc = math::fma(delta, delta, 4.0 * tree.child_area).sqrt();
         let m = (h + w - disc) / 2.0;
         let crec = Rectangle {
             x: [tree.r.x[0], tree.r.x[1]],

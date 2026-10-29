@@ -184,8 +184,8 @@ impl XdotEngine {
             } else {
                 // C (clang) fuses `G[0] + r2 / 4 * cos/sin(angle)`.
                 Point::new(
-                    (r2 / 4.0).mul_add(math::cos(angle), g[0].x),
-                    (r2 / 4.0).mul_add(math::sin(angle), g[0].y),
+                    math::fma(r2 / 4.0, math::cos(angle), g[0].x),
+                    math::fma(r2 / 4.0, math::sin(angle), g[0].y),
                 )
             };
             let r1 = r2 / 4.0;

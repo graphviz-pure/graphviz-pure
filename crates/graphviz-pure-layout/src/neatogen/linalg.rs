@@ -3,6 +3,8 @@
 
 /// `solve(a, b, c, n)`: solve `a b = c` for row-major `a[n][n]`. `a` and `c`
 /// are restored; on an ill-conditioned matrix `b` is left unchanged.
+use graphviz_pure_core::math;
+
 pub fn solve(a: &mut [f64], b: &mut [f64], c: &mut [f64], n: usize) {
     let asave = a.to_vec();
     let csave = c.to_vec();
@@ -32,9 +34,9 @@ pub fn solve(a: &mut [f64], b: &mut [f64], c: &mut [f64], n: usize) {
         c.swap(istar, i);
         for ii in (i + 1)..n {
             let pivot = a[ii * n + i] / a[i * n + i];
-            c[ii] = (-pivot).mul_add(c[i], c[ii]);
+            c[ii] = math::fma(-pivot, c[i], c[ii]);
             for j in 0..n {
-                a[ii * n + j] = (-pivot).mul_add(a[i * n + j], a[ii * n + j]);
+                a[ii * n + j] = math::fma(-pivot, a[i * n + j], a[ii * n + j]);
             }
         }
     }
@@ -46,7 +48,7 @@ pub fn solve(a: &mut [f64], b: &mut [f64], c: &mut [f64], n: usize) {
         let m = n - k - 2;
         b[m] = c[m];
         for j in (m + 1)..n {
-            b[m] = (-a[m * n + j]).mul_add(b[j], b[m]);
+            b[m] = math::fma(-a[m * n + j], b[j], b[m]);
         }
         b[m] /= a[m * n + m];
     }
@@ -99,7 +101,7 @@ pub fn lu_decompose(a: &[Vec<f64>], n: usize) -> Option<Lu> {
             lu[ps[i]][k] = mult;
             for j in (k + 1)..n {
                 let v = lu[ps[k]][j];
-                lu[ps[i]][j] = (-mult).mul_add(v, lu[ps[i]][j]);
+                lu[ps[i]][j] = math::fma(-mult, v, lu[ps[i]][j]);
             }
         }
     }
@@ -114,14 +116,14 @@ pub fn lu_solve(lu: &Lu, x: &mut [f64], bi: usize, n: usize) {
     for i in 0..n {
         let mut dot = 0.0;
         for j in 0..i {
-            dot = lu.lu[lu.ps[i]][j].mul_add(x[j], dot);
+            dot = math::fma(lu.lu[lu.ps[i]][j], x[j], dot);
         }
         x[i] = f64::from(u8::from(lu.ps[i] == bi)) - dot;
     }
     for i in (0..n).rev() {
         let mut dot = 0.0;
         for j in (i + 1)..n {
-            dot = lu.lu[lu.ps[i]][j].mul_add(x[j], dot);
+            dot = math::fma(lu.lu[lu.ps[i]][j], x[j], dot);
         }
         x[i] = (x[i] - dot) / lu.lu[lu.ps[i]][i];
     }

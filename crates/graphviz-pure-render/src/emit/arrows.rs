@@ -57,8 +57,8 @@ fn miter_shape(base_left: Point, pt: Point, base_right: Point, penwidth: f64) ->
     };
     let p1 = p(
         // C (clang) fuses each `P ± penwidth / 2.0 * …` of `miter_shape` into one fma.
-        (-(penwidth / 2.0)).mul_add(sin_alpha, pt.x),
-        (penwidth / 2.0).mul_add(cos_alpha, pt.y),
+        math::fma(-(penwidth / 2.0), sin_alpha, pt.x),
+        math::fma(penwidth / 2.0, cos_alpha, pt.y),
     );
     let dxb = base_right.x - pt.x;
     let dyb = base_right.y - pt.y;
@@ -79,15 +79,15 @@ fn miter_shape(base_left: Point, pt: Point, base_right: Point, penwidth: f64) ->
     let normalized_miter_length = 1.0 / math::sin(theta / 2.0);
     let sin_beta = dyb / hypot_b;
     let p2 = p(
-        (penwidth / 2.0).mul_add(-sin_beta, pt.x),
-        (-(penwidth / 2.0)).mul_add(-cos_beta, pt.y),
+        math::fma(penwidth / 2.0, -sin_beta, pt.x),
+        math::fma(-(penwidth / 2.0), -cos_beta, pt.y),
     );
     if normalized_miter_length > 4.0 {
         let pbevel = p((p1.x + p2.x) / 2.0, (p1.y + p2.y) / 2.0);
         return [pbevel, p1, p2];
     }
     let l = penwidth / 2.0 / math::tan(theta / 2.0);
-    let p3 = p(l.mul_add(cos_alpha, p1.x), l.mul_add(sin_alpha, p1.y));
+    let p3 = p(math::fma(l, cos_alpha, p1.x), math::fma(l, sin_alpha, p1.y));
     [p3, p1, p2]
 }
 
@@ -313,8 +313,8 @@ pub(crate) fn bezier_split(v: &[Point; 4], t: f64) -> (Point, [Point; 4], [Point
         for j in 0..=(3 - i) {
             // C (clang) fuses `(1.0 - t) * a + t * b` in `Bezier` (lib/common/utils.c).
             vt[i][j] = p(
-                (1.0 - t).mul_add(vt[i - 1][j].x, t * vt[i - 1][j + 1].x),
-                (1.0 - t).mul_add(vt[i - 1][j].y, t * vt[i - 1][j + 1].y),
+                math::fma(1.0 - t, vt[i - 1][j].x, t * vt[i - 1][j + 1].x),
+                math::fma(1.0 - t, vt[i - 1][j].y, t * vt[i - 1][j + 1].y),
             );
         }
     }
@@ -373,10 +373,10 @@ impl<E: Engine> Emitter<'_, E> {
                 let mut pp = pp;
                 let mut q = add(pp, u);
                 // C (clang) fuses `p + u * 0.2`, `p + u * 0.6` and `penwidth / 2 - 0.2 * length`.
-                let mut m = p(u.x.mul_add(0.2, pp.x), u.y.mul_add(0.2, pp.y));
-                let mut n = p(u.x.mul_add(0.6, pp.x), u.y.mul_add(0.6, pp.y));
+                let mut m = p(math::fma(u.x, 0.2, pp.x), math::fma(u.y, 0.2, pp.y));
+                let mut n = p(math::fma(u.x, 0.6, pp.x), math::fma(u.y, 0.6, pp.y));
                 let length = math::hypot(u.x, u.y);
-                let ext = (-0.2f64).mul_add(length, penwidth / 2.0);
+                let ext = math::fma(-0.2, length, penwidth / 2.0);
                 if length > 0.0 && ext > 0.0 {
                     let tip = p(-u.x, -u.y);
                     let h = math::hypot(tip.x, tip.y);
@@ -402,7 +402,7 @@ impl<E: Engine> Emitter<'_, E> {
                 let v = p(-u.y * 0.4, u.x * 0.4);
                 let mut pp = pp;
                 // C (clang) fuses `p + u * 0.8`.
-                let mut m = p(u.x.mul_add(0.8, pp.x), u.y.mul_add(0.8, pp.y));
+                let mut m = p(math::fma(u.x, 0.8, pp.x), math::fma(u.y, 0.8, pp.y));
                 let mut q = add(pp, u);
                 if u.x != 0.0 || u.y != 0.0 {
                     let d = back_delta(u, penwidth);
@@ -469,20 +469,20 @@ impl<E: Engine> Emitter<'_, E> {
                 // C (clang) fuses `p.x ± 0.95 * v.x`.
                 if flag & ARR_MOD_INV != 0 {
                     af[1] = p(
-                        0.95f64.mul_add(v.x, pp.x) + w.x + w.x * 4.0 / 3.0,
+                        math::fma(0.95, v.x, pp.x) + w.x + w.x * 4.0 / 3.0,
                         af[0].y + w.y * 4.0 / 3.0,
                     );
                     af[2] = p(
-                        (-0.95f64).mul_add(v.x, pp.x) + w.x + w.x * 4.0 / 3.0,
+                        math::fma(-0.95, v.x, pp.x) + w.x + w.x * 4.0 / 3.0,
                         af[3].y + w.y * 4.0 / 3.0,
                     );
                 } else {
                     af[1] = p(
-                        0.95f64.mul_add(v.x, pp.x) + w.x - w.x * 4.0 / 3.0,
+                        math::fma(0.95, v.x, pp.x) + w.x - w.x * 4.0 / 3.0,
                         af[0].y - w.y * 4.0 / 3.0,
                     );
                     af[2] = p(
-                        (-0.95f64).mul_add(v.x, pp.x) + w.x - w.x * 4.0 / 3.0,
+                        math::fma(-0.95, v.x, pp.x) + w.x - w.x * 4.0 / 3.0,
                         af[3].y - w.y * 4.0 / 3.0,
                     );
                 }

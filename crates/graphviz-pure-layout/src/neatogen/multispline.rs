@@ -415,7 +415,7 @@ const MARGIN: f64 = 32.0;
 /// `DIST(p, q)`: `sqrt(dx*dx + dy*dy)` (fused).
 fn dist(p: Point, q: Point) -> f64 {
     let (dx, dy) = (p.x - q.x, p.y - q.y);
-    dx.mul_add(dx, dy * dy).sqrt()
+    math::fma(dx, dx, dy * dy).sqrt()
 }
 
 fn shared_edge(p: &[usize; 3], q: &[usize; 3]) -> Ipair {
@@ -778,12 +778,12 @@ fn line_intersect(a: Point, b: Point, c: Point, d: Point) -> Option<Point> {
     let mv = Point::new(b.x - a.x, b.y - a.y);
     let lv = Point::new(d.x - c.x, d.y - c.y);
     let ln = Point::new(-lv.y, lv.x);
-    let lc = -ln.x.mul_add(c.x, ln.y * c.y);
-    let dt = ln.x.mul_add(mv.x, ln.y * mv.y);
+    let lc = -math::fma(ln.x, c.x, ln.y * c.y);
+    let dt = math::fma(ln.x, mv.x, ln.y * mv.y);
     if dt.abs() < 0.0000000001 {
         return None;
     }
-    let s = (ln.x.mul_add(a.x, ln.y * a.y) + lc) / dt;
+    let s = (math::fma(ln.x, a.x, ln.y * a.y) + lc) / dt;
     Some(Point::new(a.x - s * mv.x, a.y - s * mv.y))
 }
 
@@ -823,8 +823,8 @@ fn mk_ctrl_pts(
     let mut sin_theta = math::sin(theta);
     let mut cos_theta = math::cos(theta);
     let mut w = Point::new(
-        100.0f64.mul_add(cos_theta, v.x),
-        100.0f64.mul_add(sin_theta, v.y),
+        math::fma(100.0, cos_theta, v.x),
+        math::fma(100.0, sin_theta, v.y),
     );
     let flip = if idx > s {
         wind(prev, v, w) != 1
@@ -835,8 +835,8 @@ fn mk_ctrl_pts(
         sin_theta *= -1.0;
         cos_theta *= -1.0;
         w = Point::new(
-            100.0f64.mul_add(cos_theta, v.x),
-            100.0f64.mul_add(sin_theta, v.y),
+            math::fma(100.0, cos_theta, v.x),
+            math::fma(100.0, sin_theta, v.y),
         );
     }
     let q = tri_point(trip, idx, v, w)?;
@@ -849,8 +849,8 @@ fn mk_ctrl_pts(
     for i in 0..mult {
         let fi = i as f64;
         let pt = Point::new(
-            (fi * sep).mul_add(cos_theta, v.x),
-            (fi * sep).mul_add(sin_theta, v.y),
+            math::fma(fi * sep, cos_theta, v.x),
+            math::fma(fi * sep, sin_theta, v.y),
         );
         if idx < s {
             ps[i] = pt;

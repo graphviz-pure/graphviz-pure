@@ -95,7 +95,7 @@ fn limit_boxes(boxes: &mut [BoundingBox], pps: &[Point], delta: f64) {
                 pps[splinepi + 3],
             ];
             // `a += t * (b - a)`, contracted to fma(t, b - a, a) by clang.
-            let lerp = |a: f64, b: f64| t.mul_add(b - a, a);
+            let lerp = |a: f64, b: f64| math::fma(t, b - a, a);
             sp[0].x = lerp(sp[0].x, sp[1].x);
             sp[0].y = lerp(sp[0].y, sp[1].y);
             sp[1].x = lerp(sp[1].x, sp[2].x);
@@ -673,8 +673,8 @@ pub fn bend(spl: &mut [Point; 4], centroid: Point) {
     }
     // C (clang) fuses `midpt - v / magV * r`.
     let a = Point::new(
-        (-(vx / mag_v)).mul_add(r, midpt.x),
-        (-(vy / mag_v)).mul_add(r, midpt.y),
+        math::fma(-(vx / mag_v), r, midpt.x),
+        math::fma(-(vy / mag_v), r, midpt.y),
     );
     spl[1] = a;
     spl[2] = a;

@@ -27,12 +27,12 @@ pub struct Router {
 
 fn ellipse_tangent_slope(a: f64, b: f64, p: Point) -> f64 {
     let sign_y = if p.y >= 0.0 { 1.0 } else { -1.0 };
-    -sign_y * (b * p.x) / (a * a.mul_add(a, -(p.x * p.x)).sqrt())
+    -sign_y * (b * p.x) / (a * math::fma(a, a, -(p.x * p.x)).sqrt())
 }
 
 fn line_intersection(p0: Point, m0: f64, p1: Point, m1: f64) -> Point {
-    let x = ((-m1).mul_add(p1.x, m0.mul_add(p0.x, -p0.y)) + p1.y) / (m0 - m1);
-    let y = m0.mul_add(x - p0.x, p0.y);
+    let x = (math::fma(-m1, p1.x, math::fma(m0, p0.x, -p0.y)) + p1.y) / (m0 - m1);
+    let y = math::fma(m0, x - p0.x, p0.y);
     Point::new(x, y)
 }
 
@@ -141,7 +141,7 @@ pub fn make_obstacle(g: &LGraph<'_>, n: usize, pmargin: &Expand) -> Option<Vec<P
             } else {
                 // recPt: C (clang) fuses `x * m->x + c.x`.
                 let rec_pt = |x: f64, y: f64| {
-                    Point::new(x.mul_add(pmargin.x, c.x), y.mul_add(pmargin.y, c.y))
+                    Point::new(math::fma(x, pmargin.x, c.x), math::fma(y, pmargin.y, c.y))
                 };
                 [
                     rec_pt(llx, lly),
