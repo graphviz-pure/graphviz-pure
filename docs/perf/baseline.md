@@ -13,6 +13,9 @@ from `.cargo/config.toml` into the workspace `Cargo.toml` and the published CLI 
 (#540, fixed by #546), which also enabled CLI stripping. The `pow` fast paths (#532, #543)
 and sfdp quadtree allocation reuse (#534, #548) landed too; the timings below predate them.
 
+The 1.x goal (10× faster than 1.0) measures from a newer baseline of the shipped 1.0.0 build:
+[1.x-10x.md](1.x-10x.md).
+
 ## Headlines
 
 - **dot, fdp and circo are already faster than C**: dot is 0.5–0.9× C's time (geometric mean
