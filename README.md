@@ -87,6 +87,9 @@ On a CPU supporting x86-64-v3, build the faster version with:
 RUSTFLAGS="-C target-cpu=x86-64-v3" cargo install graphviz-pure-cli --locked
 ```
 
+Native release binaries also use [profile-guided optimisation](docs/perf/pgo.md).
+Source builds, including `cargo install` with the flags above, use the plain release profile.
+
 ## Crates
 
 - [`graphviz-pure-core`](crates/graphviz-pure-core): graph IR, geometry, font metric tables, colour tables with `colorxlate` semantics, charset handling, and the math module (`math`: the same pure-Rust functions on every target).

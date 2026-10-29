@@ -273,14 +273,28 @@ jobs:
         env:
           TARGET: ${{ matrix.target }}
         run: |
-          rustup toolchain install "$RUST_VERSION" --profile minimal --target "$TARGET"
+          rustup toolchain install "$RUST_VERSION" --profile minimal --component llvm-tools --target "$TARGET"
           rustup default "$RUST_VERSION"
-      - name: Build
+      - name: Build with profile-guided optimisation
         env:
           TARGET: ${{ matrix.target }}
           # Windows: link the C runtime statically, so the binary needs no VC++ redistributable.
           RUSTFLAGS: ${{ format('{0} {1}', startsWith(matrix.target, 'x86_64') && '-C target-cpu=x86-64-v3' || '', contains(matrix.target, 'windows') && '-C target-feature=+crt-static' || '') }}
-        run: cargo build --release --locked --target "$TARGET" -p graphviz-pure-cli
+          PYTHON: ${{ runner.os == 'Windows' && 'python' || 'python3' }}
+        run: >-
+          "$PYTHON" scripts/build-pgo.py --target "$TARGET"
+          --profiles "$RUNNER_TEMP/pgo"
+      # Preserve the exact optimiser input; a fixed training list alone does not promise
+      # byte-reproducible profiles across hosts (hash-table seeds and SDKs can differ).
+      - name: Preserve PGO build inputs
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: pgo-${{ matrix.target }}
+          path: |
+            ${{ runner.temp }}/pgo/merged.profdata
+            ${{ runner.temp }}/pgo/build-info.json
+          if-no-files-found: error
+          retention-days: 90
       - name: Build x86-64 compat binary and baseline launcher
         if: startsWith(matrix.target, 'x86_64')
         env:

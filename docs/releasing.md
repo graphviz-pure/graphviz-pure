@@ -39,6 +39,29 @@ Source installation stays baseline unless the user sets RUSTFLAGS.
 CI tests the v3 workspace fidelity ratchets and compares v1/v3 output for every
 `tests/**/*.gv` input with its own `layout=` engine. No goldens change.
 
+### Profile-guided optimisation
+
+All six default native binaries use PGO, including x86-64-v3 and ARM64. The v1
+compat binaries and the baseline launcher use plain builds; WASM is unchanged.
+`scripts/build-pgo.py` builds with `-Cprofile-generate`, runs the checked-in
+`scripts/bench/sets/pgo.tsv` in order, merges fresh profiles with the pinned Rust
+toolchain's `llvm-profdata`, and rebuilds with `-Cprofile-use`. Every runner trains
+its own native binary with the same CPU and static-runtime flags as its final build.
+No profile from another architecture or commit is reused. A failed training command
+fails the release. `cargo install` users keep the plain profile.
+
+The `pgo-TARGET` Actions artifact retains `merged.profdata` and `build-info.json`
+for 90 days (toolchain, flags, and training/profile/binary SHA-256 hashes). The
+same commit alone does **not** guarantee the same binary: a fresh profile may
+vary with hash-table seeds or platform libraries, and the compiler, linker and
+SDK also matter. Retain the exact profile and build environment to reproduce a
+build; deterministic archive packaging still gives the same archive from the
+same binary. [Measurements and reproduction](perf/pgo.md) describe the limits.
+
+CPU fidelity CI runs the PGO workspace ratchets and compares the final musl PGO
+CLI against v1 on every corpus SVG, including diagnostics and status. Release
+smoke tests cover each native PGO binary and its wheel/container packaging.
+
 ### Gate before 1.1.0
 
 After merge, a release dry run from master must pass before 1.1.0 is tagged. The

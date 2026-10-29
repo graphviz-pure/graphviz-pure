@@ -86,7 +86,7 @@ jobs:
           persist-credentials: false
       - name: Install Rust and musl
         run: |
-          rustup toolchain install stable --profile minimal --target x86_64-unknown-linux-musl
+          rustup toolchain install stable --profile minimal --component llvm-tools --target x86_64-unknown-linux-musl
           rustup default stable
           sudo apt-get update && sudo apt-get install -y musl-tools qemu-user
       - name: Check safe launcher process behavior
@@ -105,13 +105,13 @@ jobs:
           for cpu in Nehalem Haswell,-fma,-hle,-rtm Haswell,-bmi2,-hle,-rtm; do
             qemu-x86_64 -cpu "$cpu" launcher-test/graphviz-pure -V
           done
-      - name: Build v3 and run fidelity ratchets
+      - name: Build v3 with PGO and run fidelity ratchets
         env:
           RUSTFLAGS: -C target-cpu=x86-64-v3
           CARGO_TARGET_DIR: target-v3
         run: |
-          cargo build --release --locked --target x86_64-unknown-linux-musl -p graphviz-pure-cli
-          cargo test --workspace --locked
+          python3 scripts/build-pgo.py --target x86_64-unknown-linux-musl --target-dir target-v3 --profiles "$RUNNER_TEMP/pgo"
+          RUSTFLAGS="$RUSTFLAGS -Cprofile-use=$RUNNER_TEMP/pgo/merged.profdata" cargo test --workspace --release --locked
       - name: Launcher selects v3 on a capable CPU
         run: |
           mkdir -p launcher-v3-test/v3
@@ -124,6 +124,39 @@ jobs:
           python3 scripts/check-cpu-builds.py
           target/x86_64-unknown-linux-musl/release/graphviz-pure
           target-v3/x86_64-unknown-linux-musl/release/graphviz-pure
+
+  windows-pgo:
+    name: Windows PGO smoke (${{ matrix.target }})
+    needs: lookup
+    if: needs.lookup.outputs.hit != 'true'
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { target: x86_64-pc-windows-msvc, runner: windows-2025 }
+          - { target: aarch64-pc-windows-msvc, runner: windows-11-arm }
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install Rust, target and llvm-tools
+        env:
+          TARGET: ${{ matrix.target }}
+        run: |
+          rustup toolchain install stable --profile minimal --component llvm-tools --target "$TARGET"
+          rustup default stable
+      - name: Train, rebuild and smoke-test the release configuration
+        env:
+          TARGET: ${{ matrix.target }}
+          RUSTFLAGS: ${{ format('{0} -C target-feature=+crt-static', startsWith(matrix.target, 'x86_64') && '-C target-cpu=x86-64-v3' || '') }}
+        run: |
+          python scripts/build-pgo.py --target "$TARGET" --target-dir target-pgo --profiles "$RUNNER_TEMP/pgo"
+          python scripts/release-smoke.py "target-pgo/$TARGET/release/graphviz-pure.exe"
 
   msrv:
     name: MSRV
@@ -359,7 +392,7 @@ jobs:
   # wasm-e2e and wasm-runtimes.
   record:
     name: Record the result for these inputs
-    needs: [verify, msrv, wasm-e2e, wasm-runtimes, cpu-fidelity]
+    needs: [verify, msrv, wasm-e2e, wasm-runtimes, cpu-fidelity, windows-pgo]
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
