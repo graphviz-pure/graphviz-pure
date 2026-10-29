@@ -21,10 +21,12 @@
 //! that order, then the move. `counts` and `nsuper` are added in node
 //! order in that same loop.
 //!
-//! The stored terms are a window of nodes that have not moved yet. Every
-//! window is sized so that `nodes * n * dim` floats fit in 32 MiB, which
-//! is every node as its own supernode. The next window does not grow from
-//! the previous window's average. A single node is never split.
+//! The stored terms are a window of nodes that have not moved yet. The
+//! first window is at most 64 nodes, sized so that `n` supernodes per node
+//! fit in 32 MiB. Later windows use twice the most supernodes any node has
+//! needed so far, and that plan also fits in 32 MiB. A window that stores
+//! more than the budget is dropped and retried shorter. One node is never
+//! split.
 
 use super::{BH, attractive, move_node};
 use crate::neatogen::par;
@@ -50,6 +52,12 @@ const MIN_THREADS: usize = 4;
 
 /// Resident precomputed terms. `4_000_000` `f64`s is 32 MiB.
 const TERM_BUDGET_F64S: usize = 4_000_000;
+
+/// First window, before any supernode count has been observed.
+const PROBE_NODES: usize = 64;
+
+/// Later windows reserve this multiple of the most supernodes seen so far.
+const SUPERNODE_MARGIN: usize = 2;
 
 #[cfg(test)]
 thread_local! {
@@ -228,39 +236,51 @@ fn accumulate_with_threads(
         return;
     }
     let mut start = 0;
+    let mut max_nsuper = 0usize;
+    let mut primed = false;
     while start < n {
-        // `n` supernodes per node is every node as its own supernode.
-        // Sizing from the previous window's average let a later window
-        // with more supernodes pass the budget.
-        let window = window_limit(n, dim);
-        let end = (start + window).min(n);
-        precompute(qt, x, dim, start..end, threads, kp, p, scratch);
-        let terms: usize = scratch.chunks.iter().map(|chunk| chunk.terms.len()).sum();
-        debug_assert!(
-            terms <= term_budget() || n.saturating_mul(dim) > term_budget(),
-            "window stored {terms} floats, budget {}",
-            term_budget()
-        );
-        #[cfg(test)]
-        {
-            scratch.windows += 1;
-            scratch.max_term_f64s = scratch.max_term_f64s.max(terms);
+        let mut nodes = planned_window(n - start, n, dim, primed.then_some(max_nsuper));
+        loop {
+            let end = start + nodes;
+            precompute(qt, x, dim, start..end, threads, kp, p, scratch);
+            let terms: usize = scratch.chunks.iter().map(|chunk| chunk.terms.len()).sum();
+            max_nsuper = max_nsuper.max(observed_supernodes(&scratch.chunks));
+            // A node past the margin makes this attempt too big. Drop it
+            // and retry a shorter window. One node is kept even then.
+            if terms > term_budget() && nodes > 1 {
+                let fit = nodes.saturating_mul(term_budget()) / terms.max(1);
+                nodes = fit.min(nodes - 1).max(1);
+                release_terms(scratch);
+                continue;
+            }
+            debug_assert!(
+                terms <= term_budget() || nodes == 1,
+                "window stored {terms} floats, budget {}",
+                term_budget()
+            );
+            #[cfg(test)]
+            {
+                scratch.windows += 1;
+                scratch.max_term_f64s = scratch.max_term_f64s.max(terms);
+            }
+            consume(
+                a,
+                dim,
+                x,
+                crk,
+                step,
+                f,
+                fnorm,
+                counts_avg,
+                nsuper_avg,
+                start,
+                end,
+                &scratch.chunks,
+            );
+            start = end;
+            primed = true;
+            break;
         }
-        consume(
-            a,
-            dim,
-            x,
-            crk,
-            step,
-            f,
-            fnorm,
-            counts_avg,
-            nsuper_avg,
-            start,
-            end,
-            &scratch.chunks,
-        );
-        start = end;
     }
 }
 
@@ -272,15 +292,38 @@ fn term_budget() -> usize {
     TERM_BUDGET_F64S
 }
 
-/// Nodes that fit in [`term_budget`] when each stores `n * dim` floats.
-///
-/// That is one supernode per node. `get_supernodes` skips the query node
-/// and replaces an opened subtree with one average, so the count is at
-/// most `n`. One node is always taken, even when that worst case alone
-/// is larger than the budget.
-fn window_limit(n: usize, dim: usize) -> usize {
-    let per = n.saturating_mul(dim).max(1);
-    (term_budget() / per).clamp(1, n.max(1))
+/// Nodes that fit in [`term_budget`] at `supernodes` stored vectors each.
+fn nodes_for(supernodes: usize, dim: usize) -> usize {
+    let per = supernodes.max(1).saturating_mul(dim.max(1));
+    (term_budget() / per).max(1)
+}
+
+/// First window: at most [`PROBE_NODES`], and no more than the budget
+/// allows when every node is its own supernode. Later windows: the budget
+/// divided by [`SUPERNODE_MARGIN`] times the most supernodes seen so far.
+fn planned_window(remaining: usize, n: usize, dim: usize, max_nsuper: Option<usize>) -> usize {
+    let limit = match max_nsuper {
+        None => nodes_for(n, dim).min(PROBE_NODES),
+        Some(seen) => nodes_for(seen.max(1).saturating_mul(SUPERNODE_MARGIN), dim),
+    };
+    limit.clamp(1, remaining.max(1))
+}
+
+fn observed_supernodes(chunks: &[Chunk]) -> usize {
+    chunks
+        .iter()
+        .flat_map(|chunk| chunk.nodes.iter())
+        .map(|node| node.nsuper)
+        .max()
+        .unwrap_or(0)
+}
+
+fn release_terms(scratch: &mut Scratch) {
+    for chunk in &mut scratch.chunks {
+        chunk.nodes.clear();
+        chunk.terms.clear();
+        chunk.terms.shrink_to_fit();
+    }
 }
 
 fn precompute(
@@ -577,9 +620,9 @@ mod tests {
         }
     }
 
-    /// A budget smaller than the level still matches, and every window stays
-    /// inside that budget. The window length is the worst case (`n` supernodes),
-    /// not the previous window's average.
+    /// A budget smaller than the level still matches. The first window is the
+    /// worst case (10 nodes here). Later windows grow from the supernodes
+    /// actually seen, and none of the kept windows pass the budget.
     #[test]
     fn a_short_budget_splits_the_level_and_stays_inside_it() {
         let n = 80;
@@ -599,7 +642,12 @@ mod tests {
         assert_eq!(c_seq.to_bits(), c_par.to_bits(), "counts");
         assert_eq!(s_seq.to_bits(), s_par.to_bits(), "nsuper");
         assert_bits(&x_par, &x_seq, "short budget");
-        assert_eq!(windows, n / 10, "windows={windows}");
+        let worst_windows = n / 10;
+        assert!(windows > 1, "windows={windows}");
+        assert!(
+            windows < worst_windows,
+            "windows={windows} stayed at the worst-case size"
+        );
         assert!(resident <= budget, "resident={resident} budget={budget}");
         assert!(resident > 0);
     }
