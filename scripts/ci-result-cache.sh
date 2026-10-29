@@ -72,8 +72,8 @@ ignored=(
   scripts/verify-local.sh
 )
 read_by_jobs=(site/public/samples site/src/data/samples.json)
-# Unlike the distribution recipes, the baseline launcher is compiled by CI's CPU fidelity job.
-if [ "$kind" = ci ]; then read_by_jobs+=(packaging/launcher); fi
+# Unlike distribution recipes, the launcher is compiled by CPU fidelity and Windows cross-platform checks.
+read_by_jobs+=(packaging/launcher)
 
 # The index, which matches HEAD in a fresh checkout. glob magic: `*` does not cross a `/`.
 key=$({

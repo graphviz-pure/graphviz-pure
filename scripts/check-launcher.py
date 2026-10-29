@@ -13,7 +13,9 @@ with tempfile.TemporaryDirectory(prefix="graphviz launcher ") as tmp:
     root = pathlib.Path(tmp)
     launcher = root / "graphviz-pure"
     shutil.copy2(sys.argv[1], launcher)
-    children = [root / f"graphviz-pure-{v}" for v in ("v3", "compat")]
+    children = [root / v / "graphviz-pure" for v in ("v3", "compat")]
+    for child in children:
+        child.parent.mkdir()
     for child in children:
         child.write_text('#!/bin/sh\ncat\nprintf "%s\\n" "$@"\nprintf diagnostic >&2\nexit 37\n')
         child.chmod(0o755)
@@ -32,5 +34,5 @@ with tempfile.TemporaryDirectory(prefix="graphviz launcher ") as tmp:
     for child in children:
         child.unlink()
     result = subprocess.run([str(launcher)], capture_output=True)
-    assert result.returncode == 1 and b"launcher:" in result.stderr, result
+    assert result.returncode == 1 and b"install the launcher together" in result.stderr, result
 print("launcher: arguments, streams, exit status, signal and missing binary pass")

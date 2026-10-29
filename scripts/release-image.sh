@@ -33,12 +33,13 @@ for arch in amd64:x86_64 arm64:aarch64; do
   tar -xzf "$dist/$name.tar.gz" -C "$ctx/${arch%%:*}" --strip-components=1 "$name/graphviz-pure"
 done
 # The amd64 entry point is the baseline launcher; choose v3 only on capable hosts.
-mv "$ctx/amd64/graphviz-pure" "$ctx/amd64/graphviz-pure-v3"
+mkdir "$ctx/amd64/v3" "$ctx/amd64/compat"
+mv "$ctx/amd64/graphviz-pure" "$ctx/amd64/v3/graphviz-pure"
 name=graphviz-pure-$version-x86_64-unknown-linux-musl
 # Rename explicitly: keep release archive binary bytes intact.
 tar -xOf "$dist/$name.tar.gz" "$name/graphviz-pure-launcher" > "$ctx/amd64/graphviz-pure"
-tar -xOf "$dist/$name-compat.tar.gz" "$name-compat/graphviz-pure" > "$ctx/amd64/graphviz-pure-compat"
-chmod 755 "$ctx/amd64/"*
+tar -xOf "$dist/$name-compat.tar.gz" "$name-compat/graphviz-pure" > "$ctx/amd64/compat/graphviz-pure"
+chmod 755 "$ctx/amd64/graphviz-pure" "$ctx/amd64/compat/graphviz-pure"
 # The licence files are the same in both archives.
 name=graphviz-pure-$version-x86_64-unknown-linux-musl
 mkdir "$ctx/doc"

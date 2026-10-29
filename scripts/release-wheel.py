@@ -150,8 +150,8 @@ if target.startswith("x86_64"):
     extension = ".exe" if "windows" in target else ""
     entries = [
         (f"{dist}.data/scripts/{exe}", files["graphviz-pure-launcher" + extension], 0o755),
-        (f"{dist}.data/scripts/graphviz-pure-v3{extension}", files[exe], 0o755),
-        (f"{dist}.data/scripts/graphviz-pure-compat{extension}", compat_binary, 0o755),
+        (f"{dist}.data/scripts/v3/{exe}", files[exe], 0o755),
+        (f"{dist}.data/scripts/compat/{exe}", compat_binary, 0o755),
     ]
 entries += [(f"{dist}.dist-info/licenses/{f}", files[f], 0o644) for f in licences]
 entries += [(f"{dist}.dist-info/METADATA", metadata, 0o644), (f"{dist}.dist-info/WHEEL", wheel, 0o644)]

@@ -39,7 +39,8 @@ CORE-MATH `pow` and expat ports; the licences of the Rust crates compiled in are
 Rust crates, the npm package for browsers and Node.js, the container image and other installers
 are described at <https://graphviz-pure.github.io/>.
 
-On x86-64 the wheel bundles both an AVX2/FMA (x86-64-v3) binary and a baseline
+On x86-64 the wheel installs `v3/graphviz-pure[.exe]` and
+`compat/graphviz-pure[.exe]` beside its launcher. It bundles both an AVX2/FMA (x86-64-v3) binary and a baseline
 compatibility binary. A safe Rust launcher checks CPU and OS support at runtime
 and selects the appropriate one. No Python CPU-detection dependencies are needed.
 ARM64 wheels use their baseline binary directly.

@@ -1,7 +1,7 @@
 //! Baseline x86-64 launcher shared by wheels and the container. No dependencies.
 #![forbid(unsafe_code)]
 
-use std::{env, io, process::Command};
+use std::{env, io, path::PathBuf, process::Command};
 
 fn has_v3() -> bool {
     // v3 includes all v2 features too. Rust's AVX detection checks OSXSAVE/XCR0,
@@ -26,15 +26,43 @@ fn has_v3() -> bool {
 }
 
 fn run() -> io::Result<()> {
-    let path = env::current_exe()?.canonicalize()?;
+    // Some Unix environments do not mount /proc. Try argv[0] (including PATH
+    // lookup for a bare command) when the platform cannot locate this executable.
+    let path = env::current_exe()
+        .or_else(|error| {
+            let arg = env::args_os().next().ok_or(error)?;
+            let path = PathBuf::from(&arg);
+            if path.components().count() > 1 || path.is_absolute() {
+                return Ok(path);
+            }
+            env::var_os("PATH")
+                .and_then(|paths| {
+                    env::split_paths(&paths)
+                        .map(|dir| dir.join(&arg))
+                        .find(|p| p.is_file())
+                })
+                .ok_or_else(|| {
+                    io::Error::new(
+                        io::ErrorKind::NotFound,
+                        "cannot locate launcher via argv[0] or PATH",
+                    )
+                })
+        })?
+        .canonicalize()?;
     let parent = path
         .parent()
         .ok_or_else(|| io::Error::other("launcher has no parent"))?;
     let variant = if has_v3() { "v3" } else { "compat" };
-    let mut command = Command::new(parent.join(format!(
-        "graphviz-pure-{variant}{}",
-        env::consts::EXE_SUFFIX
-    )));
+    let binary = parent
+        .join(variant)
+        .join(format!("graphviz-pure{}", env::consts::EXE_SUFFIX));
+    if !binary.is_file() {
+        return Err(io::Error::new(
+            io::ErrorKind::NotFound,
+            "install the launcher together with v3/graphviz-pure and compat/graphviz-pure (with .exe on Windows)",
+        ));
+    }
+    let mut command = Command::new(binary);
     command.args(env::args_os().skip(1));
     // Command inherits all three standard streams. exec preserves Unix signals
     // and status exactly, without a shell or an unsafe system-call wrapper.

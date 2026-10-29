@@ -21,18 +21,20 @@ on its inner directory. Never use `target-cpu=native`. ARM64 and WASM are unchan
 
 The default x86-64 archives also carry a baseline `graphviz-pure-launcher` executable.
 The six wheels retain their platform tags; x86-64 wheels carry the launcher
-as `graphviz-pure` plus both archive binaries as `graphviz-pure-v3` and
-`graphviz-pure-compat`. The launcher checks CPU and OS support using Rust's
+as `graphviz-pure` plus both archive binaries as `v3/graphviz-pure[.exe]` and
+`compat/graphviz-pure[.exe]`. The launcher checks CPU and OS support using Rust's
 safe detection macros. Unix `CommandExt::exec` preserves signals, streams and
 exit status; Windows inherits streams and returns the child exit code.
 The amd64 container uses the same launcher and both binaries.
 Binstall selects compat because target triples do not encode CPU support.
 
-Homebrew and Scoop updates live in separate repositories. Their existing archive
-names select v3; their descriptions must state the new CPU minimum. Older hosts
-can use compat archives or auto-selecting wheels. AUR's binary recipe selects compat
-to retain baseline support. npm ships WASM only. Source installation stays baseline
-unless the user sets RUSTFLAGS.
+Homebrew and Scoop update generators live in their separate repositories. On
+x86-64 they fetch and verify both archives, install the baseline launcher and both
+variant directories, and expose only the launcher on PATH. Homebrew puts the bundle
+in libexec with a bin symlink; Scoop extracts to v3/compat and moves the launcher to
+the install root. Existing baseline releases without compat keep their original
+recipes. AUR's binary recipe and binstall select compat. npm ships WASM only.
+Source installation stays baseline unless the user sets RUSTFLAGS.
 
 CI tests the v3 workspace fidelity ratchets and compares v1/v3 output for every
 `tests/**/*.gv` input with its own `layout=` engine. No goldens change.

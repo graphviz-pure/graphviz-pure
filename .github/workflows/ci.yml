@@ -97,10 +97,10 @@ jobs:
         run: cargo build --release --locked --target x86_64-unknown-linux-musl -p graphviz-pure-cli
       - name: Launcher falls back on a pre-AVX CPU
         run: |
-          mkdir launcher-test
+          mkdir -p launcher-test/compat
           rustc --edition=2024 --target x86_64-unknown-linux-musl -C target-cpu=x86-64 \
             packaging/launcher/main.rs -o launcher-test/graphviz-pure
-          cp target/x86_64-unknown-linux-musl/release/graphviz-pure launcher-test/graphviz-pure-compat
+          cp target/x86_64-unknown-linux-musl/release/graphviz-pure launcher-test/compat/graphviz-pure
           # No v3 file: selecting it on Nehalem would fail this check.
           for cpu in Nehalem Haswell,-fma,-hle,-rtm Haswell,-bmi2,-hle,-rtm; do
             qemu-x86_64 -cpu "$cpu" launcher-test/graphviz-pure -V
@@ -114,9 +114,9 @@ jobs:
           cargo test --workspace --locked
       - name: Launcher selects v3 on a capable CPU
         run: |
-          mkdir launcher-v3-test
+          mkdir -p launcher-v3-test/v3
           cp launcher-test/graphviz-pure launcher-v3-test/graphviz-pure
-          cp target-v3/x86_64-unknown-linux-musl/release/graphviz-pure launcher-v3-test/graphviz-pure-v3
+          cp target-v3/x86_64-unknown-linux-musl/release/graphviz-pure launcher-v3-test/v3/graphviz-pure
           # No compat file: selecting it on Haswell would fail this check.
           qemu-x86_64 -cpu Haswell,-hle,-rtm launcher-v3-test/graphviz-pure -V
       - name: Compare every corpus input
