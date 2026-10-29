@@ -22,8 +22,87 @@
 //! `wrapping_*` there (see `docs/porting/crashes.md`, "C's own overflow checks").
 
 use crate::math;
+use std::fmt::Write as _;
 
-pub use crate::diag::fmt_g;
+/// C's `printf("%.{prec}g", v)` on the reference platform (macOS libc), as diagnostics and
+/// renderers print numbers.
+pub fn fmt_g(v: f64, prec: usize) -> String {
+    let mut s = String::new();
+    fmt_g_into(&mut s, v, prec);
+    s
+}
+
+/// C's `printf("%.{prec}f", v)` on the macOS libc, written into `out`.
+///
+/// The digits are the ones [`fmt_f`] prints; this writes them into the caller's buffer
+/// instead of allocating a `String` per number. Returns the writer's error; writing into a
+/// `String` never fails.
+pub fn fmt_f_into<W: std::fmt::Write>(out: &mut W, v: f64, prec: usize) -> std::fmt::Result {
+    if v.is_nan() {
+        // C prints `nan` whatever the sign.
+        out.write_str("nan")
+    } else if v.is_infinite() {
+        out.write_str(if v < 0.0 { "-inf" } else { "inf" })
+    } else {
+        write!(out, "{v:.prec$}")
+    }
+}
+
+/// C's `printf("%.{prec}g", v)` on the macOS libc, written into `out`.
+///
+/// The digits are the ones [`fmt_g`] prints; this writes them into the caller's buffer
+/// instead of allocating a `String` per number. The trailing zeros of the mantissa go, so
+/// the text is trimmed in place, which needs a `String` to trim.
+pub fn fmt_g_into(out: &mut String, v: f64, prec: usize) {
+    if v.is_nan() {
+        // macOS libc prints `nan` for either sign.
+        out.push_str("nan");
+        return;
+    }
+    if v.is_infinite() {
+        out.push_str(if v < 0.0 { "-inf" } else { "inf" });
+        return;
+    }
+    let p = prec.max(1);
+    if v == 0.0 {
+        out.push_str(if v.is_sign_negative() { "-0" } else { "0" });
+        return;
+    }
+    // The exponent after rounding to `p` significant digits. Rust's `LowerExp` writes it as
+    // `d.dddde<exp>`; C writes the exponent with a sign and two digits.
+    let start = out.len();
+    let _ = write!(out, "{:.*e}", p - 1, v);
+    let epos = start + out[start..].find('e').expect("LowerExp writes an exponent");
+    let exp: i32 = out[epos + 1..].parse().unwrap_or(0);
+    if exp < -4 || exp >= p as i32 {
+        out.truncate(epos);
+        trim_zeros_from(out, start);
+        out.push('e');
+        out.push(if exp < 0 { '-' } else { '+' });
+        let _ = write!(out, "{:02}", exp.unsigned_abs());
+    } else {
+        let decimals = (p as i32 - 1 - exp).max(0) as usize;
+        out.truncate(start);
+        let _ = write!(out, "{v:.decimals$}");
+        trim_zeros_from(out, start);
+    }
+}
+
+/// C's `%g`'s trimming: the trailing zeros after a decimal point, and the point itself.
+/// Only a number with a decimal point is trimmed, as C's `agxbuf_trim_zeros` does.
+fn trim_zeros_from(out: &mut String, start: usize) {
+    if !out[start..].contains('.') {
+        return;
+    }
+    let mut end = out.len();
+    while end > start && out.as_bytes()[end - 1] == b'0' {
+        end -= 1;
+    }
+    if end > start && out.as_bytes()[end - 1] == b'.' {
+        end -= 1;
+    }
+    out.truncate(end);
+}
 
 /// C's `MIN(a,b)`: `a < b ? a : b`. With a NaN in either operand the test is false and the
 /// result is `b`.
@@ -263,17 +342,138 @@ pub fn mapbool(p: Option<&str>) -> bool {
 /// C's `printf("%.{prec}f", v)` on the macOS libc: NaN prints `nan` whatever its sign,
 /// infinities `inf` and `-inf`.
 pub fn fmt_f(v: f64, prec: usize) -> String {
-    if v.is_nan() {
-        "nan".to_string()
-    } else if v.is_infinite() {
-        if v < 0.0 { "-inf" } else { "inf" }.to_string()
-    } else {
-        format!("{v:.prec$}")
-    }
+    let mut s = String::new();
+    let _ = fmt_f_into(&mut s, v, prec);
+    s
 }
 
 #[cfg(test)]
 mod tests {
+    /// The `%g` the port printed before [`fmt_g_into`] existed, as the differential test's
+    /// reference: the same digits, each in its own `String`.
+    fn fmt_g_reference(v: f64, prec: usize) -> String {
+        fn trim(mut s: String) -> String {
+            if s.contains('.') {
+                while s.ends_with('0') {
+                    s.pop();
+                }
+                if s.ends_with('.') {
+                    s.pop();
+                }
+            }
+            s
+        }
+        if v.is_nan() {
+            return "nan".to_string();
+        }
+        if v.is_infinite() {
+            return if v < 0.0 { "-inf" } else { "inf" }.to_string();
+        }
+        let p = prec.max(1);
+        if v == 0.0 {
+            return if v.is_sign_negative() { "-0" } else { "0" }.to_string();
+        }
+        let e_form = format!("{:.*e}", p - 1, v);
+        let exp: i32 = e_form
+            .rsplit_once('e')
+            .and_then(|(_, e)| e.parse().ok())
+            .unwrap_or(0);
+        if exp < -4 || exp >= p as i32 {
+            let (mant, _) = e_form.rsplit_once('e').unwrap_or((&e_form, "0"));
+            let mant = trim(mant.to_string());
+            let sign = if exp < 0 { '-' } else { '+' };
+            format!("{mant}e{sign}{:02}", exp.abs())
+        } else {
+            let decimals = (p as i32 - 1 - exp).max(0) as usize;
+            trim(format!("{v:.decimals$}"))
+        }
+    }
+
+    /// The doubles the differential test walks: the edges, the powers of ten and a
+    /// deterministic spread of random ones.
+    fn doubles() -> Vec<f64> {
+        let mut v = vec![
+            0.0,
+            -0.0,
+            f64::NAN,
+            -f64::NAN,
+            f64::INFINITY,
+            f64::NEG_INFINITY,
+            f64::MIN,
+            f64::MAX,
+            f64::MIN_POSITIVE,
+            1.0,
+            -1.0,
+            0.005,
+            -0.005,
+            0.0001234,
+            0.00001234,
+            99999.5,
+            123456.0,
+            205.8,
+            0.75,
+            0.333333333,
+        ];
+        for e in -30i32..30 {
+            let mut p = 1.0f64;
+            for _ in 0..e.unsigned_abs() {
+                p *= 10.0;
+            }
+            if e < 0 {
+                p = 1.0 / p;
+            }
+            v.push(p);
+            v.push(-p);
+            v.push(p * 1.5);
+            v.push(p * 9.9999);
+        }
+        // A deterministic spread of random doubles: a 64-bit xorshift, then the mantissa
+        // and the exponent of a double out of the 64 bits.
+        let mut s: u64 = 0x2545_f491_4f6c_dd1d;
+        for _ in 0..20_000 {
+            s ^= s << 13;
+            s ^= s >> 7;
+            s ^= s << 17;
+            v.push(f64::from_bits(s));
+            v.push(f64::from_bits(s >> 11));
+        }
+        v
+    }
+
+    #[test]
+    fn fmt_g_into_prints_what_fmt_g_printed() {
+        for v in doubles() {
+            for prec in 1..=17 {
+                let want = fmt_g_reference(v, prec);
+                let mut got = String::new();
+                fmt_g_into(&mut got, v, prec);
+                assert_eq!(got, want, "fmt_g_into({v:?}, {prec})");
+                assert_eq!(fmt_g(v, prec), want, "fmt_g({v:?}, {prec})");
+            }
+        }
+    }
+
+    #[test]
+    fn fmt_f_into_prints_what_fmt_f_printed() {
+        for v in doubles() {
+            for prec in 0..=17 {
+                let want = fmt_f(v, prec);
+                let mut got = String::new();
+                let _ = fmt_f_into(&mut got, v, prec);
+                assert_eq!(got, want, "fmt_f_into({v:?}, {prec})");
+            }
+        }
+    }
+
+    #[test]
+    fn fmt_f_into_appends_to_what_is_there() {
+        let mut s = String::from("x");
+        let _ = fmt_f_into(&mut s, 1.5, 2);
+        let _ = fmt_f_into(&mut s, f64::NAN, 2);
+        let _ = fmt_f_into(&mut s, f64::NEG_INFINITY, 2);
+        assert_eq!(s, "x1.50nan-inf");
+    }
+
     #[test]
     fn strtoul_reads_like_c() {
         assert_eq!(strtoul("12", 0), (12, 2));

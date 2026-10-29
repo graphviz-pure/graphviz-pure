@@ -6,12 +6,13 @@ use super::attrs::{StyleItem, parse_style};
 use super::emit::{DEFAULT_COLOR, DEFAULT_FILL, find_stop_color};
 use super::job::{EMIT_CLUSTERS_LAST, EmitState, Emitter, Engine, FILL, GRADIENT, RGRADIENT};
 use super::model::TextLabel;
-use super::num::fmt_g;
+use super::num::fmt_g_into;
 use graphviz_pure_core::Point;
 pub(crate) use graphviz_pure_core::cnum::is_exactly_zero;
 use graphviz_pure_core::math;
 use graphviz_pure_geom::node_size::PolygonGeometry;
 use graphviz_pure_geom::shapes::{RecordField, ShapeKind};
+use std::fmt::Write;
 
 /// `IS_BOX` (`shapes.c:77-79`).
 pub(crate) fn is_rect(p: &PolygonGeometry) -> bool {
@@ -280,11 +281,13 @@ impl<E: Engine> Emitter<'_, E> {
         if do_map && !(self.job.flags & EMIT_CLUSTERS_LAST != 0) {
             self.begin_obj_anchor();
         }
-        let line = format!(
-            "{} {} translate newpath user_shape_{macro_id}\n",
-            fmt_g(nd.coord.x + offset.x, 5),
-            fmt_g(nd.coord.y + offset.y, 5)
-        );
+        let mut line = String::new();
+        fmt_g_into(&mut line, nd.coord.x + offset.x, 5);
+        line.push(' ');
+        fmt_g_into(&mut line, nd.coord.y + offset.y, 5);
+        line.push_str(" translate newpath user_shape_");
+        let _ = write!(line, "{macro_id}");
+        line.push('\n');
         self.write_output_file(&line);
         let nd = &self.job.m.nodes[n];
         let mut label = nd.label.clone();

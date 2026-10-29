@@ -56,7 +56,8 @@ struct F3(f64);
 
 impl std::fmt::Display for F3 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(&graphviz_pure_core::cnum::fmt_f(self.0, 3))
+        // The number goes straight into the formatter's buffer, without a `String` of its own.
+        graphviz_pure_core::cnum::fmt_f_into(f, self.0, 3)
     }
 }
 
