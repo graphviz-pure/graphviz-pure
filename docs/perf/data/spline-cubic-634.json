@@ -1,0 +1,1001 @@
+{
+ "after": [
+  {
+   "counts": {
+    "v1": {
+     "heap_blocks": 349187,
+     "heap_bytes": 149506939,
+     "heap_peak_bytes": 15660799,
+     "instructions": 7492507064
+    },
+    "v3": {
+     "heap_blocks": 349187,
+     "heap_bytes": 149506939,
+     "heap_peak_bytes": 15660799,
+     "instructions": 4042899069
+    }
+   },
+   "input": "tests/wild/gv16_graphs_b29_d1e4db.gv",
+   "native": {
+    "v1": {
+     "cycles_median": 4075912864,
+     "samples": [
+      {
+       "cycles": 4379492910,
+       "perf": "4379492910,,cycles:u,1432999559,100.00,,",
+       "wall": 1.4975187520030886
+      },
+      {
+       "cycles": 4075912864,
+       "perf": "4075912864,,cycles:u,1327333733,100.00,,",
+       "wall": 1.3629522990086116
+      },
+      {
+       "cycles": 4074543180,
+       "perf": "4074543180,,cycles:u,1325691988,100.00,,",
+       "wall": 1.3591299619874917
+      }
+     ],
+     "stderr_sha256": "3aa211bb263f825db476f6fcb6f20b0d581e2a62a3fd213ec0fedee3dc95633c",
+     "stdout_sha256": "379a137a896fe5bfb792cb5c5fe4acdced10d9a2ebce44d4182d1a98f78c4405",
+     "wall_median": 1.3629522990086116
+    },
+    "v3": {
+     "cycles_median": 3469530432,
+     "samples": [
+      {
+       "cycles": 3438904807,
+       "perf": "3438904807,,cycles:u,1136166106,100.00,,",
+       "wall": 1.2087647820007987
+      },
+      {
+       "cycles": 3515611822,
+       "perf": "3515611822,,cycles:u,1155988664,100.00,,",
+       "wall": 1.1922815190046094
+      },
+      {
+       "cycles": 3469530432,
+       "perf": "3469530432,,cycles:u,1147853078,100.00,,",
+       "wall": 1.1849581740098074
+      }
+     ],
+     "stderr_sha256": "3aa211bb263f825db476f6fcb6f20b0d581e2a62a3fd213ec0fedee3dc95633c",
+     "stdout_sha256": "379a137a896fe5bfb792cb5c5fe4acdced10d9a2ebce44d4182d1a98f78c4405",
+     "wall_median": 1.1922815190046094
+    }
+   },
+   "uptime_end": "21:54:26 up 4 days, 18:36,  2 users,  load average: 4.43, 5.00, 5.18",
+   "uptime_start": "21:54:16 up 4 days, 18:36,  2 users,  load average: 3.12, 4.78, 5.11"
+  },
+  {
+   "counts": {
+    "v1": {
+     "heap_blocks": 250586,
+     "heap_bytes": 47523317,
+     "heap_peak_bytes": 8293640,
+     "instructions": 1952408832
+    },
+    "v3": {
+     "heap_blocks": 250586,
+     "heap_bytes": 47523317,
+     "heap_peak_bytes": 8293640,
+     "instructions": 1199113550
+    }
+   },
+   "input": "tests/wild/gv16_graphs_b143_5416de.gv",
+   "native": {
+    "v1": {
+     "cycles_median": 894063653,
+     "samples": [
+      {
+       "cycles": 894154643,
+       "perf": "894154643,,cycles:u,310798536,100.00,,",
+       "wall": 0.34854061901569366
+      },
+      {
+       "cycles": 894063653,
+       "perf": "894063653,,cycles:u,312732495,100.00,,",
+       "wall": 0.34674403100507334
+      },
+      {
+       "cycles": 830300507,
+       "perf": "830300507,,cycles:u,296020023,100.00,,",
+       "wall": 0.3392826449708082
+      }
+     ],
+     "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+     "stdout_sha256": "04c49b83f1f8e1b0f3011ada3979d9e5961d3810cabc0bca3db746e8b37862b3",
+     "wall_median": 0.34674403100507334
+    },
+    "v3": {
+     "cycles_median": 655497351,
+     "samples": [
+      {
+       "cycles": 655497351,
+       "perf": "655497351,,cycles:u,231771818,100.00,,",
+       "wall": 0.2701590129872784
+      },
+      {
+       "cycles": 772520303,
+       "perf": "772520303,,cycles:u,277543320,100.00,,",
+       "wall": 0.31218245200579986
+      },
+      {
+       "cycles": 645942539,
+       "perf": "645942539,,cycles:u,228279538,100.00,,",
+       "wall": 0.2676869359565899
+      }
+     ],
+     "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+     "stdout_sha256": "04c49b83f1f8e1b0f3011ada3979d9e5961d3810cabc0bca3db746e8b37862b3",
+     "wall_median": 0.2701590129872784
+    }
+   },
+   "uptime_end": "21:54:29 up 4 days, 18:36,  2 users,  load average: 4.43, 5.00, 5.18",
+   "uptime_start": "21:54:26 up 4 days, 18:36,  2 users,  load average: 4.43, 5.00, 5.18"
+  },
+  {
+   "counts": {
+    "v1": {
+     "heap_blocks": 183235,
+     "heap_bytes": 45733825,
+     "heap_peak_bytes": 7779174,
+     "instructions": 1673127638
+    },
+    "v3": {
+     "heap_blocks": 183235,
+     "heap_bytes": 45733825,
+     "heap_peak_bytes": 7779174,
+     "instructions": 853318738
+    }
+   },
+   "input": "tests/wild/gv16_graphs_b106_471493.gv",
+   "native": {
+    "v1": {
+     "cycles_median": 677312996,
+     "samples": [
+      {
+       "cycles": 701211486,
+       "perf": "701211486,,cycles:u,244611367,100.00,,",
+       "wall": 0.28071096003986895
+      },
+      {
+       "cycles": 660491692,
+       "perf": "660491692,,cycles:u,230454468,100.00,,",
+       "wall": 0.2695983200101182
+      },
+      {
+       "cycles": 677312996,
+       "perf": "677312996,,cycles:u,237431551,100.00,,",
+       "wall": 0.2745890220394358
+      }
+     ],
+     "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+     "stdout_sha256": "2dc08bcf794824cdb59e88be6384a04db3eead55279e410574c4e8cc8b1b063d",
+     "wall_median": 0.2745890220394358
+    },
+    "v3": {
+     "cycles_median": 465432104,
+     "samples": [
+      {
+       "cycles": 458464517,
+       "perf": "458464517,,cycles:u,165863690,100.00,,",
+       "wall": 0.20896185102174059
+      },
+      {
+       "cycles": 465432104,
+       "perf": "465432104,,cycles:u,168526793,100.00,,",
+       "wall": 0.20573120604967698
+      },
+      {
+       "cycles": 478152422,
+       "perf": "478152422,,cycles:u,174118799,100.00,,",
+       "wall": 0.21321615698980168
+      }
+     ],
+     "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+     "stdout_sha256": "2dc08bcf794824cdb59e88be6384a04db3eead55279e410574c4e8cc8b1b063d",
+     "wall_median": 0.20896185102174059
+    }
+   },
+   "uptime_end": "21:54:31 up 4 days, 18:36,  2 users,  load average: 5.43, 5.20, 5.24",
+   "uptime_start": "21:54:29 up 4 days, 18:36,  2 users,  load average: 4.43, 5.00, 5.18"
+  },
+  {
+   "counts": {
+    "v1": {
+     "heap_blocks": 418625,
+     "heap_bytes": 78051913,
+     "heap_peak_bytes": 13947933,
+     "instructions": 1551093930
+    },
+    "v3": {
+     "heap_blocks": 418625,
+     "heap_bytes": 78051913,
+     "heap_peak_bytes": 13947933,
+     "instructions": 1002377742
+    }
+   },
+   "input": "synth/dot_dag_1000.gv",
+   "native": {
+    "v1": {
+     "cycles_median": 881380613,
+     "samples": [
+      {
+       "cycles": 891551115,
+       "perf": "891551115,,cycles:u,342825584,100.00,,",
+       "wall": 0.3807077899691649
+      },
+      {
+       "cycles": 868575284,
+       "perf": "868575284,,cycles:u,312739352,100.00,,",
+       "wall": 0.3501523739541881
+      },
+      {
+       "cycles": 881380613,
+       "perf": "881380613,,cycles:u,315759224,100.00,,",
+       "wall": 0.3494568259920925
+      }
+     ],
+     "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+     "stdout_sha256": "00d4f56ca29fd7593fc70dbd7a543dc00240a7bdb785c2064653eaeb470e5a06",
+     "wall_median": 0.3501523739541881
+    },
+    "v3": {
+     "cycles_median": 729878080,
+     "samples": [
+      {
+       "cycles": 729878080,
+       "perf": "729878080,,cycles:u,269838861,100.00,,",
+       "wall": 0.30825940298382193
+      },
+      {
+       "cycles": 724042324,
+       "perf": "724042324,,cycles:u,268636776,100.00,,",
+       "wall": 0.30534915503812954
+      },
+      {
+       "cycles": 744154788,
+       "perf": "744154788,,cycles:u,276126810,100.00,,",
+       "wall": 0.3115532980300486
+      }
+     ],
+     "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+     "stdout_sha256": "00d4f56ca29fd7593fc70dbd7a543dc00240a7bdb785c2064653eaeb470e5a06",
+     "wall_median": 0.30825940298382193
+    }
+   },
+   "uptime_end": "21:54:33 up 4 days, 18:36,  2 users,  load average: 5.43, 5.20, 5.24",
+   "uptime_start": "21:54:31 up 4 days, 18:36,  2 users,  load average: 5.43, 5.20, 5.24"
+  }
+ ],
+ "before": [
+  {
+   "counts": {
+    "c": {
+     "instructions": 5380426783
+    },
+    "reference": {
+     "instructions": 7807486537
+    },
+    "v1": {
+     "heap_blocks": 349187,
+     "heap_bytes": 149506939,
+     "heap_peak_bytes": 15660799,
+     "instructions": 7807487264
+    },
+    "v3": {
+     "heap_blocks": 349187,
+     "heap_bytes": 149506939,
+     "heap_peak_bytes": 15660799,
+     "instructions": 4123859876
+    }
+   },
+   "input": "tests/wild/gv16_graphs_b29_d1e4db.gv",
+   "native": {
+    "c": {
+     "cycles_median": 5378223098,
+     "samples": [
+      {
+       "cycles": 5225844595,
+       "perf": "5225844595,,cycles:u,1641150132,100.00,,",
+       "wall": 1.6988564200000837
+      },
+      {
+       "cycles": 5398809981,
+       "perf": "5398809981,,cycles:u,1691515302,100.00,,",
+       "wall": 1.7235608720220625
+      },
+      {
+       "cycles": 5378223098,
+       "perf": "5378223098,,cycles:u,1676808327,100.00,,",
+       "wall": 1.7088182879961096
+      }
+     ],
+     "stderr_sha256": "3aa211bb263f825db476f6fcb6f20b0d581e2a62a3fd213ec0fedee3dc95633c",
+     "stdout_sha256": "3467a0c7b3fd265adc477f8b686e87eecb270e0be86196478ee6a843666d3f61",
+     "wall_median": 1.7088182879961096
+    },
+    "reference": {
+     "cycles_median": 4236743450,
+     "samples": [
+      {
+       "cycles": 4253791726,
+       "perf": "4253791726,,cycles:u,1384700698,100.00,,",
+       "wall": 1.4461919200257398
+      },
+      {
+       "cycles": 4177523606,
+       "perf": "4177523606,,cycles:u,1352829452,100.00,,",
+       "wall": 1.3862245870404877
+      },
+      {
+       "cycles": 4236743450,
+       "perf": "4236743450,,cycles:u,1375170932,100.00,,",
+       "wall": 1.4071915230015293
+      }
+     ],
+     "stderr_sha256": "3aa211bb263f825db476f6fcb6f20b0d581e2a62a3fd213ec0fedee3dc95633c",
+     "stdout_sha256": "379a137a896fe5bfb792cb5c5fe4acdced10d9a2ebce44d4182d1a98f78c4405",
+     "wall_median": 1.4071915230015293
+    },
+    "v1": {
+     "cycles_median": 4303628449,
+     "samples": [
+      {
+       "cycles": 4303628449,
+       "perf": "4303628449,,cycles:u,1407107230,100.00,,",
+       "wall": 1.4758770080516115
+      },
+      {
+       "cycles": 4381324646,
+       "perf": "4381324646,,cycles:u,1426683407,100.00,,",
+       "wall": 1.458562518004328
+      },
+      {
+       "cycles": 4181833640,
+       "perf": "4181833640,,cycles:u,1353327916,100.00,,",
+       "wall": 1.3847112290095538
+      }
+     ],
+     "stderr_sha256": "3aa211bb263f825db476f6fcb6f20b0d581e2a62a3fd213ec0fedee3dc95633c",
+     "stdout_sha256": "379a137a896fe5bfb792cb5c5fe4acdced10d9a2ebce44d4182d1a98f78c4405",
+     "wall_median": 1.458562518004328
+    },
+    "v3": {
+     "cycles_median": 3449969277,
+     "samples": [
+      {
+       "cycles": 3235804645,
+       "perf": "3235804645,,cycles:u,1075381711,100.00,,",
+       "wall": 1.1392032169969752
+      },
+      {
+       "cycles": 3449969277,
+       "perf": "3449969277,,cycles:u,1131400241,100.00,,",
+       "wall": 1.1671523000113666
+      },
+      {
+       "cycles": 3561252463,
+       "perf": "3561252463,,cycles:u,1170169761,100.00,,",
+       "wall": 1.2051159029942937
+      }
+     ],
+     "stderr_sha256": "3aa211bb263f825db476f6fcb6f20b0d581e2a62a3fd213ec0fedee3dc95633c",
+     "stdout_sha256": "379a137a896fe5bfb792cb5c5fe4acdced10d9a2ebce44d4182d1a98f78c4405",
+     "wall_median": 1.1671523000113666
+    }
+   },
+   "uptime_end": "21:48:14 up 4 days, 18:30,  2 users,  load average: 5.74, 4.36, 5.01",
+   "uptime_start": "21:47:51 up 4 days, 18:29,  2 users,  load average: 5.42, 4.20, 4.97"
+  },
+  {
+   "counts": {
+    "c": {
+     "instructions": 1128444308
+    },
+    "reference": {
+     "instructions": 2015886815
+    },
+    "v1": {
+     "heap_blocks": 250586,
+     "heap_bytes": 47523317,
+     "heap_peak_bytes": 8293640,
+     "instructions": 2015884062
+    },
+    "v3": {
+     "heap_blocks": 250586,
+     "heap_bytes": 47523317,
+     "heap_peak_bytes": 8293640,
+     "instructions": 1214262315
+    }
+   },
+   "input": "tests/wild/gv16_graphs_b143_5416de.gv",
+   "native": {
+    "c": {
+     "cycles_median": 774944970,
+     "samples": [
+      {
+       "cycles": 774944970,
+       "perf": "774944970,,cycles:u,246152287,100.00,,",
+       "wall": 0.28152419097023085
+      },
+      {
+       "cycles": 774586283,
+       "perf": "774586283,,cycles:u,245038398,100.00,,",
+       "wall": 0.28073232900351286
+      },
+      {
+       "cycles": 792863146,
+       "perf": "792863146,,cycles:u,252281351,100.00,,",
+       "wall": 0.28282666101586074
+      }
+     ],
+     "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+     "stdout_sha256": "0eb9eb69d69105bc8bbe89087f00f28c02e3b5e1901cf28b3d1dd96c2b478c14",
+     "wall_median": 0.28152419097023085
+    },
+    "reference": {
+     "cycles_median": 862748664,
+     "samples": [
+      {
+       "cycles": 862748664,
+       "perf": "862748664,,cycles:u,303743275,100.00,,",
+       "wall": 0.3383309610071592
+      },
+      {
+       "cycles": 872795689,
+       "perf": "872795689,,cycles:u,299431750,100.00,,",
+       "wall": 0.33181130897719413
+      },
+      {
+       "cycles": 841007187,
+       "perf": "841007187,,cycles:u,289555738,100.00,,",
+       "wall": 0.32015556894475594
+      }
+     ],
+     "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+     "stdout_sha256": "04c49b83f1f8e1b0f3011ada3979d9e5961d3810cabc0bca3db746e8b37862b3",
+     "wall_median": 0.33181130897719413
+    },
+    "v1": {
+     "cycles_median": 853779948,
+     "samples": [
+      {
+       "cycles": 898309349,
+       "perf": "898309349,,cycles:u,310331641,100.00,,",
+       "wall": 0.3425320560345426
+      },
+      {
+       "cycles": 853779948,
+       "perf": "853779948,,cycles:u,293299903,100.00,,",
+       "wall": 0.3275078889564611
+      },
+      {
+       "cycles": 838344859,
+       "perf": "838344859,,cycles:u,287624979,100.00,,",
+       "wall": 0.3213473980431445
+      }
+     ],
+     "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+     "stdout_sha256": "04c49b83f1f8e1b0f3011ada3979d9e5961d3810cabc0bca3db746e8b37862b3",
+     "wall_median": 0.3275078889564611
+    },
+    "v3": {
+     "cycles_median": 660411062,
+     "samples": [
+      {
+       "cycles": 653588124,
+       "perf": "653588124,,cycles:u,229666937,100.00,,",
+       "wall": 0.2603005900164135
+      },
+      {
+       "cycles": 677673825,
+       "perf": "677673825,,cycles:u,239155091,100.00,,",
+       "wall": 0.27307757595553994
+      },
+      {
+       "cycles": 660411062,
+       "perf": "660411062,,cycles:u,232112928,100.00,,",
+       "wall": 0.2665781630203128
+      }
+     ],
+     "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+     "stdout_sha256": "04c49b83f1f8e1b0f3011ada3979d9e5961d3810cabc0bca3db746e8b37862b3",
+     "wall_median": 0.2665781630203128
+    }
+   },
+   "uptime_end": "21:48:18 up 4 days, 18:30,  2 users,  load average: 5.92, 4.42, 5.02",
+   "uptime_start": "21:48:14 up 4 days, 18:30,  2 users,  load average: 5.74, 4.36, 5.01"
+  },
+  {
+   "counts": {
+    "c": {
+     "instructions": 998946088
+    },
+    "reference": {
+     "instructions": 1763786745
+    },
+    "v1": {
+     "heap_blocks": 183235,
+     "heap_bytes": 45733825,
+     "heap_peak_bytes": 7779174,
+     "instructions": 1763786485
+    },
+    "v3": {
+     "heap_blocks": 183235,
+     "heap_bytes": 45733825,
+     "heap_peak_bytes": 7779174,
+     "instructions": 875736627
+    }
+   },
+   "input": "tests/wild/gv16_graphs_b106_471493.gv",
+   "native": {
+    "c": {
+     "cycles_median": 695214370,
+     "samples": [
+      {
+       "cycles": 698926700,
+       "perf": "698926700,,cycles:u,221832658,100.00,,",
+       "wall": 0.25831614702474326
+      },
+      {
+       "cycles": 695214370,
+       "perf": "695214370,,cycles:u,220686738,100.00,,",
+       "wall": 0.25567317596869543
+      },
+      {
+       "cycles": 693223338,
+       "perf": "693223338,,cycles:u,219666114,100.00,,",
+       "wall": 0.25155939598334953
+      }
+     ],
+     "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+     "stdout_sha256": "93b35ec06625acd832c429623f4085e684c0e28a43cc5dabb8992313a91cdc75",
+     "wall_median": 0.25567317596869543
+    },
+    "reference": {
+     "cycles_median": 691909161,
+     "samples": [
+      {
+       "cycles": 691909161,
+       "perf": "691909161,,cycles:u,239720495,100.00,,",
+       "wall": 0.3034048390109092
+      },
+      {
+       "cycles": 716047053,
+       "perf": "716047053,,cycles:u,247935021,100.00,,",
+       "wall": 0.280661083990708
+      },
+      {
+       "cycles": 675011891,
+       "perf": "675011891,,cycles:u,242695552,100.00,,",
+       "wall": 0.2750292560085654
+      }
+     ],
+     "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+     "stdout_sha256": "2dc08bcf794824cdb59e88be6384a04db3eead55279e410574c4e8cc8b1b063d",
+     "wall_median": 0.280661083990708
+    },
+    "v1": {
+     "cycles_median": 694906216,
+     "samples": [
+      {
+       "cycles": 718808811,
+       "perf": "718808811,,cycles:u,249569375,100.00,,",
+       "wall": 0.28433879697695374
+      },
+      {
+       "cycles": 694906216,
+       "perf": "694906216,,cycles:u,239824922,100.00,,",
+       "wall": 0.2747793120215647
+      },
+      {
+       "cycles": 680321720,
+       "perf": "680321720,,cycles:u,235234602,100.00,,",
+       "wall": 0.27504087798297405
+      }
+     ],
+     "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+     "stdout_sha256": "2dc08bcf794824cdb59e88be6384a04db3eead55279e410574c4e8cc8b1b063d",
+     "wall_median": 0.27504087798297405
+    },
+    "v3": {
+     "cycles_median": 483014689,
+     "samples": [
+      {
+       "cycles": 474281285,
+       "perf": "474281285,,cycles:u,170682637,100.00,,",
+       "wall": 0.205135962984059
+      },
+      {
+       "cycles": 490369978,
+       "perf": "490369978,,cycles:u,175477432,100.00,,",
+       "wall": 0.20815892500104383
+      },
+      {
+       "cycles": 483014689,
+       "perf": "483014689,,cycles:u,174190548,100.00,,",
+       "wall": 0.20703889097785577
+      }
+     ],
+     "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+     "stdout_sha256": "2dc08bcf794824cdb59e88be6384a04db3eead55279e410574c4e8cc8b1b063d",
+     "wall_median": 0.20703889097785577
+    }
+   },
+   "uptime_end": "21:48:22 up 4 days, 18:30,  2 users,  load average: 6.09, 4.48, 5.04",
+   "uptime_start": "21:48:18 up 4 days, 18:30,  2 users,  load average: 5.92, 4.42, 5.02"
+  },
+  {
+   "counts": {
+    "c": {
+     "instructions": 1144115926
+    },
+    "reference": {
+     "instructions": 1575333310
+    },
+    "v1": {
+     "heap_blocks": 418625,
+     "heap_bytes": 78051913,
+     "heap_peak_bytes": 13947933,
+     "instructions": 1575333523
+    },
+    "v3": {
+     "heap_blocks": 418625,
+     "heap_bytes": 78051913,
+     "heap_peak_bytes": 13947933,
+     "instructions": 1007328084
+    }
+   },
+   "input": "synth/dot_dag_1000.gv",
+   "native": {
+    "c": {
+     "cycles_median": 988440612,
+     "samples": [
+      {
+       "cycles": 995560467,
+       "perf": "995560467,,cycles:u,316149374,100.00,,",
+       "wall": 0.3485641229781322
+      },
+      {
+       "cycles": 969257166,
+       "perf": "969257166,,cycles:u,306426670,100.00,,",
+       "wall": 0.3365208489703946
+      },
+      {
+       "cycles": 988440612,
+       "perf": "988440612,,cycles:u,313302426,100.00,,",
+       "wall": 0.3442203470040113
+      }
+     ],
+     "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+     "stdout_sha256": "bc27563595fc6d6ef62f75c2270ab6c0b18ab22870e4d0d47117fdcd1db56a28",
+     "wall_median": 0.3442203470040113
+    },
+    "reference": {
+     "cycles_median": 845622954,
+     "samples": [
+      {
+       "cycles": 845622954,
+       "perf": "845622954,,cycles:u,302334293,100.00,,",
+       "wall": 0.3328633230412379
+      },
+      {
+       "cycles": 853049363,
+       "perf": "853049363,,cycles:u,303435428,100.00,,",
+       "wall": 0.33656376000726596
+      },
+      {
+       "cycles": 824126395,
+       "perf": "824126395,,cycles:u,293353373,100.00,,",
+       "wall": 0.32401940500130877
+      }
+     ],
+     "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+     "stdout_sha256": "00d4f56ca29fd7593fc70dbd7a543dc00240a7bdb785c2064653eaeb470e5a06",
+     "wall_median": 0.3328633230412379
+    },
+    "v1": {
+     "cycles_median": 830292765,
+     "samples": [
+      {
+       "cycles": 817079521,
+       "perf": "817079521,,cycles:u,297274588,100.00,,",
+       "wall": 0.32836211897665635
+      },
+      {
+       "cycles": 830292765,
+       "perf": "830292765,,cycles:u,295920498,100.00,,",
+       "wall": 0.32717023900477216
+      },
+      {
+       "cycles": 855878796,
+       "perf": "855878796,,cycles:u,308036278,100.00,,",
+       "wall": 0.34001387102762237
+      }
+     ],
+     "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+     "stdout_sha256": "00d4f56ca29fd7593fc70dbd7a543dc00240a7bdb785c2064653eaeb470e5a06",
+     "wall_median": 0.32836211897665635
+    },
+    "v3": {
+     "cycles_median": 714513323,
+     "samples": [
+      {
+       "cycles": 659469462,
+       "perf": "659469462,,cycles:u,240626876,100.00,,",
+       "wall": 0.2719250409863889
+      },
+      {
+       "cycles": 714513323,
+       "perf": "714513323,,cycles:u,265027759,100.00,,",
+       "wall": 0.29606437002075836
+      },
+      {
+       "cycles": 717871517,
+       "perf": "717871517,,cycles:u,263693967,100.00,,",
+       "wall": 0.297032494971063
+      }
+     ],
+     "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+     "stdout_sha256": "00d4f56ca29fd7593fc70dbd7a543dc00240a7bdb785c2064653eaeb470e5a06",
+     "wall_median": 0.29606437002075836
+    }
+   },
+   "uptime_end": "21:48:27 up 4 days, 18:30,  2 users,  load average: 6.24, 4.53, 5.05",
+   "uptime_start": "21:48:22 up 4 days, 18:30,  2 users,  load average: 6.09, 4.48, 5.04"
+  }
+ ],
+ "master": "b35ebbe2",
+ "ratchet_after": {
+  "cases": {
+   "laid/tests/wild/gv16_graphs_b29_d1e4db.gv -Tcanon -Knop2": {
+    "exit": 0,
+    "heap_blocks": 227582,
+    "heap_bytes": 18118855,
+    "heap_peak_bytes": 5232421,
+    "instructions": 158765222,
+    "rss_kib": 9604
+   },
+   "laid/tests/wild/gv16_graphs_b29_d1e4db.gv -Tsvg -Knop2": {
+    "exit": 0,
+    "heap_blocks": 210281,
+    "heap_bytes": 16555307,
+    "heap_peak_bytes": 5232417,
+    "instructions": 162400725,
+    "rss_kib": 9160
+   },
+   "synth/dot_dag_1000.gv -Tsvg": {
+    "exit": 0,
+    "heap_blocks": 418625,
+    "heap_bytes": 78051913,
+    "heap_peak_bytes": 13947933,
+    "instructions": 1551088760,
+    "rss_kib": 19176
+   },
+   "synth/twopi_tree_5000.gv -Tsvg": {
+    "exit": 0,
+    "heap_blocks": 1024852,
+    "heap_bytes": 83144778,
+    "heap_peak_bytes": 29377254,
+    "instructions": 850855217,
+    "rss_kib": 32672
+   },
+   "tests/circo/wild_gv16_directed_sdh_29b016.gv -Tsvg": {
+    "exit": 0,
+    "heap_blocks": 678425,
+    "heap_bytes": 37859247,
+    "heap_peak_bytes": 991806,
+    "instructions": 1540662633,
+    "rss_kib": 6856
+   },
+   "tests/fdp/wild_gv16_graphs_b69_4b5b48.gv -Tsvg": {
+    "exit": 0,
+    "heap_blocks": 321513,
+    "heap_bytes": 14775142,
+    "heap_peak_bytes": 1407901,
+    "instructions": 5226761487,
+    "rss_kib": 7488
+   },
+   "tests/fixtures/unix.gv -Tpng": {
+    "exit": 0,
+    "heap_blocks": 26276,
+    "heap_bytes": 14148183,
+    "heap_peak_bytes": 7460189,
+    "instructions": 146768157,
+    "rss_kib": 19852
+   },
+   "tests/fixtures/unix.gv -Tsvg": {
+    "exit": 0,
+    "heap_blocks": 14253,
+    "heap_bytes": 2123314,
+    "heap_peak_bytes": 569037,
+    "instructions": 27342339,
+    "rss_kib": 6576
+   },
+   "tests/neato/hw2_random_120.gv -Tsvg": {
+    "exit": 0,
+    "heap_blocks": 26433,
+    "heap_bytes": 3162994,
+    "heap_peak_bytes": 798545,
+    "instructions": 2532965151,
+    "rss_kib": 6852
+   },
+   "tests/osage/wild_gv16_graphs_b51_33bcb0.gv -Tsvg": {
+    "exit": 0,
+    "heap_blocks": 42661,
+    "heap_bytes": 3457450,
+    "heap_peak_bytes": 983805,
+    "instructions": 41865127,
+    "rss_kib": 7544
+   },
+   "tests/patchwork/wild_gv16_graphs_b51_33bcb0.gv -Tsvg": {
+    "exit": 0,
+    "heap_blocks": 36848,
+    "heap_bytes": 3344860,
+    "heap_peak_bytes": 908186,
+    "instructions": 31217886,
+    "rss_kib": 6844
+   },
+   "tests/sfdp/gen_grid20x20.gv -Tsvg": {
+    "exit": 0,
+    "heap_blocks": 97178,
+    "heap_bytes": 9553635,
+    "heap_peak_bytes": 3066430,
+    "instructions": 976537407,
+    "rss_kib": 9164
+   },
+   "tests/twopi/fx_arrows.gv -Tsvg": {
+    "exit": 0,
+    "heap_blocks": 22546,
+    "heap_bytes": 6864954,
+    "heap_peak_bytes": 909557,
+    "instructions": 4294303805,
+    "rss_kib": 6816
+   },
+   "tests/wild/gv16_graphs_b143_5416de.gv -Tplain": {
+    "exit": 0,
+    "heap_blocks": 245032,
+    "heap_bytes": 46698076,
+    "heap_peak_bytes": 8293644,
+    "instructions": 1969698595,
+    "rss_kib": 13324
+   },
+   "tests/wild/gv16_graphs_b143_5416de.gv -Tsvg": {
+    "exit": 0,
+    "heap_blocks": 250586,
+    "heap_bytes": 47523317,
+    "heap_peak_bytes": 8293640,
+    "instructions": 1952406391,
+    "rss_kib": 13336
+   }
+  },
+  "target": "x86_64-unknown-linux-musl"
+ },
+ "ratchet_before": {
+  "cases": {
+   "laid/tests/wild/gv16_graphs_b29_d1e4db.gv -Tcanon -Knop2": {
+    "exit": 0,
+    "heap_blocks": 227582,
+    "heap_bytes": 18118855,
+    "heap_peak_bytes": 5232421,
+    "instructions": 158765528,
+    "rss_kib": 9364
+   },
+   "laid/tests/wild/gv16_graphs_b29_d1e4db.gv -Tsvg -Knop2": {
+    "exit": 0,
+    "heap_blocks": 210281,
+    "heap_bytes": 16555307,
+    "heap_peak_bytes": 5232417,
+    "instructions": 162399000,
+    "rss_kib": 9168
+   },
+   "synth/dot_dag_1000.gv -Tsvg": {
+    "exit": 0,
+    "heap_blocks": 418625,
+    "heap_bytes": 78051913,
+    "heap_peak_bytes": 13947933,
+    "instructions": 1575332160,
+    "rss_kib": 19024
+   },
+   "synth/twopi_tree_5000.gv -Tsvg": {
+    "exit": 0,
+    "heap_blocks": 1024852,
+    "heap_bytes": 83144778,
+    "heap_peak_bytes": 29377254,
+    "instructions": 850833840,
+    "rss_kib": 34628
+   },
+   "tests/circo/wild_gv16_directed_sdh_29b016.gv -Tsvg": {
+    "exit": 0,
+    "heap_blocks": 678425,
+    "heap_bytes": 37859247,
+    "heap_peak_bytes": 991806,
+    "instructions": 1540665318,
+    "rss_kib": 6824
+   },
+   "tests/fdp/wild_gv16_graphs_b69_4b5b48.gv -Tsvg": {
+    "exit": 0,
+    "heap_blocks": 321513,
+    "heap_bytes": 14775142,
+    "heap_peak_bytes": 1407901,
+    "instructions": 5226739399,
+    "rss_kib": 7448
+   },
+   "tests/fixtures/unix.gv -Tpng": {
+    "exit": 0,
+    "heap_blocks": 26276,
+    "heap_bytes": 14148183,
+    "heap_peak_bytes": 7460189,
+    "instructions": 147049395,
+    "rss_kib": 19872
+   },
+   "tests/fixtures/unix.gv -Tsvg": {
+    "exit": 0,
+    "heap_blocks": 14253,
+    "heap_bytes": 2123314,
+    "heap_peak_bytes": 569037,
+    "instructions": 27624531,
+    "rss_kib": 6604
+   },
+   "tests/neato/hw2_random_120.gv -Tsvg": {
+    "exit": 0,
+    "heap_blocks": 26433,
+    "heap_bytes": 3162994,
+    "heap_peak_bytes": 798545,
+    "instructions": 2532965540,
+    "rss_kib": 6816
+   },
+   "tests/osage/wild_gv16_graphs_b51_33bcb0.gv -Tsvg": {
+    "exit": 0,
+    "heap_blocks": 42661,
+    "heap_bytes": 3457450,
+    "heap_peak_bytes": 983805,
+    "instructions": 41866437,
+    "rss_kib": 7328
+   },
+   "tests/patchwork/wild_gv16_graphs_b51_33bcb0.gv -Tsvg": {
+    "exit": 0,
+    "heap_blocks": 36848,
+    "heap_bytes": 3344860,
+    "heap_peak_bytes": 908186,
+    "instructions": 31217582,
+    "rss_kib": 6812
+   },
+   "tests/sfdp/gen_grid20x20.gv -Tsvg": {
+    "exit": 0,
+    "heap_blocks": 97178,
+    "heap_bytes": 9553635,
+    "heap_peak_bytes": 3066430,
+    "instructions": 976538650,
+    "rss_kib": 9132
+   },
+   "tests/twopi/fx_arrows.gv -Tsvg": {
+    "exit": 0,
+    "heap_blocks": 22546,
+    "heap_bytes": 6864954,
+    "heap_peak_bytes": 909557,
+    "instructions": 4303945157,
+    "rss_kib": 6784
+   },
+   "tests/wild/gv16_graphs_b143_5416de.gv -Tplain": {
+    "exit": 0,
+    "heap_blocks": 245032,
+    "heap_bytes": 46698076,
+    "heap_peak_bytes": 8293644,
+    "instructions": 2033175218,
+    "rss_kib": 13544
+   },
+   "tests/wild/gv16_graphs_b143_5416de.gv -Tsvg": {
+    "exit": 0,
+    "heap_blocks": 250586,
+    "heap_bytes": 47523317,
+    "heap_peak_bytes": 8293640,
+    "instructions": 2015885377,
+    "rss_kib": 13500
+   }
+  },
+  "target": "x86_64-unknown-linux-musl"
+ }
+}
