@@ -193,6 +193,9 @@ jobs:
     permissions:
       contents: read
       actions: read # fuzz.yml reads the fuzzed-inputs markers of earlier runs
+      # A called workflow may not ask for more than its caller grants, or the run fails at
+      # startup. The report job runs only on fuzz.yml's own schedule, so a release writes no issue.
+      issues: write # fuzz.yml's report job asks for it
     uses: $/.github/workflows/fuzz.yml
     with:
       ref: ${{ needs.prepare.outputs.base_sha }}
