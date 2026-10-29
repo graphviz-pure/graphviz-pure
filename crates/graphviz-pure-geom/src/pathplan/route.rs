@@ -73,7 +73,8 @@ pub fn proutespline(
     let ev0 = normv(endpoint_slopes[0]);
     let ev1 = normv(endpoint_slopes[1]);
     let mut ops = vec![input_route[0]];
-    really_route_spline(barriers, input_route, ev0, ev1, &mut ops)?;
+    let mut tnas = Vec::new();
+    really_route_spline(barriers, input_route, ev0, ev1, &mut ops, &mut tnas)?;
     Ok(ops)
 }
 
@@ -83,9 +84,11 @@ fn really_route_spline(
     ev0: Ppoint,
     ev1: Ppoint,
     ops: &mut Vec<Ppoint>,
+    tnas: &mut Vec<Tna>,
 ) -> Result<(), super::PathplanError> {
     let inpn = inps.len();
-    let mut tnas = vec![Tna::default(); inpn];
+    tnas.clear();
+    tnas.resize(inpn, Tna::default());
     for i in 1..inpn {
         tnas[i].t = tnas[i - 1].t + dist(inps[i], inps[i - 1]);
     }
@@ -96,7 +99,7 @@ fn really_route_spline(
         t.a[0] = scale(ev0, b1(t.t));
         t.a[1] = scale(ev1, b2(t.t));
     }
-    let (p1, v1, p2, v2) = mkspline(inps, &tnas, ev0, ev1);
+    let (p1, v1, p2, v2) = mkspline(inps, tnas, ev0, ev1);
     if splinefits(edges, p1, v1, p2, v2, inps, ops) {
         return Ok(());
     }
@@ -127,8 +130,8 @@ fn really_route_spline(
     let splitv1 = normv(sub(inps[spliti], inps[spliti - 1]));
     let splitv2 = normv(sub(inps[spliti + 1], inps[spliti]));
     let splitv = normv(add(splitv1, splitv2));
-    really_route_spline(edges, &inps[..=spliti], ev0, splitv, ops)?;
-    really_route_spline(edges, &inps[spliti..], splitv, ev1, ops)
+    really_route_spline(edges, &inps[..=spliti], ev0, splitv, ops, tnas)?;
+    really_route_spline(edges, &inps[spliti..], splitv, ev1, ops, tnas)
 }
 
 fn mkspline(
