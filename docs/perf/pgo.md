@@ -242,6 +242,11 @@ reference over the whole SVG corpus before packaging. x86-64 reuses compat;
 ARM64 builds a plain reference. The same gate runs in CI on Linux x86-64/ARM64,
 macOS ARM64/Intel and Windows x86-64/ARM64. Gallery/wheel/container checks remain.
 
+On x86-64 this release gate compares **PGO + v3** with **compat (v1, no PGO)**.
+A mismatch therefore flags either PGO or CPU-level differences. Plain v3 versus
+compat was already checked separately for #605; the release gate additionally
+checks the actual newly trained artifact.
+
 ## Release builds and reproducibility
 
 The helper trains and rebuilds each of the six default native targets on its own
@@ -253,6 +258,12 @@ job. No archive names, CPU requirements or install layouts change. Missing-funct
 profile warnings are enabled. Windows ARM64 uses bundled `rust-lld` for both
 PGO phases to avoid MSVC link.exe padding LLVM profile section markers; the
 first CI run detected the malformed profiles rather than shipping a fallback.
+
+Before profile use, the build rejects a merged profile below 64 KiB, fewer than
+1,000 recorded functions, a maximum function count below 10,000, or fewer than
+one million total block executions. Normal training produces several MiB and
+billions of block executions. These conservative floors catch empty or trivial
+training even if a profile contains zero-count records for every function.
 
 An independent run through the release helper reproduced the **8.80%** instruction
 reduction; counts differ from the manual build by at most **0.0062%** per case.

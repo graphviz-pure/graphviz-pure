@@ -10,6 +10,36 @@ import unittest
 from unittest import mock
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
+CHECK_PROFILE = runpy.run_path(str(ROOT / "scripts/build-pgo.py"))["check_profile"]
+
+
+class ProfileGuard(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.profile = pathlib.Path(self.temp.name) / "merged.profdata"
+
+    def test_empty_and_small_profiles_fail_before_profile_use(self):
+        for size in [0, 64 * 1024 - 1]:
+            self.profile.write_bytes(b"\0" * size)
+            with self.assertRaisesRegex(RuntimeError, "smaller than 64 KiB"):
+                CHECK_PROFILE(self.profile, "llvm-profdata")
+
+    def test_large_but_untrained_profiles_fail(self):
+        self.profile.write_bytes(b"\0" * (128 * 1024))
+        for functions, maximum, total in [(0, 0, 0), (10000, 0, 0), (10000, 100, 999999)]:
+            summary = (f"Total functions: {functions}\nMaximum function count: {maximum}\n"
+                       f"Total count: {total}\n")
+            with mock.patch("subprocess.check_output", return_value=summary):
+                with self.assertRaisesRegex(RuntimeError, "too little training"):
+                    CHECK_PROFILE(self.profile, "llvm-profdata")
+
+    def test_meaningful_profile_passes_and_records_counts(self):
+        self.profile.write_bytes(b"\0" * (128 * 1024))
+        summary = "Total functions: 2000\nMaximum function count: 50000\nTotal count: 2000000\n"
+        with mock.patch("subprocess.check_output", return_value=summary):
+            counts = CHECK_PROFILE(self.profile, "llvm-profdata")
+        self.assertEqual(counts["Total count"], 2000000)
 
 
 class CorpusGate(unittest.TestCase):

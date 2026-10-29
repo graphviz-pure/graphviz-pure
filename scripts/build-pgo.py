@@ -9,6 +9,7 @@ import hashlib
 import json
 import os
 import pathlib
+import re
 import shlex
 import subprocess
 import sys
@@ -16,6 +17,25 @@ import time
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 TRAINING = ROOT / "scripts/bench/sets/pgo.tsv"
+
+
+def check_profile(path, profdata):
+    # Normal profiles are several MiB and billions of counted block executions.
+    # These deliberately low floors reject empty/trivial training without tying
+    # the release to a particular compiler's function count or profile encoding.
+    if path.stat().st_size < 64 * 1024:
+        raise RuntimeError("merged PGO profile is smaller than 64 KiB")
+    summary = subprocess.check_output([str(profdata), "show", str(path)], text=True)
+    counts = {}
+    for field in ["Total functions", "Maximum function count", "Total count"]:
+        match = re.search(rf"^{field}:\s*(\d+)", summary, re.MULTILINE)
+        if not match:
+            raise RuntimeError(f"missing {field} in llvm-profdata summary")
+        counts[field] = int(match[1])
+    if (counts["Total functions"] < 1000 or counts["Maximum function count"] < 10000
+            or counts["Total count"] < 1000000):
+        raise RuntimeError(f"merged PGO profile contains too little training: {counts}")
+    return counts
 
 
 def train(binary, profiles, synth):
@@ -104,6 +124,7 @@ def main():
         raise RuntimeError("training did not write a profile for every command")
     merge_start = time.monotonic()
     subprocess.run([str(profdata), "merge", "-o", str(merged), *map(str, raw_files)], check=True)
+    profile_counts = check_profile(merged, profdata)
     merge_seconds = time.monotonic() - merge_start
     # Diagnose a profile whose function names/hashes barely match the final build.
     use_start = time.monotonic()
@@ -120,6 +141,7 @@ def main():
         "training_commands": count,
         "training_sha256": hashlib.sha256(TRAINING.read_bytes()).hexdigest(),
         "profile_sha256": hashlib.sha256(merged.read_bytes()).hexdigest(),
+        "profile_counts": profile_counts,
         "binary_sha256": hashlib.sha256(binary.read_bytes()).hexdigest(),
         "generate_build_seconds": generate_seconds,
         "training_seconds": training_seconds,
