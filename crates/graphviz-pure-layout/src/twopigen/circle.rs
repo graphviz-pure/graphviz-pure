@@ -44,18 +44,62 @@ fn other(g: &LGraph<'_>, e: usize, n: usize) -> usize {
     if t == n { g.edges[e].head } else { t }
 }
 
-/// `setNStepsToLeaf(g, n, prev)`.
-fn set_n_steps_to_leaf(g: &LGraph<'_>, sg: &Sub, r: &mut RData, n: usize, prev: Option<usize>) {
-    let nsteps = r.d[n].n_steps_to_leaf + 1;
-    let edges: Vec<usize> = g.all_edges(sg, n).collect();
-    for ep in edges {
-        let next = other(g, ep, n);
-        if prev == Some(next) {
+/// C: lib/twopigen/circle.c:setNStepsToLeaf
+/// A suspended recursive call, including the distance captured on entry.
+struct LeafFrame {
+    n: usize,
+    prev: Option<usize>,
+    edges: std::ops::Range<usize>,
+    nsteps: u64,
+}
+
+/// C: lib/twopigen/circle.c:setNStepsToLeaf
+fn set_n_steps_to_leaf(
+    r: &mut RData,
+    n: usize,
+    adjacency: &[usize],
+    offsets: &[std::ops::Range<usize>],
+    stack: &mut Vec<LeafFrame>,
+) {
+    stack.clear();
+    let (Some(node), Some(edges)) = (r.d.get(n), offsets.get(n)) else {
+        return;
+    };
+    let Some(nsteps) = node.n_steps_to_leaf.checked_add(1) else {
+        return;
+    };
+    stack.push(LeafFrame {
+        n,
+        prev: None,
+        edges: edges.clone(),
+        nsteps,
+    });
+    while let Some(frame) = stack.last_mut() {
+        let Some(ep) = frame.edges.next() else {
+            stack.pop();
+            continue;
+        };
+        let Some(&next) = adjacency.get(ep) else {
+            continue;
+        };
+        if frame.prev == Some(next) {
             continue;
         }
-        if nsteps < r.d[next].n_steps_to_leaf {
-            r.d[next].n_steps_to_leaf = nsteps;
-            set_n_steps_to_leaf(g, sg, r, next, Some(n));
+        if let Some(node) = r.d.get_mut(next)
+            && frame.nsteps < node.n_steps_to_leaf
+        {
+            node.n_steps_to_leaf = frame.nsteps;
+            let (Some(edges), Some(nsteps)) = (offsets.get(next), frame.nsteps.checked_add(1))
+            else {
+                continue;
+            };
+            let child = LeafFrame {
+                n: next,
+                prev: Some(frame.n),
+                edges: edges.clone(),
+                nsteps,
+            };
+            stack.push(child);
         }
     }
 }
@@ -90,9 +134,20 @@ fn init_layout(g: &LGraph<'_>, sg: &Sub, r: &mut RData) {
 
 /// `findCenterNode(g)`.
 fn find_center_node(g: &LGraph<'_>, sg: &Sub, r: &mut RData) -> Option<usize> {
+    // Preserve all_edges' out-then-in order, filtering membership just once.
+    let mut adjacency = Vec::new();
+    let mut offsets = vec![0..0; r.d.len()];
+    for &n in &sg.nodes {
+        let start = adjacency.len();
+        adjacency.extend(g.all_edges(sg, n).map(|e| other(g, e, n)));
+        if let Some(offset) = offsets.get_mut(n) {
+            *offset = start..adjacency.len();
+        }
+    }
+    let mut stack = Vec::with_capacity(sg.nodes.len());
     for &n in &sg.nodes {
         if r.d[n].n_steps_to_leaf == 0 {
-            set_n_steps_to_leaf(g, sg, r, n, None);
+            set_n_steps_to_leaf(r, n, &adjacency, &offsets, &mut stack);
         }
     }
     let mut center = None;
@@ -311,4 +366,74 @@ pub fn circle_layout(
     set_positions(g, sg, r, center);
     set_absolute_pos(g, sg, r, max_n_steps_to_center);
     Some(center)
+}
+
+#[cfg(test)]
+mod leaf_tests {
+    use super::*;
+
+    fn reference(
+        r: &mut RData,
+        n: usize,
+        prev: Option<usize>,
+        adjacency: &[usize],
+        offsets: &[std::ops::Range<usize>],
+    ) {
+        let nsteps = r.d[n].n_steps_to_leaf + 1;
+        for &next in &adjacency[offsets[n].clone()] {
+            if prev != Some(next) && nsteps < r.d[next].n_steps_to_leaf {
+                r.d[next].n_steps_to_leaf = nsteps;
+                reference(r, next, Some(n), adjacency, offsets);
+            }
+        }
+    }
+
+    #[test]
+    fn iterative_relaxation_matches_recursive_calls() {
+        // Includes a cycle, parallel edges, a self-loop and two leaves.
+        let adjacency = [1, 0, 2, 2, 3, 1, 1, 3, 2, 1, 3, 4, 3];
+        let offsets = [0..1, 1..5, 5..8, 8..12, 12..13];
+        let mut actual = RData::new(5);
+        for n in &mut actual.d {
+            n.n_steps_to_leaf = 25;
+        }
+        actual.d[0].n_steps_to_leaf = 0;
+        actual.d[4].n_steps_to_leaf = 0;
+        let mut expected = RData {
+            d: actual.d.clone(),
+        };
+        let mut stack = Vec::new();
+        for leaf in [0, 4] {
+            reference(&mut expected, leaf, None, &adjacency, &offsets);
+            set_n_steps_to_leaf(&mut actual, leaf, &adjacency, &offsets, &mut stack);
+            assert_eq!(
+                actual
+                    .d
+                    .iter()
+                    .map(|n| n.n_steps_to_leaf)
+                    .collect::<Vec<_>>(),
+                expected
+                    .d
+                    .iter()
+                    .map(|n| n.n_steps_to_leaf)
+                    .collect::<Vec<_>>()
+            );
+        }
+    }
+
+    #[test]
+    fn deep_relaxation_uses_heap_stack() {
+        let count = 20_000;
+        let adjacency: Vec<_> = (1..count).collect();
+        let offsets: Vec<_> = (0..count)
+            .map(|n| n.min(count - 1)..(n + 1).min(count - 1))
+            .collect();
+        let mut r = RData::new(count);
+        for n in &mut r.d {
+            n.n_steps_to_leaf = u64::MAX;
+        }
+        r.d[0].n_steps_to_leaf = 0;
+        set_n_steps_to_leaf(&mut r, 0, &adjacency, &offsets, &mut Vec::new());
+        assert_eq!(r.d[count - 1].n_steps_to_leaf, (count - 1) as u64);
+    }
 }
