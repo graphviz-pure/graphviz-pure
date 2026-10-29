@@ -17,7 +17,7 @@ LABEL org.opencontainers.image.title="graphviz-pure" \
       org.opencontainers.image.created="${CREATED}"
 # LICENSE, NOTICE, THIRD-PARTY-LICENSES.md and LICENSES/, from the release archive.
 COPY doc/ /usr/share/doc/graphviz-pure/
-COPY ${TARGETARCH}/graphviz-pure /usr/local/bin/graphviz-pure
+COPY ${TARGETARCH}/ /usr/local/bin/
 # Mount the files to render here: docker run -v "$PWD:/data" ... -o out.svg in.dot
 WORKDIR /data
 # nobody: the binary needs no privileges. Pass --user "$(id -u):$(id -g)" to write into a mount.

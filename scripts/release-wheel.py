@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Repackages one release archive as a Python wheel: graphviz_pure-VERSION-py3-none-PLATFORM.whl
-in OUT, whose scripts directory holds the archive's binary byte for byte, so `pip install
+in OUT, whose scripts directory holds the archive binaries byte for byte, so `pip install
 graphviz-pure` (or `uvx graphviz-pure`) puts the attested `graphviz-pure` command on the
 environment's PATH, the way ruff and uv ship. Nothing is compiled and nothing is imported: the
 wheel works with any Python 3.
@@ -9,7 +9,8 @@ The wheel is deterministic for a given Python and zlib: sorted entries, fixed ti
 Unix file attributes, and LF line endings in METADATA on every host. The archive's licence files go to the wheel's dist-info
 (PEP 639), and packaging/pypi/README.md is its description.
 
-Usage: scripts/release-wheel.py ARCHIVE OUT
+Usage: scripts/release-wheel.py ARCHIVE OUT [--compat COMPAT_ARCHIVE]
+  x86-64 requires the matching compat archive; its launcher comes from ARCHIVE.
   ARCHIVE  graphviz-pure-VERSION-TARGET.{tar.gz,zip} (scripts/release-package.py)
        scripts/release-wheel.py --pep440 VERSION
   prints VERSION's PEP 440 form, or fails if it has none (release.yml's check job runs it, so a
@@ -72,7 +73,7 @@ def macosx_tag(binary, arch):
 if sys.argv[1:2] == ["--pep440"] and len(sys.argv) == 3:
     print(pep440(sys.argv[2]))
     sys.exit(0)
-if len(sys.argv) != 3:
+if len(sys.argv) not in (3, 5):
     sys.exit(__doc__)
 archive, out = sys.argv[1:3]
 base = os.path.basename(archive)
@@ -80,6 +81,8 @@ match = [t for t in PLATFORMS if re.fullmatch(rf"graphviz-pure-.+-{re.escape(t)}
 if len(match) != 1:
     sys.exit(f"{archive}: not a release archive of a target with a wheel ({', '.join(PLATFORMS)})")
 target = match[0]
+if not target.startswith("x86_64") and len(sys.argv) != 3:
+    sys.exit("--compat is only supported for x86-64 targets")
 version = re.fullmatch(rf"graphviz-pure-(.+)-{re.escape(target)}\.(tar\.gz|zip)", base).group(1)
 name = f"graphviz-pure-{version}-{target}"
 exe = "graphviz-pure.exe" if "windows" in target else "graphviz-pure"
@@ -131,6 +134,25 @@ wheel = "".join(
 ).encode()
 
 entries = [(f"{dist}.data/scripts/{exe}", files[exe], 0o755)]
+if target.startswith("x86_64"):
+    if len(sys.argv) != 5 or sys.argv[3] != "--compat":
+        sys.exit("x86-64 wheels require --compat ARCHIVE (baseline binary)")
+    compat_archive = sys.argv[4]
+    expected = name + "-compat"
+    if os.path.basename(compat_archive) != expected + (".zip" if "windows" in target else ".tar.gz"):
+        sys.exit("compat archive must have the same version and target")
+    if compat_archive.endswith(".zip"):
+        with zipfile.ZipFile(compat_archive) as z:
+            compat_binary = z.read(f"{expected}/{exe}")
+    else:
+        with tarfile.open(compat_archive) as t:
+            compat_binary = t.extractfile(f"{expected}/{exe}").read()
+    extension = ".exe" if "windows" in target else ""
+    entries = [
+        (f"{dist}.data/scripts/{exe}", files["graphviz-pure-launcher" + extension], 0o755),
+        (f"{dist}.data/scripts/graphviz-pure-v3{extension}", files[exe], 0o755),
+        (f"{dist}.data/scripts/graphviz-pure-compat{extension}", compat_binary, 0o755),
+    ]
 entries += [(f"{dist}.dist-info/licenses/{f}", files[f], 0o644) for f in licences]
 entries += [(f"{dist}.dist-info/METADATA", metadata, 0o644), (f"{dist}.dist-info/WHEEL", wheel, 0o644)]
 

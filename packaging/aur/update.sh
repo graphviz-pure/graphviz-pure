@@ -58,7 +58,7 @@ fi
 
 echo "== release assets of $tag" >&2
 mkdir "$work/dist"
-targets=(x86_64-unknown-linux-musl aarch64-unknown-linux-musl)
+targets=(x86_64-unknown-linux-musl-compat aarch64-unknown-linux-musl)
 patterns=(--pattern SHA256SUMS)
 for t in "${targets[@]}"; do patterns+=(--pattern "graphviz-pure-$version-$t.tar.gz"); done
 gh release download "$tag" --repo "$repo" --dir "$work/dist" "${patterns[@]}"

@@ -12,6 +12,31 @@ Cut 1.0.0 directly from 0.2.3 with `-f version=1.0.0`; use the corresponding exp
 
 A dry run, or a check that fails, never asks for the `release` environment. A real release uses the concurrency group `release` (one at a time; a second one waits). A dry run uses `release-dry-run`, so dispatching a dry run cannot cancel a real release that is queued or running. A real release has to be dispatched from `master`. The `release` environment allows deployments from `master` only, so a workflow run from any other branch cannot request it.
 
+## x86-64 CPU variants
+
+Ordinary x86-64 Linux musl, macOS Intel and Windows archives use
+`-C target-cpu=x86-64-v3` (AVX2/FMA). Each also has an x86-64-v1 archive,
+`graphviz-pure-X.Y.Z-TARGET-compat.tar.gz` (Windows: `.zip`), with the same suffix
+on its inner directory. Never use `target-cpu=native`. ARM64 and WASM are unchanged.
+
+The default x86-64 archives also carry a baseline `graphviz-pure-launcher` executable.
+The six wheels retain their platform tags; x86-64 wheels carry the launcher
+as `graphviz-pure` plus both archive binaries as `graphviz-pure-v3` and
+`graphviz-pure-compat`. The launcher checks CPU and OS support using Rust's
+safe detection macros. Unix `CommandExt::exec` preserves signals, streams and
+exit status; Windows inherits streams and returns the child exit code.
+The amd64 container uses the same launcher and both binaries.
+Binstall selects compat because target triples do not encode CPU support.
+
+Homebrew and Scoop updates live in separate repositories. Their existing archive
+names select v3; their descriptions must state the new CPU minimum. Older hosts
+can use compat archives or auto-selecting wheels. AUR's binary recipe selects compat
+to retain baseline support. npm ships WASM only. Source installation stays baseline
+unless the user sets RUSTFLAGS.
+
+CI tests the v3 workspace fidelity ratchets and compares v1/v3 output for every
+`tests/**/*.gv` input with its own `layout=` engine. No goldens change.
+
 ## Before dispatching
 
 `scripts/release-check.sh` prints the checklist the workflow runs, and changes nothing:
@@ -67,7 +92,7 @@ toolchain and `cargo build --locked`:
   every archive and the binary in it (`scripts/check-binstall.py`), so
   `cargo binstall graphviz-pure-cli` installs the release's archive instead of compiling;
 - it repackages each archive's binary as a Python wheel (`scripts/release-wheel.py`: `py3-none`
-  wheels whose scripts directory holds the binary byte for byte), installs it with pip into a
+  wheels whose scripts directory holds the archive binaries byte for byte (both variants and a baseline launcher on x86-64)), installs it with pip into a
   fresh environment on the same runner and runs the smoke test on the installed command, and
   attests the six wheels (they go to PyPI only, not to the GitHub release). The macOS wheels'
   tags carry the binaries' minimum OS version, read from their Mach-O headers;
@@ -75,7 +100,7 @@ toolchain and `cargo build --locked`:
   NOTICE, THIRD-PARTY-LICENSES.md and LICENSES/, and every crate LICENSE and NOTICE
   (`scripts/check-package-notices.py`, `scripts/check-crate-notices.sh`; CI runs the same
   checks on every change; the crates' directories hold copies that must match the root files);
-- it builds the container image for linux/amd64 and linux/arm64 from the two musl archives
+- it builds the container image for linux/amd64 and linux/arm64 from the musl archives (both x86-64 variants and arm64)
   (`scripts/release-image.sh`, no second compile; with the same BuildKit, commit time and
   revision, the same archives give the same digest) and runs the version check and the gallery
   smoke test through it on both platforms;
