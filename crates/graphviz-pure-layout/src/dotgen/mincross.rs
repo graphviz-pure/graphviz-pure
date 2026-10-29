@@ -2,6 +2,14 @@
 //!
 //! The rank structure is global (`Root` is always the dot root, graph 0):
 //! cluster rank arrays are windows of the root arrays, see [`super::types::Rank`].
+//!
+//! C-mirror mapping: C `in_cross`, `out_cross` and `left2right` each map to the
+//! same-named free function below, with the same loops/branches. C `exchange`
+//! maps to `Dot::exchange`; the remaining tie-breaking functions (`mincross`,
+//! `mincross_step`, `medians`, `flat_mval`, `reorder`, `transpose`, `transpose_step`,
+//! `rcross`, `ncross`, `save_best`, `restore_best`) map to same-named `Dot` methods.
+//! `CrossingAdjacency`, `pair_cross` and the `Dot` left2right adapters only select
+//! storage; they do not provide alternative implementations of the C algorithms.
 
 use super::Dot;
 use super::qsort::qsort;
@@ -70,6 +78,21 @@ struct CrossingEdge {
     port_order: i32,
 }
 
+/// Compact endpoint slots are established together with the order array. A missing
+/// slot is an invariant failure, as was an invalid arena endpoint before compaction.
+#[inline]
+fn compact_order(orders: &[i32], slot: usize) -> i32 {
+    let order = orders.get(slot);
+    debug_assert!(
+        order.is_some(),
+        "mincross: compact slot {slot} has no order"
+    );
+    match order {
+        Some(order) => *order,
+        None => panic!("mincross: compact slot {slot} has no order"),
+    }
+}
+
 /// The arena alternative is needed by ncross: it counts root ranks even while a
 /// cluster window is being reordered. Its untouched nodes must retain their edges.
 #[derive(Clone)]
@@ -92,7 +115,7 @@ impl Iterator for CrossingEdges<'_> {
             Self::Compact(edges, orders) => {
                 let e = edges.next()?;
                 Some(CrossingEdge {
-                    order: *orders.get(e.other)?,
+                    order: compact_order(orders, e.other),
                     penalty: e.penalty,
                     port_order: e.port_order,
                 })
@@ -141,7 +164,7 @@ fn left2right(dot: &Dot<'_>, g: G, v: &MinCrossMeta, w: &MinCrossMeta) -> bool {
 trait CrossingAdjacency {
     type Edge;
     fn edges(&self) -> &[Self::Edge];
-    fn order(&self, e: &Self::Edge) -> Option<i32>;
+    fn order(&self, e: &Self::Edge) -> i32;
     fn penalty(&self, e: &Self::Edge) -> i32;
     fn port_x(&self, e: &Self::Edge) -> f64;
 }
@@ -158,8 +181,8 @@ impl CrossingAdjacency for CompactAdjacency<'_> {
         self.edges
     }
     #[inline]
-    fn order(&self, e: &MinCrossEdge) -> Option<i32> {
-        self.order.get(e.other).copied()
+    fn order(&self, e: &MinCrossEdge) -> i32 {
+        compact_order(self.order, e.other)
     }
     #[inline]
     fn penalty(&self, e: &MinCrossEdge) -> i32 {
@@ -184,9 +207,9 @@ impl CrossingAdjacency for ArenaAdjacency<'_> {
         self.edges
     }
     #[inline]
-    fn order(&self, e: &E) -> Option<i32> {
+    fn order(&self, e: &E) -> i32 {
         let e = &self.dot.edges[*e];
-        Some(self.dot.nodes[if self.out { e.head } else { e.tail }].order)
+        self.dot.nodes[if self.out { e.head } else { e.tail }].order
     }
     #[inline]
     fn penalty(&self, e: &E) -> i32 {
@@ -209,9 +232,9 @@ fn in_cross(v: impl CrossingAdjacency, w: impl CrossingAdjacency) -> i64 {
     let mut cross: i64 = 0;
     for e2 in w.edges() {
         let cnt = w.penalty(e2) as i64;
-        let Some(inv) = w.order(e2) else { continue };
+        let inv = w.order(e2);
         for e1 in v.edges() {
-            let Some(order) = v.order(e1) else { continue };
+            let order = v.order(e1);
             let t = order - inv;
             if t > 0 || (t == 0 && v.port_x(e1) > w.port_x(e2)) {
                 cross += v.penalty(e1) as i64 * cnt;
@@ -227,9 +250,9 @@ fn out_cross(v: impl CrossingAdjacency, w: impl CrossingAdjacency) -> i64 {
     let mut cross: i32 = 0;
     for e2 in w.edges() {
         let cnt = w.penalty(e2);
-        let Some(inv) = w.order(e2) else { continue };
+        let inv = w.order(e2);
         for e1 in v.edges() {
-            let Some(order) = v.order(e1) else { continue };
+            let order = v.order(e1);
             let t = order - inv;
             if t > 0 || (t == 0 && v.port_x(e1) > w.port_x(e2)) {
                 cross = cross.wrapping_add(v.penalty(e1).wrapping_mul(cnt));
@@ -779,7 +802,6 @@ impl Dot<'_> {
         self.left2right_arena(g, v.global, w.global)
     }
 
-    #[cold]
     fn left2right_arena(&self, g: G, v: N, w: N) -> bool {
         let load = |n: N| {
             let n = &self.nodes[n];
@@ -2036,6 +2058,34 @@ impl Dot<'_> {
 mod tests {
     use super::*;
     use graphviz_pure_core::{Graph, GraphKind};
+
+    #[test]
+    fn missing_compact_order_panics_instead_of_undercounting() {
+        let edges = [MinCrossEdge {
+            other: 0,
+            penalty: 1,
+            port_order: 0,
+            port_x: 0.0,
+        }];
+        let valid = CompactAdjacency {
+            edges: &edges,
+            order: &[0],
+        };
+        let missing = CompactAdjacency {
+            edges: &edges,
+            order: &[],
+        };
+        // Exercise both the outer and inner endpoint lookup in each C core.
+        for (v, w) in [(missing, valid), (valid, missing)] {
+            assert!(std::panic::catch_unwind(|| in_cross(v, w)).is_err());
+            assert!(std::panic::catch_unwind(|| out_cross(v, w)).is_err());
+        }
+        // rcross/medians must not silently end their compact iterator either.
+        assert!(
+            std::panic::catch_unwind(|| { CrossingEdges::Compact(edges.iter(), &[]).next() })
+                .is_err()
+        );
+    }
 
     fn sparse_window(input: &Graph) -> Dot<'_> {
         let mut d = Dot::empty(input);
