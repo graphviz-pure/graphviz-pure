@@ -35,7 +35,7 @@ pub(super) fn for_each_chunk(n: usize, threads: usize, f: impl Fn(Range<usize>) 
 /// Split `items` into at most `threads` contiguous subslices and call `f` on
 /// each. The subslices are disjoint. A thread count of 0 or 1 runs `f` on the
 /// caller.
-pub(super) fn for_each_chunk_mut<T: Send + Sync>(
+pub(crate) fn for_each_chunk_mut<T: Send + Sync>(
     items: &mut [T],
     threads: usize,
     f: impl Fn(Range<usize>, &mut [T]) + Sync,
@@ -159,6 +159,77 @@ fn first_chunk_len(n: usize, threads: usize) -> usize {
     n / threads + usize::from(!n.is_multiple_of(threads))
 }
 
+/// The same split [`for_each_chunk_mut`] runs. `n = 10`, `threads = 3` is
+/// `4 + 3 + 3`. Empty when `n` is 0.
+pub(crate) fn split_ranges(n: usize, threads: usize) -> Vec<Range<usize>> {
+    let threads = threads.max(1).min(n.max(1));
+    let mut ranges = Vec::with_capacity(threads);
+    let mut base = 0usize;
+    let mut left = n;
+    let mut remaining = threads;
+    while remaining > 0 && left > 0 {
+        let len = left / remaining + usize::from(!left.is_multiple_of(remaining));
+        ranges.push(base..base + len);
+        base += len;
+        left -= len;
+        remaining -= 1;
+    }
+    ranges
+}
+
+/// Threads used when `GRAPHVIZ_PURE_THREADS` is unset.
+///
+/// Four beat eight on rnd2000-as-neato (4.35 s against 4.58 s median wall).
+/// An explicit count may be higher, and both are capped by
+/// `available_parallelism`. Every parallel kernel reads this one value.
+pub(crate) const DEFAULT_THREADS: usize = 4;
+
+/// Thread count for every `parallel` kernel. Read once per process.
+///
+/// Unset `GRAPHVIZ_PURE_THREADS` is [`DEFAULT_THREADS`], not every core.
+/// An explicit count is clamped to `available_parallelism`. `0` and any
+/// unreadable value stay on one thread.
+pub(crate) fn configured_threads() -> usize {
+    static CACHED: std::sync::OnceLock<usize> = std::sync::OnceLock::new();
+    *CACHED.get_or_init(|| {
+        let available = std::thread::available_parallelism()
+            .map(|count| count.get())
+            .unwrap_or(1);
+        // The cache stores the first answer for the process. The decision
+        // itself is [`threads_from_env`], which tests can call with
+        // `NotPresent` without racing that cache.
+        threads_from_env(std::env::var("GRAPHVIZ_PURE_THREADS"), available)
+    })
+}
+
+/// What [`configured_threads`] stores.
+///
+/// `NotPresent` is [`DEFAULT_THREADS`], capped by `available`. Returning
+/// `available` here would ignore that cap: this is the arm the `OnceLock`
+/// runs when the variable was never set. An explicit count is capped the
+/// same way. `0`, garbage, and a non-Unicode value stay on one thread.
+fn threads_from_env(value: Result<String, std::env::VarError>, available: usize) -> usize {
+    match value {
+        Ok(value) => parse_threads(Some(&value), available),
+        Err(std::env::VarError::NotPresent) => parse_threads(None, available),
+        Err(std::env::VarError::NotUnicode(_)) => 1,
+    }
+}
+
+/// `None` is [`DEFAULT_THREADS`], capped by `available`. An explicit count is
+/// capped by `available` too. `0` and any other unreadable value are
+/// sequential, so a bad setting does not spawn.
+pub(crate) fn parse_threads(value: Option<&str>, available: usize) -> usize {
+    let available = available.max(1);
+    match value {
+        None => DEFAULT_THREADS.min(available),
+        Some(text) => match text.trim().parse::<usize>() {
+            Ok(count) if count >= 1 => count.min(available),
+            _ => 1,
+        },
+    }
+}
+
 #[cfg(all(test, not(target_family = "wasm")))]
 thread_local! {
     static SPAWN_LIMIT: std::cell::Cell<Option<usize>> = const { std::cell::Cell::new(None) };
@@ -180,14 +251,14 @@ fn spawn_blocked() -> bool {
 
 /// Restores the spawn limit when dropped, including on a panic.
 #[cfg(all(test, not(target_family = "wasm")))]
-pub(super) struct SpawnLimit {
+pub(crate) struct SpawnLimit {
     prev: Option<usize>,
 }
 
 #[cfg(all(test, not(target_family = "wasm")))]
 impl SpawnLimit {
     /// Allow `n` real spawns on this thread, then run chunks inline.
-    pub(super) fn at_most(n: usize) -> Self {
+    pub(crate) fn at_most(n: usize) -> Self {
         let prev = SPAWN_LIMIT.with(|cell| cell.replace(Some(n)));
         Self { prev }
     }
@@ -205,6 +276,34 @@ impl Drop for SpawnLimit {
 mod tests {
     use super::*;
     use std::sync::Mutex;
+
+    /// The `OnceLock` used to return every core on `NotPresent`. `parse_threads(None)`
+    /// was already the cap, and that test did not call the arm the cache runs.
+    #[test]
+    fn unset_threads_is_min_of_available_and_default() {
+        use std::env::VarError;
+        use std::ffi::OsString;
+
+        assert_eq!(
+            threads_from_env(Err(VarError::NotPresent), 8),
+            DEFAULT_THREADS
+        );
+        assert_eq!(
+            threads_from_env(Err(VarError::NotPresent), 28),
+            DEFAULT_THREADS
+        );
+        assert_eq!(threads_from_env(Err(VarError::NotPresent), 2), 2);
+        assert_eq!(threads_from_env(Err(VarError::NotPresent), 0), 1);
+        assert_ne!(threads_from_env(Err(VarError::NotPresent), 8), 8);
+        assert_ne!(threads_from_env(Err(VarError::NotPresent), 28), 28);
+        assert_eq!(threads_from_env(Ok("6".to_string()), 28), 6);
+        assert_eq!(threads_from_env(Ok("100".to_string()), 8), 8);
+        assert_eq!(threads_from_env(Ok("0".to_string()), 8), 1);
+        assert_eq!(
+            threads_from_env(Err(VarError::NotUnicode(OsString::from("x"))), 8),
+            1
+        );
+    }
 
     fn ranges_for(n: usize, threads: usize) -> Vec<Range<usize>> {
         let got = Mutex::new(Vec::new());
@@ -234,6 +333,11 @@ mod tests {
                 } else {
                     assert!(once.len() <= cap);
                 }
+                assert_eq!(
+                    split_ranges(n, threads),
+                    once,
+                    "split_ranges n={n} threads={threads}"
+                );
             }
         }
     }

@@ -4,7 +4,8 @@
 //! Graphviz layout engines in pure Rust (`dot`, `neato`, `fdp`, `sfdp`, `twopi`, `circo`, `osage`, `patchwork`).
 //!
 //! The `parallel` feature is native-only and off by default. It runs neato's
-//! symmetric mat-vec on several threads. Wasm builds do not enable it.
+//! symmetric mat-vec, and sfdp's quadtree repulsive terms, on several threads.
+//! Wasm builds do not enable it.
 
 #[cfg(all(feature = "parallel", target_family = "wasm"))]
 compile_error!("the parallel feature is native-only and is not part of the wasm build");

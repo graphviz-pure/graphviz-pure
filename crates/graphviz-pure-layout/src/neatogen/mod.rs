@@ -35,7 +35,7 @@ pub mod neatoinit;
 pub mod neatosplines;
 pub mod overlap;
 #[cfg(all(feature = "parallel", not(target_family = "wasm")))]
-mod par;
+pub(crate) mod par;
 pub mod quad_prog_vpsc;
 pub mod robust;
 pub mod routing;
