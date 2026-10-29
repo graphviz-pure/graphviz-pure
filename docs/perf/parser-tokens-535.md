@@ -19,9 +19,23 @@ ownership only for transformed strings, owned normalization fallback, and the la
 context after a shift without speculative scanning. Existing error/warning assertions and
 all workspace fidelity tests pass unchanged.
 
+The two lookahead `expect` calls cannot fail: `peek` fills an empty lookahead
+before returning, and `advance` calls `peek` before taking that same cached token.
+The scanner-context `expect` in `push` is likewise guarded by initialization through
+`peek` when absent. Both `unreachable!` arms in `atom` are excluded by the token-kind
+checks immediately before `shift`; shifting returns that cached token unchanged, or
+propagates a stack-exhaustion error before either match. `panic-sites.sh` scans the
+layout and geometry crates, so these parser invariants are documented explicitly here.
+
 Raw measurements: [parser-tokens-535.json](data/parser-tokens-535.json).
 
 ## Performance
+
+On the 11.6 MB parser-only input, peak heap falls **73.4%** (755,115,653 →
+200,845,000 B) and allocations fall **69.5%** (17,833,395 → 5,433,360).
+The parse-heavy canon readback uses **17.39% fewer instructions in CI**
+(158,705,292 → 131,104,138). These deterministic counts are the performance results.
+The end-to-end RSS gap on the 200,000-node CLI case (989,920 KiB) remains #536's work.
 
 Matched musl v1 release builds, before `b35ebbe2` and after. The Rust sources at the base
 are identical to the supplied 1.0 release candidate (`f89e21d9`). Counts below are local
@@ -67,17 +81,17 @@ CLI peak heap is unchanged on these large cases: it is set by graph/layout/rende
 after the parser has been dropped. No claim is made that removing token retention fixes
 all graph-model memory use (#536).
 
-Wall times are informational and noisy: median of three runs, with 1.0, after and C
-interleaved for each sample. × columns are reference/after (larger means faster).
+Wall times are **noise at shared-host load 30–60**: medians of three runs, with 1.0,
+after and C interleaved for each sample. No speedup is inferred from these timings.
 C is stock Graphviz 16.1.0 with the pango-free plugin directory.
 
-| input | 1.0 ms | after ms | ×1.0 | C ms | ×C |
-| :-- | --: | --: | --: | --: | --: |
-| `osage_clustered_20000` | 1,393 | 868 | 1.60 | 525 | 0.60 |
-| `patchwork_clustered_20000` | 1,161 | 1,133 | 1.03 | 548 | 0.48 |
-| `twopi_tree_20000` | 2,370 | 2,346 | 1.01 | 2,473 | 1.05 |
-| `dot_dag_20000_pos` | 1,876 | 1,559 | 1.20 | 730 | 0.47 |
-| `parse_200000_pos` | 11,621 | 9,294 | 1.25 | 3,736 | 0.40 |
+| input | 1.0 ms (noise) | after ms (noise) | C ms (noise) |
+| :-- | --: | --: | --: |
+| `osage_clustered_20000` | 1,393 | 868 | 525 |
+| `patchwork_clustered_20000` | 1,161 | 1,133 | 548 |
+| `twopi_tree_20000` | 2,370 | 2,346 | 2,473 |
+| `dot_dag_20000_pos` | 1,876 | 1,559 | 730 |
+| `parse_200000_pos` | 11,621 | 9,294 | 3,736 |
 
 | input | 1.0 RSS KiB | after RSS KiB | C RSS KiB |
 | :-- | --: | --: | --: |
@@ -111,7 +125,7 @@ from the shipped CLI results above.
 | bytes allocated | 1,648,905,910 | 521,964,509 | -68.34% | — |
 | peak heap B | 755,115,653 | 200,845,000 | -73.40% | — |
 | peak RSS KiB | 676,004 | 217,236 | -67.86% | 63,412 |
-| wall ms (noisy) | 3,734 | 1,936 | -48.17% | 2,108 |
+| wall ms (noise) | 3,734 | 1,936 | — | 2,108 |
 
 Parser-only timing uptime (before / after / C):
 
@@ -129,9 +143,9 @@ Run cargo through the build-slot wrapper. Put build outputs and all generated in
 Callgrind files, RSS files and renders on the data disk. The stock ratchet hardcodes
 worktree targets and bench.py's RSS file uses `/tmp`; this run overrides only those paths
 and reuses the shared synthetic inputs. The before/after ratchet uses identical argument
-paths. The committed heap baseline translates the measured path-length differences back
-to the canonical harness arguments using the matched before run; instruction baselines
-retain the previous CI values, per the ratchet's CI-only instruction-baseline rule.
+paths. The committed baseline now matches all four metrics in every row of the successful
+[perf-ratchet CI artifact](https://github.com/graphviz-pure/graphviz-pure/actions/runs/40930072152)
+for head `3b5500b0`. Local before/after figures remain recorded separately from CI results.
 
 Generate the parser-only input with:
 
