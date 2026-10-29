@@ -253,12 +253,8 @@ impl<'a> LGraph<'a> {
         let env = graphviz_pure_geom::NodeSizeEnv::from_graph_attrs(graph, gattrs);
         let mut nodes = Vec::with_capacity(graph.nodes.len());
         for nd in &graph.nodes {
-            let geom = graphviz_pure_geom::node_geometry(nd, &env)?;
-            let mut n = nd.clone();
-            n.width = geom.width;
-            n.height = geom.height;
-            let mut shape = NodeShape::new(&n)?;
-            shape.apply_geometry(&geom);
+            let mut geom = graphviz_pure_geom::node_geometry(nd, &env)?;
+            let shape = NodeShape::from_geometry(nd, &mut geom)?;
             let (lw, rw, ht) = geom.nodesize(false);
             let xlabel = geom.xlabel.as_ref().map(|l| TextLabel {
                 // lp->text: what addXLabels' `-v2` trace prints
@@ -275,8 +271,8 @@ impl<'a> LGraph<'a> {
             let mut node = LNode {
                 pos: vec![0.0; ndim],
                 coord: Point::default(),
-                width: n.width,
-                height: n.height,
+                width: geom.width,
+                height: geom.height,
                 lw,
                 rw,
                 ht,

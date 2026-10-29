@@ -268,17 +268,14 @@ impl<'a> Dot<'a> {
         let r = self.nodes[n].real.unwrap();
         let nd = &self.input.nodes[r];
         let env = graphviz_pure_geom::NodeSizeEnv::from_graph(self.input);
-        let geom = graphviz_pure_geom::node_geometry(nd, &env).map_err(super::fatal)?;
+        let mut geom = graphviz_pure_geom::node_geometry(nd, &env).map_err(super::fatal)?;
         // lp->text, which addXLabels' -v trace prints
         let xlabel_text = geom.xlabel.as_ref().map(|xl| {
             graphviz_pure_geom::label_text(xl, nd.attrs.get("xlabel").map_or("", String::as_str))
         });
         let (lw, rw, ht) = geom.nodesize(flip);
-        let mut sized = nd.clone();
-        sized.width = geom.width;
-        sized.height = geom.height;
-        let mut shape = crate::common::shapes::NodeShape::new(&sized).map_err(super::fatal)?;
-        shape.apply_geometry(&geom);
+        let shape =
+            crate::common::shapes::NodeShape::from_geometry(nd, &mut geom).map_err(super::fatal)?;
         let rec_fields = geom
             .record
             .as_ref()
