@@ -59,9 +59,14 @@ pub fn fmt_f_into<W: std::fmt::Write>(out: &mut W, v: f64, prec: usize) -> std::
     write!(out, "{v:.prec$}")
 }
 
-/// The most decimals the fixed-point path prints. The precisions the writers use are 0, 2,
-/// 3, 4 and 6; above this the numerator `m·10^prec` no longer fits the `u128` the path
-/// scales with, and the generic formatter prints the number.
+/// The most decimals the fixed-point path prints.
+///
+/// The `u128` the path scales with is not what bounds this: `m·10^prec` still fits it at
+/// precision 22 (the mantissa is 53 bits and `10^22` is 74 bits, so the numerator is 127),
+/// and it stops fitting at 23. The bound is what the writers need — the precisions they
+/// print with are 0, 2, 3, 4 and 6 — and, for the value, the other limit: the rounded
+/// scaled integer has to fit in a `u64`, which is what sends a large value to the generic
+/// formatter.
 const FIXED_MAX_PREC: usize = 6;
 
 /// The buffer the fixed-point path writes into: a sign, the digits of the integer part (at
@@ -522,13 +527,15 @@ mod tests {
     }
 
     /// The values whose scaled form is exactly a half, and their neighbours: a double's
-    /// decimal expansion ends in 5 at the odd multiples of `2^-3` (two decimals) and of
-    /// `2^-4` (three), and the doubles next to those are the values that round the other
-    /// way.
+    /// decimal expansion ends in 5 at the odd multiples of `1/2^(prec+1)` for `prec`
+    /// decimals, and the doubles next to those are the values that round the other way.
+    /// The precisions the writers use are 0, 2, 3, 4 and 6, so the ties are at the odd
+    /// multiples of `1/2`, `1/8`, `1/16`, `1/32` and `1/128`.
     fn halfway_cases() -> Vec<f64> {
         let mut v = Vec::new();
         for k in 0..2_000 {
-            for h in [(2 * k + 1) as f64 / 8.0, (2 * k + 1) as f64 / 16.0] {
+            for den in [2.0f64, 8.0, 16.0, 32.0, 128.0] {
+                let h = (2 * k + 1) as f64 / den;
                 v.push(h);
                 v.push(-h);
                 // The next double up and the next double down.
@@ -735,6 +742,123 @@ mod tests {
             total,
             start.elapsed().as_secs_f64()
         );
+    }
+
+    /// The randomized differential test over `f64`: a hundred million values with the full
+    /// 53-bit mantissa, at every precision the writers use, against the generic formatter.
+    ///
+    /// The `f32` sweep above cannot cover them: an `f32` has 24 bits of mantissa, so every
+    /// value it holds has 29 low mantissa bits that are zero, and it never reaches a long
+    /// decimal expansion. This one does.
+    ///
+    /// It is `#[ignore]`d and run by hand:
+    ///
+    /// ```sh
+    /// cargo test --release -p graphviz-pure-core -- --ignored every_f64
+    /// ```
+    #[test]
+    #[ignore = "a hundred million values; run it by hand"]
+    fn every_f64_matches_the_generic_formatter() {
+        let threads = std::thread::available_parallelism().map_or(1, |n| n.get().min(16));
+        let total = 100_000_000u64;
+        let stride = u64::try_from(threads).unwrap_or(1);
+        let start = std::time::Instant::now();
+        let mut handles = Vec::new();
+        for t in 0..threads {
+            handles.push(std::thread::spawn(move || {
+                let mut rng = 0x2545_f491_4f6c_dd1du64
+                    ^ (u64::try_from(t).unwrap_or(0)).wrapping_mul(0x9e37_79b9_7f4a_7c15);
+                let mut i = u64::try_from(t).unwrap_or(0);
+                while i < total {
+                    let v = random_double(&mut rng);
+                    for prec in [0usize, 2, 3, 4, 6] {
+                        // C prints `nan` for a NaN of either sign; Rust prints `NaN`.
+                        let want = if v.is_nan() {
+                            "nan".to_string()
+                        } else {
+                            format!("{v:.prec$}")
+                        };
+                        let mut got = String::new();
+                        let _ = fmt_f_into(&mut got, v, prec);
+                        assert_eq!(got, want, "bits {:#x} ({v:?}) at {prec}", v.to_bits());
+                    }
+                    i += stride;
+                }
+            }));
+        }
+        for h in handles {
+            h.join().unwrap();
+        }
+        println!(
+            "{} f64 values, five precisions each, in {:.1} s",
+            total,
+            start.elapsed().as_secs_f64()
+        );
+    }
+
+    /// One value for the randomized differential test: the kinds where the fixed-point path
+    /// and the generic formatter could disagree — a random bit pattern with the full
+    /// 53-bit mantissa, a value on a decimal boundary, an exact tie, a neighbour of either,
+    /// and the edge of the range where the scaled integer stops fitting in a `u64`.
+    fn random_double(rng: &mut u64) -> f64 {
+        *rng ^= *rng << 13;
+        *rng ^= *rng >> 7;
+        *rng ^= *rng << 17;
+        let bits = *rng;
+        // The precision the value is built for.
+        let (pow10, pow5, pow2) = RANDOM_POWERS[(bits >> 3) as usize % RANDOM_POWERS.len()];
+        match bits % 8 {
+            // A random bit pattern: the full 53-bit mantissa.
+            0 => f64::from_bits(bits),
+            // A random mantissa with the exponent of a layout coordinate.
+            1 => {
+                let mant = (bits >> 12) & 0x000f_ffff_ffff_ffff;
+                let exp = 1010 + ((bits >> 9) % 24);
+                f64::from_bits((bits & 0x8000_0000_0000_0000) | (exp << 52) | mant)
+            }
+            // A value on a decimal boundary: `k/10^prec`.
+            2 => ((bits >> 8) % 1_000_000_000) as f64 / pow10,
+            // A neighbour of one.
+            3 => {
+                let v = ((bits >> 8) % 1_000_000_000) as f64 / pow10;
+                ulp_neighbours(v)[(bits >> 2) as usize % 2]
+            }
+            // An exact tie: the odd multiple of `1/2^(prec+1)`, which is
+            // `odd·5^prec/2^(prec+1)` and is exactly representable.
+            4 => {
+                let odd = 2 * ((bits >> 8) % 1_000_000) + 1;
+                odd as f64 * pow5 / pow2
+            }
+            // A neighbour of a tie.
+            5 => {
+                let odd = 2 * ((bits >> 8) % 1_000_000) + 1;
+                let v = odd as f64 * pow5 / pow2;
+                ulp_neighbours(v)[(bits >> 2) as usize % 2]
+            }
+            // The edge of the path's range: the scaled integer is `2^64`, which is one too
+            // many for a `u64`, and its neighbour below.
+            6 => ulp_neighbours(18_446_744_073_709_551_616f64 / pow10)[(bits >> 2) as usize % 2],
+            // The edge itself.
+            _ => 18_446_744_073_709_551_616f64 / pow10,
+        }
+    }
+
+    /// The powers the random values are built from, for the precisions the writers use:
+    /// `10^prec`, `5^prec` and `2^(prec+1)`.
+    const RANDOM_POWERS: [(f64, f64, f64); 5] = [
+        (1.0, 1.0, 2.0),
+        (100.0, 25.0, 8.0),
+        (1_000.0, 125.0, 16.0),
+        (10_000.0, 625.0, 32.0),
+        (1_000_000.0, 15_625.0, 128.0),
+    ];
+
+    /// The doubles next to `v`: the one above it and the one below it.
+    fn ulp_neighbours(v: f64) -> [f64; 2] {
+        [
+            f64::from_bits(v.to_bits() + 1),
+            f64::from_bits(v.to_bits() - 1),
+        ]
     }
 
     #[test]
