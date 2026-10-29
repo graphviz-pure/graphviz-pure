@@ -34,6 +34,11 @@ struct Osage<'g, 'a> {
     /// Whether `sortv` is declared for graphs / nodes.
     sortv_graph: bool,
     sortv_node: bool,
+    kids: Vec<Vec<usize>>,
+    members: Vec<usize>,
+    gs: Vec<BoundingBox>,
+    children: Vec<Child>,
+    vals: Vec<u32>,
 }
 
 impl Osage<'_, '_> {
@@ -44,10 +49,11 @@ impl Osage<'_, '_> {
         }
     }
 
-    fn members(&self, c: Option<usize>) -> Vec<usize> {
+    fn members(&self, c: Option<usize>, out: &mut Vec<usize>) {
+        out.clear();
         match c {
-            None => (0..self.g.nodes.len()).collect(),
-            Some(c) => subgraph_member_nodes(self.g.src, self.tree.subgraph[c]),
+            None => out.extend(0..self.g.nodes.len()),
+            Some(c) => out.extend(subgraph_member_nodes(self.g.src, self.tree.subgraph[c])),
         }
     }
 
@@ -68,13 +74,23 @@ impl Osage<'_, '_> {
     /// `layout(g, depth)`.
     fn layout(&mut self, c: Option<usize>, depth: i32) {
         self.trace(depth, &format!("layout {}", self.gname(c)));
-        let kids = self.tree.kids(c).to_vec();
+        if self.kids.len() <= depth as usize {
+            self.kids.push(Vec::new());
+        }
+        let mut kids = match self.kids.pop() {
+            Some(kids) => kids,
+            None => unreachable!(),
+        };
+        kids.clear();
+        kids.extend_from_slice(self.tree.kids(c));
         let mut nvs = 0usize;
+        let mut members = std::mem::take(&mut self.members);
         for &sc in &kids {
             self.layout(Some(sc), depth + 1);
-            nvs += self.members(Some(sc)).len();
+            self.members(Some(sc), &mut members);
+            nvs += members.len();
         }
-        let members = self.members(c);
+        self.members(c, &mut members);
         let nv = members.len();
         let total = nv as i64 - nvs as i64 + kids.len() as i64;
         let label_dimen = match c {
@@ -82,6 +98,8 @@ impl Osage<'_, '_> {
             Some(c) => self.g.clusters[c].label.as_ref().map(|l| l.dimen),
         };
         if total == 0 && label_dimen.is_none() {
+            self.members = members;
+            self.kids.push(kids);
             self.set_bb(c, BoundingBox::new(0.0, 0.0, DFLT_SZ, DFLT_SZ));
             return;
         }
@@ -116,9 +134,12 @@ impl Osage<'_, '_> {
             }
         }
 
-        let mut gs: Vec<BoundingBox> = Vec::new();
-        let mut children: Vec<Child> = Vec::new();
-        let mut vals: Vec<u32> = Vec::new();
+        let mut gs = std::mem::take(&mut self.gs);
+        gs.clear();
+        let mut children = std::mem::take(&mut self.children);
+        children.clear();
+        let mut vals = std::mem::take(&mut self.vals);
+        vals.clear();
         for &sc in &kids {
             gs.push(self.g.clusters[sc].bb);
             if cattr {
@@ -147,6 +168,9 @@ impl Osage<'_, '_> {
             pinfo.vals = Some(vals);
         }
         let pts = put_rects(&gs, &pinfo).unwrap_or_else(|| vec![Point::default(); gs.len()]);
+        if let Some(vals) = pinfo.vals {
+            self.vals = vals;
+        }
 
         let m = f64::MAX;
         let mut rootbb = BoundingBox::new(m, m, -m, -m);
@@ -219,6 +243,10 @@ impl Osage<'_, '_> {
         let bb = BoundingBox::new(0.0, 0.0, ur.x, ur.y);
         self.trace_bb(depth, &self.gname(c), bb);
         self.set_bb(c, bb);
+        self.gs = gs;
+        self.children = children;
+        self.members = members;
+        self.kids.push(kids);
     }
 
     /// `agnameof(g)` of the root or a cluster.
@@ -265,7 +293,9 @@ impl Osage<'_, '_> {
         let bb = self.bb(c);
         self.trace(depth, &format!("reposition {}", self.gname(c)));
         if depth > 0 {
-            for n in self.members(c) {
+            let mut members = std::mem::take(&mut self.members);
+            self.members(c, &mut members);
+            for &n in &members {
                 if self.parent[n] != Some(c) {
                     continue;
                 }
@@ -273,6 +303,7 @@ impl Osage<'_, '_> {
                 self.g.nodes[n].coord.y += bb.ll.y;
                 self.trace_node(depth, n);
             }
+            self.members = members;
         }
         for sc in self.tree.kids(c).to_vec() {
             if depth > 0 {
@@ -326,6 +357,11 @@ pub fn osage_layout(graph: &mut Graph) -> Result<()> {
         root_bb: BoundingBox::default(),
         sortv_graph,
         sortv_node,
+        kids: Vec::new(),
+        members: Vec::new(),
+        gs: Vec::new(),
+        children: Vec::new(),
+        vals: Vec::new(),
     };
     o.layout(None, 0);
     o.reposition(None, 0);
