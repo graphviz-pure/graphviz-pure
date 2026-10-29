@@ -5,7 +5,6 @@
 // fails CI when the generated function names or the init signatures drift from this
 // file. `scripts/wasm-runtimes/types.ts` is typechecked against it. Edit this file;
 // do not treat a regenerated one as the source.
-/// <reference lib="dom" />
 
 export type InitInput = RequestInfo | URL | Response | BufferSource | WebAssembly.Module;
 
