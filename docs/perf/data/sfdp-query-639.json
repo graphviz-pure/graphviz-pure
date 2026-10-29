@@ -2392,5 +2392,14 @@
     "rss_kib": 9408
    }
   }
+ },
+ "ci_baseline": {
+  "run": 40973224305,
+  "head": "90e08799af06aab6fe5d817a3cb18cd527708f21",
+  "artifact": 12940639074,
+  "case": "tests/sfdp/gen_grid20x20.gv -Tsvg",
+  "before_instructions": 975163328,
+  "after_instructions": 922510237,
+  "other_rows_unchanged": true
  }
 }

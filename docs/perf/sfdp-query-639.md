@@ -52,3 +52,5 @@ Only the private query receives a constant dimension (2), selected by the unchan
 The independent old collector compares count bits, center bits, weight bits and distance bits on weighted/duplicate points, depths 0/1/3/10, dimensions 1/2/3 and far/near/infinite Barnes–Hut parameters. Existing tests cover buffer-capacity reuse. Every measured stdout/stderr hash matches master and the 1.0 reference. cargo test --workspace (v3), the new unit tests (v1 and v3), clippy --workspace --all-targets -- -D warnings, fmt, panic-sites and the before/after full ratchet pass. No panic-site increase.
 
 Closes #639. Stacked on #614.
+
+CI lock: the grid20x20 row is refreshed from the perf-ratchet artifact of run 40973224305 (head 90e08799): 975,163,328 → 922,510,237 instructions; allocation/heap fields are unchanged. Other rows are unchanged. The artifact reports only the pre-existing fdp b69 +612 allocations (#600, fixed by queued #632).
