@@ -110,6 +110,15 @@ pub struct NsEdge {
     pub tree_index: i32,
 }
 
+impl NsData {
+    fn node_mut(&mut self, n: usize) -> &mut NsNode {
+        match self.nodes.get_mut(n) {
+            Some(node) => node,
+            None => panic!("NsData node index out of bounds"),
+        }
+    }
+}
+
 impl NsGraph for NsData {
     fn nlist(&self) -> &[usize] {
         &self.nlist
@@ -172,24 +181,24 @@ impl NsGraph for NsData {
         &self.nodes[n].tree_out
     }
     fn tree_in_push(&mut self, n: usize, e: usize) -> bool {
-        self.nodes[n].tree_in.push(e);
+        self.node_mut(n).tree_in.push(e);
         true
     }
     fn tree_out_push(&mut self, n: usize, e: usize) -> bool {
-        self.nodes[n].tree_out.push(e);
+        self.node_mut(n).tree_out.push(e);
         true
     }
     fn tree_in_remove(&mut self, n: usize, e: usize) {
-        zapinlist(&mut self.nodes[n].tree_in, e);
+        zapinlist(&mut self.node_mut(n).tree_in, e);
     }
     fn tree_out_remove(&mut self, n: usize, e: usize) {
-        zapinlist(&mut self.nodes[n].tree_out, e);
+        zapinlist(&mut self.node_mut(n).tree_out, e);
     }
     fn tree_in_clear(&mut self, n: usize) {
-        self.nodes[n].tree_in.clear();
+        self.node_mut(n).tree_in.clear();
     }
     fn tree_out_clear(&mut self, n: usize) {
-        self.nodes[n].tree_out.clear();
+        self.node_mut(n).tree_out.clear();
     }
     fn tail(&self, e: usize) -> usize {
         self.edges[e].tail
@@ -322,9 +331,11 @@ fn exchange_tree_edges<G: NsGraph + ?Sized>(g: &mut G, ctx: &mut Ctx, e: usize, 
     let h = g.head(e);
     g.tree_in_remove(h, e);
     let t = g.tail(f);
-    g.tree_out_push(t, f);
+    let pushed = g.tree_out_push(t, f);
+    debug_assert!(pushed, "tree edges must be a subset of the node's edges");
     let h = g.head(f);
-    g.tree_in_push(h, f);
+    let pushed = g.tree_in_push(h, f);
+    debug_assert!(pushed, "tree edges must be a subset of the node's edges");
 }
 
 fn init_rank<G: NsGraph + ?Sized>(g: &mut G) {

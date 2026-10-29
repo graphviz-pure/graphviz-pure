@@ -26,7 +26,11 @@ impl Adjacency {
     }
 
     fn prepare(&mut self, n: usize, capacity: usize) {
-        if (self.capacities[n] as usize) < capacity {
+        let Some(current) = self.capacities.get(n).copied() else {
+            debug_assert!(false, "adjacency node out of bounds");
+            return;
+        };
+        if (current as usize) < capacity {
             let start = self.tree.len();
             let required = start.wrapping_add(capacity);
             if self.tree.capacity() < required {
@@ -34,44 +38,93 @@ impl Adjacency {
                 let target = required.max(current.wrapping_add(current / 8));
                 self.tree.reserve_exact(target.wrapping_sub(start));
             }
-            self.offsets[n] = start as u32;
+            let Some(offset) = self.offsets.get_mut(n) else {
+                debug_assert!(false, "adjacency node out of bounds");
+                return;
+            };
+            *offset = start as u32;
             self.tree.resize(required, 0);
-            self.capacities[n] = capacity as u32;
+            if let Some(stored) = self.capacities.get_mut(n) {
+                *stored = capacity as u32;
+            }
         }
-        self.tree_len[n] = 0;
+        if let Some(len) = self.tree_len.get_mut(n) {
+            *len = 0;
+        }
+    }
+
+    fn bounds(&self, n: usize) -> Option<(usize, usize)> {
+        let start = self.offsets.get(n).copied()? as usize;
+        let len = self.tree_len.get(n).copied()? as usize;
+        Some((start, len))
     }
 
     fn edges(&self, n: usize) -> &[E] {
-        let start = self.offsets[n] as usize;
-        &self.tree[start..start.wrapping_add(self.tree_len[n] as usize)]
+        let Some((start, len)) = self.bounds(n) else {
+            debug_assert!(false, "adjacency node out of bounds");
+            return &[];
+        };
+        let end = start.wrapping_add(len);
+        match self.tree.get(start..end) {
+            Some(edges) => edges,
+            None => {
+                debug_assert!(false, "adjacency segment out of bounds");
+                &[]
+            }
+        }
     }
 
     fn push(&mut self, n: usize, e: E) -> bool {
-        let len = self.tree_len[n] as usize;
-        if len >= self.capacities[n] as usize {
+        let Some(len) = self.tree_len.get(n).copied() else {
+            debug_assert!(false, "adjacency node out of bounds");
+            return false;
+        };
+        let Some(capacity) = self.capacities.get(n).copied() else {
+            debug_assert!(false, "adjacency node out of bounds");
+            return false;
+        };
+        let len = len as usize;
+        if len >= capacity as usize {
             return false;
         }
-        let i = (self.offsets[n] as usize).wrapping_add(len);
-        self.tree[i] = e;
-        self.tree_len[n] = len.wrapping_add(1) as u32;
+        let Some(start) = self.offsets.get(n).copied() else {
+            debug_assert!(false, "adjacency node out of bounds");
+            return false;
+        };
+        let i = (start as usize).wrapping_add(len);
+        let Some(slot) = self.tree.get_mut(i) else {
+            debug_assert!(false, "adjacency segment out of bounds");
+            return false;
+        };
+        *slot = e;
+        if let Some(stored) = self.tree_len.get_mut(n) {
+            *stored = len.wrapping_add(1) as u32;
+        }
         true
     }
 
     fn remove(&mut self, n: usize, e: E) {
-        let start = self.offsets[n] as usize;
-        let len = self.tree_len[n] as usize;
+        let Some((start, len)) = self.bounds(n) else {
+            debug_assert!(false, "adjacency node out of bounds");
+            return;
+        };
         let end = start.wrapping_add(len);
-        if let Some(i) = self.tree[start..end].iter().position(|&x| x == e) {
-            self.tree.swap(
-                start.wrapping_add(i),
-                start.wrapping_add(len.wrapping_sub(1)),
-            );
-            self.tree_len[n] = len.wrapping_sub(1) as u32;
+        let Some(segment) = self.tree.get_mut(start..end) else {
+            debug_assert!(false, "adjacency segment out of bounds");
+            return;
+        };
+        if let Some(i) = segment.iter().position(|&x| x == e) {
+            segment.swap(i, len.wrapping_sub(1));
+            if let Some(stored) = self.tree_len.get_mut(n) {
+                *stored = len.wrapping_sub(1) as u32;
+            }
         }
     }
 
     fn clear(&mut self, n: usize) {
-        self.tree_len[n] = 0;
+        if let Some(len) = self.tree_len.get_mut(n) {
+            *len = 0;
+        }
     }
 }
 
@@ -147,27 +200,95 @@ impl<'x, 'a> DotNs<'x, 'a> {
             n = d.nodes[x].next;
         }
         scratch.resize(d.nodes.len(), d.edges.len());
+        #[cfg(debug_assertions)]
+        {
+            let mut listed = vec![false; d.nodes.len()];
+            for &n in &scratch.nlist {
+                if let Some(slot) = listed.get_mut(n) {
+                    *slot = true;
+                }
+            }
+            for &n in &scratch.nlist {
+                let Some(node) = d.nodes.get(n) else {
+                    continue;
+                };
+                for &e in node.in_.iter().chain(&node.out) {
+                    let Some(edge) = d.edges.get(e) else {
+                        continue;
+                    };
+                    debug_assert!(
+                        listed.get(edge.tail).copied().unwrap_or(false)
+                            && listed.get(edge.head).copied().unwrap_or(false),
+                        "NS node list must be closed under every incident edge"
+                    );
+                }
+            }
+        }
         for &n in &scratch.nlist {
-            let node = &d.nodes[n];
-            scratch.rank[n] = node.rank;
-            scratch.mark[n] = node.mark;
-            scratch.priority[n] = node.priority;
-            scratch.low[n] = node.low;
-            scratch.lim[n] = node.lim;
-            scratch.par[n] = node.par;
-            scratch.subtree[n] = node.subtree;
+            let Some(node) = d.nodes.get(n) else {
+                debug_assert!(false, "NS node out of bounds");
+                continue;
+            };
+            if let (
+                Some(rank),
+                Some(mark),
+                Some(priority),
+                Some(low),
+                Some(lim),
+                Some(par),
+                Some(subtree),
+            ) = (
+                scratch.rank.get_mut(n),
+                scratch.mark.get_mut(n),
+                scratch.priority.get_mut(n),
+                scratch.low.get_mut(n),
+                scratch.lim.get_mut(n),
+                scratch.par.get_mut(n),
+                scratch.subtree.get_mut(n),
+            ) {
+                *rank = node.rank;
+                *mark = node.mark;
+                *priority = node.priority;
+                *low = node.low;
+                *lim = node.lim;
+                *par = node.par;
+                *subtree = node.subtree;
+            } else {
+                debug_assert!(false, "NS scratch node out of bounds");
+            }
             scratch.incoming.prepare(n, node.in_.len());
             scratch.outgoing.prepare(n, node.out.len());
             scratch.edges.extend_from_slice(&node.in_);
         }
         for &e in &scratch.edges {
-            let edge = &d.edges[e];
-            scratch.tail[e] = edge.tail;
-            scratch.head[e] = edge.head;
-            scratch.minlen[e] = edge.minlen;
-            scratch.weight[e] = edge.weight;
-            scratch.cutvalue[e] = edge.cutvalue;
-            scratch.tree_index[e] = edge.tree_index;
+            let Some(edge) = d.edges.get(e) else {
+                debug_assert!(false, "NS edge out of bounds");
+                continue;
+            };
+            if let (
+                Some(tail),
+                Some(head),
+                Some(minlen),
+                Some(weight),
+                Some(cutvalue),
+                Some(tree_index),
+            ) = (
+                scratch.tail.get_mut(e),
+                scratch.head.get_mut(e),
+                scratch.minlen.get_mut(e),
+                scratch.weight.get_mut(e),
+                scratch.cutvalue.get_mut(e),
+                scratch.tree_index.get_mut(e),
+            ) {
+                *tail = edge.tail;
+                *head = edge.head;
+                *minlen = edge.minlen;
+                *weight = edge.weight;
+                *cutvalue = edge.cutvalue;
+                *tree_index = edge.tree_index;
+            } else {
+                debug_assert!(false, "NS scratch edge out of bounds");
+            }
         }
         Self { d, g, scratch }
     }
@@ -176,23 +297,55 @@ impl<'x, 'a> DotNs<'x, 'a> {
         for &n in &self.scratch.nlist {
             let tree_in = self.scratch.incoming.edges(n);
             let tree_out = self.scratch.outgoing.edges(n);
-            let node = &mut self.d.nodes[n];
-            node.rank = self.scratch.rank[n];
-            node.mark = self.scratch.mark[n];
-            node.priority = self.scratch.priority[n];
-            node.low = self.scratch.low[n];
-            node.lim = self.scratch.lim[n];
-            node.par = self.scratch.par[n];
-            node.subtree = self.scratch.subtree[n];
+            let Some(node) = self.d.nodes.get_mut(n) else {
+                debug_assert!(false, "NS node out of bounds");
+                continue;
+            };
+            if let (
+                Some(&rank),
+                Some(&mark),
+                Some(&priority),
+                Some(&low),
+                Some(&lim),
+                Some(&par),
+                Some(&subtree),
+            ) = (
+                self.scratch.rank.get(n),
+                self.scratch.mark.get(n),
+                self.scratch.priority.get(n),
+                self.scratch.low.get(n),
+                self.scratch.lim.get(n),
+                self.scratch.par.get(n),
+                self.scratch.subtree.get(n),
+            ) {
+                node.rank = rank;
+                node.mark = mark;
+                node.priority = priority;
+                node.low = low;
+                node.lim = lim;
+                node.par = par;
+                node.subtree = subtree;
+            } else {
+                debug_assert!(false, "NS scratch node out of bounds");
+            }
             node.tree_in.clear();
             node.tree_in.extend_from_slice(tree_in);
             node.tree_out.clear();
             node.tree_out.extend_from_slice(tree_out);
         }
         for &e in &self.scratch.edges {
-            let edge = &mut self.d.edges[e];
-            edge.cutvalue = self.scratch.cutvalue[e];
-            edge.tree_index = self.scratch.tree_index[e];
+            let Some(edge) = self.d.edges.get_mut(e) else {
+                debug_assert!(false, "NS edge out of bounds");
+                continue;
+            };
+            if let (Some(&cutvalue), Some(&tree_index)) =
+                (self.scratch.cutvalue.get(e), self.scratch.tree_index.get(e))
+            {
+                edge.cutvalue = cutvalue;
+                edge.tree_index = tree_index;
+            } else {
+                debug_assert!(false, "NS scratch edge out of bounds");
+            }
         }
     }
 }
@@ -391,6 +544,7 @@ mod tests {
 
         let result = d.rank2(0, 0, i32::MAX, SEARCHSIZE);
         assert_eq!(result, Err(ns::OVERFLOW_EDGE_WEIGHT_SUM.to_string()));
+        assert!(d.nodes.iter().any(|node| node.rank != 0));
         for (i, node) in d.nodes.iter().enumerate() {
             assert_eq!(node.rank, d.ns_scratch.rank[i]);
             assert_eq!(node.low, d.ns_scratch.low[i]);
