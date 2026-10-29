@@ -23,7 +23,9 @@ bounds the **rounded computation that C actually uses**:
 3. Every candidate root that C considers is in `[0,1]`, so no candidate can pass that filter after a rejection, regardless of the accuracy of `solve3`. The original helper therefore returns either zero accepted roots or its sentinel 4; `splineisinside` continues in either case. Point barriers, which do not use this filter, always fall through.
 4. Every surviving call executes the original coefficient construction, `solve3`, `horner`, `addroot` and intersection checks in their original order. Buffer references replace local arrays without changing stored values or arithmetic. No retained output float is reordered, split or fused differently.
 
-The original scalar implementation is copied into a test-only reference module. Tests compare
+The bounds helpers are Rust-only additions with no C counterparts. The original scalar
+route implementation is copied into a test-only reference module; it uses the live `solve3`
+because `solvers.rs` is unchanged by this PR. Tests compare
 all four output-root bit patterns, the returned root count, and final routing decisions;
 reused scratch is deliberately filled with stale NaNs/infinities to detect unwritten reads.
 The independent bound test includes strict endpoint-rounding and signed-zero cases.
@@ -116,9 +118,10 @@ No instruction increase over 2% and no allocation/peak-heap change against match
 - Workspace formatting and Clippy with all targets/warnings denied: pass.
 - Panic-site ratchet: pass, unchanged; no new `unwrap`, `expect` or `unreachable!`.
 - `cargo test --workspace`: pass with unchanged fidelity baselines.
-- The three new geometry tests also pass with `RUSTFLAGS="-C target-cpu=x86-64-v3"`.
+- The four new geometry tests also pass with `RUSTFLAGS="-C target-cpu=x86-64-v3"`.
 - 80,000 deterministic random segment/line pairs across scales `2^-900` through `2^900`, plus 840 adversarial pairs: tangencies, exact endpoints, repeated roots, degenerate cubics, signed zeros and subnormals. Old/new root counts and every output-root bit match; single-side and multi-side routing decisions match.
 - 180,000 sampled Horner evaluations lie within the independently computed bounds. Explicit tests retain cases whose side parameter rounds to zero or one despite geometric separation.
+- 260 fixed regressions that the old solver accepts despite all controls lying beyond the segment extent: 1–64 ulps beyond each near endpoint across both coordinate axes and mirrored signs, plus cancelling excursions. A temporary hull-only mutation fails the new test.
 - Full performance ratchet meets all three limits against matched master; only the known #600 allocation failure remains against the committed baseline.
 - All four target SVG/stdout and stderr SHA-256 values match before/after and between v1 and v3.
 

@@ -106,11 +106,13 @@ fn really_route_spline(
     let mut maxd = -1.0;
     for i in 1..inpn.saturating_sub(1) {
         let t = tnas[i].t;
-        let px = math::fma(b3(t), 
+        let px = math::fma(
+            b3(t),
             p2.x,
             math::fma(b2(t), cp2.x, math::fma(b0(t), p1.x, b1(t) * cp1.x)),
         );
-        let py = math::fma(b3(t), 
+        let py = math::fma(
+            b3(t),
             p2.y,
             math::fma(b2(t), cp2.y, math::fma(b0(t), p1.y, b1(t) * cp1.y)),
         );
@@ -237,7 +239,8 @@ struct SplineScratch {
     coeff: [f64; 4],
 }
 
-/// C: lib/pathplan/route.c:horner (conservative bounds for its side-parameter filter)
+/// Rust-only helper; no C counterpart. Bounds C's `horner` side-parameter
+/// evaluation in `lib/pathplan/route.c:splineintersectsline`.
 /// Bounds the *rounded Horner evaluation* for every floating t in [0, 1].
 /// Multiplication by nonnegative t maps [lo, hi] into [min(0, lo), max(0, hi)].
 /// At either endpoint the product is exact (0 or 1 times a finite float), so
@@ -259,7 +262,8 @@ fn horner_bounds(s: [f64; 4]) -> Option<(f64, f64)> {
     Some((lo, hi))
 }
 
-/// C: lib/pathplan/route.c:splineintersectsline (the existing sv range check)
+/// Rust-only helper; no C counterpart. Bounds the `sv` range check in
+/// `lib/pathplan/route.c:splineintersectsline`.
 /// Proves that every candidate t fails the original side-parameter test. This
 /// remains valid for solve3's approximate/spurious roots and near-zero tolerances.
 /// A return value of 4 also causes splineisinside to continue, just like rejection.
@@ -278,7 +282,8 @@ fn outside_side(bounds: Option<(f64, f64)>, origin: f64, delta: f64) -> bool {
     (a < 0.0 && b < 0.0) || (a > 1.0 && b > 1.0)
 }
 
-/// C: lib/pathplan/route.c:splineisinside (lazy, conservative side filtering)
+/// Rust-only helper; no C counterpart. Lazily caches conservative bounds for
+/// barrier-side filtering in C's `splineisinside` (`lib/pathplan/route.c`).
 #[derive(Default)]
 struct SplineBounds {
     x: std::cell::OnceCell<Option<(f64, f64)>>,
@@ -342,15 +347,17 @@ fn splineisinside(edges: &[Pedge], sps: &[Ppoint; 4]) -> bool {
             let tc = 3.0 * t * t * (1.0 - t);
             let tb = 3.0 * t * (1.0 - t) * (1.0 - t);
             let ta = (1.0 - t) * (1.0 - t) * (1.0 - t);
-            let ipx = math::fma(td, 
+            let ipx = math::fma(
+                td,
                 sps[3].x,
                 math::fma(tc, sps[2].x, math::fma(ta, sps[0].x, tb * sps[1].x)),
             );
-            let ipy = math::fma(td, 
+            let ipy = math::fma(
+                td,
                 sps[3].y,
                 math::fma(tc, sps[2].y, math::fma(ta, sps[0].y, tb * sps[1].y)),
             );
-            let ds = |q: Ppoint| math::fma((ipx - q.x), ipx - q.x, (ipy - q.y) * (ipy - q.y));
+            let ds = |q: Ppoint| math::fma(ipx - q.x, ipx - q.x, (ipy - q.y) * (ipy - q.y));
             if ds(lps[0]) < EPSILON1 || ds(lps[1]) < EPSILON1 {
                 continue;
             }
@@ -371,7 +378,7 @@ fn points2coeff(v0: f64, v1: f64, v2: f64, v3: f64) -> [f64; 4] {
     [
         v0,
         3.0 * (v1 - v0),
-        math::fma((-6.0f64), v1, math::fma(3.0f64, v0, 3.0 * v2)),
+        math::fma(-6.0f64, v1, math::fma(3.0f64, v0, 3.0 * v2)),
         math::fma(3.0f64, v1, v3) - math::fma(3.0f64, v2, v0),
     ]
 }
@@ -445,7 +452,7 @@ fn splineintersectsline(
         }
     } else {
         let rat = yc[1] / xc[1];
-        let f = |p: Ppoint| math::fma((-rat), p.x, p.y);
+        let f = |p: Ppoint| math::fma(-rat, p.x, p.y);
         *s = points2coeff(f(sps[0]), f(sps[1]), f(sps[2]), f(sps[3]));
         s[0] += math::fma(rat, xc[0], -yc[0]);
         let xn = solve3(s, xr);
@@ -467,6 +474,8 @@ fn splineintersectsline(
 
 #[cfg(test)]
 mod reference {
+    // The route code is the old implementation. It calls the live solve3 because
+    // solvers.rs is unchanged by this PR.
     use super::*;
     pub(super) fn splineisinside(edges: &[Pedge], sps: &[Ppoint; 4]) -> bool {
         let mut roots = [0.0f64; 4];
@@ -484,15 +493,17 @@ mod reference {
                 let tc = 3.0 * t * t * (1.0 - t);
                 let tb = 3.0 * t * (1.0 - t) * (1.0 - t);
                 let ta = (1.0 - t) * (1.0 - t) * (1.0 - t);
-                let ipx = math::fma(td, 
+                let ipx = math::fma(
+                    td,
                     sps[3].x,
                     math::fma(tc, sps[2].x, math::fma(ta, sps[0].x, tb * sps[1].x)),
                 );
-                let ipy = math::fma(td, 
+                let ipy = math::fma(
+                    td,
                     sps[3].y,
                     math::fma(tc, sps[2].y, math::fma(ta, sps[0].y, tb * sps[1].y)),
                 );
-                let ds = |q: Ppoint| math::fma((ipx - q.x), ipx - q.x, (ipy - q.y) * (ipy - q.y));
+                let ds = |q: Ppoint| math::fma(ipx - q.x, ipx - q.x, (ipy - q.y) * (ipy - q.y));
                 if ds(lps[0]) < EPSILON1 || ds(lps[1]) < EPSILON1 {
                     continue;
                 }
@@ -513,7 +524,7 @@ mod reference {
         [
             v0,
             3.0 * (v1 - v0),
-            math::fma((-6.0f64), v1, math::fma(3.0f64, v0, 3.0 * v2)),
+            math::fma(-6.0f64, v1, math::fma(3.0f64, v0, 3.0 * v2)),
             math::fma(3.0f64, v1, v3) - math::fma(3.0f64, v2, v0),
         ]
     }
@@ -581,7 +592,7 @@ mod reference {
             }
         } else {
             let rat = yc[1] / xc[1];
-            let f = |p: Ppoint| math::fma((-rat), p.x, p.y);
+            let f = |p: Ppoint| math::fma(-rat, p.x, p.y);
             let mut s = points2coeff(f(sps[0]), f(sps[1]), f(sps[2]), f(sps[3]));
             s[0] += math::fma(rat, xc[0], -yc[0]);
             let xn = solve3(&s, &mut xr);
@@ -721,6 +732,77 @@ mod tests {
             misses > 1000,
             "exercise the rejection, not only its fallback"
         );
+    }
+
+    #[test]
+    fn rounding_induced_roots_beyond_segment_extent_are_retained() {
+        let endpoint = f64::from_bits((1023u64 + 50) << 52);
+        let distant_origin = f64::from_bits((1023u64 + 110) << 52);
+        let mut scratch = SplineScratch::default();
+        let mut cases = 0;
+        for ulps in 1..=64 {
+            let beyond = f64::from_bits(endpoint.to_bits() + ulps);
+            for sign in [-1.0, 1.0] {
+                for swap in [false, true] {
+                    let point = |x, y| {
+                        if swap {
+                            Ppoint::new(y, x)
+                        } else {
+                            Ppoint::new(x, y)
+                        }
+                    };
+                    let x = sign * beyond;
+                    let sps = [-1.0, -1.0, 1.0, 1.0].map(|y| point(x, y));
+                    let line = [
+                        point(-sign * distant_origin, 0.0),
+                        point(sign * endpoint, 0.0),
+                    ];
+                    // Every control point is 1–64 ulps past the near endpoint.
+                    // C's rounded (horner - origin) / delta is nevertheless 1.
+                    let mut roots = [0.0; 4];
+                    assert_eq!(reference::splineintersectsline(&sps, &line, &mut roots), 1);
+                    assert!((EPSILON2..=1.0 - EPSILON2).contains(&roots[0]));
+                    assert!(!reference::splineisinside(
+                        &[Pedge {
+                            a: line[0],
+                            b: line[1]
+                        }],
+                        &sps
+                    ));
+                    assert!(!check(&sps, &line, &mut scratch, &SplineBounds::default()));
+                    cases += 1;
+                }
+            }
+        }
+        assert_eq!(cases, 256);
+
+        // Large positive excursions cancel in the power-basis Horner evaluation
+        // at t=1. All controls are beyond the endpoint, but C still accepts a root.
+        let far = f64::from_bits((1023u64 + 55) << 52);
+        for (ulps, pattern) in [(8, 0), (16, 1)] {
+            let near = f64::from_bits(endpoint.to_bits() + ulps);
+            let xs = if pattern == 0 {
+                [near, near, far, near]
+            } else {
+                [near, far, 2.0 * far, near]
+            };
+            assert!(xs.iter().all(|&x| x > endpoint));
+            for swap in [false, true] {
+                let point = |x, y| {
+                    if swap {
+                        Ppoint::new(y, x)
+                    } else {
+                        Ppoint::new(x, y)
+                    }
+                };
+                let sps = std::array::from_fn(|i| point(xs[i], [-1.0, -1.0, -1.0, 0.0][i]));
+                let line = [point(0.0, 0.0), point(endpoint, 0.0)];
+                let mut roots = [0.0; 4];
+                assert_eq!(reference::splineintersectsline(&sps, &line, &mut roots), 1);
+                assert_eq!(roots[0].to_bits(), 1.0f64.to_bits());
+                assert!(!check(&sps, &line, &mut scratch, &SplineBounds::default()));
+            }
+        }
     }
 
     #[test]
