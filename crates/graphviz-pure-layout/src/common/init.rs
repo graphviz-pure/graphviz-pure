@@ -361,9 +361,77 @@ impl<'a> LGraph<'a> {
         })
     }
 
+    /// C: lib/common/postproc.c:gv_postprocess
+    /// The finished layout without its source graph or construction/routing scratch.
+    /// This ends the immutable source borrow before the result is applied to that graph.
+    pub fn into_layout_result(self) -> LayoutResult {
+        LayoutResult {
+            odim: self.odim,
+            nodes: self.nodes,
+            edges: self.edges,
+            bb: self.bb,
+            clusters: self.clusters,
+            label: self.label,
+        }
+    }
+
     /// Writes positions, splines, label positions and bounding boxes back
     /// into `graph` (points, with the final translation already applied).
     pub fn write_back(&self, graph: &mut Graph) {
+        LayoutResultView {
+            odim: self.odim,
+            nodes: &self.nodes,
+            edges: &self.edges,
+            bb: self.bb,
+            clusters: &self.clusters,
+            label: &self.label,
+        }
+        .write_back(graph);
+    }
+}
+
+/// C: lib/common/postproc.c:gv_postprocess
+/// Owned layout fields to apply after the source borrow and layout scratch have ended.
+/// C keeps these values in its node/edge records; the port transfers its working fields.
+pub struct LayoutResult {
+    odim: usize,
+    nodes: Vec<LNode>,
+    edges: Vec<LEdge>,
+    bb: BoundingBox,
+    clusters: Vec<LCluster>,
+    label: Option<TextLabel>,
+}
+
+impl LayoutResult {
+    /// C: lib/common/postproc.c:gv_postprocess
+    /// Applies the same fields and in the same order as [`LGraph::write_back`].
+    pub fn write_back(self, graph: &mut Graph) {
+        LayoutResultView {
+            odim: self.odim,
+            nodes: &self.nodes,
+            edges: &self.edges,
+            bb: self.bb,
+            clusters: &self.clusters,
+            label: &self.label,
+        }
+        .write_back(graph);
+    }
+}
+
+/// C: lib/common/postproc.c:gv_postprocess
+/// Shared write-back traversal for borrowed and detached layouts.
+struct LayoutResultView<'a> {
+    odim: usize,
+    nodes: &'a [LNode],
+    edges: &'a [LEdge],
+    bb: BoundingBox,
+    clusters: &'a [LCluster],
+    label: &'a Option<TextLabel>,
+}
+
+impl LayoutResultView<'_> {
+    /// C: lib/common/postproc.c:gv_postprocess
+    fn write_back(&self, graph: &mut Graph) {
         graph.layout.odim = self.odim;
         for (i, n) in self.nodes.iter().enumerate() {
             let nd = &mut graph.nodes[i];
@@ -418,7 +486,7 @@ impl<'a> LGraph<'a> {
             }
         }
         let mut registered = vec![false; graph.subgraphs.len()];
-        for c in &self.clusters {
+        for c in self.clusters {
             let sg = &mut graph.subgraphs[c.subgraph];
             sg.bb = c.bb;
             // GD_clust holds it even with an empty box, which is drawn.
@@ -433,7 +501,7 @@ impl<'a> LGraph<'a> {
         // Placed graph and cluster labels; the renderer would otherwise re-place them with
         // dot's rules (which flip for rankdir).
         graph.layout.label_pos = self.label.as_ref().filter(|l| l.set).map(|l| l.pos);
-        for c in &self.clusters {
+        for c in self.clusters {
             if let Some(l) = c.label.as_ref().filter(|l| l.set) {
                 graph.subgraphs[c.subgraph].layout.label_pos = Some(l.pos);
             }
@@ -490,5 +558,47 @@ pub fn edge_type_of(s: &str, dflt: EdgeType) -> EdgeType {
             }
             dflt
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn detached_result_outlives_source_and_matches_borrowed_write_back() {
+        let mut graph = Graph::new("G", GraphKind::Directed, false);
+        let a = graph.ensure_node("a");
+        let b = graph.ensure_node("b");
+        graph.nodes[a.0 as usize]
+            .attrs
+            .set("label", "source label".into(), false);
+        graph.add_edge(a, b, AttrMap::new());
+        let (result, expected) = {
+            let source = graph.clone();
+            let mut layout = LGraph::new(&source, 3, EdgeType::Line).unwrap();
+            layout.odim = 3;
+            layout.nodes[0].coord = Point::new(12.0, 34.0);
+            layout.nodes[0].pos[2] = 0.25;
+            layout.edges[0].spl = Some(vec![Bezier {
+                list: vec![Point::new(1.0, 2.0), Point::new(3.0, 4.0)],
+                eflag: 1,
+                ep: Point::new(5.0, 6.0),
+                ..Bezier::default()
+            }]);
+            layout.label = Some(TextLabel {
+                pos: Point::new(7.0, 8.0),
+                set: true,
+                ..TextLabel::default()
+            });
+            let mut expected = source.clone();
+            layout.write_back(&mut expected);
+            (layout.into_layout_result(), expected)
+        }; // The graph borrowed by LGraph has been dropped.
+        result.write_back(&mut graph);
+        assert_eq!(graph.nodes, expected.nodes);
+        assert_eq!(graph.edges, expected.edges);
+        assert_eq!(graph.bb, expected.bb);
+        assert_eq!(graph.layout, expected.layout);
     }
 }
