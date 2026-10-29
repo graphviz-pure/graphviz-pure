@@ -432,13 +432,14 @@ every `fmadd` is used, and on x86-64 Linux, whose baseline instruction set has n
 **The reference is Homebrew's Graphviz 16.1.0 on macOS arm64**, the build the corpus goldens
 come from (`scripts/gen-golden.sh`). The port computes what that build computes, on every
 target: where it fuses, the port calls `math::fma` explicitly (`f32::mul_add` for `f32`); where
-it does not, the port does not. `math::fma` is correctly rounded on every target: on `wasm32`
-and on `x86_64` musl without `target_feature = "fma"` (where `f64::mul_add` calls an
-out-of-line integer `fma`) it inlines `math::portable::fma` (Boldo–Melquiond emulated FMA in
-the common exponent window, with a zero-factor shortcut and `libm::fma` outside it; see
-`docs/perf/wasm-fma.md`), and everywhere else it calls `f64::mul_add` (hardware FMA, or glibc's
-IFUNC-dispatched `fma`). So the port's bits do not depend on the platform. Rust never contracts
-on its own, and clippy's `disallowed-methods` rejects direct `f64::mul_add` calls outside `math`.
+it does not, the port does not. `math::fma` is correctly rounded on every target: on `wasm`
+(`wasm32`/`wasm64`) and on `x86_64` musl without `target_feature = "fma"` (where `f64::mul_add`
+calls an out-of-line integer `fma`) it calls `math::portable::fma` (Boldo–Melquiond emulated FMA
+in the common exponent window, with a zero-factor shortcut and `libm::fma` outside it, inlined on
+`x86_64` musl and out-of-line on `wasm`; see `docs/perf/wasm-fma.md`), and everywhere else it
+calls `f64::mul_add` (hardware FMA, or glibc's IFUNC-dispatched `fma`). So the port's bits do not
+depend on the platform. Rust never contracts on its own, and clippy's `disallowed-methods`
+rejects direct `f64::mul_add` calls outside `math`.
 
 How a site is decided: within one C expression, clang fuses a product that is an operand of an
 addition or subtraction, preferring the left operand. So `a*b + c*d` is `fma(a, b, c*d)`,

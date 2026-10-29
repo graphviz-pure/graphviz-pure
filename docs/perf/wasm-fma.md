@@ -11,14 +11,15 @@ user cycles** of fdp, sfdp and spline-routing runs under node, with byte-identic
 Catalogue row: T1b in [`docs/roadmap/post-1.0.md`](../roadmap/post-1.0.md). Baseline:
 [`baseline.md`](baseline.md#wasm).
 
-**Shipped (#549, #601):** `graphviz_pure_core::math::fma(a, b, c)` inlines `math::portable::fma`
+**Shipped (#549, #601):** `graphviz_pure_core::math::fma(a, b, c)` calls `math::portable::fma`
 (the Boldo–Melquiond fast path with a zero-factor shortcut and `libm::fma` outside the window) on
-`target_family = "wasm"` (`wasm32`/`wasm64`) and on `x86_64` musl without `target_feature = "fma"`
-(the static Linux `-compat` binary of #531, where musl's `libc.a` links its ~145–170-instruction
-integer `fma` instead of compiler-builtins' runtime-dispatched one). Everywhere else (glibc x86-64
-with IFUNC hardware `fma`, `x86-64-v3` / `+fma`, and `aarch64`) `math::fma` calls `a.mul_add(b, c)`,
-and `f32` stays on `f32::mul_add`. The end-to-end measurements below predate the merged `pow` fast
-paths (#543, #532), which remove much of sfdp's earlier `pow`-internal FMA work.
+`target_family = "wasm"` (`wasm32`/`wasm64`, `#[inline(never)]`) and on `x86_64` musl without
+`target_feature = "fma"` (`#[inline(always)]` on the static Linux `-compat` binary of #531, where
+musl's `libc.a` links its ~145–170-instruction integer `fma` instead of compiler-builtins'
+runtime-dispatched one). Everywhere else (glibc x86-64 with IFUNC hardware `fma`, `x86-64-v3` /
+`+fma`, and `aarch64`) `math::fma` calls `a.mul_add(b, c)`, and `f32` stays on `f32::mul_add`. The
+end-to-end measurements below predate the merged `pow` fast paths (#543, #532), which remove much
+of sfdp's earlier `pow`-internal FMA work.
 
 ## Headlines
 
@@ -49,8 +50,9 @@ paths (#543, #532), which remove much of sfdp's earlier `pow`-internal FMA work.
   slower (2.9 ns). Inlining `libm::fmaf` cut neato's instructions by 22%, but its cycles did
   not move measurably on this machine.
 - **Recommendation (implemented in #549 / #601):** do it, for f64 only, as `math::fma` in
-  `graphviz-pure-core`, with the fast path inlined on `wasm32`/`wasm64` and on `x86_64` musl
-  without `target_feature = "fma"`; see [Recommendation](#recommendation).
+  `graphviz-pure-core`, with `portable::fma` inlined on `x86_64` musl without
+  `target_feature = "fma"` and out-of-line (`#[inline(never)]`) on `wasm32`/`wasm64`; see
+  [Recommendation](#recommendation).
 
 ## 1. What `mul_add` compiles to on wasm32
 
@@ -401,16 +403,18 @@ cycle ratios: halving a 60–76% share predicts 1.4–1.6×.
 ## Recommendation
 
 **Shipped (#549, #601), for f64.** It cannot change a byte (the result is the IEEE value), and it
-takes up to a third off the user cycles of fdp, sfdp and spline routing under node, as well as
-making the static `x86_64-unknown-linux-musl` v1 build 1.3–2.2× faster on `f64`-heavy layouts.
+takes 1.1–1.6× off the user cycles of fdp, sfdp and spline routing under node while shrinking the
+WASM modules slightly, as well as making the static `x86_64-unknown-linux-musl` v1 build 1.36–2.20×
+faster on `f64`-heavy layouts.
 
 What shipped in #601:
 
 - `crates/graphviz-pure-core/src/math/`: `math::fma(a, b, c)` and `math::portable::fma(a, b, c)`.
   On `cfg(any(target_family = "wasm", all(target_arch = "x86_64", target_env = "musl", not(target_feature = "fma"))))`
-  it inlines `portable::fma` (the code above, with the zero-factor shortcut and `libm::fma` as the
-  fallback). Elsewhere it calls `a.mul_add(b, c)`, so gnu builds, `x86-64-v3` (`+fma`) and
-  `aarch64` keep hardware FMA.
+  it calls `portable::fma` (the code above, with the zero-factor shortcut and `libm::fma` as the
+  fallback), inlined (`#[inline(always)]`) on native targets (`x86_64` musl) and out-of-line
+  (`#[inline(never)]`) on `target_family = "wasm"`. Elsewhere it calls `a.mul_add(b, c)`, so gnu
+  builds, `x86-64-v3` (`+fma`) and `aarch64` keep hardware FMA.
 - The 397 `f64::mul_add` sites across 57 files became `math::fma(x, y, z)` with the operand
   order unchanged.
 - `clippy.toml` adds `f64::mul_add` to `disallowed-methods`, allowed only inside `math`.
@@ -418,10 +422,16 @@ What shipped in #601:
 - `crates/graphviz-pure-core/src/math/tests.rs` runs the differential test against hardware
   FMA / `libm::fma` on every target, plus an `#[ignore]`d long run.
 
-Maintainer decisions (#549):
+Maintainer decisions (#549, revised in #601):
 
-1. **Inline the fast path** (`#[inline(always)]`) for the full speed gain on `wasm32` and
-   `x86_64` musl v1.
+1. **Inline on `x86_64` musl (`#[inline(always)]`), out-of-line (`#[inline(never)]`) on
+   `target_family = "wasm"`:** inlining all 397 sites grew `graphviz_pure_wasm.wasm` by +173.0 KB
+   (+4.29%, `4,032,225 B → 4,205,221 B`) vs +141.1 KB (+1.31%, `10,807,756 B → 10,948,895 B`) on
+   the larger WASI CLI. Keeping `portable::fma` `#[inline(never)]` on `wasm` shrinks
+   `graphviz_pure_wasm.wasm` by −6.6 KB (−0.16%, `4,025,669 B`) and `graphviz-pure.wasm` by
+   −32.0 KB (−0.30%, `10,775,758 B`) while retaining 1.14–1.64× cycle speedups (1.13–1.56× fewer
+   instructions) under node, whereas `x86_64` musl v1 keeps the full inlined speedup (1.44× wall
+   on `fdp/viewport`, 1.36× on `sfdp/gen_rnd2000`, 2.20× on `twopi/ngk10_4`).
 2. **Keep `f32` on `f32::mul_add`:** musl's `fmaf` is already 1.5 ns, and a round-to-odd `fmaf`
    is slower.
 

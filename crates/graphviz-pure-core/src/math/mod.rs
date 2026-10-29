@@ -13,7 +13,7 @@
 //!
 //! `sqrt` and `fma` are correctly rounded everywhere: `sqrt` stays an `f64` method, while
 //! [`fma`] dispatches to [`portable::fma`] on targets whose `f64::mul_add` is an out-of-line
-//! software `fma` (`wasm32`/`wasm64`, and `x86_64` musl without `target_feature = "fma"`) and to
+//! integer `fma` (`wasm32`/`wasm64`, and `x86_64` musl without `target_feature = "fma"`) and to
 //! `f64::mul_add` everywhere else.
 
 /// The pure-Rust functions every `math` function calls, exposed for `graphviz-pure-portable-libm`.
@@ -31,9 +31,10 @@ mod trace {
 /// `a * b + c` (`docs/porting/libm.md`).
 ///
 /// On `wasm` (`wasm32`/`wasm64`) and on `x86_64` musl without `target_feature = "fma"`,
-/// `f64::mul_add` calls an out-of-line integer `fma`; those builds inline [`portable::fma`]
-/// instead. Everywhere else (aarch64, any build with `target_feature = "fma"`, and glibc x86-64
-/// whose `fma` uses an IFUNC hardware dispatch) this calls `f64::mul_add`.
+/// `f64::mul_add` calls an out-of-line integer `fma`; those builds call [`portable::fma`]
+/// instead (inlined on `x86_64` musl, out-of-line on `wasm`). Everywhere else (aarch64, any build
+/// with `target_feature = "fma"`, and glibc x86-64 whose `fma` uses an IFUNC hardware dispatch)
+/// this calls `f64::mul_add`.
 #[inline(always)]
 #[must_use]
 pub fn fma(a: f64, b: f64, c: f64) -> f64 {

@@ -59,7 +59,10 @@ pub(crate) fn in_window(a: f64, b: f64, c: f64) -> bool {
 }
 
 /// Correctly rounded `RN(a * b + c)` for all binary64 inputs.
-#[inline(always)]
+// Inlined on native targets (`x86_64` musl: 2.20x vs 1.82x on twopi/ngk10_4); out-of-line on wasm
+// to avoid +173 KB (+4.29%) module growth while keeping most of the gain (`docs/perf/wasm-fma.md`).
+#[cfg_attr(target_family = "wasm", inline(never))]
+#[cfg_attr(not(target_family = "wasm"), inline(always))]
 #[must_use]
 pub fn fma(a: f64, b: f64, c: f64) -> f64 {
     if in_window(a, b, c) {
