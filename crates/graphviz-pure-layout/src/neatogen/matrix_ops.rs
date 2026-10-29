@@ -479,15 +479,45 @@ mod tests {
         ]
     }
 
+    /// Bit equality, except that any NaN matches any NaN.
+    ///
+    /// Rust does not specify the payload or the sign of an FMA's NaN, and
+    /// other targets do not keep the x86 payload. The sign is not checked:
+    /// it was not shown to be stable off x86. `+0`, `-0`, and subnormals
+    /// are not NaNs, so `to_bits` still distinguishes them.
     fn assert_f32_bits(got: &[f32], expect: &[f32], what: &str) {
         assert_eq!(got.len(), expect.len(), "{what}");
         for (i, (got, expect)) in got.iter().zip(expect).enumerate() {
+            if got.is_nan() && expect.is_nan() {
+                continue;
+            }
             assert_eq!(
                 got.to_bits(),
                 expect.to_bits(),
                 "{what} [{i}]: {got:?} vs {expect:?}"
             );
         }
+    }
+
+    #[test]
+    fn f32_bits_accept_any_nan_and_keep_signed_zero_and_subnormals() {
+        assert_f32_bits(
+            &[
+                f32::from_bits(0x7fc0_0001),
+                f32::from_bits(0xffc0_0001),
+                0.0,
+                -0.0,
+                f32::from_bits(1),
+            ],
+            &[
+                f32::from_bits(0x7fc0_0000),
+                f32::from_bits(0x7f80_0001),
+                0.0,
+                -0.0,
+                f32::from_bits(1),
+            ],
+            "nan, zero, subnormal",
+        );
     }
 
     fn check_matvec(packed: &[f32], n: usize, vector: &[f32]) {
