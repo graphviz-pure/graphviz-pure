@@ -371,7 +371,7 @@ fn splineisinside(edges: &[Pedge], sps: &[Ppoint; 4]) -> bool {
 }
 
 fn addroot(root: f64, roots: &mut [f64; 4], n: &mut usize) {
-    if (0.0..=1.0).contains(&root) {
+    if *n < roots.len() && (0.0..=1.0).contains(&root) {
         roots[*n] = root;
         *n += 1;
     }
@@ -868,5 +868,29 @@ mod tests {
                 }
             }
         }
+    }
+
+    /// #635: the point-barrier branch of `splineintersectsline` compares every pair of
+    /// the x and the y roots, so three coincident roots give nine `addroot` calls and C
+    /// writes past the end of its four-root array (undefined behaviour; the port panicked
+    /// on the fifth write). The port keeps the four roots C's buffer holds.
+    #[test]
+    fn the_point_barrier_keeps_the_four_roots() {
+        // Both coordinates are exactly `(t - 0.5)^3`, so `solve3` returns three identical
+        // roots of `0.5` for x and for y, and all nine pairs match.
+        let sps = [-0.125, 0.125, -0.125, 0.125].map(|v| Ppoint::new(v, v));
+        let lps = [Ppoint::new(0.0, 0.0); 2];
+        let mut scratch = SplineScratch::default();
+        let rootn = splineintersectsline(&sps, &lps, &mut scratch);
+        assert_eq!(rootn, 4);
+        assert_eq!(scratch.roots, [0.5; 4]);
+        // The caller's answer is C's: C returns nine roots, checks each of them, finds
+        // that the spline passes through the barrier's point, and says the edge is not
+        // inside; the port skips the edge on the four roots and says the same.
+        let edge = Pedge {
+            a: Ppoint::new(0.0, 0.0),
+            b: Ppoint::new(0.0, 0.0),
+        };
+        assert!(splineisinside(&[edge], &sps));
     }
 }
