@@ -284,17 +284,6 @@ jobs:
         run: >-
           "$PYTHON" scripts/build-pgo.py --target "$TARGET"
           --profiles "$RUNNER_TEMP/pgo"
-      # Preserve the exact optimiser input; a fixed training list alone does not promise
-      # byte-reproducible profiles across hosts (hash-table seeds and SDKs can differ).
-      - name: Preserve PGO build inputs
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: pgo-${{ matrix.target }}
-          path: |
-            ${{ runner.temp }}/pgo/merged.profdata
-            ${{ runner.temp }}/pgo/build-info.json
-          if-no-files-found: error
-          retention-days: 90
       - name: Build x86-64 compat binary and baseline launcher
         if: startsWith(matrix.target, 'x86_64')
         env:
@@ -307,6 +296,24 @@ jobs:
           case "$TARGET" in *windows*) ext=.exe ;; esac
           rustc --edition=2024 --target "$TARGET" -C opt-level=2 -C target-cpu=x86-64 $RUSTFLAGS \
             packaging/launcher/main.rs -o "target-launcher/graphviz-pure-launcher$ext"
+      - name: Every shipped PGO binary matches plain output on the whole corpus
+        env:
+          TARGET: ${{ matrix.target }}
+          PYTHON: ${{ runner.os == 'Windows' && 'python' || 'python3' }}
+        run: >-
+          "$PYTHON" scripts/check-release-pgo.py --target "$TARGET"
+          --report "$RUNNER_TEMP/pgo-fidelity.json"
+      # Retain both optimiser inputs and the per-target fidelity counts/timing.
+      - name: Preserve PGO build inputs and verification
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: pgo-${{ matrix.target }}
+          path: |
+            ${{ runner.temp }}/pgo/merged.profdata
+            ${{ runner.temp }}/pgo/build-info.json
+            ${{ runner.temp }}/pgo-fidelity.json
+          if-no-files-found: error
+          retention-days: 90
       - name: Smoke test (byte-identical gallery samples)
         env:
           TARGET: ${{ matrix.target }}

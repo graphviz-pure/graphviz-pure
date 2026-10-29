@@ -50,6 +50,12 @@ its own native binary with the same CPU and static-runtime flags as its final bu
 No profile from another architecture or commit is reused. A failed training command
 fails the release. `cargo install` users keep the plain profile.
 
+`llvm-profdata` comes from the **pinned Rust toolchain's `llvm-tools` component**;
+rustup verifies the downloaded component's checksum. Windows ARM64 uses that same
+toolchain's bundled `rust-lld` in both PGO phases: MSVC `link.exe` pads LLVM's
+one-byte profile section markers there, causing malformed raw profiles. Final
+builds enable `-pgo-warn-missing-function` to diagnose mismatched profile coverage.
+
 The `pgo-TARGET` Actions artifact retains `merged.profdata` and `build-info.json`
 for 90 days (toolchain, flags, and training/profile/binary SHA-256 hashes). The
 same commit alone does **not** guarantee the same binary: a fresh profile may
@@ -58,9 +64,20 @@ SDK also matter. Retain the exact profile and build environment to reproduce a
 build; deterministic archive packaging still gives the same archive from the
 same binary. [Measurements and reproduction](perf/pgo.md) describe the limits.
 
-CPU fidelity CI runs the PGO workspace ratchets and compares the final musl PGO
-CLI against v1 on every corpus SVG, including diagnostics and status. Release
-smoke tests cover each native PGO binary and its wheel/container packaging.
+Every release job gates its **actual newly trained PGO binary** against a plain
+binary of the same target on **every `tests/**/*.gv` SVG**, including diagnostics
+and exit status. x86-64 reuses the already-required compat build (including Intel
+macOS); ARM64 builds a separate non-PGO reference. A difference, crash or empty
+corpus fails before packaging/publishing. Gallery and wheel/container checks also
+run. CI exercises this gate on all six native release targets, plus the PGO
+workspace fidelity ratchets on Linux x86-64.
+
+`pgo-TARGET` also retains `pgo-fidelity.json`. Every job summary reports corpus
+comparison time; ARM64's added release time includes its new plain build, while
+x86-64 adds only the comparison because compat already exists. Build metadata
+records generation/training/merge/rebuild times. Initial per-target measurements,
+including Windows and ARM64, are reported in [PR #618](https://github.com/graphviz-pure/graphviz-pure/pull/618);
+the artifact/summary records the actual increase for every later release.
 
 ### Gate before 1.1.0
 

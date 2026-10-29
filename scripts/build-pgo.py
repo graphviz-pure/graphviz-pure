@@ -71,36 +71,61 @@ def main():
     if encoded is not None:
         flags = encoded.split("\x1f") if encoded else []
     cargo = ([args.cargo_wrapper] if args.cargo_wrapper else []) + ["cargo"]
+    build_env = dict(os.environ)
+    if args.target == "aarch64-pc-windows-msvc":
+        # link.exe pads the one-byte LLVM profile section markers on ARM64, producing
+        # malformed raw profiles (empty symbol names). The bundled lld-link preserves them.
+        linker = sysroot / "lib/rustlib" / host / "bin/rust-lld.exe"
+        if not linker.is_file():
+            parser.error("the Windows ARM64 PGO build needs rustc's bundled rust-lld")
+        build_env["CARGO_TARGET_AARCH64_PC_WINDOWS_MSVC_LINKER"] = str(linker)
 
     def build(pgo_flag):
-        env = dict(os.environ, CARGO_TARGET_DIR=str(target_dir),
-                   CARGO_ENCODED_RUSTFLAGS="\x1f".join([*flags, pgo_flag]))
+        phase_flags = [*flags, pgo_flag]
+        if pgo_flag.startswith("-Cprofile-use="):
+            phase_flags.append("-Cllvm-args=-pgo-warn-missing-function")
+        env = dict(build_env, CARGO_TARGET_DIR=str(target_dir),
+                   CARGO_ENCODED_RUSTFLAGS="\x1f".join(phase_flags))
         env.pop("RUSTFLAGS", None)
         subprocess.run([*cargo, "build", "--release", "--locked", "--target", args.target,
                         "-p", "graphviz-pure-cli", "--bin", "graphviz-pure"], env=env, check=True)
 
     start = time.monotonic()
     build(f"-Cprofile-generate={raw}")
+    generate_seconds = time.monotonic() - start
     binary = target_dir / args.target / "release" / f"graphviz-pure{suffix}"
     train_start = time.monotonic()
     count = train(binary, raw, synth)
-    print(f"PGO: {count} training commands in {time.monotonic() - train_start:.1f}s", flush=True)
+    training_seconds = time.monotonic() - train_start
+    print(f"PGO: {count} training commands in {training_seconds:.1f}s", flush=True)
     merged = profiles / "merged.profdata"
     raw_files = [raw / f"{index:04d}.profraw" for index in range(count)]
     if not all(path.is_file() for path in raw_files):
         raise RuntimeError("training did not write a profile for every command")
+    merge_start = time.monotonic()
     subprocess.run([str(profdata), "merge", "-o", str(merged), *map(str, raw_files)], check=True)
+    merge_seconds = time.monotonic() - merge_start
+    # Diagnose a profile whose function names/hashes barely match the final build.
+    use_start = time.monotonic()
     build(f"-Cprofile-use={merged}")
+    use_seconds = time.monotonic() - use_start
     info = {
         "source_commit": subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip(),
         "target": args.target,
         "rustc": rustc,
         "llvm_profdata": subprocess.check_output([str(profdata), "--version"], text=True),
         "base_rustflags": flags,
+        "linker": build_env.get(f"CARGO_TARGET_{args.target.upper().replace('-', '_')}_LINKER",
+                                "target default"),
         "training_commands": count,
         "training_sha256": hashlib.sha256(TRAINING.read_bytes()).hexdigest(),
         "profile_sha256": hashlib.sha256(merged.read_bytes()).hexdigest(),
         "binary_sha256": hashlib.sha256(binary.read_bytes()).hexdigest(),
+        "generate_build_seconds": generate_seconds,
+        "training_seconds": training_seconds,
+        "merge_seconds": merge_seconds,
+        "use_build_seconds": use_seconds,
+        "elapsed_seconds": time.monotonic() - start,
     }
     (profiles / "build-info.json").write_text(json.dumps(info, indent=2) + "\n")
     print(f"PGO: built {binary} in {time.monotonic() - start:.1f}s", flush=True)

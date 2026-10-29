@@ -1,0 +1,11 @@
+# Unseen source inputs: no input path here occurs in pgo.tsv (in any format).
+# One case per engine. The first six are full.tsv inputs excluded from training;
+# osage/patchwork use the largest remaining corpus input in that engine.
+tests/wild/gv16_graphs_b29_d1e4db.gv svg
+synth/neato_sparse_500.gv svg
+synth/fdp_sparse_250.gv svg
+synth/sfdp_sparse_5000.gv svg
+synth/circo_sparse_200.gv svg
+synth/twopi_tree_20000.gv svg
+tests/osage/wild_gv16_infosrc_plugins_1a797f.gv svg
+tests/patchwork/wild_gv16_graphs_b15_8c212e.gv svg

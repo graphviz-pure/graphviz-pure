@@ -1,11 +1,14 @@
 # Profile-guided release binaries (T14, #608)
 
-PGO reduces the geometric mean of executed instructions by **8.8%** across the
-15 musl x86-64-v3 ratchet cases. Every case improves; neato improves 17.7%, fdp
-15.2%, sfdp 16.8%, and the two dot b143 outputs about 15%. Allocation counts,
-allocated bytes and peak heap are identical on all 15 cases. This exceeds the
-5% adoption threshold, so the six default native release binaries use PGO.
-The v1 compat binary, launcher, WASM and `cargo install` builds keep plain profiles.
+PGO reduces the geometric mean of executed instructions by **11.03%** on an
+engine-balanced set of **eight held-out source inputs**, with no training overlap.
+The initial 15 musl x86-64-v3 ratchet cases improved **8.80%**, but **13 of those
+15 source inputs appear in training**; that figure describes a mostly in-sample
+set, not an estimate for arbitrary unseen inputs. The two sets have different
+sizes and engine weights. Every case in both sets improves instructions, with
+identical allocation counts, allocated bytes and peak heap. The held-out result
+also exceeds the 5% deterministic adoption threshold. All six default native
+release binaries use PGO; v1 compat, launcher, WASM and `cargo install` stay plain.
 
 This is build configuration only: no source floating-point operation, operand,
 rounding, tie-break or iteration order changes, and no fast-math flag is enabled.
@@ -14,7 +17,7 @@ Fidelity class: **none**. No product dependency is added; rustup's
 
 ## Measurement method
 
-Measured on 2026-10-29 (UTC), at base commit `a693a9589474ddd9876dd14c93ac693c90f47dc1`, stacked
+Initial measurements on 2026-10-29 (UTC), at base commit `a693a9589474ddd9876dd14c93ac693c90f47dc1`, stacked
 on #605, with Rust 1.99.1 / LLVM 23.1.1, release `opt-level=3`, thin LTO,
 one codegen unit and the static `x86_64-unknown-linux-musl` target. Both builds
 use `-C target-cpu=x86-64-v3`; PGO adds only `-Cprofile-generate` for training
@@ -39,9 +42,11 @@ musl `heap_counts` example and identical argument paths. C is stock Graphviz
 16.1.0 with the pango-free plugin directory; it uses glibc and has no PNG plugin.
 C is a performance reference, while committed goldens define fidelity.
 
-## Instructions and heap
+## Initial ratchet: mostly training inputs
 
-The geomean of PGO/plain-v3 instructions is **0.9120** (8.80% fewer instructions).
+13/15 source inputs in this table occur in the training list (the two laid b29
+inputs do not). The geomean of PGO/plain-v3 instructions is **0.9120**
+(8.80% fewer instructions on this mostly in-sample set).
 Counts include process start-up,
 parsing, layout, rendering and musl allocation work. They are not wall-time ratios.
 The [raw table](data/pgo-instructions.tsv) also retains total allocated bytes.
@@ -69,7 +74,57 @@ baseline is unchanged. The pre-existing fdp b69 allocation baseline discrepancy
 ([#600](https://github.com/graphviz-pure/graphviz-pure/issues/600)) appears equally
 before and after PGO: 321,513 allocations in both fresh runs.
 
-## Wall time (informational)
+## Held-out measurement
+
+This follow-up fixes one SVG case per engine **before** measuring. The first six
+are `full.tsv` source inputs absent from `pgo.tsv` in every format. Osage and
+patchwork use the largest remaining untrained corpus source in that engine.
+[The fixed list](../../scripts/bench/sets/pgo-held-out.tsv) has **zero source-path
+overlap** with training, and CI checks that separation. Training was not changed.
+The product Rust source at `04792fc3` is unchanged from the initial measurement.
+The held-out build/profile hashes are in [pgo-held-out-build.json](data/pgo-held-out-build.json).
+
+The instruction geomean is **0.889672** (**11.03% fewer instructions**). All eight
+cases improve; all eight have identical allocations, total bytes and peak heap.
+This sample is larger and engine-balanced; it is not directly interchangeable
+with the small, dot-heavy initial ratchet. Both sets pass the 5% primary-metric gate.
+
+| engine / held-out input | plain v3 instructions | PGO | Δ | allocations (both) | peak heap B (both) |
+| :-- | --: | --: | --: | --: | --: |
+| dot: `wild/gv16_graphs_b29_d1e4db.gv` | 4,124,150,754 | 3,612,232,097 | -12.41% | 349,187 | 15,660,818 |
+| neato: `synth/neato_sparse_500.gv` | 8,871,374,292 | 7,228,802,520 | -18.52% | 98,186 | 3,583,729 |
+| fdp: `synth/fdp_sparse_250.gv` | 9,086,780,278 | 7,416,596,625 | -18.38% | 755,087 | 2,248,953 |
+| sfdp: `synth/sfdp_sparse_5000.gv` | 8,177,093,400 | 6,688,522,597 | -18.20% | 907,512 | 29,504,022 |
+| circo: `synth/circo_sparse_200.gv` | 9,410,304,320 | 9,205,172,267 | -2.18% | 2,340,099 | 1,572,219 |
+| twopi: `synth/twopi_tree_20000.gv` | 3,980,676,854 | 3,728,207,455 | -6.34% | 5,639,393 | 117,871,269 |
+| osage: `osage/wild_gv16_infosrc_plugins_1a797f.gv` | 34,198,153 | 32,422,924 | -5.19% | 44,190 | 1,089,252 |
+| patchwork: `patchwork/wild_gv16_graphs_b15_8c212e.gv` | 12,121,727 | 11,495,837 | -5.16% | 18,543 | 646,407 |
+
+Wall times are medians of five after a warm-up, with the four builds interleaved
+in rotating order. The held-out PGO/plain-v3 wall geomean is **1.03474**
+(**3.47% more wall time**) under load **29.03–38.38**. The tiny patchwork case
+is 10.45 ms versus 19.72 ms and dominates that noisy ratio. We report it unchanged;
+there is no held-out wall-time speed claim. The deterministic instruction result
+remains the adoption metric. Every sample, case uptime and the full source paths
+are in [pgo-held-out.tsv](data/pgo-held-out.tsv).
+
+| engine | plain v3 ms | PGO ms | Δ | 1.0 v1 ms | ×1.0 | C ms | ×C |
+| :-- | --: | --: | --: | --: | --: | --: | --: |
+| dot | 1977.87 | 1875.45 | -5.18% | 2682.28 | 1.43 | 3636.28 | 1.94 |
+| neato | 1322.11 | 1272.48 | -3.75% | 6202.15 | 4.87 | 1170.46 | 0.92 |
+| fdp | 1573.54 | 1477.15 | -6.13% | 14329.71 | 9.70 | 6077.82 | 4.11 |
+| sfdp | 1650.23 | 1668.57 | +1.11% | 4136.34 | 2.48 | 3673.04 | 2.20 |
+| circo | 2674.94 | 2370.85 | -11.37% | 2224.37 | 0.94 | 4745.78 | 2.00 |
+| twopi | 1673.71 | 1479.71 | -11.59% | 1820.63 | 1.23 | 1627.66 | 1.10 |
+| osage | 32.83 | 33.68 | +2.59% | 32.36 | 0.96 | 31.96 | 0.95 |
+| patchwork | 10.45 | 19.72 | +88.72% | 32.07 | 1.63 | 15.89 | 0.81 |
+
+```text
+18:34:36 up 4 days, 15:16,  2 users,  load average: 30.27, 30.97, 37.44
+18:41:46 up 4 days, 15:23,  2 users,  load average: 37.73, 34.63, 36.51
+```
+
+## Initial wall time (informational)
 
 The 60 `full.tsv` input/format pairs below roughly five seconds in the preceding
 plain-v3 probe were timed afresh. Every selected case has **five measured runs**
@@ -79,7 +134,7 @@ PNG has three builds because the C installation has no PNG plugin. This override
 
 The geomean PGO/plain-v3 wall ratio is **0.9601** (4.0% less wall time). Individual
 cases move in both directions under heavy scheduling noise. Adoption uses the
-**primary deterministic metric**, the 8.8% instruction reduction above, exceeding
+**primary deterministic metric**, instruction counts (8.8% here and 11.03% on the held-out set), exceeding
 the 5% gate. These loaded wall times are not release speed promises.
 The one-minute load ranged from **29.26 to 123.12** while timing:
 
@@ -182,9 +237,10 @@ per-case median ratios and start/end `uptime`. Times below are medians in ms;
 
 CI trains the musl PGO binary, runs the workspace fidelity ratchets with
 `-Cprofile-use`, and compares the final musl CLI with plain v1 over every corpus
-SVG. Each native release target retains its existing byte-identical gallery,
-wheel and packaging checks. Windows x86-64 and ARM64 CI also train and smoke-test
-the exact static-CRT release configurations before merge.
+SVG. Every newly trained native release binary is also compared against its plain
+reference over the whole SVG corpus before packaging. x86-64 reuses compat;
+ARM64 builds a plain reference. The same gate runs in CI on Linux x86-64/ARM64,
+macOS ARM64/Intel and Windows x86-64/ARM64. Gallery/wheel/container checks remain.
 
 ## Release builds and reproducibility
 
@@ -193,7 +249,10 @@ runner, keeping the original CPU/runtime flags in both phases. It uses a new
 profile directory, a numbered file per training command and an explicitly ordered
 merge, and fails if any command or raw profile is missing. Compat and the launcher
 remain plain builds to avoid another instrumented build/training pass per x86-64
-job. No archive names, CPU requirements or install layouts change.
+job. No archive names, CPU requirements or install layouts change. Missing-function
+profile warnings are enabled. Windows ARM64 uses bundled `rust-lld` for both
+PGO phases to avoid MSVC link.exe padding LLVM profile section markers; the
+first CI run detected the malformed profiles rather than shipping a fallback.
 
 An independent run through the release helper reproduced the **8.80%** instruction
 reduction; counts differ from the manual build by at most **0.0062%** per case.
@@ -218,6 +277,22 @@ profile removes training variability, but identical compiler, linker, SDK, sourc
 flags and build paths are still needed for a binary reproduction attempt.
 Deterministic archive packaging continues to produce identical archives from the
 same binary. Neither PGO nor its runtime instrumentation is part of `cargo install`.
+
+## Release validation cost
+
+Every target runs `scripts/check-release-pgo.py` on its actual fresh PGO binary.
+It compares stdout, stderr and exit status for every corpus SVG, and rejects
+crashes and an empty corpus. On x86-64, compat already exists, so the added
+release time is the complete comparison. ARM64 adds a cold plain build as well.
+The checker prints both components and records `additional_release_seconds` in
+`pgo-fidelity.json`; release artifacts retain it beside the exact PGO profile.
+Native CI uses the same helper, so per-target timings can be measured before merge.
+[PR #618](https://github.com/graphviz-pure/graphviz-pure/pull/618) records the
+initial runner measurements, including Windows/ARM. The local musl x86-64 gate
+passed **2,667/2,667** inputs in **677.2 s** (reference 555.3 s, PGO 121.8 s),
+adding 11.3 minutes while reusing compat. This is shared-machine wall time, not
+a runner forecast. Future releases report their own actual timings; costs vary
+with runner speed and corpus growth.
 
 ## Reproducing
 

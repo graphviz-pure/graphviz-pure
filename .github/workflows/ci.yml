@@ -93,6 +93,7 @@ jobs:
         run: |
           rustc --edition=2024 -D warnings packaging/launcher/main.rs -o launcher
           python3 scripts/check-launcher.py ./launcher
+          python3 scripts/test-pgo-validation.py
       - name: Build baseline
         run: cargo build --release --locked --target x86_64-unknown-linux-musl -p graphviz-pure-cli
       - name: Launcher falls back on a pre-AVX CPU
@@ -124,9 +125,10 @@ jobs:
           python3 scripts/check-cpu-builds.py
           target/x86_64-unknown-linux-musl/release/graphviz-pure
           target-v3/x86_64-unknown-linux-musl/release/graphviz-pure
+          --report "$RUNNER_TEMP/pgo-fidelity.json" --label x86_64-unknown-linux-musl
 
-  windows-pgo:
-    name: Windows PGO smoke (${{ matrix.target }})
+  native-pgo:
+    name: Native PGO fidelity (${{ matrix.target }})
     needs: lookup
     if: needs.lookup.outputs.hit != 'true'
     runs-on: ${{ matrix.runner }}
@@ -137,6 +139,9 @@ jobs:
         include:
           - { target: x86_64-pc-windows-msvc, runner: windows-2025 }
           - { target: aarch64-pc-windows-msvc, runner: windows-11-arm }
+          - { target: aarch64-apple-darwin, runner: macos-15 }
+          - { target: x86_64-apple-darwin, runner: macos-15-intel }
+          - { target: aarch64-unknown-linux-musl, runner: ubuntu-24.04-arm }
     defaults:
       run:
         shell: bash
@@ -150,13 +155,33 @@ jobs:
         run: |
           rustup toolchain install stable --profile minimal --component llvm-tools --target "$TARGET"
           rustup default stable
-      - name: Train, rebuild and smoke-test the release configuration
+      - name: Train and rebuild the release configuration
         env:
           TARGET: ${{ matrix.target }}
-          RUSTFLAGS: ${{ format('{0} -C target-feature=+crt-static', startsWith(matrix.target, 'x86_64') && '-C target-cpu=x86-64-v3' || '') }}
+          RUSTFLAGS: ${{ format('{0} {1}', startsWith(matrix.target, 'x86_64') && '-C target-cpu=x86-64-v3' || '', contains(matrix.target, 'windows') && '-C target-feature=+crt-static' || '') }}
+          PYTHON: ${{ runner.os == 'Windows' && 'python' || 'python3' }}
         run: |
-          python scripts/build-pgo.py --target "$TARGET" --target-dir target-pgo --profiles "$RUNNER_TEMP/pgo"
-          python scripts/release-smoke.py "target-pgo/$TARGET/release/graphviz-pure.exe"
+          "$PYTHON" scripts/build-pgo.py --target "$TARGET" --target-dir target-pgo --profiles "$RUNNER_TEMP/pgo"
+      - name: Whole-corpus release gate and added release time
+        env:
+          TARGET: ${{ matrix.target }}
+          PYTHON: ${{ runner.os == 'Windows' && 'python' || 'python3' }}
+        run: |
+          "$PYTHON" scripts/check-release-pgo.py --target "$TARGET" --pgo-dir target-pgo --build-reference --report "$RUNNER_TEMP/pgo-fidelity.json"
+          exe=target-pgo/$TARGET/release/graphviz-pure
+          case "$TARGET" in *windows*) exe=$exe.exe ;; esac
+          "$PYTHON" scripts/release-smoke.py "$exe"
+      - name: Preserve PGO diagnostics and per-target timing
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: pgo-fidelity-${{ matrix.target }}
+          path: |
+            ${{ runner.temp }}/pgo-fidelity.json
+            ${{ runner.temp }}/pgo/build-info.json
+            ${{ runner.temp }}/pgo/raw/0000.profraw
+          if-no-files-found: ignore
+          retention-days: 7
 
   msrv:
     name: MSRV
@@ -392,7 +417,7 @@ jobs:
   # wasm-e2e and wasm-runtimes.
   record:
     name: Record the result for these inputs
-    needs: [verify, msrv, wasm-e2e, wasm-runtimes, cpu-fidelity, windows-pgo]
+    needs: [verify, msrv, wasm-e2e, wasm-runtimes, cpu-fidelity, native-pgo]
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
