@@ -1,0 +1,258 @@
+{
+  "rnd2000": {
+    "samples": 14095,
+    "cycles_weight": 19820490431,
+    "top15_self": [
+      {
+        "function": "<graphviz_pure_layout[ee6abe0125dbdbce]::sparse::quad_tree::QuadTree>::get_supernodes_internal",
+        "cycles_weight": 12001618277,
+        "percent": 60.551570702958045
+      },
+      {
+        "function": "graphviz_pure_layout[ee6abe0125dbdbce]::sfdpgen::spring_electrical::repulsive_supernodes",
+        "cycles_weight": 1803392276,
+        "percent": 9.09862590069631
+      },
+      {
+        "function": "<graphviz_pure_layout[ee6abe0125dbdbce]::sparse::quad_tree::QuadTree>::add_internal",
+        "cycles_weight": 1150633249,
+        "percent": 5.805271332743442
+      },
+      {
+        "function": "<graphviz_pure_layout[ee6abe0125dbdbce]::sparse::quad_tree::QuadTree>::child_for",
+        "cycles_weight": 690780051,
+        "percent": 3.485181425781442
+      },
+      {
+        "function": "memcpy",
+        "cycles_weight": 613565947,
+        "percent": 3.095614354932205
+      },
+      {
+        "function": "graphviz_pure_layout[ee6abe0125dbdbce]::sfdpgen::spring_electrical::attractive",
+        "cycles_weight": 532753901,
+        "percent": 2.687894645466253
+      },
+      {
+        "function": "graphviz_pure_layout[ee6abe0125dbdbce]::sfdpgen::spring_electrical::multilevel_spring_electrical_embedding",
+        "cycles_weight": 361984115,
+        "percent": 1.8263126044239706
+      },
+      {
+        "function": "__libc_free",
+        "cycles_weight": 231630395,
+        "percent": 1.1686410879002331
+      },
+      {
+        "function": "__libc_malloc_impl",
+        "cycles_weight": 199114757,
+        "percent": 1.0045904650703141
+      },
+      {
+        "function": "memset",
+        "cycles_weight": 138936263,
+        "percent": 0.700972881996393
+      },
+      {
+        "function": "alloc_slot",
+        "cycles_weight": 116623308,
+        "percent": 0.588397690793749
+      },
+      {
+        "function": "<graphviz_pure_layout[ee6abe0125dbdbce]::sparse::quad_tree::QuadTree>::push_cell",
+        "cycles_weight": 99554028,
+        "percent": 0.5022783283116634
+      },
+      {
+        "function": "<graphviz_pure_render[981a4f9b06d58f60]::emit::job::Emitter<graphviz_pure_render[981a4f9b06d58f60]::svg_engine::SvgEngine>>::emit_node",
+        "cycles_weight": 83514459,
+        "percent": 0.42135415009398663
+      },
+      {
+        "function": "<graphviz_pure_render[981a4f9b06d58f60]::emit::job::Emitter<graphviz_pure_render[981a4f9b06d58f60]::svg_engine::SvgEngine>>::emit_edge",
+        "cycles_weight": 73764310,
+        "percent": 0.3721618809423092
+      },
+      {
+        "function": "<graphviz_pure_layout[ee6abe0125dbdbce]::sparse::quad_tree::QuadTree>::add",
+        "cycles_weight": 66578401,
+        "percent": 0.3359069304151468
+      }
+    ],
+    "phases": [
+      {
+        "phase": "quadtree query / get_supernodes",
+        "cycles_weight": 12035906756,
+        "percent": 60.72456581182969
+      },
+      {
+        "phase": "spring-electrical force / driver (excluding tree)",
+        "cycles_weight": 2764930560,
+        "percent": 13.949859462990602
+      },
+      {
+        "phase": "quadtree build / rebuild",
+        "cycles_weight": 2361045700,
+        "percent": 11.912145707087221
+      },
+      {
+        "phase": "render",
+        "cycles_weight": 1538254991,
+        "percent": 7.760933042272812
+      },
+      {
+        "phase": "allocator, broken/unattributable caller",
+        "cycles_weight": 505861096,
+        "percent": 2.5522128110857136
+      },
+      {
+        "phase": "parse",
+        "cycles_weight": 297274733,
+        "percent": 1.49983540535935
+      },
+      {
+        "phase": "other layout / setup / routing",
+        "cycles_weight": 240407997,
+        "percent": 1.2129265813927226
+      },
+      {
+        "phase": "multilevel coarsening",
+        "cycles_weight": 64597955,
+        "percent": 0.3259150182225882
+      },
+      {
+        "phase": "smoothing / overlap",
+        "cycles_weight": 12210643,
+        "percent": 0.061606159759306924
+      }
+    ]
+  },
+  "sparse5000": {
+    "samples": 40296,
+    "cycles_weight": 58599128361,
+    "top15_self": [
+      {
+        "function": "<graphviz_pure_layout[ee6abe0125dbdbce]::sparse::quad_tree::QuadTree>::get_supernodes_internal",
+        "cycles_weight": 37020391292,
+        "percent": 63.17566886649889
+      },
+      {
+        "function": "graphviz_pure_layout[ee6abe0125dbdbce]::sfdpgen::spring_electrical::repulsive_supernodes",
+        "cycles_weight": 5180759196,
+        "percent": 8.841017504704041
+      },
+      {
+        "function": "<graphviz_pure_layout[ee6abe0125dbdbce]::sparse::quad_tree::QuadTree>::add_internal",
+        "cycles_weight": 3750869062,
+        "percent": 6.400895656489576
+      },
+      {
+        "function": "<graphviz_pure_layout[ee6abe0125dbdbce]::sparse::quad_tree::QuadTree>::child_for",
+        "cycles_weight": 2141508028,
+        "percent": 3.654504918242533
+      },
+      {
+        "function": "graphviz_pure_layout[ee6abe0125dbdbce]::sfdpgen::spring_electrical::attractive",
+        "cycles_weight": 1764470797,
+        "percent": 3.011087103770513
+      },
+      {
+        "function": "memcpy",
+        "cycles_weight": 1491436954,
+        "percent": 2.5451521135468105
+      },
+      {
+        "function": "graphviz_pure_layout[ee6abe0125dbdbce]::sfdpgen::spring_electrical::multilevel_spring_electrical_embedding",
+        "cycles_weight": 822422749,
+        "percent": 1.4034726658960928
+      },
+      {
+        "function": "__libc_free",
+        "cycles_weight": 475565645,
+        "percent": 0.8115575407031266
+      },
+      {
+        "function": "__libc_malloc_impl",
+        "cycles_weight": 455406423,
+        "percent": 0.7771556262654082
+      },
+      {
+        "function": "memset",
+        "cycles_weight": 333250891,
+        "percent": 0.568695986307181
+      },
+      {
+        "function": "memcmp",
+        "cycles_weight": 248330890,
+        "percent": 0.42377915328391447
+      },
+      {
+        "function": "alloc_slot",
+        "cycles_weight": 198127495,
+        "percent": 0.3381065564310707
+      },
+      {
+        "function": "<graphviz_pure_render[981a4f9b06d58f60]::emit::job::Emitter<graphviz_pure_render[981a4f9b06d58f60]::svg_engine::SvgEngine>>::emit_node",
+        "cycles_weight": 188985653,
+        "percent": 0.32250591141177676
+      },
+      {
+        "function": "<graphviz_pure_layout[ee6abe0125dbdbce]::sparse::quad_tree::QuadTree>::add",
+        "cycles_weight": 187554272,
+        "percent": 0.32006324538578745
+      },
+      {
+        "function": "<graphviz_pure_render[981a4f9b06d58f60]::emit::job::Emitter<graphviz_pure_render[981a4f9b06d58f60]::svg_engine::SvgEngine>>::emit_edge",
+        "cycles_weight": 177366037,
+        "percent": 0.3026769202219806
+      }
+    ],
+    "phases": [
+      {
+        "phase": "quadtree query / get_supernodes",
+        "cycles_weight": 37114884291,
+        "percent": 63.33692211657777
+      },
+      {
+        "phase": "spring-electrical force / driver (excluding tree)",
+        "cycles_weight": 7908596377,
+        "percent": 13.496099000447725
+      },
+      {
+        "phase": "quadtree build / rebuild",
+        "cycles_weight": 7235100605,
+        "percent": 12.346771713784127
+      },
+      {
+        "phase": "render",
+        "cycles_weight": 3789345234,
+        "percent": 6.466555629728371
+      },
+      {
+        "phase": "allocator, broken/unattributable caller",
+        "cycles_weight": 1024524620,
+        "percent": 1.7483615348139907
+      },
+      {
+        "phase": "parse",
+        "cycles_weight": 812698302,
+        "percent": 1.3868777996037263
+      },
+      {
+        "phase": "other layout / setup / routing",
+        "cycles_weight": 518832934,
+        "percent": 0.8853936031330177
+      },
+      {
+        "phase": "multilevel coarsening",
+        "cycles_weight": 158649272,
+        "percent": 0.2707365731152876
+      },
+      {
+        "phase": "smoothing / overlap",
+        "cycles_weight": 36496726,
+        "percent": 0.062282028795994836
+      }
+    ]
+  }
+}
