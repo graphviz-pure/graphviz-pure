@@ -6,6 +6,8 @@ polygon even for real nodes whose original shape was present. The existing shape
 cloned; missing shapes take the identical fallible constructor. Errors from an unused
 fallback are no longer propagated.
 
+The regression came from #590: `unwrap_or(NodeShape::new(..)?)` made the fallback eager. This restores lazy fallback construction. The run no longer aborts on an allocation failure in an unused fallback; C makes no such allocation.
+
 C provenance: `lib/fdpgen/layout.c:mkDeriveNode`, adapted by `with_lgraph`.
 Technique T9 allocation avoidance. Fidelity class **none**: source lookup, retained shape
 fields, iteration, diagnostics and write-back are unchanged. The only omitted floating-point
@@ -107,7 +109,7 @@ No allocation increase, no instruction increase over 2%, and no peak-heap increa
 - Full v1 performance ratchet: pass against the committed baseline and matched master. The b69 count returns to the existing baseline; no heap baseline needs weakening or refreshing.
 - Four target SVG/stdout and stderr hashes match before/after and between v1 and v3.
 
-Closes #626. Refs #600 (the matched b69 allocation excess disappears).
+Closes #626. Fixes #600 (the matched b69 allocation excess disappears).
 
 ## Changelog entry
 

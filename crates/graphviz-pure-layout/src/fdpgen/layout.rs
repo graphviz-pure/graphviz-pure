@@ -1378,6 +1378,45 @@ pub fn fdp_layout(graph: &mut Graph) -> Result<()> {
 mod adapter_tests {
     use super::*;
 
+    fn assert_shape_eq(actual: &NodeShape, expected: &NodeShape) {
+        assert_eq!(
+            (
+                actual.inside,
+                &actual.name,
+                actual.sides,
+                actual.peripheries,
+                actual.regular,
+                actual.no_clip,
+                actual.fixedshape
+            ),
+            (
+                expected.inside,
+                &expected.name,
+                expected.sides,
+                expected.peripheries,
+                expected.regular,
+                expected.no_clip,
+                expected.fixedshape
+            )
+        );
+        let scalars = |shape: &NodeShape| {
+            [
+                shape.orientation,
+                shape.distortion,
+                shape.skew,
+                shape.width,
+                shape.height,
+                shape.outline_width,
+                shape.outline_height,
+                shape.penwidth,
+            ]
+            .map(f64::to_bits)
+        };
+        assert_eq!(scalars(actual), scalars(expected));
+        assert_eq!(actual.vertices, expected.vertices);
+        assert_eq!(actual.record_box, expected.record_box);
+    }
+
     #[test]
     fn derived_adapter_preserves_existing_shapes_and_constructs_missing_shapes() {
         let mut source = Graph::new("shapes", GraphKind::Directed, true);
@@ -1397,8 +1436,8 @@ mod adapter_tests {
         dg.add_node(real);
         dg.add_node(DNode::new(DKind::Port));
         with_lgraph(&mut dg, &[0, 1], |lg, _, _| {
-            assert_eq!(format!("{:?}", lg.nodes[0].shape), format!("{existing:?}"));
-            assert_eq!(format!("{:?}", lg.nodes[1].shape), format!("{fallback:?}"));
+            assert_shape_eq(&lg.nodes[0].shape, &existing);
+            assert_shape_eq(&lg.nodes[1].shape, &fallback);
             assert_eq!(lg.nodes[0].pos, [1.25, -2.5, 0.0]);
             lg.nodes[0].pos[1] = 4.5;
         })
