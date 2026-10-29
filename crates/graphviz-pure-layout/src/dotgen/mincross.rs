@@ -8,8 +8,12 @@
 //! maps to `Dot::exchange`; the remaining tie-breaking functions (`mincross`,
 //! `mincross_step`, `medians`, `flat_mval`, `reorder`, `transpose`, `transpose_step`,
 //! `rcross`, `ncross`, `save_best`, `restore_best`) map to same-named `Dot` methods.
-//! `CrossingAdjacency`, `pair_cross` and the `Dot` left2right adapters only select
+//! `FlatAdjacency`, `pair_cross` and the `Dot` left2right adapters only select
 //! storage; they do not provide alternative implementations of the C algorithms.
+//! Const parameters in `reorder`/`transpose_step` remove only tests proven constant
+//! by the current view (no cluster/flat constraints, or all medians nonnegative).
+//! Validated rank scans write compact orders immediately and publish arena orders
+//! at the scan boundary; mixed/stale ranks retain immediate arena writes.
 
 use super::Dot;
 use super::qsort::qsort;
@@ -39,13 +43,15 @@ pub const OVERFLOW_VIRTUAL_WEIGHT: &str = "overflow when calculating virtual wei
 pub(super) struct MinCrossStore {
     graph: Option<G>,
     constrained: bool,
-    active: Vec<N>,
+    nonnegative_medians: bool,
     nodes: Vec<N>,
     order: Vec<i32>,
     mval: Vec<f64>,
     meta: Vec<MinCrossMeta>,
-    adjacency: Vec<Option<[usize; 4]>>,
+    adjacency: Vec<Option<[CrossingSpan; 2]>>,
     edges: Vec<MinCrossEdge>,
+    crossings: FlatCrossings,
+    uncached_crossings: FlatCrossings,
     median: Vec<i32>,
     count: Vec<i64>,
 }
@@ -57,20 +63,171 @@ struct MinCrossMeta {
     cluster: Option<G>,
     ranktype: u8,
     node_type: u8,
+    snapshot_valid: bool,
+    snapshot_adjacent: bool,
 }
 
 /// The remote endpoint is a compact slot, not an index into the node arena.
 struct MinCrossEdge {
     other: usize,
-    penalty: i32,
     port_order: i32,
-    port_x: f64,
+}
+
+/// Singleton payloads are stored inline, avoiding slice setup for virtual-node chains.
+#[derive(Clone, Copy)]
+enum CrossingSpan {
+    Empty,
+    One {
+        index: usize,
+        value: ResolvedCrossing,
+    },
+    Many {
+        start: usize,
+        end: usize,
+    },
+}
+
+impl CrossingSpan {
+    fn new(start: usize, end: usize, flat: &FlatCrossings) -> Self {
+        if start == end {
+            Self::Empty
+        } else if start.checked_add(1) == Some(end) {
+            let value = flat
+                .view(start, end)
+                .one()
+                .unwrap_or_else(|| panic!("mincross: missing singleton"));
+            Self::One {
+                index: start,
+                value,
+            }
+        } else {
+            Self::Many { start, end }
+        }
+    }
+
+    #[inline]
+    fn range(self) -> (usize, usize) {
+        match self {
+            Self::Empty => (0, 0),
+            Self::One { index, .. } => (index, index.saturating_add(1)),
+            Self::Many { start, end } => (start, end),
+        }
+    }
+}
+
+/// Resolved remote orders and immutable crossing payloads, in adjacency insertion order.
+/// Each rank scan refreshes its remote orders; the counting loops only stream slices.
+#[derive(Default)]
+struct FlatCrossings {
+    order: Vec<i32>,
+    penalty: Vec<i32>,
+    port_x: Vec<f64>,
+}
+
+#[derive(Clone, Copy)]
+struct FlatAdjacency<'a> {
+    order: &'a [i32],
+    penalty: &'a [i32],
+    port_x: &'a [f64],
+}
+
+impl<'a> FlatAdjacency<'a> {
+    #[inline]
+    fn iter(self) -> impl Iterator<Item = ResolvedCrossing> + Clone + 'a {
+        self.order
+            .iter()
+            .zip(self.penalty)
+            .zip(self.port_x)
+            .map(|((&order, &penalty), &port_x)| ResolvedCrossing {
+                order,
+                penalty,
+                port_x,
+            })
+    }
+
+    #[inline]
+    fn one(self) -> Option<ResolvedCrossing> {
+        if let ([order], [penalty], [port_x]) = (self.order, self.penalty, self.port_x) {
+            Some(ResolvedCrossing {
+                order: *order,
+                penalty: *penalty,
+                port_x: *port_x,
+            })
+        } else {
+            None
+        }
+    }
+
+    #[inline]
+    fn new(order: &'a [i32], penalty: &'a [i32], port_x: &'a [f64]) -> Self {
+        assert_eq!(
+            order.len(),
+            penalty.len(),
+            "mincross: missing crossing order/penalty"
+        );
+        assert_eq!(order.len(), port_x.len(), "mincross: missing crossing port");
+        Self {
+            order,
+            penalty,
+            port_x,
+        }
+    }
+}
+
+impl FlatCrossings {
+    fn clear(&mut self) {
+        self.order.clear();
+        self.penalty.clear();
+        self.port_x.clear();
+    }
+
+    fn reserve(&mut self, count: usize) {
+        self.order.reserve(count);
+        self.penalty.reserve(count);
+        self.port_x.reserve(count);
+    }
+
+    fn push(&mut self, order: i32, penalty: i32, port_x: f64) {
+        self.order.push(order);
+        self.penalty.push(penalty);
+        self.port_x.push(port_x);
+    }
+
+    fn truncate(&mut self, len: usize) {
+        self.order.truncate(len);
+        self.penalty.truncate(len);
+        self.port_x.truncate(len);
+    }
+
+    #[inline]
+    fn view(&self, start: usize, end: usize) -> FlatAdjacency<'_> {
+        let order = self
+            .order
+            .get(start..end)
+            .unwrap_or_else(|| panic!("mincross: missing crossing order"));
+        let penalty = self
+            .penalty
+            .get(start..end)
+            .unwrap_or_else(|| panic!("mincross: missing crossing penalty"));
+        let port_x = self
+            .port_x
+            .get(start..end)
+            .unwrap_or_else(|| panic!("mincross: missing crossing port"));
+        FlatAdjacency::new(order, penalty, port_x)
+    }
 }
 
 #[derive(Clone, Copy)]
 struct MinCrossNode {
     global: N,
     slot: usize,
+}
+
+#[derive(Clone, Copy)]
+struct ResolvedCrossing {
+    order: i32,
+    penalty: i32,
+    port_x: f64,
 }
 
 struct CrossingEdge {
@@ -98,7 +255,10 @@ fn compact_order(orders: &[i32], slot: usize) -> i32 {
 /// cluster window is being reordered. Its untouched nodes must retain their edges.
 #[derive(Clone)]
 enum CrossingEdges<'a> {
-    Compact(std::slice::Iter<'a, MinCrossEdge>, &'a [i32]),
+    Compact(
+        std::iter::Zip<std::slice::Iter<'a, MinCrossEdge>, std::slice::Iter<'a, i32>>,
+        &'a [i32],
+    ),
     Arena(
         std::slice::Iter<'a, E>,
         &'a [EdgeInfo],
@@ -114,10 +274,11 @@ impl Iterator for CrossingEdges<'_> {
     fn next(&mut self) -> Option<Self::Item> {
         match self {
             Self::Compact(edges, orders) => {
-                let e = edges.next()?;
+                let (e, &penalty) = edges.next()?;
+                let order = compact_order(orders, e.other);
                 Some(CrossingEdge {
-                    order: compact_order(orders, e.other),
-                    penalty: e.penalty,
+                    order,
+                    penalty,
                     port_order: e.port_order,
                 })
             }
@@ -162,83 +323,20 @@ fn left2right(dot: &Dot<'_>, g: G, v: &MinCrossMeta, w: &MinCrossMeta) -> bool {
     m.get(a.low as usize, b.low as usize)
 }
 
-trait CrossingAdjacency {
-    type Edge;
-    fn edges(&self) -> &[Self::Edge];
-    fn order(&self, e: &Self::Edge) -> i32;
-    fn penalty(&self, e: &Self::Edge) -> i32;
-    fn port_x(&self, e: &Self::Edge) -> f64;
-}
-
-#[derive(Clone, Copy)]
-struct CompactAdjacency<'a> {
-    edges: &'a [MinCrossEdge],
-    order: &'a [i32],
-}
-impl CrossingAdjacency for CompactAdjacency<'_> {
-    type Edge = MinCrossEdge;
-    #[inline]
-    fn edges(&self) -> &[MinCrossEdge] {
-        self.edges
-    }
-    #[inline]
-    fn order(&self, e: &MinCrossEdge) -> i32 {
-        compact_order(self.order, e.other)
-    }
-    #[inline]
-    fn penalty(&self, e: &MinCrossEdge) -> i32 {
-        e.penalty
-    }
-    #[inline]
-    fn port_x(&self, e: &MinCrossEdge) -> f64 {
-        e.port_x
-    }
-}
-
-#[derive(Clone, Copy)]
-struct ArenaAdjacency<'a> {
-    edges: &'a [E],
-    dot: &'a Dot<'a>,
-    out: bool,
-}
-impl CrossingAdjacency for ArenaAdjacency<'_> {
-    type Edge = E;
-    #[inline]
-    fn edges(&self) -> &[E] {
-        self.edges
-    }
-    #[inline]
-    fn order(&self, e: &E) -> i32 {
-        let e = &self.dot.edges[*e];
-        self.dot.nodes[if self.out { e.head } else { e.tail }].order
-    }
-    #[inline]
-    fn penalty(&self, e: &E) -> i32 {
-        self.dot.edges[*e].xpenalty
-    }
-    #[inline]
-    fn port_x(&self, e: &E) -> f64 {
-        let e = &self.dot.edges[*e];
-        if self.out {
-            e.head_port.p.x
-        } else {
-            e.tail_port.p.x
-        }
-    }
-}
-
 /// C: lib/dotgen/mincross.c:in_cross
 #[inline]
-fn in_cross(v: impl CrossingAdjacency, w: impl CrossingAdjacency) -> i64 {
+fn in_cross(
+    v: impl Iterator<Item = ResolvedCrossing> + Clone,
+    w: impl Iterator<Item = ResolvedCrossing>,
+) -> i64 {
     let mut cross: i64 = 0;
-    for e2 in w.edges() {
-        let cnt = w.penalty(e2) as i64;
-        let inv = w.order(e2);
-        for e1 in v.edges() {
-            let order = v.order(e1);
-            let t = order - inv;
-            if t > 0 || (t == 0 && v.port_x(e1) > w.port_x(e2)) {
-                cross += v.penalty(e1) as i64 * cnt;
+    for e2 in w {
+        let cnt = e2.penalty as i64;
+        let inv = e2.order;
+        for e1 in v.clone() {
+            let t = e1.order - inv;
+            if t > 0 || (t == 0 && e1.port_x > e2.port_x) {
+                cross += e1.penalty as i64 * cnt;
             }
         }
     }
@@ -247,23 +345,61 @@ fn in_cross(v: impl CrossingAdjacency, w: impl CrossingAdjacency) -> i64 {
 
 /// C: lib/dotgen/mincross.c:out_cross
 #[inline]
-fn out_cross(v: impl CrossingAdjacency, w: impl CrossingAdjacency) -> i64 {
+fn out_cross(
+    v: impl Iterator<Item = ResolvedCrossing> + Clone,
+    w: impl Iterator<Item = ResolvedCrossing>,
+) -> i64 {
     let mut cross: i32 = 0;
-    for e2 in w.edges() {
-        let cnt = w.penalty(e2);
-        let inv = w.order(e2);
-        for e1 in v.edges() {
-            let order = v.order(e1);
-            let t = order - inv;
-            if t > 0 || (t == 0 && v.port_x(e1) > w.port_x(e2)) {
-                cross = cross.wrapping_add(v.penalty(e1).wrapping_mul(cnt));
+    for e2 in w {
+        let cnt = e2.penalty;
+        let inv = e2.order;
+        for e1 in v.clone() {
+            let t = e1.order - inv;
+            if t > 0 || (t == 0 && e1.port_x > e2.port_x) {
+                cross = cross.wrapping_add(e1.penalty.wrapping_mul(cnt));
             }
         }
     }
     cross as i64
 }
 
+/// C's cached `vlist` in reorder: indices into the live rank buffer, not a copy.
+#[derive(Clone, Copy, Default)]
+struct RankWindow {
+    buf: usize,
+    offset: usize,
+    n: i32,
+}
+
+impl RankWindow {
+    #[inline]
+    fn node(self, dot: &Dot<'_>, i: i32) -> Option<N> {
+        if i < 0 {
+            return None;
+        }
+        dot.bufs
+            .get(self.buf)?
+            .get(self.offset.checked_add(i as usize)?)
+            .copied()
+            .flatten()
+    }
+}
+
 impl Dot<'_> {
+    #[inline]
+    fn mincross_rank(&self, g: G, r: i32) -> RankWindow {
+        let n = self.rank_n(g, r);
+        if n == 0 {
+            return RankWindow::default();
+        }
+        let rank = self.rk(g, r);
+        RankWindow {
+            buf: rank.vbuf,
+            offset: rank.voff,
+            n,
+        }
+    }
+
     /// Build after rank/flat-edge preparation, only when a crossing pass is needed.
     /// Sorting identifies slots; neither the rank order nor an edge list is sorted.
     fn prepare_mincross(&mut self, g: G) {
@@ -273,14 +409,23 @@ impl Dot<'_> {
         let mut store = std::mem::take(&mut self.mincross_store);
         store.graph = None;
         store.constrained = false;
-        store.active.clear();
+        let mut arc_capacity = 0usize;
+        let graph = &self.graphs[g];
+        let (minrank, maxrank) = (graph.minrank, graph.maxrank);
         store.nodes.clear();
-        for r in self.graphs[g].minrank..=self.graphs[g].maxrank {
+        for r in minrank..=maxrank {
+            if self.rank_n(g, r) > 0 {
+                let row = self.rk_mut(g, r);
+                row.mincross_snapshot = false;
+                row.mincross_position = None;
+            }
             for i in 0..self.rank_n(g, r) {
                 if let Some(v) = self.rv(g, r, i) {
-                    store.active.push(v);
                     store.nodes.push(v);
                     if let Some(n) = self.nodes.get(v) {
+                        arc_capacity = arc_capacity
+                            .saturating_add(n.in_.len())
+                            .saturating_add(n.out.len());
                         for &e in n
                             .in_
                             .iter()
@@ -305,6 +450,9 @@ impl Dot<'_> {
         store.meta.clear();
         store.adjacency.clear();
         store.edges.clear();
+        store.edges.reserve(arc_capacity);
+        store.crossings.clear();
+        store.crossings.reserve(arc_capacity);
         for (slot, &v) in store.nodes.iter().enumerate() {
             if let Some(n) = self.nodes.get_mut(v) {
                 let Ok(index) = u32::try_from(slot) else {
@@ -320,51 +468,76 @@ impl Dot<'_> {
                     cluster: n.clust,
                     ranktype: n.ranktype,
                     node_type: n.node_type,
+                    snapshot_valid: false,
+                    snapshot_adjacent: false,
                 });
                 store.adjacency.push(None);
             }
         }
-        for &v in &store.active {
-            let Some(n) = self.nodes.get(v) else { continue };
-            store.constrained |= n.clust.is_some()
-                || n.rank
-                    .checked_add(1)
-                    .and_then(|r| usize::try_from(r).ok())
-                    .and_then(|r| self.graphs[g].rank.get(r))
-                    .is_none_or(|r| r.flat.is_some());
-            let start = store.edges.len();
-            let mut valid = true;
-            for (out, list) in [(false, &n.in_), (true, &n.out)] {
-                for &e in list {
-                    let Some(e) = self.edges.get(e) else {
-                        valid = false;
-                        break;
-                    };
-                    let (other, port) = if out {
-                        (e.head, &e.head_port)
-                    } else {
-                        (e.tail, &e.tail_port)
-                    };
-                    let Some(other) = self.nodes.get(other) else {
-                        valid = false;
-                        break;
-                    };
-                    store.edges.push(MinCrossEdge {
-                        other: other.mincross_index as usize,
-                        penalty: e.xpenalty,
-                        port_order: port.order as i32,
-                        port_x: port.p.x,
-                    });
+        for r in minrank..=maxrank {
+            for i in 0..self.rank_n(g, r) {
+                let Some(v) = self.rv(g, r, i) else { continue };
+                let Some(n) = self.nodes.get(v) else { continue };
+                store.constrained |= n.clust.is_some()
+                    || n.rank
+                        .checked_add(1)
+                        .and_then(|r| usize::try_from(r).ok())
+                        .and_then(|r| self.graphs[g].rank.get(r))
+                        .is_none_or(|r| r.flat.is_some());
+                let start = store.edges.len();
+                let mut valid = true;
+                let mut snapshot_valid = true;
+                let mut snapshot_adjacent = true;
+                for (out, list) in [(false, &n.in_), (true, &n.out)] {
+                    for &e in list {
+                        let Some(e) = self.edges.get(e) else {
+                            valid = false;
+                            break;
+                        };
+                        let (other, port) = if out {
+                            (e.head, &e.head_port)
+                        } else {
+                            (e.tail, &e.tail_port)
+                        };
+                        let Some(other) = self.nodes.get(other) else {
+                            valid = false;
+                            break;
+                        };
+                        snapshot_valid &= other.rank != n.rank;
+                        let expected = if out {
+                            n.rank.checked_add(1)
+                        } else {
+                            n.rank.checked_sub(1)
+                        };
+                        snapshot_adjacent &= Some(other.rank) == expected;
+                        store.edges.push(MinCrossEdge {
+                            other: other.mincross_index as usize,
+                            port_order: port.order as i32,
+                        });
+                        store.crossings.push(
+                            compact_order(&store.order, other.mincross_index as usize),
+                            e.xpenalty,
+                            port.p.x,
+                        );
+                    }
                 }
-            }
-            if valid {
-                if let Some(span) = store.adjacency.get_mut(n.mincross_index as usize) {
-                    let mid = start.saturating_add(n.in_.len());
-                    *span = Some([start, mid, mid, store.edges.len()]);
+                if valid {
+                    if let Some(meta) = store.meta.get_mut(n.mincross_index as usize) {
+                        meta.snapshot_valid = snapshot_valid;
+                        meta.snapshot_adjacent = snapshot_adjacent;
+                    }
+                    if let Some(span) = store.adjacency.get_mut(n.mincross_index as usize) {
+                        let mid = start.saturating_add(n.in_.len());
+                        *span = Some([
+                            CrossingSpan::new(start, mid, &store.crossings),
+                            CrossingSpan::new(mid, store.edges.len(), &store.crossings),
+                        ]);
+                    }
+                } else {
+                    // Preserve the original arena path, including its invalid-edge behaviour.
+                    store.edges.truncate(start);
+                    store.crossings.truncate(start);
                 }
-            } else {
-                // Preserve the original arena path, including its invalid-edge behaviour.
-                store.edges.truncate(start);
             }
         }
         store.graph = Some(g);
@@ -413,7 +586,6 @@ impl Dot<'_> {
         if let Some(value) = self.mincross_store.order.get_mut(v.slot) {
             *value = order;
         }
-        // ncross reads root nodes outside a cluster's compact view as well.
         self.nodes[v.global].order = order;
     }
 
@@ -449,12 +621,26 @@ impl Dot<'_> {
     }
 
     #[inline]
+    fn mc_adjacency(&self, v: MinCrossNode, out: bool) -> Option<CrossingSpan> {
+        let &[incoming, outgoing] = self.mincross_store.adjacency.get(v.slot)?.as_ref()?;
+        Some(if out { outgoing } else { incoming })
+    }
+
+    #[inline]
+    fn mc_span(&self, v: MinCrossNode, out: bool) -> Option<(usize, usize)> {
+        self.mc_adjacency(v, out).map(CrossingSpan::range)
+    }
+
+    #[inline]
     fn mc_edges(&self, v: MinCrossNode, out: bool) -> CrossingEdges<'_> {
         let store = &self.mincross_store;
-        if let Some(Some(&[a, b, c, d])) = store.adjacency.get(v.slot).map(Option::as_ref)
-            && let Some(edges) = store.edges.get(if out { c..d } else { a..b })
-        {
-            return CrossingEdges::Compact(edges.iter(), &store.order);
+        if let Some((start, end)) = self.mc_span(v, out) {
+            let edges = store
+                .edges
+                .get(start..end)
+                .unwrap_or_else(|| panic!("mincross: missing adjacency range"));
+            let data = store.crossings.view(start, end);
+            return CrossingEdges::Compact(edges.iter().zip(data.penalty), &store.order);
         }
         let n = &self.nodes[v.global];
         CrossingEdges::Arena(
@@ -812,108 +998,377 @@ impl Dot<'_> {
                 cluster: n.clust,
                 ranktype: n.ranktype,
                 node_type: n.node_type,
+                snapshot_valid: false,
+                snapshot_adjacent: false,
             }
         };
         left2right(self, g, &load(v), &load(w))
     }
 
-    /// Resolve the two adjacency lists once for C's two directed crossing counts.
-    #[inline]
-    fn pair_cross(&self, v: MinCrossNode, w: MinCrossNode, out: bool) -> (i64, i64) {
-        #[inline]
-        fn count<A: CrossingAdjacency + Copy>(v: A, w: A, out: bool) -> (i64, i64) {
+    /// A validated scan only exchanges nodes of r, so remote orders are fixed during
+    /// that scan. Reuse across scans additionally requires edges to r-1/r+1 and the
+    /// shared root buffer: changes to either neighbour invalidate this snapshot.
+    /// Skipping-rank edges refresh on every scan; same-rank edges, mixed/stale rank
+    /// leaders and unavailable adjacency use live arena orders instead.
+    /// Immutable endpoint ranks are validated once while building the view. Only
+    /// orders are refreshed here. Medians and rcross always read live scalar orders,
+    /// never these snapshots.
+    fn prepare_crossing_rank(&mut self, g: G, r: i32, rank: RankWindow) -> bool {
+        if self.rk(g, r).mincross_snapshot {
+            return true;
+        }
+        let mut valid = true;
+        let mut adjacent = true;
+        for i in 0..rank.n {
+            let Some(node) = rank.node(self, i) else {
+                valid = false;
+                break;
+            };
+            let v = self.mc_rank_node(node);
+            let Some(meta) = self.mc_meta(v).filter(|m| m.rank == r && m.snapshot_valid) else {
+                valid = false;
+                break;
+            };
+            adjacent &= meta.snapshot_adjacent;
+            let store = &mut self.mincross_store;
+            let Some(Some(spans)) = store.adjacency.get_mut(v.slot) else {
+                valid = false;
+                break;
+            };
+            for span in spans {
+                match span {
+                    CrossingSpan::Empty => {}
+                    CrossingSpan::One { index, value } => {
+                        let edge = store
+                            .edges
+                            .get(*index)
+                            .unwrap_or_else(|| panic!("mincross: missing singleton edge"));
+                        value.order = compact_order(&store.order, edge.other);
+                        *store
+                            .crossings
+                            .order
+                            .get_mut(*index)
+                            .unwrap_or_else(|| panic!("mincross: missing crossing order")) =
+                            value.order;
+                    }
+                    CrossingSpan::Many { start, end } => {
+                        let edges = store
+                            .edges
+                            .get(*start..*end)
+                            .unwrap_or_else(|| panic!("mincross: missing adjacency range"));
+                        let orders = store
+                            .crossings
+                            .order
+                            .get_mut(*start..*end)
+                            .unwrap_or_else(|| panic!("mincross: missing crossing order"));
+                        for (edge, order) in edges.iter().zip(orders) {
+                            *order = compact_order(&store.order, edge.other);
+                        }
+                    }
+                }
+            }
+        }
+        let root = self.mincross_rank(0, r);
+        self.rk_mut(g, r).mincross_snapshot =
+            valid && adjacent && root.n > 0 && root.buf == rank.buf;
+        valid
+    }
+
+    /// Storage invalidation follows actual node ranks, including mixed-rank fallback swaps.
+    fn invalidate_crossing_rank(&mut self, g: G, r: i32, own: bool) {
+        for rank in [r.checked_sub(1), Some(r), r.checked_add(1)]
+            .into_iter()
+            .flatten()
+        {
+            if let Some(slot) = rank.checked_add(1).and_then(|r| usize::try_from(r).ok())
+                && let Some(row) = self.graphs.get_mut(g).and_then(|g| g.rank.get_mut(slot))
+                && (own || rank != r)
+            {
+                row.mincross_snapshot = false;
+                if own && rank == r {
+                    row.mincross_position = None;
+                }
+            }
+        }
+    }
+
+    fn invalidate_mixed_exchange(&mut self, g: G, v: MinCrossNode, w: MinCrossNode) {
+        let vr = self.nodes[v.global].rank;
+        let wr = self.nodes[w.global].rank;
+        self.invalidate_crossing_rank(g, vr, true);
+        if wr != vr {
+            self.invalidate_crossing_rank(g, wr, true)
+        }
+    }
+
+    /// Dispatch only at the call boundary, preserving the C loop order for every shape.
+    // Keep the many/many loops out of the rank scan's singleton fast path.
+    #[inline(never)]
+    fn count_pair(v: FlatAdjacency<'_>, w: FlatAdjacency<'_>, out: bool) -> (i64, i64) {
+        #[inline(always)]
+        fn count<
+            V: Iterator<Item = ResolvedCrossing> + Clone,
+            W: Iterator<Item = ResolvedCrossing> + Clone,
+        >(
+            v: V,
+            w: W,
+            out: bool,
+        ) -> (i64, i64) {
             if out {
-                (out_cross(v, w), out_cross(w, v))
+                (out_cross(v.clone(), w.clone()), out_cross(w, v))
             } else {
-                (in_cross(v, w), in_cross(w, v))
+                (in_cross(v.clone(), w.clone()), in_cross(w, v))
             }
         }
-        match (self.mc_edges(v, out), self.mc_edges(w, out)) {
-            (CrossingEdges::Compact(v, order), CrossingEdges::Compact(w, _)) => count(
-                CompactAdjacency {
-                    edges: v.as_slice(),
-                    order,
-                },
-                CompactAdjacency {
-                    edges: w.as_slice(),
-                    order,
-                },
-                out,
-            ),
-            _ => {
-                let edges = |n: N| {
-                    let n = &self.nodes[n];
-                    if out { &n.out[..] } else { &n.in_[..] }
-                };
-                count(
-                    ArenaAdjacency {
-                        edges: edges(v.global),
-                        dot: self,
-                        out,
-                    },
-                    ArenaAdjacency {
-                        edges: edges(w.global),
-                        dot: self,
-                        out,
-                    },
+        match (v.one(), w.one()) {
+            (Some(v), Some(w)) => count(std::iter::once(v), std::iter::once(w), out),
+            (Some(v), None) => count(std::iter::once(v), w.iter(), out),
+            (None, Some(w)) => count(v.iter(), std::iter::once(w), out),
+            (None, None) => count(v.iter(), w.iter(), out),
+        }
+    }
+
+    #[inline(always)]
+    fn pair_cross(
+        &mut self,
+        v: MinCrossNode,
+        w: MinCrossNode,
+        out: bool,
+        cached: bool,
+    ) -> (i64, i64) {
+        #[inline(always)]
+        fn count<
+            V: Iterator<Item = ResolvedCrossing> + Clone,
+            W: Iterator<Item = ResolvedCrossing> + Clone,
+        >(
+            v: V,
+            w: W,
+            out: bool,
+        ) -> (i64, i64) {
+            if out {
+                (out_cross(v.clone(), w.clone()), out_cross(w, v))
+            } else {
+                (in_cross(v.clone(), w.clone()), in_cross(w, v))
+            }
+        }
+        if cached && let (Some(v), Some(w)) = (self.mc_adjacency(v, out), self.mc_adjacency(w, out))
+        {
+            return match (v, w) {
+                (CrossingSpan::Empty, _) | (_, CrossingSpan::Empty) => (0, 0),
+                (CrossingSpan::One { value: v, .. }, CrossingSpan::One { value: w, .. }) => {
+                    count(std::iter::once(v), std::iter::once(w), out)
+                }
+                (CrossingSpan::One { value: v, .. }, CrossingSpan::Many { start, end }) => count(
+                    std::iter::once(v),
+                    self.mincross_store.crossings.view(start, end).iter(),
                     out,
-                )
+                ),
+                (CrossingSpan::Many { start, end }, CrossingSpan::One { value: w, .. }) => count(
+                    self.mincross_store.crossings.view(start, end).iter(),
+                    std::iter::once(w),
+                    out,
+                ),
+                (
+                    CrossingSpan::Many { start: a, end: b },
+                    CrossingSpan::Many { start: c, end: d },
+                ) => Self::count_pair(
+                    self.mincross_store.crossings.view(a, b),
+                    self.mincross_store.crossings.view(c, d),
+                    out,
+                ),
+            };
+        }
+        self.pair_cross_arena(v, w, out)
+    }
+
+    fn pair_cross_arena(&mut self, v: MinCrossNode, w: MinCrossNode, out: bool) -> (i64, i64) {
+        // Resolve original arena records once when the compact view is unavailable.
+        let mut flat = std::mem::take(&mut self.mincross_store.uncached_crossings);
+        flat.clear();
+        let mut split = 0;
+        for (i, n) in [v.global, w.global].into_iter().enumerate() {
+            let node = self
+                .nodes
+                .get(n)
+                .unwrap_or_else(|| panic!("mincross: missing node"));
+            for &e in if out { &node.out } else { &node.in_ } {
+                let e = self
+                    .edges
+                    .get(e)
+                    .unwrap_or_else(|| panic!("mincross: missing edge"));
+                let (other, port) = if out {
+                    (e.head, &e.head_port)
+                } else {
+                    (e.tail, &e.tail_port)
+                };
+                let remote = self
+                    .nodes
+                    .get(other)
+                    .unwrap_or_else(|| panic!("mincross: missing endpoint"));
+                flat.push(remote.order, e.xpenalty, port.p.x);
+            }
+            if i == 0 {
+                split = flat.order.len();
             }
         }
+        let result = Self::count_pair(flat.view(0, split), flat.view(split, flat.order.len()), out);
+        self.mincross_store.uncached_crossings = flat;
+        result
     }
 
     /// C: lib/dotgen/mincross.c:exchange
-    fn exchange(&mut self, v: MinCrossNode, w: MinCrossNode) {
-        let r = self
-            .mc_meta(v)
-            .map_or_else(|| self.nodes[v.global].rank, |m| m.rank);
+    #[inline(always)]
+    fn exchange<const DEFER_ARENA: bool>(
+        &mut self,
+        v: MinCrossNode,
+        w: MinCrossNode,
+        root: RankWindow,
+    ) {
         let vi = self.mc_order(v);
         let wi = self.mc_order(w);
-        self.mc_set_order(v, wi);
-        self.set_rv(0, r, wi, Some(v.global));
-        self.mc_set_order(w, vi);
-        self.set_rv(0, r, vi, Some(w.global));
+        if DEFER_ARENA {
+            // positioned_rank proved that both orders are slots of this buffer.
+            let orders = &mut self.mincross_store.order;
+            let buf = self
+                .bufs
+                .get_mut(root.buf)
+                .unwrap_or_else(|| panic!("mincross: missing exchange buffer"));
+            *orders
+                .get_mut(v.slot)
+                .unwrap_or_else(|| panic!("mincross: missing exchange order")) = wi;
+            *buf.get_mut(root.offset.saturating_add(wi as usize))
+                .unwrap_or_else(|| panic!("mincross: missing exchange slot")) = Some(v.global);
+            *orders
+                .get_mut(w.slot)
+                .unwrap_or_else(|| panic!("mincross: missing exchange order")) = vi;
+            *buf.get_mut(root.offset.saturating_add(vi as usize))
+                .unwrap_or_else(|| panic!("mincross: missing exchange slot")) = Some(w.global);
+        } else {
+            let r = self
+                .mc_meta(v)
+                .map_or_else(|| self.nodes[v.global].rank, |m| m.rank);
+            self.mc_set_order(v, wi);
+            self.set_rv(0, r, wi, Some(v.global));
+            self.mc_set_order(w, vi);
+            self.set_rv(0, r, vi, Some(w.global));
+        }
+    }
+
+    /// Deferred arena writes require exchanges to be a permutation of this exact
+    /// window. Same-rank stale orders can otherwise write outside a cluster window.
+    /// A proven permutation stays positional through ordinary exchanges; restores
+    /// and mixed-rank writes invalidate this proof before the next use.
+    fn positioned_rank(&mut self, g: G, r: i32, rank: RankWindow) -> Option<RankWindow> {
+        let root = self.mincross_rank(0, r);
+        if let Some(valid) = self.rk(g, r).mincross_position {
+            return valid.then_some(root);
+        }
+        let valid = self.rank_positions_match(r, rank, root);
+        self.rk_mut(g, r).mincross_position = Some(valid);
+        valid.then_some(root)
+    }
+
+    fn rank_positions_match(&self, r: i32, rank: RankWindow, root: RankWindow) -> bool {
+        if root.n <= 0 || root.buf != rank.buf {
+            return false;
+        }
+        let Some(base) = rank
+            .offset
+            .checked_sub(root.offset)
+            .and_then(|o| i32::try_from(o).ok())
+        else {
+            return false;
+        };
+        (0..rank.n).all(|i| {
+            rank.node(self, i).is_some_and(|node| {
+                let node = self.mc_rank_node(node);
+                self.mc_meta(node).is_some_and(|m| m.rank == r)
+                    && Some(self.mc_order(node)) == base.checked_add(i)
+            })
+        })
+    }
+
+    /// Validated rank scans read only compact orders. Publish them before any other
+    /// phase can read NodeInfo, including save_best and live arena fallbacks.
+    fn write_crossing_orders(&mut self, rank: RankWindow) {
+        for i in 0..rank.n {
+            let n = rank
+                .node(self, i)
+                .unwrap_or_else(|| panic!("mincross: missing rank node"));
+            let node = self
+                .nodes
+                .get_mut(n)
+                .unwrap_or_else(|| panic!("mincross: missing node"));
+            node.order = compact_order(&self.mincross_store.order, node.mincross_index as usize);
+        }
     }
 
     /// C: lib/dotgen/mincross.c:transpose_step
-    fn transpose_step(&mut self, g: G, r: i32, reverse: bool) -> i64 {
+    fn transpose_step<const CONSTRAINED: bool>(&mut self, g: G, r: i32, reverse: bool) -> i64 {
         let mut rv: i64 = 0;
         self.rk_mut(g, r).candidate = false;
+        // Exchanges change the live buffer and validity flags, never these windows' sizes.
+        let rank = self.mincross_rank(g, r);
+        let last = rank.n - 1;
+        if last <= 0 {
+            return rv;
+        }
+        let cached = self.prepare_crossing_rank(g, r, rank);
+        let direct = if cached {
+            self.positioned_rank(g, r, rank)
+        } else {
+            None
+        };
+        let has_out = self.rank_n(g, r + 1) > 0;
         let mut i = 0;
-        while i < self.rank_n(g, r) - 1 {
-            let v = self.mc_rank_node(self.rv(g, r, i).unwrap());
-            let w = self.mc_rank_node(self.rv(g, r, i + 1).unwrap());
-            if self.left2right(g, v, w) {
+        while i < last {
+            let v = self.mc_rank_node(rank.node(self, i).unwrap());
+            let w = self.mc_rank_node(rank.node(self, i + 1).unwrap());
+            if CONSTRAINED && self.left2right(g, v, w) {
                 i += 1;
                 continue;
             }
             let mut c0: i64 = 0;
             let mut c1: i64 = 0;
             if r > 0 {
-                let (a, b) = self.pair_cross(v, w, false);
+                let (a, b) = self.pair_cross(v, w, false, cached);
                 c0 += a;
                 c1 += b;
             }
-            if self.rank_n(g, r + 1) > 0 {
-                let (a, b) = self.pair_cross(v, w, true);
+            if has_out {
+                let (a, b) = self.pair_cross(v, w, true, cached);
                 c0 += a;
                 c1 += b;
             }
             if c1 < c0 || (c0 > 0 && reverse && c1 == c0) {
-                self.exchange(v, w);
+                if let Some(root) = direct {
+                    self.exchange::<true>(v, w, root);
+                } else {
+                    self.exchange::<false>(v, w, RankWindow::default());
+                }
+                if !cached {
+                    self.invalidate_mixed_exchange(g, v, w);
+                }
                 rv += c0 - c1;
                 self.rk_mut(0, r).valid = false;
                 self.rk_mut(g, r).candidate = true;
                 if r > self.graphs[g].minrank {
                     self.rk_mut(0, r - 1).valid = false;
-                    self.rk_mut(g, r - 1).candidate = true;
+                    let row = self.rk_mut(g, r - 1);
+                    row.candidate = true;
+                    row.mincross_snapshot = false;
                 }
                 if r < self.graphs[g].maxrank {
                     self.rk_mut(0, r + 1).valid = false;
-                    self.rk_mut(g, r + 1).candidate = true;
+                    let row = self.rk_mut(g, r + 1);
+                    row.candidate = true;
+                    row.mincross_snapshot = false;
                 }
             }
             i += 1;
+        }
+        if direct.is_some() && self.rk(g, r).candidate {
+            self.write_crossing_orders(rank);
         }
         rv
     }
@@ -929,7 +1384,12 @@ impl Dot<'_> {
             let mut delta: i64 = 0;
             for r in minr..=maxr {
                 if self.rk(g, r).candidate {
-                    delta += self.transpose_step(g, r, reverse);
+                    delta +=
+                        if self.mincross_store.graph.is_none() || self.mincross_store.constrained {
+                            self.transpose_step::<true>(g, r, reverse)
+                        } else {
+                            self.transpose_step::<false>(g, r, reverse)
+                        };
                 }
             }
             if delta < 1 {
@@ -1022,6 +1482,9 @@ impl Dot<'_> {
     fn restore_best(&mut self, g: G) {
         let (minr, maxr) = (self.graphs[g].minrank, self.graphs[g].maxrank);
         for r in minr..=maxr {
+            let row = self.rk_mut(g, r);
+            row.mincross_snapshot = false;
+            row.mincross_position = None;
             for i in 0..self.rank_n(g, r) {
                 let n = self.rv(g, r, i).unwrap();
                 self.mc_set_order(self.mc_rank_node(n), self.nodes[n].coord.x as i32);
@@ -1575,7 +2038,7 @@ impl Dot<'_> {
                 for j in 0..=half {
                     let a = self.rv(g, i, j).unwrap();
                     let b = self.rv(g, i, num_nodes_1 - j).unwrap();
-                    self.exchange(self.mc_node(a), self.mc_node(b));
+                    self.exchange::<false>(self.mc_node(a), self.mc_node(b), RankWindow::default());
                 }
             }
         }
@@ -1745,15 +2208,26 @@ impl Dot<'_> {
     }
 
     /// C: lib/dotgen/mincross.c:reorder
-    fn reorder(&mut self, g: G, r: i32, reverse: bool, hasfixed: bool) {
+    fn reorder<const CONSTRAINED: bool, const CHECK_NEGATIVE: bool>(
+        &mut self,
+        g: G,
+        r: i32,
+        reverse: bool,
+        hasfixed: bool,
+    ) {
         let mut changed = 0;
-        let n = self.rank_n(g, r);
+        let rank = self.mincross_rank(g, r);
+        let n = rank.n;
+        let direct = self.positioned_rank(g, r, rank);
         let mut ep = n;
         let mut nelt = n - 1;
         while nelt >= 0 {
             let mut lp = 0;
             while lp < ep {
-                while lp < ep && self.mc_mval(self.mc_rank_node(self.rv(g, r, lp).unwrap())) < 0.0 {
+                while CHECK_NEGATIVE
+                    && lp < ep
+                    && self.mc_mval(self.mc_rank_node(rank.node(self, lp).unwrap())) < 0.0
+                {
                     lp += 1;
                 }
                 if lp >= ep {
@@ -1761,22 +2235,22 @@ impl Dot<'_> {
                 }
                 let mut sawclust = false;
                 let mut muststay = false;
-                let lpn = self.mc_rank_node(self.rv(g, r, lp).unwrap());
+                let lpn = self.mc_rank_node(rank.node(self, lp).unwrap());
                 let mut rp = lp + 1;
-                while rp < ep {
-                    let rpn = self.mc_rank_node(self.rv(g, r, rp).unwrap());
-                    if sawclust && self.mc_cluster(rpn).is_some() {
+                while (CONSTRAINED || CHECK_NEGATIVE) && rp < ep {
+                    let rpn = self.mc_rank_node(rank.node(self, rp).unwrap());
+                    if CONSTRAINED && sawclust && self.mc_cluster(rpn).is_some() {
                         rp += 1;
                         continue;
                     }
-                    if self.left2right(g, lpn, rpn) {
+                    if CONSTRAINED && self.left2right(g, lpn, rpn) {
                         muststay = true;
                         break;
                     }
-                    if self.mc_mval(rpn) >= 0.0 {
+                    if !CHECK_NEGATIVE || self.mc_mval(rpn) >= 0.0 {
                         break;
                     }
-                    if self.mc_cluster(rpn).is_some() {
+                    if CONSTRAINED && self.mc_cluster(rpn).is_some() {
                         sawclust = true;
                     }
                     rp += 1;
@@ -1785,11 +2259,18 @@ impl Dot<'_> {
                     break;
                 }
                 if !muststay {
-                    let rpn = self.mc_rank_node(self.rv(g, r, rp).unwrap());
+                    let rpn = self.mc_rank_node(rank.node(self, rp).unwrap());
                     let p1 = self.mc_mval(lpn);
                     let p2 = self.mc_mval(rpn);
                     if p1 > p2 || (p1 >= p2 && reverse) {
-                        self.exchange(lpn, rpn);
+                        if let Some(root) = direct {
+                            self.exchange::<true>(lpn, rpn, root);
+                        } else {
+                            self.exchange::<false>(lpn, rpn, RankWindow::default());
+                        }
+                        if direct.is_none() {
+                            self.invalidate_mixed_exchange(g, lpn, rpn);
+                        }
                         changed += 1;
                     }
                 }
@@ -1801,6 +2282,10 @@ impl Dot<'_> {
             nelt -= 1;
         }
         if changed != 0 {
+            if direct.is_some() {
+                self.write_crossing_orders(rank);
+            }
+            self.invalidate_crossing_rank(g, r, false);
             self.rk_mut(0, r).valid = false;
             if r > 0 {
                 self.rk_mut(0, r - 1).valid = false;
@@ -1834,7 +2319,13 @@ impl Dot<'_> {
         while r != last + dir {
             let other = r - dir;
             let hasfixed = self.medians(g, r, other);
-            self.reorder(g, r, reverse, hasfixed);
+            if self.mincross_store.graph.is_none() || self.mincross_store.constrained {
+                self.reorder::<true, true>(g, r, reverse, hasfixed);
+            } else if self.mincross_store.nonnegative_medians {
+                self.reorder::<false, false>(g, r, reverse, hasfixed);
+            } else {
+                self.reorder::<false, true>(g, r, reverse, hasfixed);
+            }
             r += dir;
         }
         self.transpose(g, !reverse);
@@ -2010,12 +2501,15 @@ impl Dot<'_> {
             };
             self.mc_set_mval(self.mc_rank_node(v), mval);
         }
+        let mut sortable = true;
         for i in 0..n {
             let v = self.rv(g, r0, i).unwrap();
             if self.nodes[v].out.is_empty() && self.nodes[v].in_.is_empty() {
                 hasfixed |= self.flat_mval(v);
             }
+            sortable &= self.mc_mval(self.mc_rank_node(v)) >= 0.0;
         }
+        self.mincross_store.nonnegative_medians = sortable;
         self.mincross_store.median = list;
         hasfixed
     }
@@ -2065,30 +2559,12 @@ mod tests {
 
     #[test]
     fn missing_compact_order_panics_instead_of_undercounting() {
-        let edges = [MinCrossEdge {
-            other: 0,
-            penalty: 1,
-            port_order: 0,
-            port_x: 0.0,
-        }];
-        let valid = CompactAdjacency {
-            edges: &edges,
-            order: &[0],
-        };
-        let missing = CompactAdjacency {
-            edges: &edges,
-            order: &[],
-        };
-        // Exercise both the outer and inner endpoint lookup in each C core.
-        for (v, w) in [(missing, valid), (valid, missing)] {
-            assert!(std::panic::catch_unwind(|| in_cross(v, w)).is_err());
-            assert!(std::panic::catch_unwind(|| out_cross(v, w)).is_err());
-        }
-        // rcross/medians must not silently end their compact iterator either.
-        assert!(
-            std::panic::catch_unwind(|| { CrossingEdges::Compact(edges.iter(), &[]).next() })
-                .is_err()
-        );
+        assert!(std::panic::catch_unwind(|| compact_order(&[], 0)).is_err());
+        assert!(std::panic::catch_unwind(|| FlatAdjacency::new(&[], &[1], &[0.0])).is_err());
+        assert!(std::panic::catch_unwind(|| FlatAdjacency::new(&[0], &[], &[0.0])).is_err());
+        assert!(std::panic::catch_unwind(|| FlatAdjacency::new(&[0], &[1], &[])).is_err());
+        let data = FlatCrossings::default();
+        assert!(std::panic::catch_unwind(|| data.view(0, 1)).is_err());
     }
 
     fn sparse_window(input: &Graph) -> Dot<'_> {
@@ -2147,8 +2623,8 @@ mod tests {
         let input = Graph::new("G", GraphKind::Directed, false);
         let mut d = sparse_window(&input);
         let raw = (
-            d.pair_cross(d.mc_node(1_988), d.mc_node(2), false).0,
-            d.pair_cross(d.mc_node(17), d.mc_node(1_900), true).0,
+            d.pair_cross(d.mc_node(1_988), d.mc_node(2), false, false).0,
+            d.pair_cross(d.mc_node(17), d.mc_node(1_900), true, false).0,
             d.rcross(0, 0),
         );
         d.prepare_mincross(1);
@@ -2162,8 +2638,8 @@ mod tests {
         );
         assert_eq!(
             (
-                d.pair_cross(d.mc_node(1_988), d.mc_node(2), false).0,
-                d.pair_cross(d.mc_node(17), d.mc_node(1_900), true).0,
+                d.pair_cross(d.mc_node(1_988), d.mc_node(2), false, false).0,
+                d.pair_cross(d.mc_node(17), d.mc_node(1_900), true, false).0,
                 d.rcross(0, 0)
             ),
             raw
@@ -2173,10 +2649,10 @@ mod tests {
             d.crossing_edges(1_988, false),
             CrossingEdges::Arena(..)
         ));
-        d.exchange(d.mc_node(17), d.mc_node(1_900));
+        d.exchange::<false>(d.mc_node(17), d.mc_node(1_900), RankWindow::default());
         let compact = (
-            d.pair_cross(d.mc_node(1_988), d.mc_node(2), false).0,
-            d.pair_cross(d.mc_node(17), d.mc_node(1_900), true).0,
+            d.pair_cross(d.mc_node(1_988), d.mc_node(2), false, false).0,
+            d.pair_cross(d.mc_node(17), d.mc_node(1_900), true, false).0,
             d.rcross(0, 0),
         );
         d.mc_set_mval(d.mc_node(17), 12.5);
@@ -2184,8 +2660,8 @@ mod tests {
         d.mincross_store.graph = None;
         assert_eq!(
             (
-                d.pair_cross(d.mc_node(1_988), d.mc_node(2), false).0,
-                d.pair_cross(d.mc_node(17), d.mc_node(1_900), true).0,
+                d.pair_cross(d.mc_node(1_988), d.mc_node(2), false, false).0,
+                d.pair_cross(d.mc_node(17), d.mc_node(1_900), true, false).0,
                 d.rcross(0, 0)
             ),
             compact
@@ -2197,6 +2673,109 @@ mod tests {
         assert_eq!(d.mincross_store.nodes, [2, 4]);
         assert!(d.mincross_slot(17).is_none());
         assert_eq!(d.mc_order(d.mc_node(17)), d.nodes[17].order);
+    }
+
+    #[test]
+    fn crossing_snapshots_refresh_after_neighbour_exchanges_and_restore() {
+        let input = Graph::new("G", GraphKind::Directed, false);
+        let mut d = sparse_window(&input);
+        d.prepare_mincross(0);
+        d.save_best(0);
+        let rank = d.mincross_rank(0, 1);
+        assert!(d.positioned_rank(0, 1, rank).is_some());
+        assert_eq!(d.rk(0, 1).mincross_position, Some(true));
+        assert!(d.prepare_crossing_rank(0, 1, rank));
+        let v = d.mc_node(1_988);
+        let w = d.mc_node(2);
+        let initial = d.pair_cross(v, w, false, true);
+        assert_eq!(initial, d.pair_cross(v, w, false, false));
+        assert!(d.transpose_step::<false>(0, 0, false) > 0);
+        assert!(!d.rk(0, 1).mincross_snapshot);
+        assert_eq!(d.rk(0, 1).mincross_position, Some(true));
+        assert!(d.prepare_crossing_rank(0, 1, d.mincross_rank(0, 1)));
+        let changed = d.pair_cross(v, w, false, true);
+        assert_eq!(changed, d.pair_cross(v, w, false, false));
+        assert_ne!(changed, initial);
+        d.restore_best(0);
+        assert!(!d.rk(0, 1).mincross_snapshot);
+        assert_eq!(d.rk(0, 1).mincross_position, None);
+        assert!(d.prepare_crossing_rank(0, 1, d.mincross_rank(0, 1)));
+        assert_eq!(d.pair_cross(v, w, false, true), initial);
+    }
+
+    #[test]
+    fn skipped_ranks_refresh_each_scan_and_mixed_ranks_use_live_orders() {
+        let input = Graph::new("G", GraphKind::Directed, false);
+        let mut d = sparse_window(&input);
+        d.nodes[1_988].rank = 3;
+        d.prepare_mincross(0);
+        let rank = d.mincross_rank(0, 0);
+        assert!(d.prepare_crossing_rank(0, 0, rank));
+        assert!(!d.rk(0, 0).mincross_snapshot);
+        let v = d.mc_node(17);
+        let w = d.mc_node(1_900);
+        d.mc_set_order(d.mc_node(1_988), 2);
+        assert!(d.prepare_crossing_rank(0, 0, rank));
+        assert_eq!(
+            d.pair_cross(v, w, true, true),
+            d.pair_cross(v, w, true, false)
+        );
+        d.mincross_store.graph = None;
+        d.nodes[1_988].rank = 0;
+        d.prepare_mincross(0);
+        assert!(!d.prepare_crossing_rank(0, 0, rank));
+        d.mincross_store.graph = None;
+        d.nodes[1_988].rank = 1;
+        d.nodes[17].rank = 1;
+        d.prepare_mincross(0);
+        assert!(!d.prepare_crossing_rank(0, 0, rank));
+    }
+
+    #[test]
+    fn snapshot_positive_equal_counts_still_obey_reverse() {
+        let input = Graph::new("G", GraphKind::Directed, false);
+        let mut d = sparse_window(&input);
+        d.edges[3].tail = 1_900;
+        d.nodes[4].out.clear();
+        d.nodes[1_900].out.push(3);
+        d.rk_mut(0, 0).n = 2;
+        for edge in &mut d.edges {
+            edge.xpenalty = 1;
+            edge.tail_port.p.x = 0.0;
+            edge.head_port.p.x = 0.0;
+        }
+        d.prepare_mincross(0);
+        assert_eq!(d.transpose_step::<false>(0, 0, false), 0);
+        assert_eq!(d.nodes[17].order, 0);
+        assert_eq!(d.transpose_step::<false>(0, 0, true), 0);
+        assert_eq!((d.nodes[17].order, d.nodes[1_900].order), (1, 0));
+    }
+
+    #[test]
+    fn stale_same_rank_orders_publish_exchanges_outside_the_window() {
+        let input = Graph::new("G", GraphKind::Directed, false);
+        for transpose in [false, true] {
+            let mut d = sparse_window(&input);
+            d.nodes[17].order = 2;
+            d.nodes[4].order = 0;
+            d.rk_mut(1, 1).n = 2;
+            d.prepare_mincross(1);
+            let rank = d.mincross_rank(1, 0);
+            assert!(d.prepare_crossing_rank(1, 0, rank));
+            assert!(d.positioned_rank(1, 0, rank).is_none());
+            if transpose {
+                assert!(d.transpose_step::<false>(1, 0, false) > 0);
+            } else {
+                d.mc_set_mval(d.mc_node(17), 10.0);
+                d.mc_set_mval(d.mc_node(1_900), 0.0);
+                d.reorder::<false, false>(1, 0, false, false);
+            }
+            assert_eq!(d.rv(0, 0, 2), Some(1_900));
+            assert_eq!(d.nodes[1_900].order, 2);
+            for &n in &[17, 1_900, 4, 1_988, 2] {
+                assert_eq!(d.nodes[n].order, d.mc_order(d.mc_node(n)));
+            }
+        }
     }
 
     #[test]
@@ -2234,14 +2813,15 @@ mod tests {
                     d.nodes[v].order = order;
                 }
                 let raw = (
-                    d.pair_cross(d.mc_node(1_988), d.mc_node(2), false),
-                    d.pair_cross(d.mc_node(17), d.mc_node(1_900), true),
+                    d.pair_cross(d.mc_node(1_988), d.mc_node(2), false, false),
+                    d.pair_cross(d.mc_node(17), d.mc_node(1_900), true, false),
                 );
                 d.prepare_mincross(1);
+                assert!(d.prepare_crossing_rank(1, 0, d.mincross_rank(1, 0)));
                 assert_eq!(
                     (
-                        d.pair_cross(d.mc_node(1_988), d.mc_node(2), false),
-                        d.pair_cross(d.mc_node(17), d.mc_node(1_900), true),
+                        d.pair_cross(d.mc_node(1_988), d.mc_node(2), false, false),
+                        d.pair_cross(d.mc_node(17), d.mc_node(1_900), true, true),
                     ),
                     raw
                 );
