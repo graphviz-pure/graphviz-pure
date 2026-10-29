@@ -22,8 +22,9 @@ pub fn conjugate_gradient_mkernel(
     orthog1f(&mut b[..n]);
     right_mult_with_vector_ff(a, n, x, &mut ax);
     orthog1f(&mut ax);
-    for i in 0..n {
-        r[i] = b[i] - ax[i];
+    // One subtraction per lane, same operands as `b[i] - ax[i]`.
+    for ((ri, &bi), &axi) in r.iter_mut().zip(&b[..n]).zip(ax.iter()) {
+        *ri = bi - axi;
     }
     p.copy_from_slice(&r);
     let mut r_r = vectors_inner_productf(n, &r, &r);
@@ -49,8 +50,9 @@ pub fn conjugate_gradient_mkernel(
             let beta = r_r_new / r_r;
             r_r = r_r_new;
             let bf = beta as f32;
-            for j in 0..n {
-                p[j] = bf.mul_add(p[j], r[j]);
+            // `p[j] = fma(beta, p[j], r[j])`, one chain per lane.
+            for (pj, &rj) in p.iter_mut().zip(r.iter()) {
+                *pj = bf.mul_add(*pj, rj);
             }
         }
         i += 1;
