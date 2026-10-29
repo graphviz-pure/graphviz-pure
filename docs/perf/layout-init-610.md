@@ -6,6 +6,9 @@ reconstruct a polygon that will immediately be discarded, or clone the measured 
 The standalone `NodeShape::new` API remains available; record/epsf initialization keeps the
 same constructor path with explicit measured dimensions. Shape names are copied once.
 `AttrMap`, graph storage and the stable facade stay unchanged. This is independent of #623.
+Each stage was measured alone against master; the gains from #623, #624 and #627 do not add up exactly.
+
+The polygon path now allocates its vertex buffer once, like C’s `poly_init`, then transfers it; the discarded `new_with_size` reconstruction can no longer return `AllocFailure` on that path. Record/epsf and standalone construction retain their existing fallible paths.
 
 C provenance: `lib/common/utils.c:common_init_node`, `lib/common/shapes.c:poly_init`,
 `point_init`, `record_init`, `epsf_init`, and `lib/dotgen/dotinit.c:dot_init_node`.
