@@ -90,46 +90,49 @@ impl X {
             let end = i + 1;
             // All three arrays have one entry per component node. Split only once per
             // outer node; the quadratic pair walk below uses references, without indexing.
-            let [pd, qds @ ..] = &mut work.disp[i..] else {
-                unreachable!("one displacement per component position");
-            };
-            for (((&q, qd), qg), &n1) in work.pos[end..]
-                .iter()
-                .zip(qds)
-                .zip(&work.geom[end..])
-                .zip(comp.nodes.iter().skip(end))
+            for ((pd, qds), (_, qps)) in work.disp[i..]
+                .split_first_mut()
+                .into_iter()
+                .zip(work.pos[i..].split_first())
             {
-                let mut xdelta = q[0] - p[0];
-                let mut ydelta = q[1] - p[1];
-                let mut dist = math::hypot(xdelta, ydelta);
-                while !(dist > 0.0) {
-                    xdelta = f64::from(5 - crate::cutil::rand() % 10);
-                    ydelta = f64::from(5 - crate::cutil::rand() % 10);
-                    dist = math::hypot(xdelta, ydelta);
-                }
-                // Overlap uses the actual positions, even when the force delta was jittered.
-                let ov = overlap(p, q, pg.half, qg.half);
-                let mut force = if ov {
-                    x_ov / (dist * dist)
-                } else {
-                    x_nonov / (dist * dist)
-                };
-                if dist > st.d.mlimit {
-                    force = 0.0;
-                }
-                add_disp(qd, xdelta, ydelta, force);
-                add_disp(pd, -xdelta, -ydelta, force);
-                overlaps += i64::from(ov);
-                if super::trace(2) {
-                    graphviz_pure_core::diag::dump(&format!(
-                        "R {} {} {:?} {:?} {:?} {}",
-                        dg.nodes[n].name,
-                        dg.nodes[n1].name,
-                        xdelta,
-                        ydelta,
-                        force,
-                        i32::from(ov)
-                    ));
+                for (((&q, qd), qg), &n1) in qps
+                    .iter()
+                    .zip(qds)
+                    .zip(&work.geom[end..])
+                    .zip(comp.nodes.iter().skip(end))
+                {
+                    let mut xdelta = q[0] - p[0];
+                    let mut ydelta = q[1] - p[1];
+                    let mut dist = math::hypot(xdelta, ydelta);
+                    while !(dist > 0.0) {
+                        xdelta = f64::from(5 - crate::cutil::rand() % 10);
+                        ydelta = f64::from(5 - crate::cutil::rand() % 10);
+                        dist = math::hypot(xdelta, ydelta);
+                    }
+                    // Overlap uses the actual positions, even when the force delta was jittered.
+                    let ov = overlap(p, q, pg.half, qg.half);
+                    let mut force = if ov {
+                        x_ov / (dist * dist)
+                    } else {
+                        x_nonov / (dist * dist)
+                    };
+                    if dist > st.d.mlimit {
+                        force = 0.0;
+                    }
+                    add_disp(qd, xdelta, ydelta, force);
+                    add_disp(pd, -xdelta, -ydelta, force);
+                    overlaps += i64::from(ov);
+                    if super::trace(2) {
+                        graphviz_pure_core::diag::dump(&format!(
+                            "R {} {} {:?} {:?} {:?} {}",
+                            dg.nodes[n].name,
+                            dg.nodes[n1].name,
+                            xdelta,
+                            ydelta,
+                            force,
+                            i32::from(ov)
+                        ));
+                    }
                 }
             }
             // CSR heads retain dg.outs(comp, n)'s order. Attraction remains interleaved
@@ -223,7 +226,9 @@ impl Work {
             });
             let start = work.heads.len();
             for e in dg.outs(comp, n) {
-                // outs filters to members; Comp keeps its node indices sorted.
+                // Comp::new builds member from its sorted nodes; Comp::remove clears both.
+                // outs filters every head through that same member set, and neither
+                // structure changes during x_layout. Thus binary_search must succeed.
                 let h = match comp.nodes.binary_search(&dg.edges[e].h) {
                     Ok(h) => h,
                     Err(_) => unreachable!("component outgoing head is a member"),

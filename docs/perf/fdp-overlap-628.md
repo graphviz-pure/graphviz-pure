@@ -27,10 +27,13 @@ the same. The output-float argument is:
 | position | same `disp[0].mul_add(disp[0], disp[1] * disp[1])`, temperature comparison, square root and component-wise additions/scaling |
 | cooling/tries | original parameter arithmetic, `k` increment and loop/early-return sequence |
 
-No retained float is reassociated, split or fused differently. The two `unreachable!` sites
-state private construction invariants: each position has a displacement, and `dg.outs` only
-returns heads that belong to the sorted component. They cannot fire for a valid `Comp`/`Work`;
-invalid internal state fails explicitly instead of silently skipping a force.
+No retained float is reassociated, split or fused differently. Matching position/displacement
+suffixes are traversed with zipped `split_first`/`split_first_mut` iterators. The remaining
+`unreachable!` states a component-construction invariant: `Comp::new` builds membership from
+its sorted nodes, `Comp::remove` updates both, and `dg.outs` filters through the same unchanged
+membership set, so every outgoing head must be found. `tests/panic-sites.tsv` has no
+`unreachable!` column and does not count this site; its validity is justified independently
+of that gate.
 
 ## Performance
 
