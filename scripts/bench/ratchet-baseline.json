@@ -29,7 +29,7 @@
    "instructions": 162347309
   },
   "synth/dot_dag_1000.gv -Tsvg": {
-   "heap_blocks": 418625,
+   "heap_blocks": 415622,
    "heap_bytes": 78051866,
    "heap_peak_bytes": 13947910,
    "instructions": 1593933658
@@ -53,13 +53,13 @@
    "instructions": 5226698670
   },
   "tests/fixtures/unix.gv -Tpng": {
-   "heap_blocks": 26276,
+   "heap_blocks": 25987,
    "heap_bytes": 14148184,
    "heap_peak_bytes": 7460222,
    "instructions": 147695639
   },
   "tests/fixtures/unix.gv -Tsvg": {
-   "heap_blocks": 14253,
+   "heap_blocks": 13964,
    "heap_bytes": 2123315,
    "heap_peak_bytes": 569038,
    "instructions": 28272066
@@ -95,13 +95,13 @@
    "instructions": 4304036181
   },
   "tests/wild/gv16_graphs_b143_5416de.gv -Tplain": {
-   "heap_blocks": 245032,
+   "heap_blocks": 244115,
    "heap_bytes": 46698077,
    "heap_peak_bytes": 8293645,
    "instructions": 2040102444
   },
   "tests/wild/gv16_graphs_b143_5416de.gv -Tsvg": {
-   "heap_blocks": 250586,
+   "heap_blocks": 249669,
    "heap_bytes": 47523318,
    "heap_peak_bytes": 8293641,
    "instructions": 2022832090

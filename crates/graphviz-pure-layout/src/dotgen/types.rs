@@ -219,6 +219,8 @@ pub struct NodeInfo {
     pub rank: i32,
     pub order: i32,
     pub mval: f64,
+    /// Slot in the current mincross view; validated against its node identity before use.
+    pub(super) mincross_index: u32,
     pub save_in: Option<Vec<E>>,
     pub save_out: Option<Vec<E>>,
     pub tree_in: Vec<E>,
