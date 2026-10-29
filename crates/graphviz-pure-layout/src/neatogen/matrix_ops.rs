@@ -51,15 +51,9 @@ pub fn orthog1f(vec: &mut [f32]) {
 /// is `fma(A[j, k], vector[k], …)` from the diagonal through column `n - 1`,
 /// starting from `+0`.
 pub fn right_mult_with_vector_ff(packed: &[f32], n: usize, vector: &[f32], result: &mut [f32]) {
-    // Feature off: this function is the sequential kernel, unchanged.
-    // Feature on, and only for a large n with more than one thread: each
-    // worker owns a column range. Every `result[j]` still receives row i
-    // before row i+1, then one plain add of row j's left-to-right dot.
-    #[cfg(all(feature = "parallel", not(target_family = "wasm")))]
-    if super::matvec_parallel::use_parallel(n) {
-        super::matvec_parallel::right_mult_ff(packed, n, vector, result);
-        return;
-    }
+    // One-shot callers stay here. The parallel gather needs a lower-triangle
+    // copy built once per solve; conjugate gradient and stress majorization
+    // own that copy and call `matvec_parallel` directly.
     let mut vector = &vector[..n];
     let mut result = &mut result[..n];
     result.fill(0.0);
@@ -636,8 +630,8 @@ mod tests {
     #[test]
     fn parallel_right_mult_matches_scalar_chain_for_every_thread_count() {
         // Odd widths, and widths that are not a multiple of the thread count
-        // or of the 4-row block. `threads == 1` still runs the column-range
-        // kernel, not the sequential one.
+        // or of the 4-wide gather. `threads == 1` still runs the gather, not
+        // the sequential kernel.
         let widths = [0, 1, 2, 3, 5, 7, 8, 9, 17, 37, 63, 64, 65, 127, 128];
         let threads = [1usize, 2, 3, 8];
         for &n in &widths {

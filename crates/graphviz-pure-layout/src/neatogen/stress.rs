@@ -376,6 +376,15 @@ pub fn stress_majorization_kd_mkernel(
             step -= 1;
         }
     }
+    // `lap2` is not written again. The outer loop rebuilds `lap1` from the
+    // current coordinates; `sqrt_vecf` reads `lap2`. One lower triangle serves
+    // every `lap2` mat-vec in this solve, including the ones inside CG.
+    #[cfg(all(feature = "parallel", not(target_family = "wasm")))]
+    let lap2_lower = if super::matvec_parallel::use_parallel(n) {
+        Some(super::matvec_parallel::pack_lower(&lap2, n))
+    } else {
+        None
+    };
 
     let mut b: Vec<Vec<f32>> = vec![vec![0.0f32; n]; dim];
     let mut tmp_coords = vec![0.0f32; n];
@@ -454,6 +463,18 @@ pub fn stress_majorization_kd_mkernel(
         new_stress *= 2.0;
         new_stress += f64::from(constant_term);
         for k in 0..dim {
+            #[cfg(all(feature = "parallel", not(target_family = "wasm")))]
+            if let Some(lower) = lap2_lower.as_deref() {
+                super::matvec_parallel::right_mult_prepared(
+                    &lap2,
+                    lower,
+                    n,
+                    &coords[k],
+                    &mut tmp_coords,
+                );
+                new_stress -= vectors_inner_productf(n, &coords[k], &tmp_coords);
+                continue;
+            }
             right_mult_with_vector_ff(&lap2, n, &coords[k], &mut tmp_coords);
             new_stress -= vectors_inner_productf(n, &coords[k], &tmp_coords);
         }
@@ -466,6 +487,28 @@ pub fn stress_majorization_kd_mkernel(
         for k in 0..dim {
             if have_pinned {
                 tmp_coords.copy_from_slice(&coords[k]);
+                #[cfg(all(feature = "parallel", not(target_family = "wasm")))]
+                if let Some(lower) = lap2_lower.as_deref() {
+                    super::conjgrad::conjugate_gradient_mkernel_prepared(
+                        &lap2,
+                        lower,
+                        &mut tmp_coords,
+                        &mut b[k],
+                        n,
+                        TOLERANCE_CG,
+                        n,
+                    )?;
+                } else {
+                    conjugate_gradient_mkernel(
+                        &lap2,
+                        &mut tmp_coords,
+                        &mut b[k],
+                        n,
+                        TOLERANCE_CG,
+                        n,
+                    )?;
+                }
+                #[cfg(not(all(feature = "parallel", not(target_family = "wasm"))))]
                 conjugate_gradient_mkernel(&lap2, &mut tmp_coords, &mut b[k], n, TOLERANCE_CG, n)?;
                 for i in 0..n {
                     if !is_fixed(g, nodes[i]) {
@@ -474,6 +517,21 @@ pub fn stress_majorization_kd_mkernel(
                 }
             } else {
                 let (ck, bk) = (&mut coords[k], &mut b[k]);
+                #[cfg(all(feature = "parallel", not(target_family = "wasm")))]
+                if let Some(lower) = lap2_lower.as_deref() {
+                    super::conjgrad::conjugate_gradient_mkernel_prepared(
+                        &lap2,
+                        lower,
+                        ck,
+                        bk,
+                        n,
+                        TOLERANCE_CG,
+                        n,
+                    )?;
+                } else {
+                    conjugate_gradient_mkernel(&lap2, ck, bk, n, TOLERANCE_CG, n)?;
+                }
+                #[cfg(not(all(feature = "parallel", not(target_family = "wasm"))))]
                 conjugate_gradient_mkernel(&lap2, ck, bk, n, TOLERANCE_CG, n)?;
             }
         }
