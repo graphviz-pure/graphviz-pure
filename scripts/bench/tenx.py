@@ -27,17 +27,25 @@ ENGINES = ("dot", "neato", "fdp", "sfdp", "circo", "twopi", "osage", "patchwork"
 
 
 def engine_of(inp):
-    """Engine of a set input: tests/<engine>/..., synth/<engine>_N.gv, else dot (wild, fixtures)."""
+    """Engine of a set input: tests/<engine>/..., synth/<engine>_N.gv, tests/wild and tests/fixtures are dot."""
     parts = pathlib.PurePosixPath(inp).parts
     if parts[0] == "synth":
-        return parts[-1].split("_")[0]
-    if len(parts) > 1 and parts[1] in ENGINES:
-        return parts[1]
-    return "dot"
+        engine = parts[-1].split("_")[0]
+    elif len(parts) > 2 and parts[0] == "tests" and parts[1] in ("wild", "fixtures"):
+        engine = "dot"
+    elif len(parts) > 2 and parts[0] == "tests":
+        engine = parts[1]
+    else:
+        engine = None
+    if engine not in ENGINES:
+        raise SystemExit(f"tenx.py: cannot tell the engine of {inp}; extend engine_of")
+    return engine
 
 
 def gmean(xs):
-    xs = [x for x in xs if x and x > 0]
+    if any(x is None for x in xs):
+        return None
+    xs = [x for x in xs if x > 0]
     return math.exp(sum(math.log(x) for x in xs) / len(xs)) if xs else None
 
 
@@ -59,16 +67,24 @@ def main():
     ap.add_argument("--floor", type=float, default=0.05, help="start-up floor in seconds")
     ap.add_argument("--cases", action="store_true", help="also print every case")
     args = ap.parse_args()
+    if args.parallel and not args.new:
+        ap.error("--parallel needs NEW")
 
     base, new, par = load(args.base), load(args.new), load(args.parallel)
     rows = []  # (group keys, base result, new result or None, parallel result or None)
+    failed = []  # cases a later run lost or failed: never silently dropped from the headline
     for key, b in base.items():
         if b["port"].get("exit") != 0:
+            failed.append(f"{key[0]} -T{key[1]}: failed in BASE")
             continue
         n = new.get(key) if new else None
         p = par.get(key) if par else None
         if new and (not n or n["port"].get("exit") != 0):
+            failed.append(f"{key[0]} -T{key[1]}: {'missing' if not n else 'failed'} in NEW")
             continue
+        if par and (not p or p["port"].get("exit") != 0):
+            failed.append(f"{key[0]} -T{key[1]}: {'missing' if not p else 'failed'} in --parallel")
+            p = None
         rows.append((key, b, n, p))
 
     def stats(sel):
@@ -86,6 +102,8 @@ def main():
                     xc.append(ct / nt)
                 if p:
                     spc.append(bt / p["port"]["wall_median"])
+                elif par:
+                    spc.append(None)  # a failed parallel case voids the column for its group
         return len(sel), gmean(sp), gmean(spc), gmean(xc), gmean(rss), gmean(base_xc), (min(sp) if sp else None)
 
     head = [r for r in rows if r[1]["port"]["wall_median"] >= args.floor]
@@ -96,49 +114,66 @@ def main():
     groups += [(f"-T{f}", [r for r in head if r[0][1] == f]) for f in fmts]
     groups += [(f"start-up (<{args.floor*1000:.0f} ms at 1.0)", small)]
 
+    def rss_xc(sel):
+        return gmean([b["port"]["rss_kib_max"] / b["c"]["rss_kib_max"]
+                      for (_, b, _, _) in sel if (b.get("c") or {}).get("exit") == 0])
+
     if new:
-        print("| group | cases | ×1.0 | min ×1.0 | ×1.0 parallel | ×C now | ×C at 1.0 | RSS /1.0 |")
+        print("| group | cases | ×1.0 | worst case ×1.0 | ×1.0 parallel | ×C now | ×C at 1.0 | RSS /1.0 |")
         print("| :-- | --: | --: | --: | --: | --: | --: | --: |")
     else:
-        print("| group | cases | ×C at 1.0 |")
-        print("| :-- | --: | --: |")
+        print("| group | cases | ×C at 1.0 | RSS ÷C at 1.0 |")
+        print("| :-- | --: | --: | --: |")
+    per_engine = {}
     for name, sel in groups:
         if not sel:
             continue
         cnt, sp, spc, xc, rss, bxc, mn = stats(sel)
+        if name in ENGINES:
+            per_engine[name] = sp
         if new:
             print(f"| {name} | {cnt} | {fmt(sp)} | {fmt(mn)} | {fmt(spc)} | {fmt(xc)} | {fmt(bxc)} | {fmt(rss)} |")
         else:
-            print(f"| {name} | {cnt} | {fmt(bxc)} |")
+            print(f"| {name} | {cnt} | {fmt(bxc)} | {fmt(rss_xc(sel))} |")
+    if new and per_engine:
+        low = min(per_engine, key=lambda e: per_engine[e])
+        print(f"\nLowest engine: {low} at {fmt(per_engine[low])}× (the goal's floor is 3×).")
+
+    def ms(x):
+        return "" if x is None else f"{x * 1000:,.1f}"
 
     if args.cases:
         print()
+        order = sorted(rows, key=lambda r: (ENGINES.index(engine_of(r[0][0])), r[0]))
         if not new:
             print("| input | -T | 1.0 ms | C ms | ×C | RSS MiB | C RSS MiB |")
             print("| :-- | :-- | --: | --: | --: | --: | --: |")
-            for (inp, f), b, _, _ in sorted(rows, key=lambda r: (ENGINES.index(engine_of(r[0][0])), r[0])):
+            for (inp, f), b, _, _ in order:
                 c = b.get("c") or {}
                 ok = c.get("exit") == 0
                 ct = c["wall_median"] if ok else None
                 crss = c["rss_kib_max"] / 1024 if ok else None
-                print(f"| {inp} | {f} | {b['port']['wall_median']*1000:,.1f} | {fmt(ct*1000 if ct else None, 1)} | "
-                      f"{fmt(ct/b['port']['wall_median'] if ct else None)} | {b['port']['rss_kib_max']/1024:.1f} | "
+                print(f"| {inp} | {f} | {ms(b['port']['wall_median'])} | {ms(ct)} | "
+                      f"{fmt(ct / b['port']['wall_median'] if ct else None)} | {b['port']['rss_kib_max'] / 1024:.1f} | "
                       f"{fmt(crss, 1)} |")
-            return 0
-        print("| input | -T | 1.0 ms | new ms | ×1.0 | C ms | ×C | RSS MiB 1.0 → new |")
-        print("| :-- | :-- | --: | --: | --: | --: | --: | :-- |")
-        for (inp, f), b, n, _ in sorted(rows, key=lambda r: (ENGINES.index(engine_of(r[0][0])), r[0])):
-            bt = b["port"]["wall_median"]
-            c = b.get("c") or {}
-            ct = c.get("wall_median") if c.get("exit") == 0 else None
-            nt = n["port"]["wall_median"] if n else None
-            ref = nt or bt
-            rss = f"{b['port']['rss_kib_max']/1024:.1f}"
-            if n:
-                rss += f" → {n['port']['rss_kib_max']/1024:.1f}"
-            print(f"| {inp} | {f} | {bt*1000:,.1f} | {fmt(nt*1000 if nt else None, 1)} | "
-                  f"{fmt(bt/nt if nt else None)} | {fmt(ct*1000 if ct else None, 1)} | "
-                  f"{fmt(ct/ref if ct else None)} | {rss} |")
+        else:
+            print("| input | -T | 1.0 ms | new ms | ×1.0 | parallel ms | C ms | ×C | RSS MiB 1.0 → new |")
+            print("| :-- | :-- | --: | --: | --: | --: | --: | --: | :-- |")
+            for (inp, f), b, n, p in order:
+                bt = b["port"]["wall_median"]
+                c = b.get("c") or {}
+                ct = c.get("wall_median") if c.get("exit") == 0 else None
+                nt = n["port"]["wall_median"]
+                pt = p["port"]["wall_median"] if p else None
+                rss = f"{b['port']['rss_kib_max'] / 1024:.1f} → {n['port']['rss_kib_max'] / 1024:.1f}"
+                print(f"| {inp} | {f} | {ms(bt)} | {ms(nt)} | {fmt(bt / nt)} | {ms(pt)} | {ms(ct)} | "
+                      f"{fmt(ct / nt if ct else None)} | {rss} |")
+
+    if failed:
+        print(f"\n{len(failed)} case(s) failed or missing; they count against the goal:", file=sys.stderr)
+        for line in failed:
+            print(f"  {line}", file=sys.stderr)
+        return 1
     return 0
 
 
