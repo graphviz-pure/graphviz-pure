@@ -162,8 +162,9 @@ writes `hypot(a, b)`. The rewrite was mechanical, done with a `syn`-based rewrit
     code compiler-builtins uses for wasm32. Linux gets the same bits as wasm (glibc's
     `pow`/`exp` pick FMA or non-FMA paths by CPU), and `Cargo.lock` pins the results rather
     than the toolchain.
-- `crates/graphviz-pure-core/src/math/tests.rs` (macOS only) checks the portable `hypot` against the
-  system libm on 1,000,000 random and edge inputs.
+- `crates/graphviz-pure-core/src/math/tests.rs` checks `portable::fma` against hardware FMA and
+  `libm::fma` on every target, and on macOS arm64 checks the portable `hypot` against the system
+  libm on 1,000,000 random and edge inputs.
 
 ## Results
 
@@ -278,7 +279,7 @@ corpus output through the whole pipeline, matching C or not:
 | wasm32 (node, `scripts/wasm-e2e.mjs --hashes`) | n/a | n/a | all 2538 hashes identical |
 
 So Linux and wasm compute the same bits as macOS with `portable-math`: no platform dependence
-was found (the math goes through `graphviz_pure_core::math`, `sqrt`/`mul_add` are exact everywhere, and
+was found (the math goes through `graphviz_pure_core::math`, `sqrt`/`math::fma` are exact everywhere, and
 the `libm` crate has no CPU-dependent paths on these targets). Two harness issues were fixed:
 
 - `scripts/wasm-e2e.mjs` read inputs as JS strings, which replaced the non-UTF-8 bytes of the
@@ -430,10 +431,14 @@ every `fmadd` is used, and on x86-64 Linux, whose baseline instruction set has n
 
 **The reference is Homebrew's Graphviz 16.1.0 on macOS arm64**, the build the corpus goldens
 come from (`scripts/gen-golden.sh`). The port computes what that build computes, on every
-target: where it fuses, the port calls `f64::mul_add` explicitly; where it does not, the port
-does not. `mul_add` is correctly rounded on every target (hardware FMA, or a software `fma` on
-x86-64 without FMA and on wasm32), so the port's bits do not depend on the platform. Rust never
-contracts on its own.
+target: where it fuses, the port calls `math::fma` explicitly (`f32::mul_add` for `f32`); where
+it does not, the port does not. `math::fma` is correctly rounded on every target: on `wasm32`
+and on `x86_64` musl without `target_feature = "fma"` (where `f64::mul_add` calls an
+out-of-line integer `fma`) it inlines `math::portable::fma` (Boldo–Melquiond emulated FMA in
+the common exponent window, with a zero-factor shortcut and `libm::fma` outside it; see
+`docs/perf/wasm-fma.md`), and everywhere else it calls `f64::mul_add` (hardware FMA, or glibc's
+IFUNC-dispatched `fma`). So the port's bits do not depend on the platform. Rust never contracts
+on its own, and clippy's `disallowed-methods` rejects direct `f64::mul_add` calls outside `math`.
 
 How a site is decided: within one C expression, clang fuses a product that is an operand of an
 addition or subtraction, preferring the left operand. So `a*b + c*d` is `fma(a, b, c*d)`,
@@ -467,8 +472,9 @@ The `Verbose` output was ported later (#416). Its fused lines are `computeStep`'
 line 0); the port fuses them as C does. patchwork's `-v` rectangles (`patchwork.c:181-182`) are
 fused too, by products with 0.5, which are exact either way.
 
-Every `mul_add` in the port is at a site C fuses, except three `(-1.0).mul_add(x, c)` in
-neato's `cola.rs`, `digcola.rs` and `stress.rs`, where C subtracts; they are exact.
+Every `math::fma` / `f32::mul_add` in the port is at a site C fuses, except three
+`math::fma(-1.0, x, c)` in neato's `cola.rs`, `digcola.rs` and `stress.rs`, where C subtracts;
+they are exact.
 
 `__sincos_stret` is clang merging a `sin(a)` and a `cos(a)` into one call. It needs nothing in
 the port: `graphviz-pure-portable-libm` interposes it with the portable `sin` and `cos`, so C
@@ -502,11 +508,12 @@ Everything under `crates/graphviz-pure-core/src/math/`:
 |---|---|---|---|
 | `mod.rs` | the `math::*` entry points | written for this port | project licence |
 | `portable/mod.rs` | re-exports of the `libm` crate | written for this port | project licence |
+| `portable/fma.rs` | correctly rounded emulated `fma` (Boldo–Melquiond fast path + `libm::fma` fallback) | written for this port from the published algorithm (IEEE TC 57(4):462–471, 2008) | project licence |
 | `portable/pow/` | correctly rounded `pow` | Rust port of CORE-MATH `src/binary64/pow/` (Tom Hubrecht, Paul Zimmermann; Copyright (c) 2022-2025 CERN and Inria), tables converted mechanically; licence text kept in `pow/mod.rs` | MIT |
 | `portable/hypot.rs` | Apple-equivalent `hypot` | an original formula identified by black-box comparison with the system libm; no code copied | project licence |
 | `trace.rs` | `math-trace` argument logging | written for this port | project licence |
-| `tests.rs`, `portable/pow/tests.rs` | portable `hypot` vs system libm; `pow` regression values from the C | written for this port | project licence |
-| `libm` crate 0.2.16 (dependency) | `atan2`, `sin`, `cos`, `tan`, `asin`, `acos`, `exp`, `log`, `log2`, `cbrt` | rust-lang/compiler-builtins: musl/fdlibm ports; `cbrt` is CORE-MATH's (Alexei Sibidanov) | MIT |
+| `tests.rs`, `portable/pow/tests.rs` | portable `fma` vs hardware/`libm::fma`; portable `hypot` vs system libm; `pow` regression values from the C | written for this port | project licence |
+| `libm` crate 0.2.16 (dependency) | `atan2`, `sin`, `cos`, `tan`, `asin`, `acos`, `exp`, `log`, `log2`, `cbrt`, fallback `fma` | rust-lang/compiler-builtins: musl/fdlibm ports; `cbrt` is CORE-MATH's (Alexei Sibidanov) | MIT |
 
 No Apple source is shipped. An earlier version ported Apple Libm's `Source/ARM/cbrt.c`, which
 has no licence header and comes from an APSL release; it was replaced by the `libm` crate's
