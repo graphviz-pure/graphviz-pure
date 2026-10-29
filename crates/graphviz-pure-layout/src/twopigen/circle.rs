@@ -28,12 +28,16 @@ pub struct RNode {
 /// `ND_alg` for every node of the root graph (`gv_calloc`'d once).
 pub struct RData {
     pub d: Vec<RNode>,
+    /// C: lib/twopigen/circle.c:setNStepsToLeaf
+    /// Root-indexed scratch allocated lazily once, then reused by components.
+    leaf_offsets: Vec<std::ops::Range<usize>>,
 }
 
 impl RData {
     pub fn new(n: usize) -> Self {
         Self {
             d: vec![RNode::default(); n],
+            leaf_offsets: Vec::new(),
         }
     }
 }
@@ -132,11 +136,11 @@ fn init_layout(g: &LGraph<'_>, sg: &Sub, r: &mut RData) {
     }
 }
 
-/// `findCenterNode(g)`.
-fn find_center_node(g: &LGraph<'_>, sg: &Sub, r: &mut RData) -> Option<usize> {
+/// C: lib/twopigen/circle.c:setNStepsToLeaf
+/// Snapshot the immutable component in cgraph's edge order.
+fn leaf_adjacency(g: &LGraph<'_>, sg: &Sub, offsets: &mut [std::ops::Range<usize>]) -> Vec<usize> {
     // Preserve all_edges' out-then-in order, filtering membership just once.
     let mut adjacency = Vec::new();
-    let mut offsets = vec![0..0; r.d.len()];
     for &n in &sg.nodes {
         let start = adjacency.len();
         adjacency.extend(g.all_edges(sg, n).map(|e| other(g, e, n)));
@@ -144,12 +148,23 @@ fn find_center_node(g: &LGraph<'_>, sg: &Sub, r: &mut RData) -> Option<usize> {
             *offset = start..adjacency.len();
         }
     }
+    adjacency
+}
+
+/// `findCenterNode(g)`.
+fn find_center_node(g: &LGraph<'_>, sg: &Sub, r: &mut RData) -> Option<usize> {
+    // Keep the root-indexed buffer across components. resize is a no-op after
+    // the first component; only entries belonging to this component are written.
+    let mut offsets = std::mem::take(&mut r.leaf_offsets);
+    offsets.resize(r.d.len(), 0..0);
+    let adjacency = leaf_adjacency(g, sg, &mut offsets);
     let mut stack = Vec::with_capacity(sg.nodes.len());
     for &n in &sg.nodes {
         if r.d[n].n_steps_to_leaf == 0 {
             set_n_steps_to_leaf(r, n, &adjacency, &offsets, &mut stack);
         }
     }
+    r.leaf_offsets = offsets;
     let mut center = None;
     let mut max_n_steps_to_leaf = 0;
     for &n in &sg.nodes {
@@ -372,52 +387,102 @@ pub fn circle_layout(
 mod leaf_tests {
     use super::*;
 
-    fn reference(
-        r: &mut RData,
-        n: usize,
-        prev: Option<usize>,
-        adjacency: &[usize],
-        offsets: &[std::ops::Range<usize>],
-    ) {
+    fn reference(g: &LGraph<'_>, sg: &Sub, r: &mut RData, n: usize, prev: Option<usize>) {
         let nsteps = r.d[n].n_steps_to_leaf + 1;
-        for &next in &adjacency[offsets[n].clone()] {
+        let edges: Vec<_> = g.all_edges(sg, n).collect();
+        for ep in edges {
+            let next = other(g, ep, n);
             if prev != Some(next) && nsteps < r.d[next].n_steps_to_leaf {
                 r.d[next].n_steps_to_leaf = nsteps;
-                reference(r, next, Some(n), adjacency, offsets);
+                reference(g, sg, r, next, Some(n));
             }
         }
     }
 
     #[test]
     fn iterative_relaxation_matches_recursive_calls() {
-        // Includes a cycle, parallel edges, a self-loop and two leaves.
-        let adjacency = [1, 0, 2, 2, 3, 1, 1, 3, 2, 1, 3, 4, 3];
-        let offsets = [0..1, 1..5, 5..8, 8..12, 12..13];
-        let mut actual = RData::new(5);
-        for n in &mut actual.d {
-            n.n_steps_to_leaf = 25;
+        use crate::common::types::EdgeType;
+        use graphviz_pure_core::{AttrMap, Graph, GraphKind};
+        let mut source = Graph::new("G", GraphKind::Directed, false);
+        let nodes: Vec<_> = (0..7)
+            .map(|i| source.ensure_node(&format!("n{i}")))
+            .collect();
+        // Cycles, parallel edges, loops, mixed directions and edges outside sg.
+        for (t, h) in [
+            (0, 1),
+            (1, 2),
+            (1, 2),
+            (1, 3),
+            (2, 3),
+            (3, 3),
+            (3, 4),
+            (0, 0),
+            (0, 5),
+            (6, 4),
+        ] {
+            source.add_edge(nodes[t], nodes[h], AttrMap::new());
         }
-        actual.d[0].n_steps_to_leaf = 0;
-        actual.d[4].n_steps_to_leaf = 0;
-        let mut expected = RData {
-            d: actual.d.clone(),
-        };
+        let g = LGraph::new(&source, 2, EdgeType::Line).expect("layout graph");
+        let sg = Sub::new(7, vec![0, 1, 2, 3, 4]);
+        let mut actual = RData::new(7);
+        init_layout(&g, &sg, &mut actual);
+        let mut expected = RData::new(7);
+        expected.d.clone_from(&actual.d);
+        let mut offsets = vec![0..0; 7];
+        let adjacency = leaf_adjacency(&g, &sg, &mut offsets);
+        // Check the production cache independently: ordering/filtering changes
+        // must fail even when the final shortest-path distances would agree.
+        for &n in &sg.nodes {
+            let old_neighbors: Vec<_> = g.all_edges(&sg, n).map(|ep| other(&g, ep, n)).collect();
+            assert_eq!(&adjacency[offsets[n].clone()], old_neighbors);
+        }
         let mut stack = Vec::new();
-        for leaf in [0, 4] {
-            reference(&mut expected, leaf, None, &adjacency, &offsets);
-            set_n_steps_to_leaf(&mut actual, leaf, &adjacency, &offsets, &mut stack);
-            assert_eq!(
-                actual
-                    .d
-                    .iter()
-                    .map(|n| n.n_steps_to_leaf)
-                    .collect::<Vec<_>>(),
-                expected
-                    .d
-                    .iter()
-                    .map(|n| n.n_steps_to_leaf)
-                    .collect::<Vec<_>>()
-            );
+        for &leaf in &sg.nodes {
+            if actual.d[leaf].n_steps_to_leaf == 0 {
+                reference(&g, &sg, &mut expected, leaf, None);
+                set_n_steps_to_leaf(&mut actual, leaf, &adjacency, &offsets, &mut stack);
+                assert_eq!(
+                    actual
+                        .d
+                        .iter()
+                        .map(|n| n.n_steps_to_leaf)
+                        .collect::<Vec<_>>(),
+                    expected
+                        .d
+                        .iter()
+                        .map(|n| n.n_steps_to_leaf)
+                        .collect::<Vec<_>>()
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn many_components_reuse_the_same_offset_allocation() {
+        use crate::common::types::EdgeType;
+        use graphviz_pure_core::{AttrMap, Graph, GraphKind};
+        let count = 200;
+        let mut source = Graph::new("pairs", GraphKind::Directed, false);
+        let nodes: Vec<_> = (0..count)
+            .map(|i| source.ensure_node(&format!("n{i}")))
+            .collect();
+        for &[tail, head] in nodes.as_chunks::<2>().0 {
+            source.add_edge(tail, head, AttrMap::new());
+        }
+        let g = LGraph::new(&source, 2, EdgeType::Line).expect("layout graph");
+        let mut r = RData::new(count);
+        let mut allocation = None;
+        for n in (0..count).step_by(2) {
+            let sg = Sub::new(count, vec![n, n + 1]);
+            init_layout(&g, &sg, &mut r);
+            assert_eq!(find_center_node(&g, &sg, &mut r), Some(n));
+            let current = (r.leaf_offsets.as_ptr(), r.leaf_offsets.capacity());
+            if let Some(previous) = allocation {
+                assert_eq!(current, previous);
+            } else {
+                allocation = Some(current);
+            }
+            assert_eq!(r.leaf_offsets.len(), count);
         }
     }
 
