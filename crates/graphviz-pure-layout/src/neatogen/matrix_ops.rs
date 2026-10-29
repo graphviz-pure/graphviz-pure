@@ -203,12 +203,15 @@ fn right_mult_ff_row<'p, 'r>(
 
 /// First element. Callers pass a non-empty slice (`split_at` already checked).
 fn lane_f32(values: &[f32]) -> f32 {
+    // Unreachable: every caller splits a diagonal or vector head of length >= 1.
     debug_assert!(!values.is_empty());
     values.first().copied().unwrap_or(0.0)
 }
 
 /// `slot[0] = fma(factor, scale, slot[0])`.
 fn fma_slot(slot: &mut [f32], factor: f32, scale: f32) {
+    // Unreachable: the slot is one element of a head `split_at_mut` just checked.
+    debug_assert!(!slot.is_empty());
     if let Some(slot) = slot.first_mut() {
         *slot = factor.mul_add(scale, *slot);
     }
@@ -216,6 +219,8 @@ fn fma_slot(slot: &mut [f32], factor: f32, scale: f32) {
 
 /// `slot[0] += term`, a plain add, not an FMA.
 fn add_slot(slot: &mut [f32], term: f32) {
+    // Unreachable: the slot is one element of a head `split_at_mut` just checked.
+    debug_assert!(!slot.is_empty());
     if let Some(slot) = slot.first_mut() {
         *slot += term;
     }
@@ -444,9 +449,34 @@ mod tests {
     fn next_f32(state: &mut u32) -> f32 {
         let bits = next_u32(state);
         let sign = bits & 0x8000_0000;
-        let exp = 117 + ((bits >> 23) & 23);
         let frac = bits & 0x007f_ffff;
+        // `% 24` visits every residue. `& 23` is a mask and kept only 16
+        // exponents, all normal. Three windows: zero and subnormals, the
+        // old modest band, and magnitudes whose products overflow.
+        let exp = match (bits >> 28) % 3 {
+            0 => (bits >> 23) % 24,
+            1 => 117 + ((bits >> 23) % 24),
+            _ => 231 + ((bits >> 23) % 24),
+        };
         f32::from_bits(sign | (exp << 23) | frac)
+    }
+
+    fn edge_values() -> [f32; 13] {
+        [
+            0.0,
+            -0.0,
+            1.0,
+            -1.0,
+            f32::MIN,
+            f32::MAX,
+            f32::MIN_POSITIVE,
+            f32::from_bits(1),
+            f32::INFINITY,
+            f32::NEG_INFINITY,
+            f32::NAN,
+            f32::from_bits(0x7fc0_0001),
+            f32::from_bits(0x8000_0001),
+        ]
     }
 
     fn assert_f32_bits(got: &[f32], expect: &[f32], what: &str) {
@@ -477,7 +507,7 @@ mod tests {
         // Widths that are not a multiple of the 4-row block, including the
         // empty and single-row edges.
         let widths = [
-            0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 15, 16, 17, 31, 32, 33, 63, 64, 65, 127, 128,
+            0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 15, 16, 17, 31, 32, 33, 37, 63, 64, 65, 127, 128,
         ];
         for &n in &widths {
             for seed in [1u32, 0x1234_5678, 0xa5a5_5a5a] {
@@ -492,21 +522,7 @@ mod tests {
 
     #[test]
     fn right_mult_matches_scalar_chain_on_edge_values() {
-        let specials = [
-            0.0,
-            -0.0,
-            1.0,
-            -1.0,
-            f32::MIN,
-            f32::MAX,
-            f32::MIN_POSITIVE,
-            f32::from_bits(1),
-            f32::INFINITY,
-            f32::NEG_INFINITY,
-            f32::NAN,
-            f32::from_bits(0x7fc0_0001),
-            f32::from_bits(0x8000_0001),
-        ];
+        let specials = edge_values();
         for n in 0..specials.len() {
             let packed_len = n * (n + 1) / 2;
             let packed: Vec<f32> = (0..packed_len)
@@ -516,6 +532,39 @@ mod tests {
                 .map(|i| specials[(i * 3 + 1) % specials.len()])
                 .collect();
             check_matvec(&packed, n, &vector);
+        }
+    }
+
+    #[test]
+    fn right_mult_matches_scalar_chain_on_large_mixed_inputs() {
+        // Widths past the 4-row block. Every 11th matrix entry and every 5th
+        // vector entry is an edge value (zero, subnormal, overflow, inf, NaN)
+        // so those patterns are not left to a rare generator draw.
+        let specials = edge_values();
+        for &n in &[37usize, 64] {
+            for seed in [1u32, 0x1234_5678, 0xa5a5_5a5a] {
+                let mut state = seed.wrapping_add(n as u32);
+                let packed_len = n * (n + 1) / 2;
+                let packed: Vec<f32> = (0..packed_len)
+                    .map(|i| {
+                        if i % 11 == 0 {
+                            specials[i % specials.len()]
+                        } else {
+                            next_f32(&mut state)
+                        }
+                    })
+                    .collect();
+                let vector: Vec<f32> = (0..n)
+                    .map(|i| {
+                        if i % 5 == 0 {
+                            specials[(i * 3) % specials.len()]
+                        } else {
+                            next_f32(&mut state)
+                        }
+                    })
+                    .collect();
+                check_matvec(&packed, n, &vector);
+            }
         }
     }
 
