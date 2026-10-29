@@ -1,0 +1,71 @@
+{
+  "schema": 1,
+  "issue": 599,
+  "pull_request": 614,
+  "measurement": "Callgrind Ir for the complete CLI invocation, not an isolated-kernel count",
+  "date_utc": "2026-10-29",
+  "before_implementation_commit": "33576bfd7d700f42f582ebda4bc0724a2e52a468",
+  "after_implementation_commit": "1f7953e5b0553ce84be8c97052deb4dcb97177d2",
+  "target": "x86_64-unknown-linux-musl",
+  "toolchain": "rustc 1.99.1 (58cf8f9c3 2026-10-13)",
+  "valgrind": "3.24.0",
+  "release_profile": {
+    "opt_level": 3,
+    "lto": "thin",
+    "codegen_units": 1,
+    "debug": false,
+    "panic": "unwind"
+  },
+  "build": {
+    "v1_before_and_after": "cargo build --release --locked --target x86_64-unknown-linux-musl -p graphviz-pure-cli --bin graphviz-pure --example heap_counts",
+    "v3_before": "RUSTFLAGS=\"-C target-cpu=x86-64-v3\" cargo build --release --locked --target x86_64-unknown-linux-musl -p graphviz-pure-cli",
+    "v3_after": "RUSTFLAGS=\"-C target-cpu=x86-64-v3\" cargo rustc --release --locked --target x86_64-unknown-linux-musl -p graphviz-pure-cli --bin graphviz-pure -- -C strip=none"
+  },
+  "cpu_flags": {
+    "v1": "default x86-64-v1, RUSTFLAGS unset",
+    "v3": "-C target-cpu=x86-64-v3; after binary retained symbols for generated-code inspection"
+  },
+  "command": "valgrind --tool=callgrind --callgrind-out-file=<profile> <binary> -Tsvg <input>",
+  "notes": [
+    "Before Rust sources match the 1.0 reference; 33576bfd differs from f89e21d9 only in release-workflow permissions.",
+    "For v1 before/after runs, inputs, executable argument path, toolchain, target and release profile match.",
+    "v3 is the default release artifact selected by PR #605; v1 is the compatibility build.",
+    "Instruction ratios measure work, not elapsed-time speedups. Shared-runner wall times are omitted."
+  ],
+  "cases": [
+    {
+      "input": "tests/sfdp/gen_rnd2000.gv",
+      "format": "svg",
+      "v1": {
+        "before": 8210878643,
+        "after": 8192935756,
+        "delta_percent": -0.218526,
+        "instruction_ratio_before_over_after": 1.00219
+      },
+      "v3": {
+        "before": 2932313690,
+        "after": 2900291777,
+        "delta_percent": -1.092036,
+        "instruction_ratio_before_over_after": 1.011041
+      },
+      "input_sha256": "4cc031f0a58ff472737e63df9ca98a1ce8adc16020c8dae5b391a640afe6c980"
+    },
+    {
+      "input": "synth/sfdp_sparse_5000.gv",
+      "format": "svg",
+      "v1": {
+        "before": 23417408820,
+        "after": 23359643791,
+        "delta_percent": -0.246676,
+        "instruction_ratio_before_over_after": 1.002473
+      },
+      "v3": {
+        "before": 8177100719,
+        "after": 8081214316,
+        "delta_percent": -1.172621,
+        "instruction_ratio_before_over_after": 1.011865
+      },
+      "input_sha256": "e4b6f923d232b65823180709185932cfe7884c9f782e7558cb5d9eced3a5f4d6"
+    }
+  ]
+}
