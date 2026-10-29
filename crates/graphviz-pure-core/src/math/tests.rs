@@ -299,9 +299,16 @@ fn check_fma(samples_per_class: u64) {
             for &c in &special {
                 let want = libm::fma(a, b, c);
                 assert_fma(a, b, c, want);
-                // On wasm32-wasip1, wasi-libc's C `fma` returns +0 when `a * b` underflows to zero
-                // with `c = +0`, where IEEE 754 and `libm::fma` return -0.
-                #[cfg(not(all(target_arch = "wasm32", target_os = "wasi")))]
+                // On musl / wasi-libc without hardware FMA, C `fma` returns +0 when `a * b`
+                // underflows to zero with `c = +0`, where IEEE 754 and `libm::fma` return -0.
+                #[cfg(not(any(
+                    all(target_arch = "wasm32", target_os = "wasi"),
+                    all(
+                        target_arch = "x86_64",
+                        target_env = "musl",
+                        not(target_feature = "fma")
+                    )
+                )))]
                 assert!(same(a.mul_add(b, c), want));
             }
         }
@@ -313,9 +320,26 @@ fn check_fma(samples_per_class: u64) {
         for i in 0..samples_per_class {
             let (a, b, c) = gen_fma(class, &mut r);
             fast += u64::from(portable::fma::in_window(a, b, c));
-            #[cfg(all(target_arch = "wasm32", target_os = "wasi"))]
-            let want = libm::fma(a, b, c);
-            #[cfg(not(all(target_arch = "wasm32", target_os = "wasi")))]
+            #[cfg(any(
+                all(target_arch = "wasm32", target_os = "wasi"),
+                all(
+                    target_arch = "x86_64",
+                    target_env = "musl",
+                    not(target_feature = "fma")
+                )
+            ))]
+            let want = {
+                let _ = i;
+                libm::fma(a, b, c)
+            };
+            #[cfg(not(any(
+                all(target_arch = "wasm32", target_os = "wasi"),
+                all(
+                    target_arch = "x86_64",
+                    target_env = "musl",
+                    not(target_feature = "fma")
+                )
+            )))]
             let want = {
                 let hw = a.mul_add(b, c);
                 if i & 15 == 0 {

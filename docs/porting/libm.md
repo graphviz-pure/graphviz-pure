@@ -473,7 +473,7 @@ line 0); the port fuses them as C does. patchwork's `-v` rectangles (`patchwork.
 fused too, by products with 0.5, which are exact either way.
 
 Every `math::fma` / `f32::mul_add` in the port is at a site C fuses, except three
-`math::fma(-1.0, x, c)` in neato's `cola.rs`, `digcola.rs` and `stress.rs`, where C subtracts;
+`(-1.0f32).mul_add(x, c)` in neato's `cola.rs`, `digcola.rs` and `stress.rs`, where C subtracts;
 they are exact.
 
 `__sincos_stret` is clang merging a `sin(a)` and a `cos(a)` into one call. It needs nothing in
