@@ -51,6 +51,15 @@ pub fn orthog1f(vec: &mut [f32]) {
 /// is `fma(A[j, k], vector[k], …)` from the diagonal through column `n - 1`,
 /// starting from `+0`.
 pub fn right_mult_with_vector_ff(packed: &[f32], n: usize, vector: &[f32], result: &mut [f32]) {
+    // Feature off: this function is the sequential kernel, unchanged.
+    // Feature on, and only for a large n with more than one thread: each
+    // worker owns a column range. Every `result[j]` still receives row i
+    // before row i+1, then one plain add of row j's left-to-right dot.
+    #[cfg(all(feature = "parallel", not(target_family = "wasm")))]
+    if super::matvec_parallel::use_parallel(n) {
+        super::matvec_parallel::right_mult_ff(packed, n, vector, result);
+        return;
+    }
     let mut vector = &vector[..n];
     let mut result = &mut result[..n];
     result.fill(0.0);
@@ -620,6 +629,92 @@ mod tests {
             vectors_mult_additionf(n, &mut got, alpha, &v2);
             scalar_mult_additionf(n, &mut expect, alpha, &v2);
             assert_f32_bits(&got, &expect, &format!("axpy n={n}"));
+        }
+    }
+
+    #[cfg(feature = "parallel")]
+    #[test]
+    fn parallel_right_mult_matches_scalar_chain_for_every_thread_count() {
+        // Odd widths, and widths that are not a multiple of the thread count
+        // or of the 4-row block. `threads == 1` still runs the column-range
+        // kernel, not the sequential one.
+        let widths = [0, 1, 2, 3, 5, 7, 8, 9, 17, 37, 63, 64, 65, 127, 128];
+        let threads = [1usize, 2, 3, 8];
+        for &n in &widths {
+            for &thread_count in &threads {
+                for seed in [1u32, 0x1234_5678, 0xa5a5_5a5a] {
+                    let mut state = seed
+                        .wrapping_add(n as u32)
+                        .wrapping_add(thread_count as u32);
+                    let packed_len = n * (n + 1) / 2;
+                    let packed: Vec<f32> = (0..packed_len).map(|_| next_f32(&mut state)).collect();
+                    let vector: Vec<f32> = (0..n).map(|_| next_f32(&mut state)).collect();
+                    let mut got = vec![1.0f32; n + 2];
+                    let mut expect = got.clone();
+                    let mut packed_ext = packed.clone();
+                    packed_ext.push(123.0);
+                    let mut vector_ext = vector.clone();
+                    vector_ext.extend([7.0, 9.0]);
+                    super::super::matvec_parallel::right_mult_ff_with_threads(
+                        &packed_ext,
+                        n,
+                        &vector_ext,
+                        &mut got,
+                        thread_count,
+                    );
+                    scalar_right_mult_with_vector_ff(&packed_ext, n, &vector_ext, &mut expect);
+                    assert_f32_bits(
+                        &got,
+                        &expect,
+                        &format!("n={n} threads={thread_count} seed={seed}"),
+                    );
+                }
+            }
+        }
+    }
+
+    #[cfg(feature = "parallel")]
+    #[test]
+    fn parallel_right_mult_matches_scalar_chain_on_large_odd_n() {
+        let specials = edge_values();
+        for &n in &[37usize, 65] {
+            for &thread_count in &[1usize, 2, 3, 8] {
+                let mut state = 0x0a11_u32.wrapping_add(n as u32);
+                let packed_len = n * (n + 1) / 2;
+                let packed: Vec<f32> = (0..packed_len)
+                    .map(|i| {
+                        if i % 11 == 0 {
+                            specials[i % specials.len()]
+                        } else {
+                            next_f32(&mut state)
+                        }
+                    })
+                    .collect();
+                let vector: Vec<f32> = (0..n)
+                    .map(|i| {
+                        if i % 5 == 0 {
+                            specials[(i * 3) % specials.len()]
+                        } else {
+                            next_f32(&mut state)
+                        }
+                    })
+                    .collect();
+                let mut got = vec![1.0f32; n + 2];
+                let mut expect = got.clone();
+                super::super::matvec_parallel::right_mult_ff_with_threads(
+                    &packed,
+                    n,
+                    &vector,
+                    &mut got,
+                    thread_count,
+                );
+                scalar_right_mult_with_vector_ff(&packed, n, &vector, &mut expect);
+                assert_f32_bits(
+                    &got,
+                    &expect,
+                    &format!("mixed n={n} threads={thread_count}"),
+                );
+            }
         }
     }
 }

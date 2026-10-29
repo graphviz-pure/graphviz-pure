@@ -16,6 +16,7 @@ pub mod font;
 pub mod geom;
 pub mod graph;
 pub mod math;
+pub mod par;
 pub mod strtod;
 pub mod usershape;
 pub mod xdot;

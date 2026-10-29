@@ -15,6 +15,9 @@ description = "The Graphviz layout engines in pure Rust: dot, neato, fdp, sfdp, 
 # `ns.c` and asserts that both agree (common/ns/cut/check.rs). For tests and CI only: it
 # costs C's full network simplex on top of the cut sets'.
 ns-check = []
+# Native only. Off unless a crate above asks for it. The wasm build refuses
+# this feature (see src/lib.rs). Thread count: `GRAPHVIZ_PURE_THREADS`.
+parallel = []
 
 [dependencies]
 graphviz-pure-core.workspace = true

@@ -44,6 +44,11 @@ pkg-fmt = "zip"
 [package.metadata.binstall.overrides.aarch64-pc-windows-msvc]
 pkg-fmt = "zip"
 
+[features]
+# Opt-in, off by default. Forwards to the layout crate. Not enabled for the
+# published archives or for wasm. `GRAPHVIZ_PURE_THREADS=1` stays sequential.
+parallel = ["graphviz-pure-layout/parallel"]
+
 [dependencies]
 graphviz-pure-core.workspace = true
 graphviz-pure-parser.workspace = true

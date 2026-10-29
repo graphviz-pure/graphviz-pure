@@ -28,6 +28,8 @@ pub mod graphdata;
 pub mod legal;
 pub mod linalg;
 pub mod matrix_ops;
+#[cfg(all(feature = "parallel", not(target_family = "wasm")))]
+mod matvec_parallel;
 pub mod multispline;
 pub mod neatoinit;
 pub mod neatosplines;
