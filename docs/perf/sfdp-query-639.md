@@ -23,6 +23,10 @@ Static musl, ordinary release profile, no PGO. v3 is `-C target-cpu=x86-64-v3`; 
 
 The full 15-case v1 ratchet comparison against #614 passes: no allocation increases, no peak increases and no instruction regressions above 2%. grid20x20: 974,616,154 → 921,957,811 instructions, 97,132 allocations unchanged. The full ratchet uses a separate fixed argv path, so its small process-startup count differs from the target measurements above. Instruction baselines must be refreshed from CI rather than from local Valgrind counts.
 
+## Wasm module size
+
+The initial 2D monomorphisation grew the raw wasm module by **1.29% to 4,034,340 B** (recorded baseline: 3,983,017 B). The 2D dispatch is now guarded with `#[cfg(not(target_family = "wasm"))]`, so all wasm targets use the generic collector and native 2D targets retain the specialization. The same local release build shrinks from 4,034,340 B to **4,032,941 B** (1,399 B smaller), still **1.25% above the recorded baseline**. This guard does not remove the entire measured size increase. All 296 sfdp wasm corpus outputs have identical before/after hashes and match the C-based golden set. Baselines remain unchanged for the merge-time CI refresh.
+
 ## Native counters and wall observations
 
 All hardware events had 100% coverage. v3 uses seven rotating, interleaved rounds pinned to one allowed CPU, with one warm-up per variant/input and no cargo build from this task during that pass. v1 records five sequential samples per variant; its time windows are noisier and are not used for speed claims. The machine was shared. C and 1.0 wall columns below are the quiet historical baseline, not contemporaneous runs. Ratios in this wall table are observations from different windows, not a claimed release speedup.
@@ -47,7 +51,7 @@ Paired v3 end: `2026-10-29T23:21:16.261280+00:00`; `23:21:16 up 4 days, 20:03,  
 
 ## Fidelity and verification
 
-Only the private query receives a constant dimension (2), selected by the unchanged public get_supernodes wrapper. All other dimensions use the original runtime-dimensional walk. Point insertion, children, leaf lists, empty-child counts and output-buffer order are unchanged. point_distance still executes the same subtraction, serial FMA accumulation and sqrt on the same coordinates. No force-loop changes or signature changes; the parallel force-loop owner can call the same API.
+On native targets, the private query receives a constant dimension (2), selected by the unchanged public get_supernodes wrapper. All other dimensions use the original runtime-dimensional walk. Point insertion, children, leaf lists, empty-child counts and output-buffer order are unchanged. point_distance still executes the same subtraction, serial FMA accumulation and sqrt on the same coordinates. No force-loop changes or signature changes; the parallel force-loop owner can call the same API.
 
 The independent old collector compares count bits, center bits, weight bits and distance bits on weighted/duplicate points, depths 0/1/3/10, dimensions 1/2/3 and far/near/infinite Barnes–Hut parameters. Existing tests cover buffer-capacity reuse. Every measured stdout/stderr hash matches master and the 1.0 reference. cargo test --workspace (v3), the new unit tests (v1 and v3), clippy --workspace --all-targets -- -D warnings, fmt, panic-sites and the before/after full ratchet pass. No panic-site increase.
 

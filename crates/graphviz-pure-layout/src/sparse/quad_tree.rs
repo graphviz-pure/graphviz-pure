@@ -347,11 +347,13 @@ impl QuadTree {
         out.center.reserve(self.coords.len());
         out.wgts.reserve(self.points.len());
         out.distances.reserve(self.points.len());
+        // Keep one recursive monomorph on wasm, where module size matters.
+        #[cfg(not(target_family = "wasm"))]
         if self.dim == 2 {
             self.get_supernodes_internal::<2>(Some(0), bh, pt, nodeid, out, &mut counts);
-        } else {
-            self.get_supernodes_internal::<0>(Some(0), bh, pt, nodeid, out, &mut counts);
+            return counts;
         }
+        self.get_supernodes_internal::<0>(Some(0), bh, pt, nodeid, out, &mut counts);
         counts
     }
 
