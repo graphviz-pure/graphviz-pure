@@ -269,6 +269,14 @@ The crash and extreme-value campaigns were also re-run on the overflow-checked r
   (`INT_MAX` / `0`) on out-of-range `double`-to-`int` casts (`68` single, `65` mix; `2` single and
   `4` mix on `stderr_diff`).
 
+A confirmation re-run on `3e9b764c` (after #587, #589 and #590 closed #581–#583) verified that
+seeds `40126`, `41310`, `43065` and all ten `peripheries=2147483647` cases now match C on stdout,
+stderr and exit status, with 5,833 / 5,899 comparable cases (98.88%; 5,858 / 5,899 or 99.30% after
+`-nan` → `nan`) identical across seeds `40001–46000` (dot 99.83%, neato 99.28%, fdp 92.19%, sfdp
+99.57%, twopi 99.84%, circo 100%, osage 98.47%, patchwork 100%), **0 port bugs**, **0**
+`port_crash`/`port_timeout`/`exit_diff`/`debug_diff` outcomes, and no new stderr differences on
+any `svg_diff` case.
+
 ### After all fixes
 
 All 382 actionable cases from rounds 1–4 (from `OUT/diff/`, not minimised) were
