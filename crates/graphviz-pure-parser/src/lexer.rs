@@ -15,7 +15,7 @@ use std::sync::Arc;
 use graphviz_pure_core::{Result, charset, diag};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum TokenKind {
+pub enum TokenKind<'a> {
     Strict,
     Graph,
     Digraph,
@@ -45,12 +45,12 @@ pub enum TokenKind {
     /// `+`
     Plus,
     /// Unquoted identifier or numeric literal
-    Ident(String),
+    Ident(Cow<'a, str>),
     /// Double-quoted string literal `"..."`
-    Quoted(String),
+    Quoted(Cow<'a, str>),
     /// HTML-like string literal `<...>`: its inner text, without the outer `<` and `>`
     /// (scan.l's `endstr_html` interns it with `agstrdup_html`; the variant is the flag).
-    Html(String),
+    Html(Cow<'a, str>),
     /// Any other character (scan.l's `.` rule: `return aagget_text(yyscanner)[0]`). No
     /// grammar rule accepts it, so it is always a syntax error.
     Other(char),
@@ -60,27 +60,27 @@ pub enum TokenKind {
 
 /// The scanner's start condition when the input ended (`YYSTATE` in scan.l's `aagerror`).
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
-pub enum ScanState {
+pub enum ScanState<'a> {
     #[default]
     Initial,
     /// Inside `"..."`, with the string read so far (`Sbuf`).
-    QString(String),
+    QString(Cow<'a, str>),
     /// Inside `<...>`, with the string read so far, without the opening `<` (`Sbuf`).
-    HString(String),
+    HString(Cow<'a, str>),
     /// Inside `/* ... */`.
     Comment,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Token {
-    pub kind: TokenKind,
+pub struct Token<'a> {
+    pub kind: TokenKind<'a>,
     /// Physical line (1-based) where the token starts.
     pub line: usize,
     pub col: usize,
     /// flex's `yytext` once the token is read, which `aagerror` prints after `near`: the
     /// source text, but `"` for a quoted string and `>` for an HTML string (the text of the
     /// last rule they matched), and empty at end of input.
-    pub text: String,
+    pub text: Cow<'a, str>,
     /// cgraph's `line_num` once the token is read: the newlines read so far, renumbered by
     /// `# N` line directives (`ppDirective`). `aagerror` reports this line, so an error is
     /// reported on the line where its lookahead token ends. An `int` in C, so it wraps.
@@ -88,7 +88,7 @@ pub struct Token {
     /// `InputFile` as set by a `# N "file"` line directive, if any.
     pub file: Option<Arc<str>>,
     /// Scanner state at the end of input (only an [`TokenKind::Eof`] token has another).
-    pub state: ScanState,
+    pub state: ScanState<'a>,
 }
 
 thread_local! {
@@ -236,7 +236,7 @@ impl<'a> Lexer<'a> {
         }
     }
 
-    pub fn tokenize_all(&mut self) -> Result<Vec<Token>> {
+    pub fn tokenize_all(&mut self) -> Result<Vec<Token<'a>>> {
         let mut tokens = Vec::new();
         loop {
             let tok = self.next_token()?;
@@ -287,7 +287,7 @@ impl<'a> Lexer<'a> {
     /// The rules of scan.l that return no token, in scan.l's order: `\n`, comments, line
     /// directives, white space and the byte-order mark. Returns [`ScanState::Comment`] when
     /// the input ends inside a `/* ... */` comment.
-    fn skip_whitespace_and_comments(&mut self) -> Option<ScanState> {
+    fn skip_whitespace_and_comments(&mut self) -> Option<ScanState<'a>> {
         loop {
             match (self.peek_char(), self.peek_next_char()) {
                 (Some(' ' | '\t' | '\r' | '\n'), _) => {
@@ -374,7 +374,7 @@ impl<'a> Lexer<'a> {
         }
     }
 
-    fn token(&self, kind: TokenKind, line: usize, col: usize, text: String) -> Token {
+    fn token(&self, kind: TokenKind<'a>, line: usize, col: usize, text: Cow<'a, str>) -> Token<'a> {
         Token {
             kind,
             line,
@@ -387,14 +387,14 @@ impl<'a> Lexer<'a> {
     }
 
     /// The end of input, read in scanner state `state`.
-    fn eof(&self, state: ScanState) -> Token {
+    fn eof(&self, state: ScanState<'a>) -> Token<'a> {
         Token {
             state,
-            ..self.token(TokenKind::Eof, self.line, self.col, String::new())
+            ..self.token(TokenKind::Eof, self.line, self.col, Cow::Borrowed(""))
         }
     }
 
-    pub fn next_token(&mut self) -> Result<Token> {
+    pub fn next_token(&mut self) -> Result<Token<'a>> {
         Ok(self.scan())
     }
 
@@ -405,7 +405,7 @@ impl<'a> Lexer<'a> {
         self.line
     }
 
-    pub(crate) fn scan(&mut self) -> Token {
+    pub(crate) fn scan(&mut self) -> Token<'a> {
         if let Some(state) = self.skip_whitespace_and_comments() {
             return self.eof(state);
         }
@@ -418,7 +418,7 @@ impl<'a> Lexer<'a> {
             return self.eof(ScanState::Initial);
         };
 
-        let single = |lexer: &mut Self, kind: TokenKind| {
+        let single = |lexer: &mut Self, kind: TokenKind<'a>| {
             lexer.advance_char();
             kind
         };
@@ -452,7 +452,7 @@ impl<'a> Lexer<'a> {
             c if is_letter(c) => self.lex_ident_or_keyword(),
             other => single(self, TokenKind::Other(other)),
         };
-        let text = self.input[start..self.pos].to_string();
+        let text = self.text(start..self.pos);
         self.token(kind, line, col, text)
     }
 
@@ -460,8 +460,9 @@ impl<'a> Lexer<'a> {
     /// `chkNum`: a match that ends in a letter, or in a second `.`, is warned about and
     /// gives its last character back (`yyless`). A `-` or `.` that starts no number is
     /// scan.l's `.` rule.
-    fn lex_number(&mut self) -> TokenKind {
-        let rest = &self.input[self.pos..];
+    fn lex_number(&mut self) -> TokenKind<'a> {
+        let start = self.pos;
+        let rest = &self.input[start..];
         let bytes = rest.as_bytes();
         let digits_from = |i: usize| bytes[i..].iter().take_while(|b| b.is_ascii_digit()).count();
         let mut len = usize::from(bytes[0] == b'-');
@@ -479,7 +480,7 @@ impl<'a> Lexer<'a> {
             self.advance_char();
             return TokenKind::Other(ch);
         }
-        let number = rest[..len].to_string();
+        let number = &rest[..len];
         // The optional `(\.|{LETTER})` ends the match; a `.` there is always a second one
         // (the first `.` after digits is the fraction's), so `chkNum` warns whenever it
         // matched.
@@ -508,87 +509,115 @@ impl<'a> Lexer<'a> {
         for _ in 0..len {
             self.advance_char();
         }
-        TokenKind::Ident(number)
+        TokenKind::Ident(self.text(start..self.pos))
     }
 
     /// scan.l's keyword rules and `{NAME}`: a keyword ties with a `{NAME}` of its length and,
     /// being the earlier rule, wins. Keywords match without regard to case.
-    fn lex_ident_or_keyword(&mut self) -> TokenKind {
+    fn lex_ident_or_keyword(&mut self) -> TokenKind<'a> {
         let start = self.pos;
         self.advance_char();
         while self.peek_char().is_some_and(is_name_char) {
             self.advance_char();
         }
         let text = &self.input[start..self.pos];
-        match text.to_ascii_lowercase().as_str() {
-            "strict" => TokenKind::Strict,
-            "graph" => TokenKind::Graph,
-            "digraph" => TokenKind::Digraph,
-            "subgraph" => TokenKind::Subgraph,
-            "node" => TokenKind::Node,
-            "edge" => TokenKind::Edge,
-            _ => TokenKind::Ident(text.to_string()),
+        if text.eq_ignore_ascii_case("strict") {
+            TokenKind::Strict
+        } else if text.eq_ignore_ascii_case("graph") {
+            TokenKind::Graph
+        } else if text.eq_ignore_ascii_case("digraph") {
+            TokenKind::Digraph
+        } else if text.eq_ignore_ascii_case("subgraph") {
+            TokenKind::Subgraph
+        } else if text.eq_ignore_ascii_case("node") {
+            TokenKind::Node
+        } else if text.eq_ignore_ascii_case("edge") {
+            TokenKind::Edge
+        } else {
+            TokenKind::Ident(self.text(start..self.pos))
         }
     }
 
-    /// scan.l's `<qstring>` rules.
-    fn lex_quoted_string(&mut self, line: usize, col: usize) -> Token {
-        // Consume opening `"`
-        self.advance_char();
-        let mut buf = String::new();
+    /// C: lib/cgraph/scan.l:yylex
+    /// The usual input is borrowed. A directly constructed scanner that owns a
+    /// NUL-normalized file buffer copies slices, so returned tokens never borrow self.
+    fn text(&self, range: std::ops::Range<usize>) -> Cow<'a, str> {
+        match &self.input {
+            Cow::Borrowed(input) => Cow::Borrowed(&input[range]),
+            Cow::Owned(input) => Cow::Owned(input[range].to_string()),
+        }
+    }
 
+    /// C: lib/cgraph/scan.l:yylex (<qstring> rules)
+    fn lex_quoted_string(&mut self, line: usize, col: usize) -> Token<'a> {
+        self.advance_char();
+        let start = self.pos;
+        // Allocate only when a rule actually changes the source spelling.
+        let mut buf: Option<String> = None;
         while let Some(ch) = self.advance_char() {
             match ch {
                 '"' => {
-                    return self.token(TokenKind::Quoted(buf), line, col, "\"".to_string());
+                    let text = buf.map_or_else(|| self.text(start..self.pos - 1), Cow::Owned);
+                    return self.token(TokenKind::Quoted(text), line, col, Cow::Borrowed("\""));
                 }
                 '\\' => match self.peek_char() {
-                    // `<qstring>[\\]["]`
+                    // `<qstring>[\\]["]`: drop the backslash before a quote.
                     Some('"') => {
+                        let prefix_end = self.pos - 1;
+                        let out =
+                            buf.get_or_insert_with(|| self.input[start..prefix_end].to_string());
+                        out.push('"');
                         self.advance_char();
-                        buf.push('"');
                     }
-                    // `<qstring>[\\][\\]`
+                    // `<qstring>[\\][\\]`: keep both backslashes.
                     Some('\\') => {
                         self.advance_char();
-                        buf.push_str("\\\\");
+                        if let Some(out) = &mut buf {
+                            out.push_str("\\\\");
+                        }
                     }
-                    // `<qstring>[\\][\n]`: an escaped newline is ignored. Only a newline:
-                    // before a CR, the backslash is kept like any other.
+                    // `<qstring>[\\][\n]`: ignore an escaped LF, but not a CR.
                     Some('\n') => {
+                        let prefix_end = self.pos - 1;
+                        buf.get_or_insert_with(|| self.input[start..prefix_end].to_string());
                         self.advance_char();
                     }
-                    // `<qstring>[\\]`: kept, and the next character is read on its own,
-                    // which keeps Graphviz escString sequences like \n, \l, \N, \G.
-                    _ => buf.push('\\'),
+                    // `<qstring>[\\]`: preserve escString sequences like \N and \G.
+                    _ => {
+                        if let Some(out) = &mut buf {
+                            out.push('\\');
+                        }
+                    }
                 },
-                other => buf.push(other),
+                other => {
+                    if let Some(out) = &mut buf {
+                        out.push(other);
+                    }
+                }
             }
         }
-
-        self.eof(ScanState::QString(buf))
+        self.eof(ScanState::QString(
+            buf.map_or_else(|| self.text(start..self.pos), Cow::Owned),
+        ))
     }
 
-    /// scan.l's `<hstring>` rules.
-    fn lex_html_string(&mut self, line: usize, col: usize) -> Token {
-        // Consume opening `<`
+    /// C: lib/cgraph/scan.l:yylex (<hstring> rules)
+    fn lex_html_string(&mut self, line: usize, col: usize) -> Token<'a> {
         self.advance_char();
+        let start = self.pos;
         let mut depth: usize = 1;
-        let mut buf = String::new();
-
         while let Some(ch) = self.advance_char() {
             if ch == '<' {
                 depth += 1;
             } else if ch == '>' {
                 depth -= 1;
                 if depth == 0 {
-                    return self.token(TokenKind::Html(buf), line, col, ">".to_string());
+                    let text = self.text(start..self.pos - 1);
+                    return self.token(TokenKind::Html(text), line, col, Cow::Borrowed(">"));
                 }
             }
-            buf.push(ch);
         }
-
-        self.eof(ScanState::HString(buf))
+        self.eof(ScanState::HString(self.text(start..self.pos)))
     }
 }
 
@@ -616,13 +645,13 @@ mod tests {
         assert_eq!(tokens[2].kind, TokenKind::Subgraph);
         assert_eq!(tokens[3].kind, TokenKind::Node);
         assert_eq!(tokens[4].kind, TokenKind::Edge);
-        assert_eq!(tokens[5].kind, TokenKind::Ident("my_id_123".to_string()));
-        assert_eq!(tokens[6].kind, TokenKind::Ident("-3.14".to_string()));
-        assert_eq!(tokens[7].kind, TokenKind::Ident(".5".to_string()));
+        assert_eq!(tokens[5].kind, TokenKind::Ident("my_id_123".into()));
+        assert_eq!(tokens[6].kind, TokenKind::Ident("-3.14".into()));
+        assert_eq!(tokens[7].kind, TokenKind::Ident(".5".into()));
         assert_eq!(tokens[8].kind, TokenKind::Eof);
     }
 
-    fn kinds(src: &str) -> Vec<TokenKind> {
+    fn kinds(src: &str) -> Vec<TokenKind<'_>> {
         Lexer::new(src)
             .tokenize_all()
             .unwrap()
@@ -631,8 +660,8 @@ mod tests {
             .collect()
     }
 
-    fn ident(s: &str) -> TokenKind {
-        TokenKind::Ident(s.to_string())
+    fn ident(s: &str) -> TokenKind<'_> {
+        TokenKind::Ident(s.into())
     }
 
     #[test]
@@ -689,12 +718,62 @@ mod tests {
         assert_eq!(
             kinds("\"a\\\nb\" \"a\\\r\nb\" \"a\\rb\""),
             [
-                TokenKind::Quoted("ab".to_string()),
-                TokenKind::Quoted("a\\\r\nb".to_string()),
-                TokenKind::Quoted("a\\rb".to_string()),
+                TokenKind::Quoted("ab".into()),
+                TokenKind::Quoted("a\\\r\nb".into()),
+                TokenKind::Quoted("a\\rb".into()),
                 TokenKind::Eof,
             ]
         );
+    }
+
+    #[test]
+    fn unchanged_token_text_borrows_input_and_outlives_scanner() {
+        let src = String::from("alpha -3.14 \"hello é\\N\\\\\" <<B>é</B>>");
+        let tokens = Lexer::new(&src).tokenize_all().unwrap();
+        for (token, expected) in tokens
+            .iter()
+            .zip(["alpha", "-3.14", "hello é\\N\\\\", "<B>é</B>"])
+        {
+            let text = match &token.kind {
+                TokenKind::Ident(Cow::Borrowed(text))
+                | TokenKind::Quoted(Cow::Borrowed(text))
+                | TokenKind::Html(Cow::Borrowed(text)) => *text,
+                other => panic!("expected borrowed text, got {other:?}"),
+            };
+            let start = src.find(expected).unwrap();
+            assert_eq!(text, expected);
+            assert_eq!(text.as_ptr(), src[start..].as_ptr());
+            assert!(matches!(token.text, Cow::Borrowed(_)));
+        }
+    }
+
+    #[test]
+    fn only_transformed_quoted_text_is_owned() {
+        let tokens = Lexer::new("\"a\\\"b\\Nc\" \"a\\\nb\"")
+            .tokenize_all()
+            .unwrap();
+        for (token, expected) in tokens.iter().zip(["a\"b\\Nc", "ab"]) {
+            let TokenKind::Quoted(Cow::Owned(text)) = &token.kind else {
+                panic!("expected owned quoted text");
+            };
+            assert_eq!(text, expected);
+            assert_eq!(token.text, "\"");
+        }
+    }
+
+    #[test]
+    fn owned_normalized_input_returns_independent_tokens() {
+        let src = String::from("al\0hidden\npha \"beta\" <gamma>");
+        let tokens = reading_file("f.gv", || Lexer::new(&src).tokenize_all().unwrap());
+        for (token, expected) in tokens.iter().zip(["alpha", "beta", "gamma"]) {
+            let text = match &token.kind {
+                TokenKind::Ident(Cow::Owned(text))
+                | TokenKind::Quoted(Cow::Owned(text))
+                | TokenKind::Html(Cow::Owned(text)) => text,
+                other => panic!("expected owned text, got {other:?}"),
+            };
+            assert_eq!(text, expected);
+        }
     }
 
     #[test]
@@ -739,11 +818,11 @@ mod tests {
         let src = "label=<<TABLE><TR><TD>hello<BR/>world</TD></TR></TABLE>>";
         let mut lexer = Lexer::new(src);
         let tokens = lexer.tokenize_all().unwrap();
-        assert_eq!(tokens[0].kind, TokenKind::Ident("label".to_string()));
+        assert_eq!(tokens[0].kind, TokenKind::Ident("label".into()));
         assert_eq!(tokens[1].kind, TokenKind::Equals);
         assert_eq!(
             tokens[2].kind,
-            TokenKind::Html("<TABLE><TR><TD>hello<BR/>world</TD></TR></TABLE>".to_string())
+            TokenKind::Html("<TABLE><TR><TD>hello<BR/>world</TD></TR></TABLE>".into())
         );
     }
 }
