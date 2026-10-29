@@ -37,15 +37,130 @@ pub fn fmt_g(v: f64, prec: usize) -> String {
 /// The digits are the ones [`fmt_f`] prints; this writes them into the caller's buffer
 /// instead of allocating a `String` per number. Returns the writer's error; writing into a
 /// `String` never fails.
+///
+/// The digits come from the fixed-point path ([`fixed_into_buf`]), which rounds the *exact*
+/// value of the double, half to even, as `format!("{v:.prec$}")` does; a value outside the
+/// path (a precision above [`FIXED_MAX_PREC`], or a value whose scaled integer does not fit
+/// in a `u64`) goes to the generic formatter, which prints the same digits.
 pub fn fmt_f_into<W: std::fmt::Write>(out: &mut W, v: f64, prec: usize) -> std::fmt::Result {
     if v.is_nan() {
         // C prints `nan` whatever the sign.
-        out.write_str("nan")
-    } else if v.is_infinite() {
-        out.write_str(if v < 0.0 { "-inf" } else { "inf" })
-    } else {
-        write!(out, "{v:.prec$}")
+        return out.write_str("nan");
     }
+    if v.is_infinite() {
+        return out.write_str(if v < 0.0 { "-inf" } else { "inf" });
+    }
+    let mut buf = [0u8; FIXED_BUF];
+    if let Some(start) = fixed_into_buf(&mut buf, v, prec) {
+        // The buffer holds a sign, digits and a point: ASCII.
+        let text = std::str::from_utf8(&buf[start..]).map_err(|_| std::fmt::Error)?;
+        return out.write_str(text);
+    }
+    write!(out, "{v:.prec$}")
+}
+
+/// The most decimals the fixed-point path prints. The precisions the writers use are 0, 2,
+/// 3, 4 and 6; above this the numerator `m·10^prec` no longer fits the `u128` the path
+/// scales with, and the generic formatter prints the number.
+const FIXED_MAX_PREC: usize = 6;
+
+/// The buffer the fixed-point path writes into: a sign, the digits of the integer part (at
+/// most 20), a point and the decimals (at most [`FIXED_MAX_PREC`]).
+const FIXED_BUF: usize = 48;
+
+/// The powers of ten the fixed-point path scales by.
+const FIXED_POW10: [u128; FIXED_MAX_PREC + 1] = [1, 10, 100, 1_000, 10_000, 100_000, 1_000_000];
+
+/// C's `printf("%.{prec}f", v)` for the values the fixed-point path covers, written into
+/// `buf` backwards from its end; the text is `buf[start..]`.
+///
+/// The double is exactly `±m·2^e`, so the scaled value `|v|·10^prec` is the exact rational
+/// `m·10^prec·2^e`: an integer when `e ≥ 0`, and `n/2^k` with `n = m·10^prec` when `e < 0`.
+/// Rounding that rational to an integer is integer arithmetic — no floating point is
+/// involved — and it is what `format!("{v:.prec$}")` does: the exact decimal expansion of the
+/// double, rounded half to even. (A tie is a value whose scaled form ends in exactly a half,
+/// which a double has at the odd multiples of `2^-3` for two decimals and of `2^-4` for
+/// three.)
+///
+/// `None` when the value is outside the path: a precision above [`FIXED_MAX_PREC`], or a
+/// value whose scaled integer does not fit in a `u64` (a large value, whose exact decimal
+/// expansion the generic formatter prints).
+fn fixed_into_buf(buf: &mut [u8; FIXED_BUF], v: f64, prec: usize) -> Option<usize> {
+    if prec > FIXED_MAX_PREC {
+        return None;
+    }
+    // The double's exact value: `±m·2^e`, with `m` the mantissa and `e` its exponent.
+    let bits = v.to_bits();
+    let biased = ((bits >> 52) & 0x7ff) as i32;
+    let frac = bits & ((1u64 << 52) - 1);
+    let (m, e) = if biased == 0 {
+        // A subnormal (zero too): the mantissa has no hidden bit.
+        (frac, -1074)
+    } else {
+        (frac | (1u64 << 52), biased - 1075)
+    };
+    // The scaled value: `m·10^prec·2^e`.
+    let n = u128::from(m) * FIXED_POW10[prec];
+    let q: u64 = if e >= 0 {
+        // Already an integer: `n·2^e` must fit in a `u64`.
+        if e > 63 {
+            return None;
+        }
+        let shift = e as u32;
+        if n > u128::from(u64::MAX >> shift) {
+            return None;
+        }
+        (n << shift) as u64
+    } else {
+        let k = -e;
+        if k >= 128 {
+            // `n/2^k` is far below a half (the numerator is below `2^74`), so it rounds to
+            // zero; a tie is impossible here.
+            0
+        } else {
+            let d = 1u128 << k;
+            let mut q = n >> k;
+            let r = n & (d - 1);
+            let twice = r << 1;
+            // Half to even: a tie goes to the even neighbour.
+            if twice > d || (twice == d && q & 1 == 1) {
+                q += 1;
+            }
+            if q > u128::from(u64::MAX) {
+                return None;
+            }
+            q as u64
+        }
+    };
+    // The digits: the fraction, the point, the integer part and the sign, written backwards
+    // from the end of the buffer.
+    let pow = FIXED_POW10[prec] as u64;
+    let mut start = buf.len();
+    let mut frac = q % pow;
+    for _ in 0..prec {
+        start -= 1;
+        buf[start] = b'0' + (frac % 10) as u8;
+        frac /= 10;
+    }
+    if prec > 0 {
+        start -= 1;
+        buf[start] = b'.';
+    }
+    let mut int = q / pow;
+    loop {
+        start -= 1;
+        buf[start] = b'0' + (int % 10) as u8;
+        int /= 10;
+        if int == 0 {
+            break;
+        }
+    }
+    if v.is_sign_negative() {
+        // C prints the sign of a negative zero too.
+        start -= 1;
+        buf[start] = b'-';
+    }
+    Some(start)
 }
 
 /// C's `printf("%.{prec}g", v)` on the macOS libc, written into `out`.
@@ -406,8 +521,26 @@ mod tests {
         }
     }
 
-    /// The doubles the differential test walks: the edges, the powers of ten and a
-    /// deterministic spread of random ones.
+    /// The values whose scaled form is exactly a half, and their neighbours: a double's
+    /// decimal expansion ends in 5 at the odd multiples of `2^-3` (two decimals) and of
+    /// `2^-4` (three), and the doubles next to those are the values that round the other
+    /// way.
+    fn halfway_cases() -> Vec<f64> {
+        let mut v = Vec::new();
+        for k in 0..2_000 {
+            for h in [(2 * k + 1) as f64 / 8.0, (2 * k + 1) as f64 / 16.0] {
+                v.push(h);
+                v.push(-h);
+                // The next double up and the next double down.
+                v.push(f64::from_bits(h.to_bits() + 1));
+                v.push(f64::from_bits(h.to_bits() - 1));
+            }
+        }
+        v
+    }
+
+    /// The doubles the differential test walks: the edges, the powers of ten, the halfway
+    /// cases and a deterministic spread of random ones.
     fn doubles() -> Vec<f64> {
         let mut v = vec![
             0.0,
@@ -454,6 +587,7 @@ mod tests {
             v.push(f64::from_bits(s));
             v.push(f64::from_bits(s >> 11));
         }
+        v.extend(halfway_cases());
         v
     }
 
@@ -520,6 +654,70 @@ mod tests {
                     );
                 }
             }
+        }
+    }
+
+    #[test]
+    fn the_fixed_point_path_covers_what_the_writers_print() {
+        // Every precision the writers use goes through the path.
+        let mut buf = [0u8; FIXED_BUF];
+        for prec in 0..=FIXED_MAX_PREC {
+            assert!(
+                fixed_into_buf(&mut buf, 123.456, prec).is_some(),
+                "prec {prec}"
+            );
+        }
+        // A value whose scaled integer does not fit in a `u64`, and a precision above the
+        // path's, go to the generic formatter.
+        assert!(fixed_into_buf(&mut buf, 1e30, 2).is_none());
+        assert!(fixed_into_buf(&mut buf, 1.5, FIXED_MAX_PREC + 1).is_none());
+        // The digits of the halfway cases: half to even, and the sign of a negative zero.
+        let start = fixed_into_buf(&mut buf, 0.125, 2).unwrap();
+        assert_eq!(&buf[start..], b"0.12");
+        let start = fixed_into_buf(&mut buf, 0.375, 2).unwrap();
+        assert_eq!(&buf[start..], b"0.38");
+        let start = fixed_into_buf(&mut buf, 0.0625, 3).unwrap();
+        assert_eq!(&buf[start..], b"0.062");
+        let start = fixed_into_buf(&mut buf, -0.0, 2).unwrap();
+        assert_eq!(&buf[start..], b"-0.00");
+        let start = fixed_into_buf(&mut buf, -0.004, 2).unwrap();
+        assert_eq!(&buf[start..], b"-0.00");
+        let start = fixed_into_buf(&mut buf, 2.5, 0).unwrap();
+        assert_eq!(&buf[start..], b"2");
+        let start = fixed_into_buf(&mut buf, 3.5, 0).unwrap();
+        assert_eq!(&buf[start..], b"4");
+    }
+
+    /// The exhaustive check: every `f32` value, converted to `f64`, at the two precisions the
+    /// writers use most. Four billion values, so it is `#[ignore]`d and run by hand:
+    ///
+    /// ```sh
+    /// cargo test --release -p graphviz-pure-core -- --ignored every_f32
+    /// ```
+    #[test]
+    #[ignore = "four billion values; run it by hand"]
+    fn every_f32_matches_the_generic_formatter() {
+        let threads = std::thread::available_parallelism().map_or(1, |n| n.get().min(4));
+        let total = u64::from(u32::MAX) + 1;
+        let chunk = total / u64::try_from(threads).unwrap_or(1);
+        let mut handles = Vec::new();
+        for t in 0..threads {
+            let lo = u64::try_from(t).unwrap_or(0) * chunk;
+            let hi = if t + 1 == threads { total } else { lo + chunk };
+            handles.push(std::thread::spawn(move || {
+                for i in lo..hi {
+                    let v = f64::from(f32::from_bits(i as u32));
+                    for prec in [2usize, 3] {
+                        let want = format!("{v:.prec$}");
+                        let mut got = String::new();
+                        let _ = fmt_f_into(&mut got, v, prec);
+                        assert_eq!(got, want, "f32 bits {i} ({v:?}) at {prec}");
+                    }
+                }
+            }));
+        }
+        for h in handles {
+            h.join().unwrap();
         }
     }
 
