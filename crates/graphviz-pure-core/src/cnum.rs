@@ -694,31 +694,47 @@ mod tests {
     /// ```sh
     /// cargo test --release -p graphviz-pure-core -- --ignored every_f32
     /// ```
+    ///
+    /// The threads take the bit patterns in stripes rather than in ranges: the cost of a value
+    /// grows with the number of digits it prints, and the bit patterns of the large values are
+    /// all at the end of the space, so a range split would leave every thread with the same
+    /// slow tail.
     #[test]
     #[ignore = "four billion values; run it by hand"]
     fn every_f32_matches_the_generic_formatter() {
         let threads = std::thread::available_parallelism().map_or(1, |n| n.get().min(4));
         let total = u64::from(u32::MAX) + 1;
-        let chunk = total / u64::try_from(threads).unwrap_or(1);
+        let stride = u64::try_from(threads).unwrap_or(1);
+        let start = std::time::Instant::now();
         let mut handles = Vec::new();
         for t in 0..threads {
-            let lo = u64::try_from(t).unwrap_or(0) * chunk;
-            let hi = if t + 1 == threads { total } else { lo + chunk };
             handles.push(std::thread::spawn(move || {
-                for i in lo..hi {
+                let mut i = u64::try_from(t).unwrap_or(0);
+                while i < total {
                     let v = f64::from(f32::from_bits(i as u32));
                     for prec in [2usize, 3] {
-                        let want = format!("{v:.prec$}");
+                        // C prints `nan` for a NaN of either sign; Rust prints `NaN`.
+                        let want = if v.is_nan() {
+                            "nan".to_string()
+                        } else {
+                            format!("{v:.prec$}")
+                        };
                         let mut got = String::new();
                         let _ = fmt_f_into(&mut got, v, prec);
                         assert_eq!(got, want, "f32 bits {i} ({v:?}) at {prec}");
                     }
+                    i += stride;
                 }
             }));
         }
         for h in handles {
             h.join().unwrap();
         }
+        println!(
+            "{} f32 values, two precisions each, in {:.1} s",
+            total,
+            start.elapsed().as_secs_f64()
+        );
     }
 
     #[test]
