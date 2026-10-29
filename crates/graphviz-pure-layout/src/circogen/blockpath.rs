@@ -302,7 +302,7 @@ impl Crossings {
         let mut offsets = vec![0..0; c.nd.len()];
         let mut edges = Vec::new();
         let mut ni = nodes.iter().peekable();
-        for (n, offset) in offsets.iter_mut().enumerate().take(c.nd.len()) {
+        for (n, offset) in offsets.iter_mut().enumerate() {
             let start = edges.len();
             if ni.peek() == Some(&&n) {
                 edges.extend(subg.edges(n));
@@ -320,31 +320,30 @@ impl Crossings {
 }
 
 /// C: lib/circogen/blockpath.c:count_all_crossings
-fn count_all_crossings(c: &mut Circ, list: &[usize], scratch: &mut Crossings) -> i32 {
-    scratch.open.fill(0);
+fn count_all_crossings(
+    c: &mut Circ,
+    list: &[usize],
+    offsets: &[std::ops::Range<usize>],
+    adjacency: &[usize],
+    open: &mut [u64],
+) -> i32 {
+    open.fill(0);
     let mut crossings = 0;
-    for &e in &scratch.edges {
-        if let Some(order) = c.arena.order.get_mut(e) {
-            *order = 0;
-        }
+    for &e in adjacency {
+        c.arena.order[e] = 0;
     }
-    let mut order = 1;
-    for &n in list {
-        let Some(range) = scratch.offsets.get(n) else {
-            continue;
-        };
-        let Some(edges) = scratch.edges.get(range.clone()) else {
-            continue;
-        };
+    for (&n, order) in list.iter().zip(1..) {
+        let edges = &adjacency[offsets[n].clone()];
         for &e in edges {
-            if c.arena.order[e] > 0 {
+            let edge_order = c.arena.order[e];
+            if edge_order > 0 {
                 // Ascending (edge id, half), exactly the old BTreeSet order.
-                for (word_index, &word) in scratch.open.iter().enumerate() {
+                for (word_index, &word) in open.iter().enumerate() {
                     let mut bits = word;
                     while bits != 0 {
                         let half = (word_index << 6) | bits.trailing_zeros() as usize;
                         let ep = half / 2;
-                        if c.arena.order[ep] > c.arena.order[e]
+                        if c.arena.order[ep] > edge_order
                             && c.arena.head[ep] != n
                             && c.arena.tail[ep] != n
                         {
@@ -356,21 +355,17 @@ fn count_all_crossings(c: &mut Circ, list: &[usize], scratch: &mut Crossings) ->
                 // C's two edge halves are distinct keys: closing at the other
                 // end must not erase the half opened at the first endpoint.
                 let half = (e << 1) | usize::from(c.arena.tail[e] != n);
-                if let Some(word) = scratch.open.get_mut(half / 64) {
-                    *word &= !(1u64.wrapping_shl((half % 64) as u32));
-                }
+                open[half / 64] &= !(1u64.wrapping_shl((half % 64) as u32));
             }
         }
         for &e in edges {
-            if c.arena.order[e] == 0 {
-                c.arena.order[e] = order;
+            let edge_order = &mut c.arena.order[e];
+            if *edge_order == 0 {
+                *edge_order = order;
                 let half = (e << 1) | usize::from(c.arena.tail[e] != n);
-                if let Some(word) = scratch.open.get_mut(half / 64) {
-                    *word |= 1u64.wrapping_shl((half % 64) as u32);
-                }
+                open[half / 64] |= 1u64.wrapping_shl((half % 64) as u32);
             }
         }
-        order += 1;
     }
     crossings
 }
@@ -387,25 +382,19 @@ fn reduce(
 ) -> Vec<usize> {
     let mut crossings = *cnt;
     let mut list_copy = Vec::with_capacity(list.len());
-    for ni in 0..scratch.nodes.len() {
-        let Some(&curnode) = scratch.nodes.get(ni) else {
-            continue;
-        };
-        let Some(range) = scratch.offsets.get(curnode).cloned() else {
-            continue;
-        };
-        for ei in range {
-            let Some(&e) = scratch.edges.get(ei) else {
-                continue;
-            };
-            let mut neighbor = c.arena.tail[e];
-            if neighbor == curnode {
-                neighbor = c.arena.head[e];
-            }
+    let Crossings {
+        nodes,
+        offsets,
+        edges,
+        open,
+    } = scratch;
+    for &curnode in nodes.iter() {
+        for &e in &edges[offsets[curnode].clone()] {
+            let neighbor = c.arena.other(e, curnode);
             for j in 0..2 {
                 list_copy.clone_from(&list);
                 insert_nodelist(&mut list, curnode, neighbor, j);
-                let new_crossings = count_all_crossings(c, &list, scratch);
+                let new_crossings = count_all_crossings(c, &list, offsets, edges, open);
                 if new_crossings < crossings {
                     crossings = new_crossings;
                     if crossings == 0 {
@@ -425,7 +414,13 @@ fn reduce(
 /// `reduce_edge_crossings(list, subg)`.
 fn reduce_edge_crossings(c: &mut Circ, mut list: Vec<usize>, subg: &CGraph) -> Vec<usize> {
     let mut scratch = Crossings::new(c, subg);
-    let mut crossings = count_all_crossings(c, &list, &mut scratch);
+    let mut crossings = count_all_crossings(
+        c,
+        &list,
+        &scratch.offsets,
+        &scratch.edges,
+        &mut scratch.open,
+    );
     if crossings == 0 {
         return list;
     }
@@ -443,11 +438,13 @@ fn reduce_edge_crossings(c: &mut Circ, mut list: Vec<usize>, subg: &CGraph) -> V
 fn largest_nodesize(c: &Circ, list: &[usize]) -> f64 {
     let mut size = 0.0;
     for &n in list {
-        if c.width[n] > size {
-            size = c.width[n];
+        let width = c.width[n];
+        if width > size {
+            size = width;
         }
-        if c.height[n] > size {
-            size = c.height[n];
+        let height = c.height[n];
+        if height > size {
+            size = height;
         }
     }
     size
@@ -525,11 +522,8 @@ pub fn layout_block(c: &mut Circ, g: &CGraph, sn: usize, min_dist: f64) -> Vec<u
         n_len as f64 * (min_dist + largest_node) / (2.0 * PI)
     };
 
-    for item in 0..longest_path.len() {
-        if c.flag(longest_path[item], PARENT_F) {
-            realign_nodelist(&mut longest_path, item);
-            break;
-        }
+    if let Some(item) = longest_path.iter().position(|&n| c.flag(n, PARENT_F)) {
+        realign_nodelist(&mut longest_path, item);
     }
 
     for (k, &n) in longest_path.iter().enumerate() {
@@ -623,7 +617,11 @@ mod tests {
         fn permutations(c: &mut Circ, g: &CGraph, s: &mut Crossings, list: &mut [usize], i: usize) {
             if i == list.len() {
                 let expected = reference(c, list, g);
-                assert_eq!(count_all_crossings(c, list, s), expected, "{list:?}");
+                assert_eq!(
+                    count_all_crossings(c, list, &s.offsets, &s.edges, &mut s.open),
+                    expected,
+                    "{list:?}"
+                );
                 return;
             }
             for j in i..list.len() {

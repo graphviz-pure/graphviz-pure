@@ -1,6 +1,9 @@
 //! `lib/circogen/edgelist.c`: the set of open edges used when counting
 //! crossings.
 //!
+//! Used only as a test oracle now: production crossing counts use the indexed
+//! bitset in `blockpath.rs`, preserving this set's edge-half ordering.
+//!
 //! C keys the set by `Agedge_t *`. An undirected cgraph edge has two halves
 //! with distinct addresses, and `agfstedge`/`agnxtedge` yield the out-half
 //! from the tail and the in-half from the head, so an edge opened at one end

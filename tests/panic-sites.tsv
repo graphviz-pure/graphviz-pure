@@ -9,7 +9,7 @@ geom/pathplan/shortest.rs	0	0	83	25
 geom/pathplan/triang.rs	0	0	22	5
 geom/pathplan/util.rs	0	0	9	5
 geom/pathplan/visibility.rs	0	0	66	32
-layout/circogen/blockpath.rs	7	6	51	26
+layout/circogen/blockpath.rs	7	6	51	25
 layout/circogen/blocktree.rs	0	4	44	1
 layout/circogen/circpos.rs	0	1	44	6
 layout/circogen/circular.rs	0	1	8	1

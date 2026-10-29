@@ -44,7 +44,7 @@
    "heap_blocks": 28953,
    "heap_bytes": 2888864,
    "heap_peak_bytes": 993215,
-   "instructions": 531358486
+   "instructions": 531359725
   },
   "tests/fdp/wild_gv16_graphs_b69_4b5b48.gv -Tsvg": {
    "heap_blocks": 320901,
