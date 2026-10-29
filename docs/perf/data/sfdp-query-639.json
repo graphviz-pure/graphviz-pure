@@ -1,0 +1,2396 @@
+{
+ "builds": {
+  "master-v1": {
+   "sha256": "b5971c5314dca2c2708caa4b3512084133ac1f36d74fbd239417732898ef6bcd",
+   "start": "2026-10-29T22:53:19.629847+00:00",
+   "uptime_start": "22:53:19 up 4 days, 19:35,  2 users,  load average: 5.39, 4.59, 4.60",
+   "cases": [
+    {
+     "case": "rnd2000",
+     "input": "tests/sfdp/gen_rnd2000.gv",
+     "format": "svg",
+     "stdout_sha256": "40dfa20c1be0a3ba6f20bb7a8f756f1ad8e7f5a066da3dbb712c36bc12e31bb1",
+     "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+     "perf": [
+      {
+       "wall": 0.8791759019950405,
+       "raw": "# started on Thu Oct 29 22:53:20 2026\n\n2627436314,,cycles:u,848754609,100.00,,\n8192201690,,instructions:u,848754609,100.00,3.12,insn per cycle\n",
+       "cycles": 2627436314,
+       "cycles_coverage": 100.0,
+       "instructions": 8192201690,
+       "instructions_coverage": 100.0
+      },
+      {
+       "wall": 0.8802460489678197,
+       "raw": "# started on Thu Oct 29 22:53:21 2026\n\n2616906382,,cycles:u,844680751,100.00,,\n8192200211,,instructions:u,844680751,100.00,3.13,insn per cycle\n",
+       "cycles": 2616906382,
+       "cycles_coverage": 100.0,
+       "instructions": 8192200211,
+       "instructions_coverage": 100.0
+      },
+      {
+       "wall": 0.8683261660044082,
+       "raw": "# started on Thu Oct 29 22:53:22 2026\n\n2598947304,,cycles:u,837888362,100.00,,\n8192205714,,instructions:u,837888362,100.00,3.15,insn per cycle\n",
+       "cycles": 2598947304,
+       "cycles_coverage": 100.0,
+       "instructions": 8192205714,
+       "instructions_coverage": 100.0
+      },
+      {
+       "wall": 0.8584748120047152,
+       "raw": "# started on Thu Oct 29 22:53:23 2026\n\n2570285675,,cycles:u,827940686,100.00,,\n8192207632,,instructions:u,827940686,100.00,3.19,insn per cycle\n",
+       "cycles": 2570285675,
+       "cycles_coverage": 100.0,
+       "instructions": 8192207632,
+       "instructions_coverage": 100.0
+      },
+      {
+       "wall": 0.8657767790136859,
+       "raw": "# started on Thu Oct 29 22:53:24 2026\n\n2586358569,,cycles:u,835915793,100.00,,\n8192205285,,instructions:u,835915793,100.00,3.17,insn per cycle\n",
+       "cycles": 2586358569,
+       "cycles_coverage": 100.0,
+       "instructions": 8192205285,
+       "instructions_coverage": 100.0
+      }
+     ],
+     "cycles_median": 2598947304,
+     "instructions_median": 8192205285,
+     "wall_median": 0.8683261660044082,
+     "callgrind_instructions": 8213497620,
+     "heap": {
+      "heap_blocks": 410382,
+      "heap_bytes": 42581175,
+      "heap_peak_bytes": 13285549
+     }
+    },
+    {
+     "case": "sparse5000",
+     "input": "synth/sfdp_sparse_5000.gv",
+     "format": "svg",
+     "stdout_sha256": "635a8e8b5fa6f1e52bdb8d83dc4d8e299d72d4feca81d031c6a18a0b20d3fd74",
+     "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+     "perf": [
+      {
+       "wall": 2.5195333309820853,
+       "raw": "# started on Thu Oct 29 22:54:18 2026\n\n7665153910,,cycles:u,2451092062,100.00,,\n23357357027,,instructions:u,2451092062,100.00,3.05,insn per cycle\n",
+       "cycles": 7665153910,
+       "cycles_coverage": 100.0,
+       "instructions": 23357357027,
+       "instructions_coverage": 100.0
+      },
+      {
+       "wall": 2.5250606369809248,
+       "raw": "# started on Thu Oct 29 22:54:21 2026\n\n7808614698,,cycles:u,2494073634,100.00,,\n23357360311,,instructions:u,2494073634,100.00,2.99,insn per cycle\n",
+       "cycles": 7808614698,
+       "cycles_coverage": 100.0,
+       "instructions": 23357360311,
+       "instructions_coverage": 100.0
+      },
+      {
+       "wall": 2.463103724003304,
+       "raw": "# started on Thu Oct 29 22:54:23 2026\n\n7646648568,,cycles:u,2432824952,100.00,,\n23357362804,,instructions:u,2432824952,100.00,3.05,insn per cycle\n",
+       "cycles": 7646648568,
+       "cycles_coverage": 100.0,
+       "instructions": 23357362804,
+       "instructions_coverage": 100.0
+      },
+      {
+       "wall": 2.408664955990389,
+       "raw": "# started on Thu Oct 29 22:54:26 2026\n\n7472160288,,cycles:u,2377927033,100.00,,\n23357372291,,instructions:u,2377927033,100.00,3.13,insn per cycle\n",
+       "cycles": 7472160288,
+       "cycles_coverage": 100.0,
+       "instructions": 23357372291,
+       "instructions_coverage": 100.0
+      },
+      {
+       "wall": 2.3743398730293848,
+       "raw": "# started on Thu Oct 29 22:54:28 2026\n\n7384467860,,cycles:u,2344122140,100.00,,\n23357360703,,instructions:u,2344122140,100.00,3.16,insn per cycle\n",
+       "cycles": 7384467860,
+       "cycles_coverage": 100.0,
+       "instructions": 23357360703,
+       "instructions_coverage": 100.0
+      }
+     ],
+     "cycles_median": 7646648568,
+     "instructions_median": 23357360703,
+     "wall_median": 2.463103724003304,
+     "callgrind_instructions": 23415458020,
+     "heap": {
+      "heap_blocks": 907512,
+      "heap_bytes": 99942954,
+      "heap_peak_bytes": 29503983
+     }
+    },
+    {
+     "case": "grid20x20",
+     "input": "tests/sfdp/gen_grid20x20.gv",
+     "format": "svg",
+     "stdout_sha256": "ee1ae6946994985b8538bc5c6173092f1545fff28fe457cf3fccfbb732aa911c",
+     "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+     "perf": [
+      {
+       "wall": 0.18170393101172522,
+       "raw": "# started on Thu Oct 29 22:56:51 2026\n\n299631201,,cycles:u,110910257,100.00,,\n972758517,,instructions:u,110910257,100.00,3.25,insn per cycle\n",
+       "cycles": 299631201,
+       "cycles_coverage": 100.0,
+       "instructions": 972758517,
+       "instructions_coverage": 100.0
+      },
+      {
+       "wall": 0.1359749610419385,
+       "raw": "# started on Thu Oct 29 22:56:51 2026\n\n308892524,,cycles:u,104570927,100.00,,\n972761311,,instructions:u,104570927,100.00,3.15,insn per cycle\n",
+       "cycles": 308892524,
+       "cycles_coverage": 100.0,
+       "instructions": 972761311,
+       "instructions_coverage": 100.0
+      },
+      {
+       "wall": 0.1339086740044877,
+       "raw": "# started on Thu Oct 29 22:56:51 2026\n\n311686391,,cycles:u,105381978,100.00,,\n972758946,,instructions:u,105381978,100.00,3.12,insn per cycle\n",
+       "cycles": 311686391,
+       "cycles_coverage": 100.0,
+       "instructions": 972758946,
+       "instructions_coverage": 100.0
+      },
+      {
+       "wall": 0.13357214600546286,
+       "raw": "# started on Thu Oct 29 22:56:51 2026\n\n304871029,,cycles:u,103524875,100.00,,\n972758958,,instructions:u,103524875,100.00,3.19,insn per cycle\n",
+       "cycles": 304871029,
+       "cycles_coverage": 100.0,
+       "instructions": 972758958,
+       "instructions_coverage": 100.0
+      },
+      {
+       "wall": 0.13197523698909208,
+       "raw": "# started on Thu Oct 29 22:56:51 2026\n\n300944943,,cycles:u,102211973,100.00,,\n972761096,,instructions:u,102211973,100.00,3.23,insn per cycle\n",
+       "cycles": 300944943,
+       "cycles_coverage": 100.0,
+       "instructions": 972761096,
+       "instructions_coverage": 100.0
+      }
+     ],
+     "cycles_median": 304871029,
+     "instructions_median": 972758958,
+     "wall_median": 0.1339086740044877,
+     "callgrind_instructions": 975847030,
+     "heap": {
+      "heap_blocks": 97178,
+      "heap_bytes": 9553615,
+      "heap_peak_bytes": 3066410
+     }
+    }
+   ],
+   "end": "2026-10-29T22:56:59.182760+00:00",
+   "uptime_end": "22:56:59 up 4 days, 19:38,  2 users,  load average: 8.02, 5.65, 4.98"
+  },
+  "master-v3": {
+   "sha256": "4ca2ba64ea8bcd202eab7aaa067817ef290efee698bdd15ca7b504d92ad6e719",
+   "start": "2026-10-29T22:56:59.195821+00:00",
+   "uptime_start": "22:56:59 up 4 days, 19:38,  2 users,  load average: 8.02, 5.65, 4.98",
+   "cases": [
+    {
+     "case": "rnd2000",
+     "input": "tests/sfdp/gen_rnd2000.gv",
+     "format": "svg",
+     "stdout_sha256": "40dfa20c1be0a3ba6f20bb7a8f756f1ad8e7f5a066da3dbb712c36bc12e31bb1",
+     "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+     "perf": [
+      {
+       "wall": 0.460633335984312,
+       "raw": "# started on Thu Oct 29 22:56:59 2026\n\n1144982727,,cycles:u,396953247,100.00,,\n2914879356,,instructions:u,396953247,100.00,2.55,insn per cycle\n",
+       "cycles": 1144982727,
+       "cycles_coverage": 100.0,
+       "instructions": 2914879356,
+       "instructions_coverage": 100.0
+      },
+      {
+       "wall": 0.40004448901163414,
+       "raw": "# started on Thu Oct 29 22:57:00 2026\n\n1092877860,,cycles:u,368185319,100.00,,\n2914884762,,instructions:u,368185319,100.00,2.67,insn per cycle\n",
+       "cycles": 1092877860,
+       "cycles_coverage": 100.0,
+       "instructions": 2914884762,
+       "instructions_coverage": 100.0
+      },
+      {
+       "wall": 0.4049080219701864,
+       "raw": "# started on Thu Oct 29 22:57:00 2026\n\n1100930834,,cycles:u,371323021,100.00,,\n2914877860,,instructions:u,371323021,100.00,2.65,insn per cycle\n",
+       "cycles": 1100930834,
+       "cycles_coverage": 100.0,
+       "instructions": 2914877860,
+       "instructions_coverage": 100.0
+      },
+      {
+       "wall": 0.4017897990415804,
+       "raw": "# started on Thu Oct 29 22:57:00 2026\n\n1092240660,,cycles:u,368701321,100.00,,\n2914875952,,instructions:u,368701321,100.00,2.67,insn per cycle\n",
+       "cycles": 1092240660,
+       "cycles_coverage": 100.0,
+       "instructions": 2914875952,
+       "instructions_coverage": 100.0
+      },
+      {
+       "wall": 0.4080136099946685,
+       "raw": "# started on Thu Oct 29 22:57:01 2026\n\n1123542974,,cycles:u,377263499,100.00,,\n2914877486,,instructions:u,377263499,100.00,2.59,insn per cycle\n",
+       "cycles": 1123542974,
+       "cycles_coverage": 100.0,
+       "instructions": 2914877486,
+       "instructions_coverage": 100.0
+      }
+     ],
+     "cycles_median": 1100930834,
+     "instructions_median": 2914877860,
+     "wall_median": 0.4049080219701864,
+     "callgrind_instructions": 2934885984,
+     "heap": {
+      "heap_blocks": 410382,
+      "heap_bytes": 42581175,
+      "heap_peak_bytes": 13285549
+     }
+    },
+    {
+     "case": "sparse5000",
+     "input": "synth/sfdp_sparse_5000.gv",
+     "format": "svg",
+     "stdout_sha256": "635a8e8b5fa6f1e52bdb8d83dc4d8e299d72d4feca81d031c6a18a0b20d3fd74",
+     "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+     "perf": [
+      {
+       "wall": 1.1164951280225068,
+       "raw": "# started on Thu Oct 29 22:57:25 2026\n\n3194873986,,cycles:u,1054683320,100.00,,\n8121210016,,instructions:u,1054683320,100.00,2.54,insn per cycle\n",
+       "cycles": 3194873986,
+       "cycles_coverage": 100.0,
+       "instructions": 8121210016,
+       "instructions_coverage": 100.0
+      },
+      {
+       "wall": 1.073066419980023,
+       "raw": "# started on Thu Oct 29 22:57:27 2026\n\n3177858187,,cycles:u,1041659952,100.00,,\n8121204529,,instructions:u,1041659952,100.00,2.56,insn per cycle\n",
+       "cycles": 3177858187,
+       "cycles_coverage": 100.0,
+       "instructions": 8121204529,
+       "instructions_coverage": 100.0
+      },
+      {
+       "wall": 1.0803060680045746,
+       "raw": "# started on Thu Oct 29 22:57:28 2026\n\n3201967511,,cycles:u,1049458060,100.00,,\n8121202499,,instructions:u,1049458060,100.00,2.54,insn per cycle\n",
+       "cycles": 3201967511,
+       "cycles_coverage": 100.0,
+       "instructions": 8121202499,
+       "instructions_coverage": 100.0
+      },
+      {
+       "wall": 1.1040111440233886,
+       "raw": "# started on Thu Oct 29 22:57:29 2026\n\n3270003074,,cycles:u,1072749275,100.00,,\n8121195347,,instructions:u,1072749275,100.00,2.48,insn per cycle\n",
+       "cycles": 3270003074,
+       "cycles_coverage": 100.0,
+       "instructions": 8121195347,
+       "instructions_coverage": 100.0
+      },
+      {
+       "wall": 1.1034096640069038,
+       "raw": "# started on Thu Oct 29 22:57:30 2026\n\n3265774032,,cycles:u,1071062648,100.00,,\n8121199485,,instructions:u,1071062648,100.00,2.49,insn per cycle\n",
+       "cycles": 3265774032,
+       "cycles_coverage": 100.0,
+       "instructions": 8121199485,
+       "instructions_coverage": 100.0
+      }
+     ],
+     "cycles_median": 3201967511,
+     "instructions_median": 8121202499,
+     "wall_median": 1.1034096640069038,
+     "callgrind_instructions": 8176077256,
+     "heap": {
+      "heap_blocks": 907512,
+      "heap_bytes": 99942954,
+      "heap_peak_bytes": 29503983
+     }
+    },
+    {
+     "case": "grid20x20",
+     "input": "tests/sfdp/gen_grid20x20.gv",
+     "format": "svg",
+     "stdout_sha256": "ee1ae6946994985b8538bc5c6173092f1545fff28fe457cf3fccfbb732aa911c",
+     "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+     "perf": [
+      {
+       "wall": 0.1219349120510742,
+       "raw": "# started on Thu Oct 29 22:58:31 2026\n\n127880724,,cycles:u,59737956,100.00,,\n369465356,,instructions:u,59737956,100.00,2.89,insn per cycle\n",
+       "cycles": 127880724,
+       "cycles_coverage": 100.0,
+       "instructions": 369465356,
+       "instructions_coverage": 100.0
+      },
+      {
+       "wall": 0.07795573299517855,
+       "raw": "# started on Thu Oct 29 22:58:31 2026\n\n127071614,,cycles:u,47516284,100.00,,\n369464172,,instructions:u,47516284,100.00,2.91,insn per cycle\n",
+       "cycles": 127071614,
+       "cycles_coverage": 100.0,
+       "instructions": 369464172,
+       "instructions_coverage": 100.0
+      },
+      {
+       "wall": 0.07483756000874564,
+       "raw": "# started on Thu Oct 29 22:58:31 2026\n\n129085052,,cycles:u,48050127,100.00,,\n369464038,,instructions:u,48050127,100.00,2.86,insn per cycle\n",
+       "cycles": 129085052,
+       "cycles_coverage": 100.0,
+       "instructions": 369464038,
+       "instructions_coverage": 100.0
+      },
+      {
+       "wall": 0.08106360503006727,
+       "raw": "# started on Thu Oct 29 22:58:31 2026\n\n129978060,,cycles:u,48840288,100.00,,\n369465982,,instructions:u,48840288,100.00,2.84,insn per cycle\n",
+       "cycles": 129978060,
+       "cycles_coverage": 100.0,
+       "instructions": 369465982,
+       "instructions_coverage": 100.0
+      },
+      {
+       "wall": 0.07901300699450076,
+       "raw": "# started on Thu Oct 29 22:58:32 2026\n\n129179684,,cycles:u,48467309,100.00,,\n369467647,,instructions:u,48467309,100.00,2.86,insn per cycle\n",
+       "cycles": 129179684,
+       "cycles_coverage": 100.0,
+       "instructions": 369467647,
+       "instructions_coverage": 100.0
+      }
+     ],
+     "cycles_median": 129085052,
+     "instructions_median": 369465356,
+     "wall_median": 0.07901300699450076,
+     "callgrind_instructions": 372253745,
+     "heap": {
+      "heap_blocks": 97178,
+      "heap_bytes": 9553615,
+      "heap_peak_bytes": 3066410
+     }
+    }
+   ],
+   "end": "2026-10-29T22:58:36.362119+00:00",
+   "uptime_end": "22:58:36 up 4 days, 19:40,  2 users,  load average: 6.73, 5.94, 5.15"
+  },
+  "parent614-v1": {
+   "sha256": "f8ec01327b278cb763c09bf654faff9c3cfc33eb568675a76efa53b312004040",
+   "start": "2026-10-29T23:08:50.825178+00:00",
+   "uptime_start": "23:08:50 up 4 days, 19:50,  2 users,  load average: 183.69, 131.64, 59.95",
+   "cases": [
+    {
+     "case": "rnd2000",
+     "input": "tests/sfdp/gen_rnd2000.gv",
+     "format": "svg",
+     "stdout_sha256": "40dfa20c1be0a3ba6f20bb7a8f756f1ad8e7f5a066da3dbb712c36bc12e31bb1",
+     "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+     "perf": [
+      {
+       "wall": 1.8807196560082957,
+       "raw": "# started on Thu Oct 29 23:08:52 2026\n\n3883927651,,cycles:u,1564585795,100.00,,\n8187484964,,instructions:u,1564585795,100.00,2.11,insn per cycle\n",
+       "cycles": 3883927651,
+       "cycles_coverage": 100.0,
+       "instructions": 8187484964,
+       "instructions_coverage": 100.0
+      },
+      {
+       "wall": 1.6953491160529666,
+       "raw": "# started on Thu Oct 29 23:08:54 2026\n\n3764832498,,cycles:u,1424430371,100.00,,\n8187485740,,instructions:u,1424430371,100.00,2.17,insn per cycle\n",
+       "cycles": 3764832498,
+       "cycles_coverage": 100.0,
+       "instructions": 8187485740,
+       "instructions_coverage": 100.0
+      },
+      {
+       "wall": 2.162183862994425,
+       "raw": "# started on Thu Oct 29 23:08:56 2026\n\n3832700815,,cycles:u,1432641956,100.00,,\n8187485460,,instructions:u,1432641956,100.00,2.14,insn per cycle\n",
+       "cycles": 3832700815,
+       "cycles_coverage": 100.0,
+       "instructions": 8187485460,
+       "instructions_coverage": 100.0
+      },
+      {
+       "wall": 1.7753575909882784,
+       "raw": "# started on Thu Oct 29 23:08:58 2026\n\n3010704434,,cycles:u,1230263973,100.00,,\n8187476190,,instructions:u,1230263973,100.00,2.72,insn per cycle\n",
+       "cycles": 3010704434,
+       "cycles_coverage": 100.0,
+       "instructions": 8187476190,
+       "instructions_coverage": 100.0
+      },
+      {
+       "wall": 1.8260630150325596,
+       "raw": "# started on Thu Oct 29 23:09:00 2026\n\n3411051601,,cycles:u,1293105301,100.00,,\n8187481995,,instructions:u,1293105301,100.00,2.40,insn per cycle\n",
+       "cycles": 3411051601,
+       "cycles_coverage": 100.0,
+       "instructions": 8187481995,
+       "instructions_coverage": 100.0
+      }
+     ],
+     "cycles_median": 3764832498,
+     "instructions_median": 8187484964,
+     "wall_median": 1.8260630150325596,
+     "callgrind_instructions": 8195547274,
+     "heap": {
+      "heap_blocks": 410278,
+      "heap_bytes": 42702103,
+      "heap_peak_bytes": 13285549
+     }
+    },
+    {
+     "case": "sparse5000",
+     "input": "synth/sfdp_sparse_5000.gv",
+     "format": "svg",
+     "stdout_sha256": "635a8e8b5fa6f1e52bdb8d83dc4d8e299d72d4feca81d031c6a18a0b20d3fd74",
+     "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+     "perf": [
+      {
+       "wall": 4.5014593719970435,
+       "raw": "# started on Thu Oct 29 23:10:45 2026\n\n11363629952,,cycles:u,4278264150,100.00,,\n23338065928,,instructions:u,4278264150,100.00,2.05,insn per cycle\n",
+       "cycles": 11363629952,
+       "cycles_coverage": 100.0,
+       "instructions": 23338065928,
+       "instructions_coverage": 100.0
+      },
+      {
+       "wall": 4.2025333709898405,
+       "raw": "# started on Thu Oct 29 23:10:49 2026\n\n10818961239,,cycles:u,4022181005,100.00,,\n23338064900,,instructions:u,4022181005,100.00,2.16,insn per cycle\n",
+       "cycles": 10818961239,
+       "cycles_coverage": 100.0,
+       "instructions": 23338064900,
+       "instructions_coverage": 100.0
+      },
+      {
+       "wall": 4.203156105009839,
+       "raw": "# started on Thu Oct 29 23:10:53 2026\n\n10908968662,,cycles:u,3940061037,100.00,,\n23338055460,,instructions:u,3940061037,100.00,2.14,insn per cycle\n",
+       "cycles": 10908968662,
+       "cycles_coverage": 100.0,
+       "instructions": 23338055460,
+       "instructions_coverage": 100.0
+      },
+      {
+       "wall": 3.1937779470463283,
+       "raw": "# started on Thu Oct 29 23:10:58 2026\n\n8055747303,,cycles:u,3007954115,100.00,,\n23338067975,,instructions:u,3007954115,100.00,2.90,insn per cycle\n",
+       "cycles": 8055747303,
+       "cycles_coverage": 100.0,
+       "instructions": 23338067975,
+       "instructions_coverage": 100.0
+      },
+      {
+       "wall": 4.537712660967372,
+       "raw": "# started on Thu Oct 29 23:11:01 2026\n\n10654744168,,cycles:u,3933050992,100.00,,\n23338065256,,instructions:u,3933050992,100.00,2.19,insn per cycle\n",
+       "cycles": 10654744168,
+       "cycles_coverage": 100.0,
+       "instructions": 23338065256,
+       "instructions_coverage": 100.0
+      }
+     ],
+     "cycles_median": 10818961239,
+     "instructions_median": 23338065256,
+     "wall_median": 4.203156105009839,
+     "callgrind_instructions": 23357675279,
+     "heap": {
+      "heap_blocks": 907380,
+      "heap_bytes": 100273322,
+      "heap_peak_bytes": 29659887
+     }
+    },
+    {
+     "case": "grid20x20",
+     "input": "tests/sfdp/gen_grid20x20.gv",
+     "format": "svg",
+     "stdout_sha256": "ee1ae6946994985b8538bc5c6173092f1545fff28fe457cf3fccfbb732aa911c",
+     "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+     "perf": [
+      {
+       "wall": 0.5530854319804348,
+       "raw": "# started on Thu Oct 29 23:15:28 2026\n\n484535717,,cycles:u,203740726,100.00,,\n972714638,,instructions:u,203740726,100.00,2.01,insn per cycle\n",
+       "cycles": 484535717,
+       "cycles_coverage": 100.0,
+       "instructions": 972714638,
+       "instructions_coverage": 100.0
+      },
+      {
+       "wall": 0.29881983099039644,
+       "raw": "# started on Thu Oct 29 23:15:29 2026\n\n467266577,,cycles:u,183276770,100.00,,\n972714958,,instructions:u,183276770,100.00,2.08,insn per cycle\n",
+       "cycles": 467266577,
+       "cycles_coverage": 100.0,
+       "instructions": 972714958,
+       "instructions_coverage": 100.0
+      },
+      {
+       "wall": 0.5282354520168155,
+       "raw": "# started on Thu Oct 29 23:15:29 2026\n\n433315544,,cycles:u,167139081,100.00,,\n972715540,,instructions:u,167139081,100.00,2.24,insn per cycle\n",
+       "cycles": 433315544,
+       "cycles_coverage": 100.0,
+       "instructions": 972715540,
+       "instructions_coverage": 100.0
+      },
+      {
+       "wall": 0.2675943690119311,
+       "raw": "# started on Thu Oct 29 23:15:30 2026\n\n483138983,,cycles:u,198695053,100.00,,\n972714854,,instructions:u,198695053,100.00,2.01,insn per cycle\n",
+       "cycles": 483138983,
+       "cycles_coverage": 100.0,
+       "instructions": 972714854,
+       "instructions_coverage": 100.0
+      },
+      {
+       "wall": 0.23295403202064335,
+       "raw": "# started on Thu Oct 29 23:15:30 2026\n\n444229939,,cycles:u,163877185,100.00,,\n972715575,,instructions:u,163877185,100.00,2.19,insn per cycle\n",
+       "cycles": 444229939,
+       "cycles_coverage": 100.0,
+       "instructions": 972715575,
+       "instructions_coverage": 100.0
+      }
+     ],
+     "cycles_median": 467266577,
+     "instructions_median": 972714958,
+     "wall_median": 0.29881983099039644,
+     "callgrind_instructions": 974482973,
+     "heap": {
+      "heap_blocks": 97132,
+      "heap_bytes": 9567407,
+      "heap_peak_bytes": 3066410
+     }
+    }
+   ],
+   "end": "2026-10-29T23:15:44.892117+00:00",
+   "uptime_end": "23:15:44 up 4 days, 19:57,  2 users,  load average: 171.56, 154.33, 95.44"
+  },
+  "parent614-v3": {
+   "sha256": "bf021f97546e8aa69b4a0a4b505995608fed8dac39a24e2632219b782b66f7a0",
+   "start": "2026-10-29T23:03:05.752845+00:00",
+   "uptime_start": "23:03:05 up 4 days, 19:44,  2 users,  load average: 5.88, 6.51, 5.67",
+   "cases": [
+    {
+     "case": "rnd2000",
+     "input": "tests/sfdp/gen_rnd2000.gv",
+     "format": "svg",
+     "stdout_sha256": "40dfa20c1be0a3ba6f20bb7a8f756f1ad8e7f5a066da3dbb712c36bc12e31bb1",
+     "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+     "perf": [
+      {
+       "wall": 0.4174127910519019,
+       "raw": "# started on Thu Oct 29 23:03:06 2026\n\n982520059,,cycles:u,345496714,100.00,,\n2896064781,,instructions:u,345496714,100.00,2.95,insn per cycle\n",
+       "cycles": 982520059,
+       "cycles_coverage": 100.0,
+       "instructions": 2896064781,
+       "instructions_coverage": 100.0
+      },
+      {
+       "wall": 0.40325388504425064,
+       "raw": "# started on Thu Oct 29 23:03:06 2026\n\n1093836340,,cycles:u,372557965,100.00,,\n2896061291,,instructions:u,372557965,100.00,2.65,insn per cycle\n",
+       "cycles": 1093836340,
+       "cycles_coverage": 100.0,
+       "instructions": 2896061291,
+       "instructions_coverage": 100.0
+      },
+      {
+       "wall": 0.3634380049770698,
+       "raw": "# started on Thu Oct 29 23:03:06 2026\n\n981691985,,cycles:u,333110997,100.00,,\n2896067347,,instructions:u,333110997,100.00,2.95,insn per cycle\n",
+       "cycles": 981691985,
+       "cycles_coverage": 100.0,
+       "instructions": 2896067347,
+       "instructions_coverage": 100.0
+      },
+      {
+       "wall": 0.375031708041206,
+       "raw": "# started on Thu Oct 29 23:03:07 2026\n\n1009463994,,cycles:u,345042485,100.00,,\n2896057291,,instructions:u,345042485,100.00,2.87,insn per cycle\n",
+       "cycles": 1009463994,
+       "cycles_coverage": 100.0,
+       "instructions": 2896057291,
+       "instructions_coverage": 100.0
+      },
+      {
+       "wall": 0.36002841900335625,
+       "raw": "# started on Thu Oct 29 23:03:07 2026\n\n968994535,,cycles:u,328884078,100.00,,\n2896069505,,instructions:u,328884078,100.00,2.99,insn per cycle\n",
+       "cycles": 968994535,
+       "cycles_coverage": 100.0,
+       "instructions": 2896069505,
+       "instructions_coverage": 100.0
+      }
+     ],
+     "cycles_median": 982520059,
+     "instructions_median": 2896064781,
+     "wall_median": 0.375031708041206,
+     "callgrind_instructions": 2902844131,
+     "heap": {
+      "heap_blocks": 410278,
+      "heap_bytes": 42702103,
+      "heap_peak_bytes": 13285549
+     }
+    },
+    {
+     "case": "sparse5000",
+     "input": "synth/sfdp_sparse_5000.gv",
+     "format": "svg",
+     "stdout_sha256": "635a8e8b5fa6f1e52bdb8d83dc4d8e299d72d4feca81d031c6a18a0b20d3fd74",
+     "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+     "perf": [
+      {
+       "wall": 1.03619285201421,
+       "raw": "# started on Thu Oct 29 23:03:34 2026\n\n2933454886,,cycles:u,978178979,100.00,,\n8063761911,,instructions:u,978178979,100.00,2.75,insn per cycle\n",
+       "cycles": 2933454886,
+       "cycles_coverage": 100.0,
+       "instructions": 8063761911,
+       "instructions_coverage": 100.0
+      },
+      {
+       "wall": 1.1319157910184003,
+       "raw": "# started on Thu Oct 29 23:03:35 2026\n\n3325238003,,cycles:u,1097926792,100.00,,\n8063773417,,instructions:u,1097926792,100.00,2.43,insn per cycle\n",
+       "cycles": 3325238003,
+       "cycles_coverage": 100.0,
+       "instructions": 8063773417,
+       "instructions_coverage": 100.0
+      },
+      {
+       "wall": 1.1339271239703521,
+       "raw": "# started on Thu Oct 29 23:03:36 2026\n\n3283048752,,cycles:u,1090996415,100.00,,\n8063763137,,instructions:u,1090996415,100.00,2.46,insn per cycle\n",
+       "cycles": 3283048752,
+       "cycles_coverage": 100.0,
+       "instructions": 8063763137,
+       "instructions_coverage": 100.0
+      },
+      {
+       "wall": 1.3512851689592935,
+       "raw": "# started on Thu Oct 29 23:03:37 2026\n\n3855533195,,cycles:u,1289702397,100.00,,\n8063780175,,instructions:u,1289702397,100.00,2.09,insn per cycle\n",
+       "cycles": 3855533195,
+       "cycles_coverage": 100.0,
+       "instructions": 8063780175,
+       "instructions_coverage": 100.0
+      },
+      {
+       "wall": 1.1483163840021007,
+       "raw": "# started on Thu Oct 29 23:03:39 2026\n\n3324120414,,cycles:u,1111972687,100.00,,\n8063760032,,instructions:u,1111972687,100.00,2.43,insn per cycle\n",
+       "cycles": 3324120414,
+       "cycles_coverage": 100.0,
+       "instructions": 8063760032,
+       "instructions_coverage": 100.0
+      }
+     ],
+     "cycles_median": 3324120414,
+     "instructions_median": 8063763137,
+     "wall_median": 1.1339271239703521,
+     "callgrind_instructions": 8080191160,
+     "heap": {
+      "heap_blocks": 907380,
+      "heap_bytes": 100273322,
+      "heap_peak_bytes": 29659887
+     }
+    },
+    {
+     "case": "grid20x20",
+     "input": "tests/sfdp/gen_grid20x20.gv",
+     "format": "svg",
+     "stdout_sha256": "ee1ae6946994985b8538bc5c6173092f1545fff28fe457cf3fccfbb732aa911c",
+     "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+     "perf": [
+      {
+       "wall": 0.19744522601831704,
+       "raw": "# started on Thu Oct 29 23:05:31 2026\n\n188395037,,cycles:u,84171280,100.00,,\n368020440,,instructions:u,84171280,100.00,1.95,insn per cycle\n",
+       "cycles": 188395037,
+       "cycles_coverage": 100.0,
+       "instructions": 368020440,
+       "instructions_coverage": 100.0
+      },
+      {
+       "wall": 0.17118320503504947,
+       "raw": "# started on Thu Oct 29 23:05:31 2026\n\n181071051,,cycles:u,79962479,100.00,,\n368020244,,instructions:u,79962479,100.00,2.03,insn per cycle\n",
+       "cycles": 181071051,
+       "cycles_coverage": 100.0,
+       "instructions": 368020244,
+       "instructions_coverage": 100.0
+      },
+      {
+       "wall": 0.14245332503924146,
+       "raw": "# started on Thu Oct 29 23:05:32 2026\n\n193638756,,cycles:u,77717456,100.00,,\n368018765,,instructions:u,77717456,100.00,1.90,insn per cycle\n",
+       "cycles": 193638756,
+       "cycles_coverage": 100.0,
+       "instructions": 368018765,
+       "instructions_coverage": 100.0
+      },
+      {
+       "wall": 0.15356847801012918,
+       "raw": "# started on Thu Oct 29 23:05:32 2026\n\n182982468,,cycles:u,82399778,100.00,,\n368023106,,instructions:u,82399778,100.00,2.01,insn per cycle\n",
+       "cycles": 182982468,
+       "cycles_coverage": 100.0,
+       "instructions": 368023106,
+       "instructions_coverage": 100.0
+      },
+      {
+       "wall": 0.16657052899245173,
+       "raw": "# started on Thu Oct 29 23:05:32 2026\n\n182690478,,cycles:u,74531811,100.00,,\n368022669,,instructions:u,74531811,100.00,2.01,insn per cycle\n",
+       "cycles": 182690478,
+       "cycles_coverage": 100.0,
+       "instructions": 368022669,
+       "instructions_coverage": 100.0
+      }
+     ],
+     "cycles_median": 182982468,
+     "instructions_median": 368020440,
+     "wall_median": 0.16657052899245173,
+     "callgrind_instructions": 369486413,
+     "heap": {
+      "heap_blocks": 97132,
+      "heap_bytes": 9567407,
+      "heap_peak_bytes": 3066410
+     }
+    }
+   ],
+   "end": "2026-10-29T23:05:42.288900+00:00",
+   "uptime_end": "23:05:42 up 4 days, 19:47,  2 users,  load average: 93.32, 38.58, 17.53"
+  },
+  "query-v1": {
+   "sha256": "1257db376d9d1c9d60cb5c8fd26e59cb0b3ce5eda75c554d23773ce9d97f8d9a",
+   "start": "2026-10-29T23:15:44.910738+00:00",
+   "uptime_start": "23:15:44 up 4 days, 19:57,  2 users,  load average: 171.56, 154.33, 95.44",
+   "cases": [
+    {
+     "case": "rnd2000",
+     "input": "tests/sfdp/gen_rnd2000.gv",
+     "format": "svg",
+     "stdout_sha256": "40dfa20c1be0a3ba6f20bb7a8f756f1ad8e7f5a066da3dbb712c36bc12e31bb1",
+     "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+     "perf": [
+      {
+       "wall": 1.6923025640426204,
+       "raw": "# started on Thu Oct 29 23:15:47 2026\n\n3603404746,,cycles:u,1389137819,100.00,,\n7661729219,,instructions:u,1389137819,100.00,2.13,insn per cycle\n",
+       "cycles": 3603404746,
+       "cycles_coverage": 100.0,
+       "instructions": 7661729219,
+       "instructions_coverage": 100.0
+      },
+      {
+       "wall": 1.3934417099808343,
+       "raw": "# started on Thu Oct 29 23:15:49 2026\n\n3303685673,,cycles:u,1197465978,100.00,,\n7661717905,,instructions:u,1197465978,100.00,2.32,insn per cycle\n",
+       "cycles": 3303685673,
+       "cycles_coverage": 100.0,
+       "instructions": 7661717905,
+       "instructions_coverage": 100.0
+      },
+      {
+       "wall": 1.8503428510157391,
+       "raw": "# started on Thu Oct 29 23:15:50 2026\n\n3666579215,,cycles:u,1360704280,100.00,,\n7661724780,,instructions:u,1360704280,100.00,2.09,insn per cycle\n",
+       "cycles": 3666579215,
+       "cycles_coverage": 100.0,
+       "instructions": 7661724780,
+       "instructions_coverage": 100.0
+      },
+      {
+       "wall": 1.6701124049723148,
+       "raw": "# started on Thu Oct 29 23:15:52 2026\n\n3621973003,,cycles:u,1347277267,100.00,,\n7661716087,,instructions:u,1347277267,100.00,2.12,insn per cycle\n",
+       "cycles": 3621973003,
+       "cycles_coverage": 100.0,
+       "instructions": 7661716087,
+       "instructions_coverage": 100.0
+      },
+      {
+       "wall": 1.4718498080037534,
+       "raw": "# started on Thu Oct 29 23:15:54 2026\n\n3517490224,,cycles:u,1267695926,100.00,,\n7661719858,,instructions:u,1267695926,100.00,2.18,insn per cycle\n",
+       "cycles": 3517490224,
+       "cycles_coverage": 100.0,
+       "instructions": 7661719858,
+       "instructions_coverage": 100.0
+      }
+     ],
+     "cycles_median": 3603404746,
+     "instructions_median": 7661719858,
+     "wall_median": 1.6701124049723148,
+     "callgrind_instructions": 7669786835,
+     "heap": {
+      "heap_blocks": 410278,
+      "heap_bytes": 42702103,
+      "heap_peak_bytes": 13285549
+     }
+    },
+    {
+     "case": "sparse5000",
+     "input": "synth/sfdp_sparse_5000.gv",
+     "format": "svg",
+     "stdout_sha256": "635a8e8b5fa6f1e52bdb8d83dc4d8e299d72d4feca81d031c6a18a0b20d3fd74",
+     "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+     "perf": [
+      {
+       "wall": 5.3800386500079185,
+       "raw": "# started on Thu Oct 29 23:17:39 2026\n\n10762521696,,cycles:u,4314836956,100.00,,\n21818171788,,instructions:u,4314836956,100.00,2.03,insn per cycle\n",
+       "cycles": 10762521696,
+       "cycles_coverage": 100.0,
+       "instructions": 21818171788,
+       "instructions_coverage": 100.0
+      },
+      {
+       "wall": 4.8411051770090126,
+       "raw": "# started on Thu Oct 29 23:17:44 2026\n\n10583064390,,cycles:u,4023918403,100.00,,\n21818148801,,instructions:u,4023918403,100.00,2.06,insn per cycle\n",
+       "cycles": 10583064390,
+       "cycles_coverage": 100.0,
+       "instructions": 21818148801,
+       "instructions_coverage": 100.0
+      },
+      {
+       "wall": 4.8943073329865,
+       "raw": "# started on Thu Oct 29 23:17:49 2026\n\n10089990392,,cycles:u,4021122398,100.00,,\n21818165564,,instructions:u,4021122398,100.00,2.16,insn per cycle\n",
+       "cycles": 10089990392,
+       "cycles_coverage": 100.0,
+       "instructions": 21818165564,
+       "instructions_coverage": 100.0
+      },
+      {
+       "wall": 5.063922322995495,
+       "raw": "# started on Thu Oct 29 23:17:54 2026\n\n10654436478,,cycles:u,4147583132,100.00,,\n21818150886,,instructions:u,4147583132,100.00,2.05,insn per cycle\n",
+       "cycles": 10654436478,
+       "cycles_coverage": 100.0,
+       "instructions": 21818150886,
+       "instructions_coverage": 100.0
+      },
+      {
+       "wall": 4.458365389029495,
+       "raw": "# started on Thu Oct 29 23:17:59 2026\n\n10151993074,,cycles:u,3740883508,100.00,,\n21818149026,,instructions:u,3740883508,100.00,2.15,insn per cycle\n",
+       "cycles": 10151993074,
+       "cycles_coverage": 100.0,
+       "instructions": 21818149026,
+       "instructions_coverage": 100.0
+      }
+     ],
+     "cycles_median": 10583064390,
+     "instructions_median": 21818150886,
+     "wall_median": 4.8943073329865,
+     "callgrind_instructions": 21837794307,
+     "heap": {
+      "heap_blocks": 907380,
+      "heap_bytes": 100273322,
+      "heap_peak_bytes": 29659887
+     }
+    },
+    {
+     "case": "grid20x20",
+     "input": "tests/sfdp/gen_grid20x20.gv",
+     "format": "svg",
+     "stdout_sha256": "ee1ae6946994985b8538bc5c6173092f1545fff28fe457cf3fccfbb732aa911c",
+     "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+     "perf": [
+      {
+       "wall": 0.3417197649832815,
+       "raw": "# started on Thu Oct 29 23:22:46 2026\n\n450568043,,cycles:u,203387463,100.00,,\n920053244,,instructions:u,203387463,100.00,2.04,insn per cycle\n",
+       "cycles": 450568043,
+       "cycles_coverage": 100.0,
+       "instructions": 920053244,
+       "instructions_coverage": 100.0
+      },
+      {
+       "wall": 0.2869540310348384,
+       "raw": "# started on Thu Oct 29 23:22:46 2026\n\n378378512,,cycles:u,192290461,100.00,,\n920054012,,instructions:u,192290461,100.00,2.43,insn per cycle\n",
+       "cycles": 378378512,
+       "cycles_coverage": 100.0,
+       "instructions": 920054012,
+       "instructions_coverage": 100.0
+      },
+      {
+       "wall": 0.2909691430395469,
+       "raw": "# started on Thu Oct 29 23:22:46 2026\n\n463669788,,cycles:u,194242453,100.00,,\n920059859,,instructions:u,194242453,100.00,1.98,insn per cycle\n",
+       "cycles": 463669788,
+       "cycles_coverage": 100.0,
+       "instructions": 920059859,
+       "instructions_coverage": 100.0
+      },
+      {
+       "wall": 0.2924999039969407,
+       "raw": "# started on Thu Oct 29 23:22:47 2026\n\n430189020,,cycles:u,176796224,100.00,,\n920055133,,instructions:u,176796224,100.00,2.14,insn per cycle\n",
+       "cycles": 430189020,
+       "cycles_coverage": 100.0,
+       "instructions": 920055133,
+       "instructions_coverage": 100.0
+      },
+      {
+       "wall": 0.2545709270052612,
+       "raw": "# started on Thu Oct 29 23:22:47 2026\n\n344830611,,cycles:u,154132311,100.00,,\n920055941,,instructions:u,154132311,100.00,2.67,insn per cycle\n",
+       "cycles": 344830611,
+       "cycles_coverage": 100.0,
+       "instructions": 920055941,
+       "instructions_coverage": 100.0
+      }
+     ],
+     "cycles_median": 430189020,
+     "instructions_median": 920055133,
+     "wall_median": 0.2909691430395469,
+     "callgrind_instructions": 921821128,
+     "heap": {
+      "heap_blocks": 97132,
+      "heap_bytes": 9567407,
+      "heap_peak_bytes": 3066410
+     }
+    }
+   ],
+   "end": "2026-10-29T23:23:02.432758+00:00",
+   "uptime_end": "23:23:02 up 4 days, 20:04,  2 users,  load average: 120.27, 142.21, 111.88"
+  },
+  "query-v3": {
+   "sha256": "2d2443008dddb543d217a422e109ba13452fabd839143b74c61d1e186f6ee9a7",
+   "start": "2026-10-29T23:05:42.311484+00:00",
+   "uptime_start": "23:05:42 up 4 days, 19:47,  2 users,  load average: 93.32, 38.58, 17.53",
+   "cases": [
+    {
+     "case": "rnd2000",
+     "input": "tests/sfdp/gen_rnd2000.gv",
+     "format": "svg",
+     "stdout_sha256": "40dfa20c1be0a3ba6f20bb7a8f756f1ad8e7f5a066da3dbb712c36bc12e31bb1",
+     "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+     "perf": [
+      {
+       "wall": 0.6697052050149068,
+       "raw": "# started on Thu Oct 29 23:05:42 2026\n\n1332178827,,cycles:u,518785139,100.00,,\n2455907844,,instructions:u,518785139,100.00,1.84,insn per cycle\n",
+       "cycles": 1332178827,
+       "cycles_coverage": 100.0,
+       "instructions": 2455907844,
+       "instructions_coverage": 100.0
+      },
+      {
+       "wall": 0.8923901629750617,
+       "raw": "# started on Thu Oct 29 23:05:43 2026\n\n1368886968,,cycles:u,534644167,100.00,,\n2455905927,,instructions:u,534644167,100.00,1.79,insn per cycle\n",
+       "cycles": 1368886968,
+       "cycles_coverage": 100.0,
+       "instructions": 2455905927,
+       "instructions_coverage": 100.0
+      },
+      {
+       "wall": 0.6922944840043783,
+       "raw": "# started on Thu Oct 29 23:05:44 2026\n\n1356143780,,cycles:u,529349113,100.00,,\n2455915209,,instructions:u,529349113,100.00,1.81,insn per cycle\n",
+       "cycles": 1356143780,
+       "cycles_coverage": 100.0,
+       "instructions": 2455915209,
+       "instructions_coverage": 100.0
+      },
+      {
+       "wall": 0.7091564419679344,
+       "raw": "# started on Thu Oct 29 23:05:45 2026\n\n1400465986,,cycles:u,558298204,100.00,,\n2455911239,,instructions:u,558298204,100.00,1.75,insn per cycle\n",
+       "cycles": 1400465986,
+       "cycles_coverage": 100.0,
+       "instructions": 2455911239,
+       "instructions_coverage": 100.0
+      },
+      {
+       "wall": 0.6465620360104367,
+       "raw": "# started on Thu Oct 29 23:05:45 2026\n\n1333614530,,cycles:u,514005156,100.00,,\n2455907522,,instructions:u,514005156,100.00,1.84,insn per cycle\n",
+       "cycles": 1333614530,
+       "cycles_coverage": 100.0,
+       "instructions": 2455907522,
+       "instructions_coverage": 100.0
+      }
+     ],
+     "cycles_median": 1356143780,
+     "instructions_median": 2455907844,
+     "wall_median": 0.6922944840043783,
+     "callgrind_instructions": 2462695090,
+     "heap": {
+      "heap_blocks": 410278,
+      "heap_bytes": 42702103,
+      "heap_peak_bytes": 13285549
+     }
+    },
+    {
+     "case": "sparse5000",
+     "input": "synth/sfdp_sparse_5000.gv",
+     "format": "svg",
+     "stdout_sha256": "635a8e8b5fa6f1e52bdb8d83dc4d8e299d72d4feca81d031c6a18a0b20d3fd74",
+     "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+     "perf": [
+      {
+       "wall": 2.0997239199932665,
+       "raw": "# started on Thu Oct 29 23:06:32 2026\n\n4161156942,,cycles:u,1641267778,100.00,,\n6790546245,,instructions:u,1641267778,100.00,1.63,insn per cycle\n",
+       "cycles": 4161156942,
+       "cycles_coverage": 100.0,
+       "instructions": 6790546245,
+       "instructions_coverage": 100.0
+      },
+      {
+       "wall": 1.573054297012277,
+       "raw": "# started on Thu Oct 29 23:06:35 2026\n\n3076114113,,cycles:u,1214275721,100.00,,\n6790528478,,instructions:u,1214275721,100.00,2.21,insn per cycle\n",
+       "cycles": 3076114113,
+       "cycles_coverage": 100.0,
+       "instructions": 6790528478,
+       "instructions_coverage": 100.0
+      },
+      {
+       "wall": 2.0053023010259494,
+       "raw": "# started on Thu Oct 29 23:06:36 2026\n\n3844005974,,cycles:u,1539360918,100.00,,\n6790551281,,instructions:u,1539360918,100.00,1.77,insn per cycle\n",
+       "cycles": 3844005974,
+       "cycles_coverage": 100.0,
+       "instructions": 6790551281,
+       "instructions_coverage": 100.0
+      },
+      {
+       "wall": 1.9272735199774615,
+       "raw": "# started on Thu Oct 29 23:06:38 2026\n\n3951875440,,cycles:u,1516132299,100.00,,\n6790566480,,instructions:u,1516132299,100.00,1.72,insn per cycle\n",
+       "cycles": 3951875440,
+       "cycles_coverage": 100.0,
+       "instructions": 6790566480,
+       "instructions_coverage": 100.0
+      },
+      {
+       "wall": 1.9636186289717443,
+       "raw": "# started on Thu Oct 29 23:06:40 2026\n\n3996732881,,cycles:u,1566889361,100.00,,\n6790551769,,instructions:u,1566889361,100.00,1.70,insn per cycle\n",
+       "cycles": 3996732881,
+       "cycles_coverage": 100.0,
+       "instructions": 6790551769,
+       "instructions_coverage": 100.0
+      }
+     ],
+     "cycles_median": 3951875440,
+     "instructions_median": 6790551281,
+     "wall_median": 1.9636186289717443,
+     "callgrind_instructions": 6806969010,
+     "heap": {
+      "heap_blocks": 907380,
+      "heap_bytes": 100273322,
+      "heap_peak_bytes": 29659887
+     }
+    },
+    {
+     "case": "grid20x20",
+     "input": "tests/sfdp/gen_grid20x20.gv",
+     "format": "svg",
+     "stdout_sha256": "ee1ae6946994985b8538bc5c6173092f1545fff28fe457cf3fccfbb732aa911c",
+     "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+     "perf": [
+      {
+       "wall": 0.15262133401120082,
+       "raw": "# started on Thu Oct 29 23:08:40 2026\n\n171527402,,cycles:u,73672479,100.00,,\n323862804,,instructions:u,73672479,100.00,1.89,insn per cycle\n",
+       "cycles": 171527402,
+       "cycles_coverage": 100.0,
+       "instructions": 323862804,
+       "instructions_coverage": 100.0
+      },
+      {
+       "wall": 0.15705814398825169,
+       "raw": "# started on Thu Oct 29 23:08:40 2026\n\n169156023,,cycles:u,78677144,100.00,,\n323864475,,instructions:u,78677144,100.00,1.91,insn per cycle\n",
+       "cycles": 169156023,
+       "cycles_coverage": 100.0,
+       "instructions": 323864475,
+       "instructions_coverage": 100.0
+      },
+      {
+       "wall": 0.1421643309877254,
+       "raw": "# started on Thu Oct 29 23:08:40 2026\n\n176456624,,cycles:u,89887118,100.00,,\n323866172,,instructions:u,89887118,100.00,1.84,insn per cycle\n",
+       "cycles": 176456624,
+       "cycles_coverage": 100.0,
+       "instructions": 323866172,
+       "instructions_coverage": 100.0
+      },
+      {
+       "wall": 0.14037299901247025,
+       "raw": "# started on Thu Oct 29 23:08:40 2026\n\n175339583,,cycles:u,86837267,100.00,,\n323865310,,instructions:u,86837267,100.00,1.85,insn per cycle\n",
+       "cycles": 175339583,
+       "cycles_coverage": 100.0,
+       "instructions": 323865310,
+       "instructions_coverage": 100.0
+      },
+      {
+       "wall": 0.1171341190347448,
+       "raw": "# started on Thu Oct 29 23:08:40 2026\n\n170570811,,cycles:u,73352078,100.00,,\n323864552,,instructions:u,73352078,100.00,1.90,insn per cycle\n",
+       "cycles": 170570811,
+       "cycles_coverage": 100.0,
+       "instructions": 323864552,
+       "instructions_coverage": 100.0
+      }
+     ],
+     "cycles_median": 171527402,
+     "instructions_median": 323864552,
+     "wall_median": 0.1421643309877254,
+     "callgrind_instructions": 325330006,
+     "heap": {
+      "heap_blocks": 97132,
+      "heap_bytes": 9567407,
+      "heap_peak_bytes": 3066410
+     }
+    }
+   ],
+   "end": "2026-10-29T23:08:50.809454+00:00",
+   "uptime_end": "23:08:50 up 4 days, 19:50,  2 users,  load average: 183.69, 131.64, 59.95"
+  },
+  "1.0": {
+   "sha256": "b5971c5314dca2c2708caa4b3512084133ac1f36d74fbd239417732898ef6bcd",
+   "start": "2026-10-29T22:58:36.378710+00:00",
+   "uptime_start": "22:58:36 up 4 days, 19:40,  2 users,  load average: 6.73, 5.94, 5.15",
+   "cases": [
+    {
+     "case": "rnd2000",
+     "input": "tests/sfdp/gen_rnd2000.gv",
+     "format": "svg",
+     "stdout_sha256": "40dfa20c1be0a3ba6f20bb7a8f756f1ad8e7f5a066da3dbb712c36bc12e31bb1",
+     "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+     "perf": [
+      {
+       "wall": 0.8962918830220588,
+       "raw": "# started on Thu Oct 29 22:58:37 2026\n\n2567320927,,cycles:u,835224067,100.00,,\n8192202031,,instructions:u,835224067,100.00,3.19,insn per cycle\n",
+       "cycles": 2567320927,
+       "cycles_coverage": 100.0,
+       "instructions": 8192202031,
+       "instructions_coverage": 100.0
+      },
+      {
+       "wall": 0.8568966750171967,
+       "raw": "# started on Thu Oct 29 22:58:38 2026\n\n2572038544,,cycles:u,824986915,100.00,,\n8192196575,,instructions:u,824986915,100.00,3.19,insn per cycle\n",
+       "cycles": 2572038544,
+       "cycles_coverage": 100.0,
+       "instructions": 8192196575,
+       "instructions_coverage": 100.0
+      },
+      {
+       "wall": 0.869031484995503,
+       "raw": "# started on Thu Oct 29 22:58:38 2026\n\n2610712229,,cycles:u,836738886,100.00,,\n8192201154,,instructions:u,836738886,100.00,3.14,insn per cycle\n",
+       "cycles": 2610712229,
+       "cycles_coverage": 100.0,
+       "instructions": 8192201154,
+       "instructions_coverage": 100.0
+      },
+      {
+       "wall": 0.8553389200242236,
+       "raw": "# started on Thu Oct 29 22:58:39 2026\n\n2574743743,,cycles:u,825766069,100.00,,\n8192203780,,instructions:u,825766069,100.00,3.18,insn per cycle\n",
+       "cycles": 2574743743,
+       "cycles_coverage": 100.0,
+       "instructions": 8192203780,
+       "instructions_coverage": 100.0
+      },
+      {
+       "wall": 0.8762307640281506,
+       "raw": "# started on Thu Oct 29 22:58:40 2026\n\n2629569704,,cycles:u,845642463,100.00,,\n8192195586,,instructions:u,845642463,100.00,3.12,insn per cycle\n",
+       "cycles": 2629569704,
+       "cycles_coverage": 100.0,
+       "instructions": 8192195586,
+       "instructions_coverage": 100.0
+      }
+     ],
+     "cycles_median": 2574743743,
+     "instructions_median": 8192201154,
+     "wall_median": 0.869031484995503,
+     "callgrind_instructions": 8213496943
+    },
+    {
+     "case": "sparse5000",
+     "input": "synth/sfdp_sparse_5000.gv",
+     "format": "svg",
+     "stdout_sha256": "635a8e8b5fa6f1e52bdb8d83dc4d8e299d72d4feca81d031c6a18a0b20d3fd74",
+     "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+     "perf": [
+      {
+       "wall": 2.525681200029794,
+       "raw": "# started on Thu Oct 29 22:59:26 2026\n\n7663258023,,cycles:u,2451826017,100.00,,\n23357363517,,instructions:u,2451826017,100.00,3.05,insn per cycle\n",
+       "cycles": 7663258023,
+       "cycles_coverage": 100.0,
+       "instructions": 23357363517,
+       "instructions_coverage": 100.0
+      },
+      {
+       "wall": 2.547496218991,
+       "raw": "# started on Thu Oct 29 22:59:28 2026\n\n7888445787,,cycles:u,2515567573,100.00,,\n23357351729,,instructions:u,2515567573,100.00,2.96,insn per cycle\n",
+       "cycles": 7888445787,
+       "cycles_coverage": 100.0,
+       "instructions": 23357351729,
+       "instructions_coverage": 100.0
+      },
+      {
+       "wall": 2.512379942985717,
+       "raw": "# started on Thu Oct 29 22:59:31 2026\n\n7764682883,,cycles:u,2478548481,100.00,,\n23357377215,,instructions:u,2478548481,100.00,3.01,insn per cycle\n",
+       "cycles": 7764682883,
+       "cycles_coverage": 100.0,
+       "instructions": 23357377215,
+       "instructions_coverage": 100.0
+      },
+      {
+       "wall": 2.4447539960383438,
+       "raw": "# started on Thu Oct 29 22:59:33 2026\n\n7569146864,,cycles:u,2409867128,100.00,,\n23357362839,,instructions:u,2409867128,100.00,3.09,insn per cycle\n",
+       "cycles": 7569146864,
+       "cycles_coverage": 100.0,
+       "instructions": 23357362839,
+       "instructions_coverage": 100.0
+      },
+      {
+       "wall": 2.4931520799873397,
+       "raw": "# started on Thu Oct 29 22:59:36 2026\n\n7722027274,,cycles:u,2460119012,100.00,,\n23357365955,,instructions:u,2460119012,100.00,3.02,insn per cycle\n",
+       "cycles": 7722027274,
+       "cycles_coverage": 100.0,
+       "instructions": 23357365955,
+       "instructions_coverage": 100.0
+      }
+     ],
+     "cycles_median": 7722027274,
+     "instructions_median": 23357363517,
+     "wall_median": 2.512379942985717,
+     "callgrind_instructions": 23415481420
+    },
+    {
+     "case": "grid20x20",
+     "input": "tests/sfdp/gen_grid20x20.gv",
+     "format": "svg",
+     "stdout_sha256": "ee1ae6946994985b8538bc5c6173092f1545fff28fe457cf3fccfbb732aa911c",
+     "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+     "perf": [
+      {
+       "wall": 0.18017033801879734,
+       "raw": "# started on Thu Oct 29 23:01:36 2026\n\n299051758,,cycles:u,115059852,100.00,,\n972762803,,instructions:u,115059852,100.00,3.25,insn per cycle\n",
+       "cycles": 299051758,
+       "cycles_coverage": 100.0,
+       "instructions": 972762803,
+       "instructions_coverage": 100.0
+      },
+      {
+       "wall": 0.13229440402938053,
+       "raw": "# started on Thu Oct 29 23:01:36 2026\n\n303682238,,cycles:u,102639505,100.00,,\n972760552,,instructions:u,102639505,100.00,3.20,insn per cycle\n",
+       "cycles": 303682238,
+       "cycles_coverage": 100.0,
+       "instructions": 972760552,
+       "instructions_coverage": 100.0
+      },
+      {
+       "wall": 0.13572811300400645,
+       "raw": "# started on Thu Oct 29 23:01:36 2026\n\n303733750,,cycles:u,102259923,100.00,,\n972759578,,instructions:u,102259923,100.00,3.20,insn per cycle\n",
+       "cycles": 303733750,
+       "cycles_coverage": 100.0,
+       "instructions": 972759578,
+       "instructions_coverage": 100.0
+      },
+      {
+       "wall": 0.1343848060350865,
+       "raw": "# started on Thu Oct 29 23:01:37 2026\n\n306053627,,cycles:u,103713469,100.00,,\n972761717,,instructions:u,103713469,100.00,3.18,insn per cycle\n",
+       "cycles": 306053627,
+       "cycles_coverage": 100.0,
+       "instructions": 972761717,
+       "instructions_coverage": 100.0
+      },
+      {
+       "wall": 0.13066712801810354,
+       "raw": "# started on Thu Oct 29 23:01:37 2026\n\n299745698,,cycles:u,101362230,100.00,,\n972762385,,instructions:u,101362230,100.00,3.25,insn per cycle\n",
+       "cycles": 299745698,
+       "cycles_coverage": 100.0,
+       "instructions": 972762385,
+       "instructions_coverage": 100.0
+      }
+     ],
+     "cycles_median": 303682238,
+     "instructions_median": 972761717,
+     "wall_median": 0.1343848060350865,
+     "callgrind_instructions": 975845464
+    }
+   ],
+   "end": "2026-10-29T23:01:42.502917+00:00",
+   "uptime_end": "23:01:42 up 4 days, 19:43,  2 users,  load average: 7.74, 6.96, 5.72"
+  }
+ },
+ "paired_v3": {
+  "cpu_affinity": [
+   15
+  ],
+  "start": "2026-10-29T23:18:26.586972+00:00",
+  "uptime_start": "23:18:26 up 4 days, 20:00,  2 users,  load average: 107.61, 141.03, 100.22",
+  "method": "Seven round-robin rounds; variant order rotates per round; one warm-up for each variant/input; no cargo command from this task during this pass.",
+  "cases": [
+   {
+    "case": "rnd2000",
+    "tag": "master-v3",
+    "samples": [
+     {
+      "raw": "# started on Thu Oct 29 23:18:28 2026\n\n1647893703,,cycles:u,615059958,100.00,,\n2912262276,,instructions:u,615059958,100.00,1.77,insn per cycle\n",
+      "perf_wall": 0.7326885110232979,
+      "cycles": 1647893703,
+      "cycles_coverage": 100.0,
+      "instructions": 2912262276,
+      "instructions_coverage": 100.0,
+      "wall": 0.6635941120330244
+     },
+     {
+      "raw": "# started on Thu Oct 29 23:18:37 2026\n\n1658527162,,cycles:u,641995655,100.00,,\n2912262534,,instructions:u,641995655,100.00,1.76,insn per cycle\n",
+      "perf_wall": 0.7332673689816147,
+      "cycles": 1658527162,
+      "cycles_coverage": 100.0,
+      "instructions": 2912262534,
+      "instructions_coverage": 100.0,
+      "wall": 0.6639664469985291
+     },
+     {
+      "raw": "# started on Thu Oct 29 23:18:41 2026\n\n1200180835,,cycles:u,436882764,100.00,,\n2912265010,,instructions:u,436882764,100.00,2.43,insn per cycle\n",
+      "perf_wall": 0.5077098669717088,
+      "cycles": 1200180835,
+      "cycles_coverage": 100.0,
+      "instructions": 2912265010,
+      "instructions_coverage": 100.0,
+      "wall": 0.4697817710111849
+     },
+     {
+      "raw": "# started on Thu Oct 29 23:18:44 2026\n\n1688048075,,cycles:u,613228978,100.00,,\n2912266759,,instructions:u,613228978,100.00,1.73,insn per cycle\n",
+      "perf_wall": 0.7116485849837773,
+      "cycles": 1688048075,
+      "cycles_coverage": 100.0,
+      "instructions": 2912266759,
+      "instructions_coverage": 100.0,
+      "wall": 0.6755393790081143
+     },
+     {
+      "raw": "# started on Thu Oct 29 23:18:48 2026\n\n1636246325,,cycles:u,639549486,100.00,,\n2912263678,,instructions:u,639549486,100.00,1.78,insn per cycle\n",
+      "perf_wall": 0.7288150200038217,
+      "cycles": 1636246325,
+      "cycles_coverage": 100.0,
+      "instructions": 2912263678,
+      "instructions_coverage": 100.0,
+      "wall": 0.6678887509624474
+     },
+     {
+      "raw": "# started on Thu Oct 29 23:18:58 2026\n\n1617491681,,cycles:u,592839566,100.00,,\n2912268842,,instructions:u,592839566,100.00,1.80,insn per cycle\n",
+      "perf_wall": 0.6960613350383937,
+      "cycles": 1617491681,
+      "cycles_coverage": 100.0,
+      "instructions": 2912268842,
+      "instructions_coverage": 100.0,
+      "wall": 0.6122947279945947
+     },
+     {
+      "raw": "# started on Thu Oct 29 23:19:01 2026\n\n1483270822,,cycles:u,547134091,100.00,,\n2912266811,,instructions:u,547134091,100.00,1.96,insn per cycle\n",
+      "perf_wall": 0.7147334339679219,
+      "cycles": 1483270822,
+      "cycles_coverage": 100.0,
+      "instructions": 2912266811,
+      "instructions_coverage": 100.0,
+      "wall": 0.7820362140191719
+     }
+    ],
+    "cycles_median": 1636246325,
+    "instructions_median": 2912265010,
+    "wall_median": 0.6639664469985291
+   },
+   {
+    "case": "rnd2000",
+    "tag": "parent614-v3",
+    "samples": [
+     {
+      "raw": "# started on Thu Oct 29 23:18:30 2026\n\n1464725088,,cycles:u,567263589,100.00,,\n2893463865,,instructions:u,567263589,100.00,1.98,insn per cycle\n",
+      "perf_wall": 0.6464492689701729,
+      "cycles": 1464725088,
+      "cycles_coverage": 100.0,
+      "instructions": 2893463865,
+      "instructions_coverage": 100.0,
+      "wall": 0.6086958509986289
+     },
+     {
+      "raw": "# started on Thu Oct 29 23:18:33 2026\n\n1515700955,,cycles:u,607441638,100.00,,\n2893468026,,instructions:u,607441638,100.00,1.91,insn per cycle\n",
+      "perf_wall": 0.713900258007925,
+      "cycles": 1515700955,
+      "cycles_coverage": 100.0,
+      "instructions": 2893468026,
+      "instructions_coverage": 100.0,
+      "wall": 0.6188518099952489
+     },
+     {
+      "raw": "# started on Thu Oct 29 23:18:42 2026\n\n1452833586,,cycles:u,518460367,100.00,,\n2893453856,,instructions:u,518460367,100.00,1.99,insn per cycle\n",
+      "perf_wall": 0.6037048459984362,
+      "cycles": 1452833586,
+      "cycles_coverage": 100.0,
+      "instructions": 2893453856,
+      "instructions_coverage": 100.0,
+      "wall": 0.5482615120126866
+     },
+     {
+      "raw": "# started on Thu Oct 29 23:18:46 2026\n\n1396815444,,cycles:u,496853936,100.00,,\n2893468742,,instructions:u,496853936,100.00,2.07,insn per cycle\n",
+      "perf_wall": 0.5769075740245171,
+      "cycles": 1396815444,
+      "cycles_coverage": 100.0,
+      "instructions": 2893468742,
+      "instructions_coverage": 100.0,
+      "wall": 0.5049382229917683
+     },
+     {
+      "raw": "# started on Thu Oct 29 23:18:49 2026\n\n1514775269,,cycles:u,561365315,100.00,,\n2893455319,,instructions:u,561365315,100.00,1.91,insn per cycle\n",
+      "perf_wall": 0.6592344660311937,
+      "cycles": 1514775269,
+      "cycles_coverage": 100.0,
+      "instructions": 2893455319,
+      "instructions_coverage": 100.0,
+      "wall": 0.6634019160410389
+     },
+     {
+      "raw": "# started on Thu Oct 29 23:18:54 2026\n\n1433312660,,cycles:u,588570246,100.00,,\n2893457367,,instructions:u,588570246,100.00,2.02,insn per cycle\n",
+      "perf_wall": 0.7933962689712644,
+      "cycles": 1433312660,
+      "cycles_coverage": 100.0,
+      "instructions": 2893457367,
+      "instructions_coverage": 100.0,
+      "wall": 0.7778606599895284
+     },
+     {
+      "raw": "# started on Thu Oct 29 23:19:03 2026\n\n1450504508,,cycles:u,571492408,100.00,,\n2893458333,,instructions:u,571492408,100.00,1.99,insn per cycle\n",
+      "perf_wall": 0.6857010099920444,
+      "cycles": 1450504508,
+      "cycles_coverage": 100.0,
+      "instructions": 2893458333,
+      "instructions_coverage": 100.0,
+      "wall": 0.6556043100426905
+     }
+    ],
+    "cycles_median": 1452833586,
+    "instructions_median": 2893458333,
+    "wall_median": 0.6188518099952489
+   },
+   {
+    "case": "rnd2000",
+    "tag": "query-v3",
+    "samples": [
+     {
+      "raw": "# started on Thu Oct 29 23:18:31 2026\n\n1357781914,,cycles:u,528254343,100.00,,\n2455913103,,instructions:u,528254343,100.00,1.81,insn per cycle\n",
+      "perf_wall": 0.6100417739944533,
+      "cycles": 1357781914,
+      "cycles_coverage": 100.0,
+      "instructions": 2455913103,
+      "instructions_coverage": 100.0,
+      "wall": 0.5883436020230874
+     },
+     {
+      "raw": "# started on Thu Oct 29 23:18:35 2026\n\n1366389647,,cycles:u,557823443,100.00,,\n2455905833,,instructions:u,557823443,100.00,1.80,insn per cycle\n",
+      "perf_wall": 0.6365203149616718,
+      "cycles": 1366389647,
+      "cycles_coverage": 100.0,
+      "instructions": 2455905833,
+      "instructions_coverage": 100.0,
+      "wall": 0.543160044006072
+     },
+     {
+      "raw": "# started on Thu Oct 29 23:18:39 2026\n\n1335056981,,cycles:u,537430585,100.00,,\n2455914126,,instructions:u,537430585,100.00,1.84,insn per cycle\n",
+      "perf_wall": 0.6192914950079285,
+      "cycles": 1335056981,
+      "cycles_coverage": 100.0,
+      "instructions": 2455914126,
+      "instructions_coverage": 100.0,
+      "wall": 0.5590030149905942
+     },
+     {
+      "raw": "# started on Thu Oct 29 23:18:47 2026\n\n1355249927,,cycles:u,517878478,100.00,,\n2455909639,,instructions:u,517878478,100.00,1.81,insn per cycle\n",
+      "perf_wall": 0.6694162309868261,
+      "cycles": 1355249927,
+      "cycles_coverage": 100.0,
+      "instructions": 2455909639,
+      "instructions_coverage": 100.0,
+      "wall": 0.5627185699995607
+     },
+     {
+      "raw": "# started on Thu Oct 29 23:18:51 2026\n\n1425816603,,cycles:u,570155313,100.00,,\n2455909186,,instructions:u,570155313,100.00,1.72,insn per cycle\n",
+      "perf_wall": 0.6567739649908617,
+      "cycles": 1425816603,
+      "cycles_coverage": 100.0,
+      "instructions": 2455909186,
+      "instructions_coverage": 100.0,
+      "wall": 0.5944855909910984
+     },
+     {
+      "raw": "# started on Thu Oct 29 23:18:55 2026\n\n1317939594,,cycles:u,517977066,100.00,,\n2455914452,,instructions:u,517977066,100.00,1.86,insn per cycle\n",
+      "perf_wall": 0.6658709660405293,
+      "cycles": 1317939594,
+      "cycles_coverage": 100.0,
+      "instructions": 2455914452,
+      "instructions_coverage": 100.0,
+      "wall": 0.6518842399818823
+     },
+     {
+      "raw": "# started on Thu Oct 29 23:18:59 2026\n\n1239953920,,cycles:u,502141181,100.00,,\n2455914442,,instructions:u,502141181,100.00,1.98,insn per cycle\n",
+      "perf_wall": 0.6130783580010757,
+      "cycles": 1239953920,
+      "cycles_coverage": 100.0,
+      "instructions": 2455914442,
+      "instructions_coverage": 100.0,
+      "wall": 0.5369984949938953
+     }
+    ],
+    "cycles_median": 1355249927,
+    "instructions_median": 2455913103,
+    "wall_median": 0.5627185699995607
+   },
+   {
+    "case": "rnd2000",
+    "tag": "links-v3",
+    "samples": [
+     {
+      "raw": "# started on Thu Oct 29 23:18:32 2026\n\n1534660613,,cycles:u,620413058,100.00,,\n2915837895,,instructions:u,620413058,100.00,1.90,insn per cycle\n",
+      "perf_wall": 0.7097634669626132,
+      "cycles": 1534660613,
+      "cycles_coverage": 100.0,
+      "instructions": 2915837895,
+      "instructions_coverage": 100.0,
+      "wall": 0.6372518180287443
+     },
+     {
+      "raw": "# started on Thu Oct 29 23:18:36 2026\n\n1433511084,,cycles:u,574528661,100.00,,\n2915823910,,instructions:u,574528661,100.00,2.03,insn per cycle\n",
+      "perf_wall": 0.6653203659807332,
+      "cycles": 1433511084,
+      "cycles_coverage": 100.0,
+      "instructions": 2915823910,
+      "instructions_coverage": 100.0,
+      "wall": 0.6191795810009353
+     },
+     {
+      "raw": "# started on Thu Oct 29 23:18:40 2026\n\n1464238645,,cycles:u,541911652,100.00,,\n2915827124,,instructions:u,541911652,100.00,1.99,insn per cycle\n",
+      "perf_wall": 0.6185050680069253,
+      "cycles": 1464238645,
+      "cycles_coverage": 100.0,
+      "instructions": 2915827124,
+      "instructions_coverage": 100.0,
+      "wall": 0.5795942770200782
+     },
+     {
+      "raw": "# started on Thu Oct 29 23:18:43 2026\n\n1456482995,,cycles:u,550714213,100.00,,\n2915832303,,instructions:u,550714213,100.00,2.00,insn per cycle\n",
+      "perf_wall": 0.6244493299745955,
+      "cycles": 1456482995,
+      "cycles_coverage": 100.0,
+      "instructions": 2915832303,
+      "instructions_coverage": 100.0,
+      "wall": 0.6120037800283171
+     },
+     {
+      "raw": "# started on Thu Oct 29 23:18:52 2026\n\n1576067050,,cycles:u,613335880,100.00,,\n2915835551,,instructions:u,613335880,100.00,1.85,insn per cycle\n",
+      "perf_wall": 0.7564020230202004,
+      "cycles": 1576067050,
+      "cycles_coverage": 100.0,
+      "instructions": 2915835551,
+      "instructions_coverage": 100.0,
+      "wall": 0.6908986020134762
+     },
+     {
+      "raw": "# started on Thu Oct 29 23:18:56 2026\n\n1543326262,,cycles:u,616422863,100.00,,\n2915825483,,instructions:u,616422863,100.00,1.89,insn per cycle\n",
+      "perf_wall": 0.78198807395529,
+      "cycles": 1543326262,
+      "cycles_coverage": 100.0,
+      "instructions": 2915825483,
+      "instructions_coverage": 100.0,
+      "wall": 0.6087202670169063
+     },
+     {
+      "raw": "# started on Thu Oct 29 23:19:00 2026\n\n1448679289,,cycles:u,517325064,100.00,,\n2915836451,,instructions:u,517325064,100.00,2.01,insn per cycle\n",
+      "perf_wall": 0.6577077000401914,
+      "cycles": 1448679289,
+      "cycles_coverage": 100.0,
+      "instructions": 2915836451,
+      "instructions_coverage": 100.0,
+      "wall": 0.586028398014605
+     }
+    ],
+    "cycles_median": 1464238645,
+    "instructions_median": 2915832303,
+    "wall_median": 0.6120037800283171
+   },
+   {
+    "case": "sparse5000",
+    "tag": "master-v3",
+    "samples": [
+     {
+      "raw": "# started on Thu Oct 29 23:19:12 2026\n\n4695032760,,cycles:u,1922380219,100.00,,\n8123144665,,instructions:u,1922380219,100.00,1.73,insn per cycle\n",
+      "perf_wall": 2.2035303249722347,
+      "cycles": 4695032760,
+      "cycles_coverage": 100.0,
+      "instructions": 8123144665,
+      "instructions_coverage": 100.0,
+      "wall": 2.2756681669852696
+     },
+     {
+      "raw": "# started on Thu Oct 29 23:19:42 2026\n\n4812614542,,cycles:u,1895827696,100.00,,\n8123145827,,instructions:u,1895827696,100.00,1.69,insn per cycle\n",
+      "perf_wall": 2.1559214729932137,
+      "cycles": 4812614542,
+      "cycles_coverage": 100.0,
+      "instructions": 8123145827,
+      "instructions_coverage": 100.0,
+      "wall": 2.292054168996401
+     },
+     {
+      "raw": "# started on Thu Oct 29 23:19:54 2026\n\n4916454413,,cycles:u,1947319517,100.00,,\n8123147022,,instructions:u,1947319517,100.00,1.65,insn per cycle\n",
+      "perf_wall": 2.3446939240093343,
+      "cycles": 4916454413,
+      "cycles_coverage": 100.0,
+      "instructions": 8123147022,
+      "instructions_coverage": 100.0,
+      "wall": 2.3807178899878636
+     },
+     {
+      "raw": "# started on Thu Oct 29 23:20:06 2026\n\n4718793933,,cycles:u,1861244252,100.00,,\n8123127812,,instructions:u,1861244252,100.00,1.72,insn per cycle\n",
+      "perf_wall": 2.0600145899807103,
+      "cycles": 4718793933,
+      "cycles_coverage": 100.0,
+      "instructions": 8123127812,
+      "instructions_coverage": 100.0,
+      "wall": 2.2868589640129358
+     },
+     {
+      "raw": "# started on Thu Oct 29 23:20:18 2026\n\n4804686022,,cycles:u,1826037660,100.00,,\n8123139720,,instructions:u,1826037660,100.00,1.69,insn per cycle\n",
+      "perf_wall": 2.0793207730166614,
+      "cycles": 4804686022,
+      "cycles_coverage": 100.0,
+      "instructions": 8123139720,
+      "instructions_coverage": 100.0,
+      "wall": 2.0060234569828026
+     },
+     {
+      "raw": "# started on Thu Oct 29 23:20:46 2026\n\n4896945540,,cycles:u,1955142329,100.00,,\n8123130927,,instructions:u,1955142329,100.00,1.66,insn per cycle\n",
+      "perf_wall": 2.4805350030073896,
+      "cycles": 4896945540,
+      "cycles_coverage": 100.0,
+      "instructions": 8123130927,
+      "instructions_coverage": 100.0,
+      "wall": 2.499174133001361
+     },
+     {
+      "raw": "# started on Thu Oct 29 23:20:59 2026\n\n4825850247,,cycles:u,1921873731,100.00,,\n8123155012,,instructions:u,1921873731,100.00,1.68,insn per cycle\n",
+      "perf_wall": 2.350067895022221,
+      "cycles": 4825850247,
+      "cycles_coverage": 100.0,
+      "instructions": 8123155012,
+      "instructions_coverage": 100.0,
+      "wall": 2.388067222025711
+     }
+    ],
+    "cycles_median": 4812614542,
+    "instructions_median": 8123144665,
+    "wall_median": 2.292054168996401
+   },
+   {
+    "case": "sparse5000",
+    "tag": "parent614-v3",
+    "samples": [
+     {
+      "raw": "# started on Thu Oct 29 23:19:17 2026\n\n4396501339,,cycles:u,1778737308,100.00,,\n8065720606,,instructions:u,1778737308,100.00,1.83,insn per cycle\n",
+      "perf_wall": 2.159918861987535,
+      "cycles": 4396501339,
+      "cycles_coverage": 100.0,
+      "instructions": 8065720606,
+      "instructions_coverage": 100.0,
+      "wall": 2.148038510000333
+     },
+     {
+      "raw": "# started on Thu Oct 29 23:19:30 2026\n\n4353548423,,cycles:u,1735479565,100.00,,\n8065717138,,instructions:u,1735479565,100.00,1.85,insn per cycle\n",
+      "perf_wall": 2.244839406979736,
+      "cycles": 4353548423,
+      "cycles_coverage": 100.0,
+      "instructions": 8065717138,
+      "instructions_coverage": 100.0,
+      "wall": 2.0144671630114317
+     },
+     {
+      "raw": "# started on Thu Oct 29 23:19:59 2026\n\n4273708608,,cycles:u,1615569977,100.00,,\n8065709442,,instructions:u,1615569977,100.00,1.89,insn per cycle\n",
+      "perf_wall": 1.85897710401332,
+      "cycles": 4273708608,
+      "cycles_coverage": 100.0,
+      "instructions": 8065709442,
+      "instructions_coverage": 100.0,
+      "wall": 1.8275016330298968
+     },
+     {
+      "raw": "# started on Thu Oct 29 23:20:11 2026\n\n4379819715,,cycles:u,1669138844,100.00,,\n8065723892,,instructions:u,1669138844,100.00,1.84,insn per cycle\n",
+      "perf_wall": 1.9543124350020662,
+      "cycles": 4379819715,
+      "cycles_coverage": 100.0,
+      "instructions": 8065723892,
+      "instructions_coverage": 100.0,
+      "wall": 1.798804291000124
+     },
+     {
+      "raw": "# started on Thu Oct 29 23:20:22 2026\n\n4326888149,,cycles:u,1639500937,100.00,,\n8065713747,,instructions:u,1639500937,100.00,1.86,insn per cycle\n",
+      "perf_wall": 1.8646145479870029,
+      "cycles": 4326888149,
+      "cycles_coverage": 100.0,
+      "instructions": 8065713747,
+      "instructions_coverage": 100.0,
+      "wall": 1.7247502009849995
+     },
+     {
+      "raw": "# started on Thu Oct 29 23:20:33 2026\n\n4305564678,,cycles:u,1694264181,100.00,,\n8065709485,,instructions:u,1694264181,100.00,1.87,insn per cycle\n",
+      "perf_wall": 2.174845280998852,
+      "cycles": 4305564678,
+      "cycles_coverage": 100.0,
+      "instructions": 8065709485,
+      "instructions_coverage": 100.0,
+      "wall": 2.6298090960481204
+     },
+     {
+      "raw": "# started on Thu Oct 29 23:21:04 2026\n\n4355016117,,cycles:u,1781341230,100.00,,\n8065734915,,instructions:u,1781341230,100.00,1.85,insn per cycle\n",
+      "perf_wall": 2.230878022965044,
+      "cycles": 4355016117,
+      "cycles_coverage": 100.0,
+      "instructions": 8065734915,
+      "instructions_coverage": 100.0,
+      "wall": 2.217773365031462
+     }
+    ],
+    "cycles_median": 4353548423,
+    "instructions_median": 8065717138,
+    "wall_median": 2.0144671630114317
+   },
+   {
+    "case": "sparse5000",
+    "tag": "query-v3",
+    "samples": [
+     {
+      "raw": "# started on Thu Oct 29 23:19:21 2026\n\n4119657504,,cycles:u,1717978571,100.00,,\n6790553387,,instructions:u,1717978571,100.00,1.65,insn per cycle\n",
+      "perf_wall": 2.087593350035604,
+      "cycles": 4119657504,
+      "cycles_coverage": 100.0,
+      "instructions": 6790553387,
+      "instructions_coverage": 100.0,
+      "wall": 2.3044650939991698
+     },
+     {
+      "raw": "# started on Thu Oct 29 23:19:34 2026\n\n3914932475,,cycles:u,1588872254,100.00,,\n6790555790,,instructions:u,1588872254,100.00,1.73,insn per cycle\n",
+      "perf_wall": 1.8524361120071262,
+      "cycles": 3914932475,
+      "cycles_coverage": 100.0,
+      "instructions": 6790555790,
+      "instructions_coverage": 100.0,
+      "wall": 1.777024083014112
+     },
+     {
+      "raw": "# started on Thu Oct 29 23:19:47 2026\n\n3985441291,,cycles:u,1615652456,100.00,,\n6790562204,,instructions:u,1615652456,100.00,1.70,insn per cycle\n",
+      "perf_wall": 1.833987177000381,
+      "cycles": 3985441291,
+      "cycles_coverage": 100.0,
+      "instructions": 6790562204,
+      "instructions_coverage": 100.0,
+      "wall": 1.8887241160264239
+     },
+     {
+      "raw": "# started on Thu Oct 29 23:20:14 2026\n\n3838427563,,cycles:u,1445637466,100.00,,\n6790552565,,instructions:u,1445637466,100.00,1.77,insn per cycle\n",
+      "perf_wall": 1.7321631609811448,
+      "cycles": 3838427563,
+      "cycles_coverage": 100.0,
+      "instructions": 6790552565,
+      "instructions_coverage": 100.0,
+      "wall": 1.7308391139958985
+     },
+     {
+      "raw": "# started on Thu Oct 29 23:20:26 2026\n\n3919498898,,cycles:u,1501432335,100.00,,\n6790542447,,instructions:u,1501432335,100.00,1.73,insn per cycle\n",
+      "perf_wall": 1.7019442619639449,
+      "cycles": 3919498898,
+      "cycles_coverage": 100.0,
+      "instructions": 6790542447,
+      "instructions_coverage": 100.0,
+      "wall": 1.6424050249624997
+     },
+     {
+      "raw": "# started on Thu Oct 29 23:20:37 2026\n\n3974296586,,cycles:u,1595709584,100.00,,\n6790549660,,instructions:u,1595709584,100.00,1.71,insn per cycle\n",
+      "perf_wall": 2.227081208024174,
+      "cycles": 3974296586,
+      "cycles_coverage": 100.0,
+      "instructions": 6790549660,
+      "instructions_coverage": 100.0,
+      "wall": 2.0553816439933144
+     },
+     {
+      "raw": "# started on Thu Oct 29 23:20:51 2026\n\n3963607709,,cycles:u,1569497932,100.00,,\n6790540117,,instructions:u,1569497932,100.00,1.71,insn per cycle\n",
+      "perf_wall": 1.9340921780094504,
+      "cycles": 3963607709,
+      "cycles_coverage": 100.0,
+      "instructions": 6790540117,
+      "instructions_coverage": 100.0,
+      "wall": 1.9156582690193318
+     }
+    ],
+    "cycles_median": 3963607709,
+    "instructions_median": 6790552565,
+    "wall_median": 1.8887241160264239
+   },
+   {
+    "case": "sparse5000",
+    "tag": "links-v3",
+    "samples": [
+     {
+      "raw": "# started on Thu Oct 29 23:19:25 2026\n\n4552230005,,cycles:u,1856913213,100.00,,\n8126098484,,instructions:u,1856913213,100.00,1.79,insn per cycle\n",
+      "perf_wall": 2.825618276023306,
+      "cycles": 4552230005,
+      "cycles_coverage": 100.0,
+      "instructions": 8126098484,
+      "instructions_coverage": 100.0,
+      "wall": 2.1189642639947124
+     },
+     {
+      "raw": "# started on Thu Oct 29 23:19:38 2026\n\n4352155897,,cycles:u,1724311653,100.00,,\n8126095401,,instructions:u,1724311653,100.00,1.87,insn per cycle\n",
+      "perf_wall": 2.073236500029452,
+      "cycles": 4352155897,
+      "cycles_coverage": 100.0,
+      "instructions": 8126095401,
+      "instructions_coverage": 100.0,
+      "wall": 1.9636884000501595
+     },
+     {
+      "raw": "# started on Thu Oct 29 23:19:50 2026\n\n3870334612,,cycles:u,1581545692,100.00,,\n8126093055,,instructions:u,1581545692,100.00,2.10,insn per cycle\n",
+      "perf_wall": 1.8488799969782121,
+      "cycles": 3870334612,
+      "cycles_coverage": 100.0,
+      "instructions": 8126093055,
+      "instructions_coverage": 100.0,
+      "wall": 1.832866456010379
+     },
+     {
+      "raw": "# started on Thu Oct 29 23:20:02 2026\n\n4357364071,,cycles:u,1698290038,100.00,,\n8126105934,,instructions:u,1698290038,100.00,1.86,insn per cycle\n",
+      "perf_wall": 1.9666585000231862,
+      "cycles": 4357364071,
+      "cycles_coverage": 100.0,
+      "instructions": 8126105934,
+      "instructions_coverage": 100.0,
+      "wall": 1.9683048789738677
+     },
+     {
+      "raw": "# started on Thu Oct 29 23:20:29 2026\n\n4343381835,,cycles:u,1715602161,100.00,,\n8126100177,,instructions:u,1715602161,100.00,1.87,insn per cycle\n",
+      "perf_wall": 1.9481686640065163,
+      "cycles": 4343381835,
+      "cycles_coverage": 100.0,
+      "instructions": 8126100177,
+      "instructions_coverage": 100.0,
+      "wall": 1.8747245640261099
+     },
+     {
+      "raw": "# started on Thu Oct 29 23:20:42 2026\n\n4404363990,,cycles:u,1747351421,100.00,,\n8126077652,,instructions:u,1747351421,100.00,1.85,insn per cycle\n",
+      "perf_wall": 2.1882181199616753,
+      "cycles": 4404363990,
+      "cycles_coverage": 100.0,
+      "instructions": 8126077652,
+      "instructions_coverage": 100.0,
+      "wall": 2.1178708170191385
+     },
+     {
+      "raw": "# started on Thu Oct 29 23:20:55 2026\n\n4330368486,,cycles:u,1717762638,100.00,,\n8126094536,,instructions:u,1717762638,100.00,1.88,insn per cycle\n",
+      "perf_wall": 2.1498356900410727,
+      "cycles": 4330368486,
+      "cycles_coverage": 100.0,
+      "instructions": 8126094536,
+      "instructions_coverage": 100.0,
+      "wall": 2.0344960520160384
+     }
+    ],
+    "cycles_median": 4352155897,
+    "instructions_median": 8126095401,
+    "wall_median": 1.9683048789738677
+   },
+   {
+    "case": "grid20x20",
+    "tag": "master-v3",
+    "samples": [
+     {
+      "raw": "# started on Thu Oct 29 23:21:09 2026\n\n203400929,,cycles:u,94056439,100.00,,\n369599443,,instructions:u,94056439,100.00,1.82,insn per cycle\n",
+      "perf_wall": 0.16916526097338647,
+      "cycles": 203400929,
+      "cycles_coverage": 100.0,
+      "instructions": 369599443,
+      "instructions_coverage": 100.0,
+      "wall": 0.11349823698401451
+     },
+     {
+      "raw": "# started on Thu Oct 29 23:21:10 2026\n\n210167713,,cycles:u,90574483,100.00,,\n369601707,,instructions:u,90574483,100.00,1.76,insn per cycle\n",
+      "perf_wall": 0.44325770798604935,
+      "cycles": 210167713,
+      "cycles_coverage": 100.0,
+      "instructions": 369601707,
+      "instructions_coverage": 100.0,
+      "wall": 0.09870969096664339
+     },
+     {
+      "raw": "# started on Thu Oct 29 23:21:11 2026\n\n200196621,,cycles:u,81606468,100.00,,\n369601333,,instructions:u,81606468,100.00,1.85,insn per cycle\n",
+      "perf_wall": 0.139166989014484,
+      "cycles": 200196621,
+      "cycles_coverage": 100.0,
+      "instructions": 369601333,
+      "instructions_coverage": 100.0,
+      "wall": 0.09375950403045863
+     },
+     {
+      "raw": "# started on Thu Oct 29 23:21:12 2026\n\n198360303,,cycles:u,84483143,100.00,,\n369599672,,instructions:u,84483143,100.00,1.86,insn per cycle\n",
+      "perf_wall": 0.16253942699404433,
+      "cycles": 198360303,
+      "cycles_coverage": 100.0,
+      "instructions": 369599672,
+      "instructions_coverage": 100.0,
+      "wall": 0.1009897330077365
+     },
+     {
+      "raw": "# started on Thu Oct 29 23:21:13 2026\n\n194849990,,cycles:u,89845281,100.00,,\n369599541,,instructions:u,89845281,100.00,1.90,insn per cycle\n",
+      "perf_wall": 0.15764405200025067,
+      "cycles": 194849990,
+      "cycles_coverage": 100.0,
+      "instructions": 369599541,
+      "instructions_coverage": 100.0,
+      "wall": 0.11426066502463073
+     },
+     {
+      "raw": "# started on Thu Oct 29 23:21:15 2026\n\n199423464,,cycles:u,89974865,100.00,,\n369600805,,instructions:u,89974865,100.00,1.85,insn per cycle\n",
+      "perf_wall": 0.15199635399039835,
+      "cycles": 199423464,
+      "cycles_coverage": 100.0,
+      "instructions": 369600805,
+      "instructions_coverage": 100.0,
+      "wall": 0.10805296100443229
+     },
+     {
+      "raw": "# started on Thu Oct 29 23:21:15 2026\n\n208026188,,cycles:u,97632254,100.00,,\n369601602,,instructions:u,97632254,100.00,1.78,insn per cycle\n",
+      "perf_wall": 0.17981782602146268,
+      "cycles": 208026188,
+      "cycles_coverage": 100.0,
+      "instructions": 369601602,
+      "instructions_coverage": 100.0,
+      "wall": 0.11322444898542017
+     }
+    ],
+    "cycles_median": 200196621,
+    "instructions_median": 369600805,
+    "wall_median": 0.10805296100443229
+   },
+   {
+    "case": "grid20x20",
+    "tag": "parent614-v3",
+    "samples": [
+     {
+      "raw": "# started on Thu Oct 29 23:21:09 2026\n\n183899040,,cycles:u,80639424,100.00,,\n368154126,,instructions:u,80639424,100.00,2.00,insn per cycle\n",
+      "perf_wall": 0.15531031496357173,
+      "cycles": 183899040,
+      "cycles_coverage": 100.0,
+      "instructions": 368154126,
+      "instructions_coverage": 100.0,
+      "wall": 0.08811353502096608
+     },
+     {
+      "raw": "# started on Thu Oct 29 23:21:10 2026\n\n182976204,,cycles:u,89414945,100.00,,\n368155945,,instructions:u,89414945,100.00,2.01,insn per cycle\n",
+      "perf_wall": 0.1541623479570262,
+      "cycles": 182976204,
+      "cycles_coverage": 100.0,
+      "instructions": 368155945,
+      "instructions_coverage": 100.0,
+      "wall": 0.09815452701877803
+     },
+     {
+      "raw": "# started on Thu Oct 29 23:21:12 2026\n\n174380326,,cycles:u,81062871,100.00,,\n368157088,,instructions:u,81062871,100.00,2.11,insn per cycle\n",
+      "perf_wall": 0.1482378620421514,
+      "cycles": 174380326,
+      "cycles_coverage": 100.0,
+      "instructions": 368157088,
+      "instructions_coverage": 100.0,
+      "wall": 0.0900754879694432
+     },
+     {
+      "raw": "# started on Thu Oct 29 23:21:12 2026\n\n176699167,,cycles:u,93040516,100.00,,\n368155854,,instructions:u,93040516,100.00,2.08,insn per cycle\n",
+      "perf_wall": 0.1637933350284584,
+      "cycles": 176699167,
+      "cycles_coverage": 100.0,
+      "instructions": 368155854,
+      "instructions_coverage": 100.0,
+      "wall": 0.08551419200375676
+     },
+     {
+      "raw": "# started on Thu Oct 29 23:21:13 2026\n\n175574191,,cycles:u,84236442,100.00,,\n368155298,,instructions:u,84236442,100.00,2.10,insn per cycle\n",
+      "perf_wall": 0.15047430898994207,
+      "cycles": 175574191,
+      "cycles_coverage": 100.0,
+      "instructions": 368155298,
+      "instructions_coverage": 100.0,
+      "wall": 0.09858879901003093
+     },
+     {
+      "raw": "# started on Thu Oct 29 23:21:14 2026\n\n179584395,,cycles:u,79714471,100.00,,\n368153866,,instructions:u,79714471,100.00,2.05,insn per cycle\n",
+      "perf_wall": 0.1399368509883061,
+      "cycles": 179584395,
+      "cycles_coverage": 100.0,
+      "instructions": 368153866,
+      "instructions_coverage": 100.0,
+      "wall": 0.09998922498198226
+     },
+     {
+      "raw": "# started on Thu Oct 29 23:21:16 2026\n\n164199289,,cycles:u,87801565,100.00,,\n368152498,,instructions:u,87801565,100.00,2.24,insn per cycle\n",
+      "perf_wall": 0.16406934399856254,
+      "cycles": 164199289,
+      "cycles_coverage": 100.0,
+      "instructions": 368152498,
+      "instructions_coverage": 100.0,
+      "wall": 0.06797302304767072
+     }
+    ],
+    "cycles_median": 176699167,
+    "instructions_median": 368155298,
+    "wall_median": 0.0900754879694432
+   },
+   {
+    "case": "grid20x20",
+    "tag": "query-v3",
+    "samples": [
+     {
+      "raw": "# started on Thu Oct 29 23:21:09 2026\n\n169592475,,cycles:u,80026626,100.00,,\n323863062,,instructions:u,80026626,100.00,1.91,insn per cycle\n",
+      "perf_wall": 0.14101926004514098,
+      "cycles": 169592475,
+      "cycles_coverage": 100.0,
+      "instructions": 323863062,
+      "instructions_coverage": 100.0,
+      "wall": 0.11181561299599707
+     },
+     {
+      "raw": "# started on Thu Oct 29 23:21:10 2026\n\n167923445,,cycles:u,70473531,100.00,,\n323862763,,instructions:u,70473531,100.00,1.93,insn per cycle\n",
+      "perf_wall": 0.12599633901845664,
+      "cycles": 167923445,
+      "cycles_coverage": 100.0,
+      "instructions": 323862763,
+      "instructions_coverage": 100.0,
+      "wall": 0.09743963298387825
+     },
+     {
+      "raw": "# started on Thu Oct 29 23:21:11 2026\n\n166576914,,cycles:u,70461126,100.00,,\n323868205,,instructions:u,70461126,100.00,1.94,insn per cycle\n",
+      "perf_wall": 0.13098405505297706,
+      "cycles": 166576914,
+      "cycles_coverage": 100.0,
+      "instructions": 323868205,
+      "instructions_coverage": 100.0,
+      "wall": 0.10301497200271115
+     },
+     {
+      "raw": "# started on Thu Oct 29 23:21:13 2026\n\n161523059,,cycles:u,69837958,100.00,,\n323866746,,instructions:u,69837958,100.00,2.01,insn per cycle\n",
+      "perf_wall": 0.12970772199332714,
+      "cycles": 161523059,
+      "cycles_coverage": 100.0,
+      "instructions": 323866746,
+      "instructions_coverage": 100.0,
+      "wall": 0.0789575040107593
+     },
+     {
+      "raw": "# started on Thu Oct 29 23:21:13 2026\n\n164411523,,cycles:u,68820639,100.00,,\n323869518,,instructions:u,68820639,100.00,1.97,insn per cycle\n",
+      "perf_wall": 0.12749913503648713,
+      "cycles": 164411523,
+      "cycles_coverage": 100.0,
+      "instructions": 323869518,
+      "instructions_coverage": 100.0,
+      "wall": 0.08135839697206393
+     },
+     {
+      "raw": "# started on Thu Oct 29 23:21:14 2026\n\n170805460,,cycles:u,80180284,100.00,,\n323861763,,instructions:u,80180284,100.00,1.90,insn per cycle\n",
+      "perf_wall": 0.1553068200009875,
+      "cycles": 170805460,
+      "cycles_coverage": 100.0,
+      "instructions": 323861763,
+      "instructions_coverage": 100.0,
+      "wall": 0.09518317301990464
+     },
+     {
+      "raw": "# started on Thu Oct 29 23:21:15 2026\n\n168066539,,cycles:u,76534078,100.00,,\n323868987,,instructions:u,76534078,100.00,1.93,insn per cycle\n",
+      "perf_wall": 0.14550756802782416,
+      "cycles": 168066539,
+      "cycles_coverage": 100.0,
+      "instructions": 323868987,
+      "instructions_coverage": 100.0,
+      "wall": 0.09546531899832189
+     }
+    ],
+    "cycles_median": 167923445,
+    "instructions_median": 323866746,
+    "wall_median": 0.09546531899832189
+   },
+   {
+    "case": "grid20x20",
+    "tag": "links-v3",
+    "samples": [
+     {
+      "raw": "# started on Thu Oct 29 23:21:09 2026\n\n183464624,,cycles:u,80669194,100.00,,\n369521133,,instructions:u,80669194,100.00,2.01,insn per cycle\n",
+      "perf_wall": 0.14523441501660272,
+      "cycles": 183464624,
+      "cycles_coverage": 100.0,
+      "instructions": 369521133,
+      "instructions_coverage": 100.0,
+      "wall": 0.0821935500134714
+     },
+     {
+      "raw": "# started on Thu Oct 29 23:21:10 2026\n\n186693004,,cycles:u,92901803,100.00,,\n369519679,,instructions:u,92901803,100.00,1.98,insn per cycle\n",
+      "perf_wall": 0.17328642698703334,
+      "cycles": 186693004,
+      "cycles_coverage": 100.0,
+      "instructions": 369519679,
+      "instructions_coverage": 100.0,
+      "wall": 0.09947289596311748
+     },
+     {
+      "raw": "# started on Thu Oct 29 23:21:11 2026\n\n181447308,,cycles:u,78760780,100.00,,\n369521733,,instructions:u,78760780,100.00,2.04,insn per cycle\n",
+      "perf_wall": 0.14742628898238763,
+      "cycles": 181447308,
+      "cycles_coverage": 100.0,
+      "instructions": 369521733,
+      "instructions_coverage": 100.0,
+      "wall": 0.0879153850255534
+     },
+     {
+      "raw": "# started on Thu Oct 29 23:21:12 2026\n\n176073054,,cycles:u,72319564,100.00,,\n369518629,,instructions:u,72319564,100.00,2.10,insn per cycle\n",
+      "perf_wall": 0.13309525500517339,
+      "cycles": 176073054,
+      "cycles_coverage": 100.0,
+      "instructions": 369518629,
+      "instructions_coverage": 100.0,
+      "wall": 0.08722929697250947
+     },
+     {
+      "raw": "# started on Thu Oct 29 23:21:14 2026\n\n180990626,,cycles:u,75593194,100.00,,\n369521759,,instructions:u,75593194,100.00,2.04,insn per cycle\n",
+      "perf_wall": 0.13976905995514244,
+      "cycles": 180990626,
+      "cycles_coverage": 100.0,
+      "instructions": 369521759,
+      "instructions_coverage": 100.0,
+      "wall": 0.08960944903083146
+     },
+     {
+      "raw": "# started on Thu Oct 29 23:21:14 2026\n\n180863783,,cycles:u,79547476,100.00,,\n369523174,,instructions:u,79547476,100.00,2.04,insn per cycle\n",
+      "perf_wall": 0.1357511690002866,
+      "cycles": 180863783,
+      "cycles_coverage": 100.0,
+      "instructions": 369523174,
+      "instructions_coverage": 100.0,
+      "wall": 0.08876435895217583
+     },
+     {
+      "raw": "# started on Thu Oct 29 23:21:15 2026\n\n185772918,,cycles:u,88773073,100.00,,\n369521054,,instructions:u,88773073,100.00,1.99,insn per cycle\n",
+      "perf_wall": 0.16506942099658772,
+      "cycles": 185772918,
+      "cycles_coverage": 100.0,
+      "instructions": 369521054,
+      "instructions_coverage": 100.0,
+      "wall": 0.09064760600449517
+     }
+    ],
+    "cycles_median": 181447308,
+    "instructions_median": 369521133,
+    "wall_median": 0.08876435895217583
+   }
+  ],
+  "end": "2026-10-29T23:21:16.261280+00:00",
+  "uptime_end": "23:21:16 up 4 days, 20:03,  2 users,  load average: 171.91, 151.20, 110.55"
+ },
+ "ratchet_before": {
+  "target": "x86_64-unknown-linux-musl",
+  "cases": {
+   "tests/fixtures/unix.gv -Tsvg": {
+    "instructions": 27736537,
+    "exit": 0,
+    "heap_blocks": 14253,
+    "heap_bytes": 2123318,
+    "heap_peak_bytes": 569041,
+    "rss_kib": 6864
+   },
+   "tests/fixtures/unix.gv -Tpng": {
+    "instructions": 147175097,
+    "exit": 0,
+    "heap_blocks": 26276,
+    "heap_bytes": 14148187,
+    "heap_peak_bytes": 7460193,
+    "rss_kib": 20168
+   },
+   "tests/wild/gv16_graphs_b143_5416de.gv -Tsvg": {
+    "instructions": 2015753102,
+    "exit": 0,
+    "heap_blocks": 250586,
+    "heap_bytes": 47523321,
+    "heap_peak_bytes": 8293644,
+    "rss_kib": 13772
+   },
+   "synth/dot_dag_1000.gv -Tsvg": {
+    "instructions": 1573419534,
+    "exit": 0,
+    "heap_blocks": 418625,
+    "heap_bytes": 78051917,
+    "heap_peak_bytes": 13947937,
+    "rss_kib": 19392
+   },
+   "tests/neato/hw2_random_120.gv -Tsvg": {
+    "instructions": 2533128087,
+    "exit": 0,
+    "heap_blocks": 26433,
+    "heap_bytes": 3162998,
+    "heap_peak_bytes": 798549,
+    "rss_kib": 7092
+   },
+   "tests/fdp/wild_gv16_graphs_b69_4b5b48.gv -Tsvg": {
+    "instructions": 5226847375,
+    "exit": 0,
+    "heap_blocks": 321513,
+    "heap_bytes": 14775146,
+    "heap_peak_bytes": 1407905,
+    "rss_kib": 7728
+   },
+   "tests/sfdp/gen_grid20x20.gv -Tsvg": {
+    "instructions": 974616154,
+    "exit": 0,
+    "heap_blocks": 97132,
+    "heap_bytes": 9567431,
+    "heap_peak_bytes": 3066434,
+    "rss_kib": 9420
+   },
+   "tests/circo/wild_gv16_directed_sdh_29b016.gv -Tsvg": {
+    "instructions": 1540576926,
+    "exit": 0,
+    "heap_blocks": 678425,
+    "heap_bytes": 37859251,
+    "heap_peak_bytes": 991810,
+    "rss_kib": 7092
+   },
+   "tests/twopi/fx_arrows.gv -Tsvg": {
+    "instructions": 4303941230,
+    "exit": 0,
+    "heap_blocks": 22546,
+    "heap_bytes": 6864958,
+    "heap_peak_bytes": 909561,
+    "rss_kib": 7060
+   },
+   "synth/twopi_tree_5000.gv -Tsvg": {
+    "instructions": 851498523,
+    "exit": 0,
+    "heap_blocks": 1024852,
+    "heap_bytes": 83144782,
+    "heap_peak_bytes": 29377258,
+    "rss_kib": 34968
+   },
+   "tests/osage/wild_gv16_graphs_b51_33bcb0.gv -Tsvg": {
+    "instructions": 41852050,
+    "exit": 0,
+    "heap_blocks": 42661,
+    "heap_bytes": 3457454,
+    "heap_peak_bytes": 983809,
+    "rss_kib": 7796
+   },
+   "tests/patchwork/wild_gv16_graphs_b51_33bcb0.gv -Tsvg": {
+    "instructions": 31197231,
+    "exit": 0,
+    "heap_blocks": 36848,
+    "heap_bytes": 3344864,
+    "heap_peak_bytes": 908190,
+    "rss_kib": 7068
+   },
+   "tests/wild/gv16_graphs_b143_5416de.gv -Tplain": {
+    "instructions": 2033040681,
+    "exit": 0,
+    "heap_blocks": 245032,
+    "heap_bytes": 46698080,
+    "heap_peak_bytes": 8293648,
+    "rss_kib": 13772
+   },
+   "laid/tests/wild/gv16_graphs_b29_d1e4db.gv -Tcanon -Knop2": {
+    "instructions": 158689941,
+    "exit": 0,
+    "heap_blocks": 227582,
+    "heap_bytes": 18118851,
+    "heap_peak_bytes": 5232421,
+    "rss_kib": 9856
+   },
+   "laid/tests/wild/gv16_graphs_b29_d1e4db.gv -Tsvg -Knop2": {
+    "instructions": 162384701,
+    "exit": 0,
+    "heap_blocks": 210281,
+    "heap_bytes": 16555303,
+    "heap_peak_bytes": 5232417,
+    "rss_kib": 9408
+   }
+  }
+ },
+ "ratchet_after": {
+  "target": "x86_64-unknown-linux-musl",
+  "cases": {
+   "tests/fixtures/unix.gv -Tsvg": {
+    "instructions": 27736405,
+    "exit": 0,
+    "heap_blocks": 14253,
+    "heap_bytes": 2123318,
+    "heap_peak_bytes": 569041,
+    "rss_kib": 6864
+   },
+   "tests/fixtures/unix.gv -Tpng": {
+    "instructions": 147175363,
+    "exit": 0,
+    "heap_blocks": 26276,
+    "heap_bytes": 14148187,
+    "heap_peak_bytes": 7460193,
+    "rss_kib": 20172
+   },
+   "tests/wild/gv16_graphs_b143_5416de.gv -Tsvg": {
+    "instructions": 2015750613,
+    "exit": 0,
+    "heap_blocks": 250586,
+    "heap_bytes": 47523321,
+    "heap_peak_bytes": 8293644,
+    "rss_kib": 13768
+   },
+   "synth/dot_dag_1000.gv -Tsvg": {
+    "instructions": 1573415974,
+    "exit": 0,
+    "heap_blocks": 418625,
+    "heap_bytes": 78051917,
+    "heap_peak_bytes": 13947937,
+    "rss_kib": 18836
+   },
+   "tests/neato/hw2_random_120.gv -Tsvg": {
+    "instructions": 2533128471,
+    "exit": 0,
+    "heap_blocks": 26433,
+    "heap_bytes": 3162998,
+    "heap_peak_bytes": 798549,
+    "rss_kib": 7096
+   },
+   "tests/fdp/wild_gv16_graphs_b69_4b5b48.gv -Tsvg": {
+    "instructions": 5226807344,
+    "exit": 0,
+    "heap_blocks": 321513,
+    "heap_bytes": 14775146,
+    "heap_peak_bytes": 1407905,
+    "rss_kib": 7732
+   },
+   "tests/sfdp/gen_grid20x20.gv -Tsvg": {
+    "instructions": 921957811,
+    "exit": 0,
+    "heap_blocks": 97132,
+    "heap_bytes": 9567431,
+    "heap_peak_bytes": 3066434,
+    "rss_kib": 9420
+   },
+   "tests/circo/wild_gv16_directed_sdh_29b016.gv -Tsvg": {
+    "instructions": 1540578482,
+    "exit": 0,
+    "heap_blocks": 678425,
+    "heap_bytes": 37859251,
+    "heap_peak_bytes": 991810,
+    "rss_kib": 7092
+   },
+   "tests/twopi/fx_arrows.gv -Tsvg": {
+    "instructions": 4303941238,
+    "exit": 0,
+    "heap_blocks": 22546,
+    "heap_bytes": 6864958,
+    "heap_peak_bytes": 909561,
+    "rss_kib": 7056
+   },
+   "synth/twopi_tree_5000.gv -Tsvg": {
+    "instructions": 851483889,
+    "exit": 0,
+    "heap_blocks": 1024852,
+    "heap_bytes": 83144782,
+    "heap_peak_bytes": 29377258,
+    "rss_kib": 35100
+   },
+   "tests/osage/wild_gv16_graphs_b51_33bcb0.gv -Tsvg": {
+    "instructions": 41853121,
+    "exit": 0,
+    "heap_blocks": 42661,
+    "heap_bytes": 3457454,
+    "heap_peak_bytes": 983809,
+    "rss_kib": 7540
+   },
+   "tests/patchwork/wild_gv16_graphs_b51_33bcb0.gv -Tsvg": {
+    "instructions": 31197916,
+    "exit": 0,
+    "heap_blocks": 36848,
+    "heap_bytes": 3344864,
+    "heap_peak_bytes": 908190,
+    "rss_kib": 7064
+   },
+   "tests/wild/gv16_graphs_b143_5416de.gv -Tplain": {
+    "instructions": 2033043813,
+    "exit": 0,
+    "heap_blocks": 245032,
+    "heap_bytes": 46698080,
+    "heap_peak_bytes": 8293648,
+    "rss_kib": 13768
+   },
+   "laid/tests/wild/gv16_graphs_b29_d1e4db.gv -Tcanon -Knop2": {
+    "instructions": 158688714,
+    "exit": 0,
+    "heap_blocks": 227582,
+    "heap_bytes": 18118851,
+    "heap_peak_bytes": 5232421,
+    "rss_kib": 9600
+   },
+   "laid/tests/wild/gv16_graphs_b29_d1e4db.gv -Tsvg -Knop2": {
+    "instructions": 162381997,
+    "exit": 0,
+    "heap_blocks": 210281,
+    "heap_bytes": 16555303,
+    "heap_peak_bytes": 5232417,
+    "rss_kib": 9408
+   }
+  }
+ }
+}
