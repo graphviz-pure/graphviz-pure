@@ -19,6 +19,7 @@ use graphviz_pure_geom::node_size::{
     LABEL_AT_LEFT, LABEL_AT_RIGHT, LABEL_AT_TOP, LabelGeometry, NodeGeometry, NodeSizeEnv,
     graph_label_geometry_in, node_geometry,
 };
+use graphviz_pure_geom::shapes::{RecordField, ShapeKind};
 
 /// `textfont_t`.
 #[derive(Debug, Clone)]
@@ -116,22 +117,75 @@ impl TextLabel {
             spans,
         }
     }
+    /// C: lib/common/labels.c:make_label, make_simple_label
+    /// Transfers measured label buffers into the emitter instead of copying them.
+    pub fn from_owned_geometry(g: LabelGeometry, raw: &str, fontcolor: &str) -> Self {
+        let mut spans = Vec::new();
+        let text = if let Some(t) = g.text {
+            spans.reserve_exact(t.lines.len());
+            for line in t.lines {
+                spans.push(TextSpan {
+                    str: line.text,
+                    just: match line.justify {
+                        TextJustify::Left => 'l',
+                        TextJustify::Right => 'r',
+                        TextJustify::Center => 'n',
+                    },
+                    width: line.width,
+                    height: line.height,
+                    yoffset_centerline: 0.1 * line.font_size,
+                    font: TextFont::new(&g.font_name, line.font_size, 0),
+                });
+            }
+            t.source
+        } else if g.html && matches!(g.html_label.as_deref(), Some(HtmlLabel::Table(_))) {
+            "<TABLE>".to_string()
+        } else {
+            raw.to_string()
+        };
+        TextLabel {
+            text,
+            fontname: g.font_name,
+            fontcolor: fontcolor.to_string(),
+            fontsize: g.font_size,
+            dimen: g.dimen,
+            space: g.space,
+            pos: Point::default(),
+            set: false,
+            valign: if g.valign == '\0' { 'c' } else { g.valign },
+            html: g.html_label,
+            is_html: g.html && !g.html_failed,
+            spans,
+        }
+    }
 }
 
 /// One Bézier of an edge (`bezier`).
 #[derive(Debug, Clone, Default)]
-pub(crate) struct Bz {
-    pub list: Vec<Point>,
+pub(crate) struct Bz<'g> {
+    pub list: &'g [Point],
     pub sflag: u32,
     pub eflag: u32,
     pub sp: Point,
     pub ep: Point,
 }
 
+/// C: lib/common/types.h:Agnodeinfo_t
+/// Shape data retained by the emitter after its labels have been transferred.
+pub(crate) struct ShapeGeometry {
+    pub shape: ShapeKind,
+    pub width: f64,
+    pub height: f64,
+    pub polygon: Option<graphviz_pure_geom::node_size::PolygonGeometry>,
+    pub record: Option<RecordField>,
+    pub epsf: Option<(Point, i32)>,
+    pub usershape: bool,
+}
+
 pub(crate) struct RNode<'g> {
     pub name: &'g str,
     pub attrs: Attrs<'g>,
-    pub geom: NodeGeometry,
+    pub geom: ShapeGeometry,
     pub label: TextLabel,
     pub xlabel: Option<TextLabel>,
     pub coord: Point,
@@ -144,7 +198,7 @@ pub(crate) struct REdge<'g> {
     pub tail: usize,
     pub head: usize,
     pub attrs: Attrs<'g>,
-    pub bz: Vec<Bz>,
+    pub bz: Vec<Bz<'g>>,
     pub label: Option<TextLabel>,
     pub xlabel: Option<TextLabel>,
     pub head_label: Option<TextLabel>,
@@ -274,16 +328,37 @@ impl<'g> Model<'g> {
         let mut has_labels = 0u32;
         let mut nodes = Vec::with_capacity(g.nodes.len());
         for n in &g.nodes {
-            let geom = node_geometry(n, &env)?;
+            let NodeGeometry {
+                shape,
+                width,
+                height,
+                label: label_geometry,
+                xlabel: xlabel_geometry,
+                polygon,
+                record,
+                epsf,
+                usershape,
+                ..
+            } = node_geometry(n, &env)?;
+            let geom = ShapeGeometry {
+                shape,
+                width,
+                height,
+                polygon,
+                record,
+                epsf,
+                usershape,
+            };
             let a = Attrs(&n.attrs);
             let fontcolor = a.late_nnstring("fontcolor", "black");
             let raw = a.get("label").unwrap_or("\\N");
-            let mut label = TextLabel::from_geometry(&geom.label, raw, fontcolor);
+            let mut label = TextLabel::from_owned_geometry(label_geometry, raw, fontcolor);
             label.pos = n.pos;
             label.set = true;
-            let xlabel = geom.xlabel.as_ref().map(|xg| {
+            let xlabel = xlabel_geometry.map(|xg| {
                 has_labels |= NODE_XLABEL;
-                let mut l = TextLabel::from_geometry(xg, a.get("xlabel").unwrap_or(""), fontcolor);
+                let mut l =
+                    TextLabel::from_owned_geometry(xg, a.get("xlabel").unwrap_or(""), fontcolor);
                 if let Some(p) = n.layout.xlabel {
                     l.pos = p;
                     l.set = true;
@@ -318,7 +393,7 @@ impl<'g> Model<'g> {
                 .segments
                 .iter()
                 .map(|s| Bz {
-                    list: s.points.clone(),
+                    list: &s.points,
                     sflag: s.sflag,
                     eflag: s.eflag,
                     sp: s.start_arrow.unwrap_or_default(),
@@ -342,13 +417,14 @@ impl<'g> Model<'g> {
             let fontcolor = a.late_nnstring("fontcolor", "black");
             let lfontcolor = a.late_nnstring("labelfontcolor", fontcolor);
             // The layout's `pos` and `set` of each label.
-            let mk = |geo: &Option<LabelGeometry>,
+            let mk = |geo: Option<LabelGeometry>,
                       key: &str,
                       place: Option<LabelPlace>,
                       color: &str|
              -> Option<TextLabel> {
-                geo.as_ref().map(|lgeo| {
-                    let mut l = TextLabel::from_geometry(lgeo, a.get(key).unwrap_or(""), color);
+                geo.map(|lgeo| {
+                    let mut l =
+                        TextLabel::from_owned_geometry(lgeo, a.get(key).unwrap_or(""), color);
                     if let Some(p) = place {
                         l.pos = p.pos;
                         l.set = p.set;
@@ -360,11 +436,11 @@ impl<'g> Model<'g> {
                 pos,
                 set: !e.label_unplaced,
             });
-            let label = mk(&lg.label, "label", main, fontcolor);
+            let label = mk(lg.label, "label", main, fontcolor);
             let placed = |pos| LabelPlace { pos, set: true };
-            let xlabel = mk(&lg.xlabel, "xlabel", e.layout.xlabel.map(placed), fontcolor);
-            let head_label = mk(&lg.head_label, "headlabel", e.layout.head_label, lfontcolor);
-            let tail_label = mk(&lg.tail_label, "taillabel", e.layout.tail_label, lfontcolor);
+            let xlabel = mk(lg.xlabel, "xlabel", e.layout.xlabel.map(placed), fontcolor);
+            let head_label = mk(lg.head_label, "headlabel", e.layout.head_label, lfontcolor);
+            let tail_label = mk(lg.tail_label, "taillabel", e.layout.tail_label, lfontcolor);
             if label.is_some() {
                 has_labels |= EDGE_LABEL;
             }
@@ -446,8 +522,8 @@ impl<'g> Model<'g> {
                 };
                 let label = label.map(|gl| {
                     *has_labels |= GRAPH_LABEL;
-                    let mut l = TextLabel::from_geometry(
-                        &gl.label,
+                    let mut l = TextLabel::from_owned_geometry(
+                        gl.label,
                         a.get("label").unwrap_or(""),
                         a.late_nnstring("fontcolor", "black"),
                     );
@@ -563,14 +639,15 @@ impl<'g> Model<'g> {
             graph_label_geometry_in(g.root_name(), false, &g.graph_attrs, true, flip, &env);
         let label = root_label.map(|gl| {
             has_labels |= GRAPH_LABEL;
-            let mut l = TextLabel::from_geometry(
-                &gl.label,
+            let label_dimen = gl.label.dimen;
+            let mut l = TextLabel::from_owned_geometry(
+                gl.label,
                 ga.get("label").unwrap_or(""),
                 ga.late_nnstring("fontcolor", "black"),
             );
             l.pos = g.layout.label_pos.unwrap_or_else(|| {
                 // place_root_label
-                let d = Point::new(gl.label.dimen.x + 16.0, gl.label.dimen.y + 8.0);
+                let d = Point::new(label_dimen.x + 16.0, label_dimen.y + 8.0);
                 let x = if gl.pos_flag & LABEL_AT_RIGHT != 0 {
                     bb.ur.x - d.x / 2.0
                 } else if gl.pos_flag & LABEL_AT_LEFT != 0 {
@@ -602,5 +679,70 @@ impl<'g> Model<'g> {
             root_clusters,
             has_labels,
         })
+    }
+}
+
+#[cfg(test)]
+mod ownership_tests {
+    use super::*;
+
+    #[test]
+    fn owned_labels_match_borrowed_conversion_and_move_buffers() {
+        for src in [
+            r#"digraph { n [label="alpha\nbeta"] }"#,
+            r#"digraph { n [label=<<B>alpha</B>>] }"#,
+            r#"digraph { n [label=<<TABLE><TR><TD>alpha</TD></TR></TABLE>>] }"#,
+        ] {
+            let graph = graphviz_pure_parser::parse_dot(src).unwrap();
+            let node = &graph.nodes[0];
+            let geom = node_geometry(node, &NodeSizeEnv::from_graph(&graph)).unwrap();
+            let raw = node.attrs.get("label").unwrap();
+            let font = geom.label.font_name.as_ptr();
+            let source = geom.label.text.as_ref().map(|t| t.source.as_ptr());
+            let lines: Vec<_> = geom
+                .label
+                .text
+                .as_ref()
+                .map(|t| t.lines.iter().map(|line| line.text.as_ptr()).collect())
+                .unwrap_or_default();
+            let html = geom.label.html_label.as_deref().map(std::ptr::from_ref);
+            let expected = TextLabel::from_geometry(&geom.label, raw, "black");
+            let actual = TextLabel::from_owned_geometry(geom.label, raw, "black");
+            assert_eq!(format!("{actual:?}"), format!("{expected:?}"), "{src}");
+            assert_eq!(actual.fontname.as_ptr(), font);
+            if let Some(source) = source {
+                assert_eq!(actual.text.as_ptr(), source);
+            }
+            for (span, line) in actual.spans.iter().zip(lines) {
+                assert_eq!(span.str.as_ptr(), line);
+            }
+            assert_eq!(actual.html.as_deref().map(std::ptr::from_ref), html);
+        }
+    }
+
+    #[test]
+    fn render_beziers_borrow_source_points_in_segment_order() {
+        let mut graph = graphviz_pure_parser::parse_dot("digraph { a -> b }").unwrap();
+        graph.edges[0].spline.segments = [1.0, 3.0]
+            .map(|x| graphviz_pure_core::BezierSegment {
+                points: vec![Point::new(x, 2.0), Point::new(x + 1.0, 4.0)],
+                start_arrow: Some(Point::new(x, 0.0)),
+                end_arrow: None,
+                sflag: 1,
+                eflag: 0,
+            })
+            .into();
+        let model = Model::build(&graph).unwrap();
+        assert_eq!(model.edges[0].bz.len(), 2);
+        for (rendered, source) in model.edges[0]
+            .bz
+            .iter()
+            .zip(&graph.edges[0].spline.segments)
+        {
+            assert_eq!(rendered.list.as_ptr(), source.points.as_ptr());
+            assert_eq!(rendered.list, source.points);
+            assert_eq!(rendered.sflag, source.sflag);
+            assert_eq!(rendered.sp, source.start_arrow.unwrap());
+        }
     }
 }

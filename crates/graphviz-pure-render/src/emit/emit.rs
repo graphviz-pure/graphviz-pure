@@ -166,9 +166,9 @@ fn arrow_bb(p: Point, u: Point, arrowsize: f64) -> BoundingBox {
 }
 
 /// `init_splines_bb`.
-fn splines_bb(bz: &[Bz]) -> Option<BoundingBox> {
+fn splines_bb(bz: &[Bz<'_>]) -> Option<BoundingBox> {
     let first = bz.first()?;
-    let bezier_bb = |b: &Bz| {
+    let bezier_bb = |b: &Bz<'_>| {
         let mut bb = BoundingBox {
             ll: b.list[0],
             ur: b.list[0],
@@ -292,7 +292,7 @@ fn mk_seg_pts(prev: Option<Point>, cur: Point, next: Option<Point>, w2: f64) -> 
 }
 
 /// `map_output_bspline` (`emit.c:902-930`).
-fn map_output_bspline(b: &Bz, w2: f64) -> Vec<Vec<Point>> {
+fn map_output_bspline(b: &Bz<'_>, w2: f64) -> Vec<Vec<Point>> {
     let mut segments = Vec::new();
     let nc = b.list.len().saturating_sub(1) / 3;
     for j in 0..nc {
@@ -1562,7 +1562,7 @@ impl<'a, E: Engine> Emitter<'a, E> {
         tooltip: Option<String>,
         target: Option<String>,
         id: Option<String>,
-        decorate: Option<&[Bz]>,
+        decorate: Option<&[Bz<'_>]>,
     ) {
         let Some(lbl) = lbl.filter(|l| l.set) else {
             return;
@@ -1607,7 +1607,7 @@ impl<'a, E: Engine> Emitter<'a, E> {
     }
 
     /// `emit_attachment`.
-    fn emit_attachment(&mut self, lp: &TextLabel, spl: &[Bz]) {
+    fn emit_attachment(&mut self, lp: &TextLabel, spl: &[Bz<'_>]) {
         if lp.text.trim_start().is_empty() {
             return;
         }
@@ -1728,7 +1728,7 @@ impl<'a, E: Engine> Emitter<'a, E> {
             self.set_fillcolor(color.text);
             let bz = &ed.bz[0];
             let dir = super::geom::taper_dir(a, m.directed);
-            let stroke = super::geom::taper(&bz.list, dir, penwidth);
+            let stroke = super::geom::taper(bz.list, dir, penwidth);
             self.polygon(&stroke, 1);
             self.set_pencolor(color.text);
             if !a.same_ptr(fillcolor, color) {
@@ -1782,9 +1782,9 @@ impl<'a, E: Engine> Emitter<'a, E> {
             }
             for bz in &ed.bz {
                 if is_ortho && want_rounded && radius > 0.0 {
-                    self.ortho_rounded(&bz.list, radius, color);
+                    self.ortho_rounded(bz.list, radius, color);
                 } else {
-                    self.bezier(&bz.list, 0);
+                    self.bezier(bz.list, 0);
                 }
                 if bz.sflag != 0 {
                     self.arrow_gen(
@@ -1971,7 +1971,7 @@ impl<'a, E: Engine> Emitter<'a, E> {
                 endcolor = Some(c.clone());
                 if first {
                     first = false;
-                    let (l, r) = super::geom::split_bspline(&bz.list, s.t);
+                    let (l, r) = super::geom::split_bspline(bz.list, s.t);
                     self.bezier(&l, 0);
                     right = r;
                     if aeq0(left) {

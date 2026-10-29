@@ -19,7 +19,7 @@ fn dist(a: Point, b: Point) -> f64 {
 }
 
 /// `dotneato_closest`.
-pub(crate) fn dotneato_closest(spl: &[Bz], pt: Point) -> Point {
+pub(crate) fn dotneato_closest(spl: &[Bz<'_>], pt: Point) -> Point {
     let (mut besti, mut bestj, mut best) = (usize::MAX, usize::MAX, f64::MAX);
     for (i, bz) in spl.iter().enumerate() {
         for (j, b) in bz.list.iter().enumerate() {
