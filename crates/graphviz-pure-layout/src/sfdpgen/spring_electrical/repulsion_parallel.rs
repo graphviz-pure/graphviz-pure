@@ -21,9 +21,10 @@
 //! that order, then the move. `counts` and `nsuper` are added in node
 //! order in that same loop.
 //!
-//! The stored terms are a window of nodes that have not moved yet. The
-//! window is at most 32 MiB, including the worst case where every other
-//! node is its own supernode.
+//! The stored terms are a window of nodes that have not moved yet. Every
+//! window is sized so that `nodes * n * dim` floats fit in 32 MiB, which
+//! is every node as its own supernode. The next window does not grow from
+//! the previous window's average. A single node is never split.
 
 use super::{BH, attractive, move_node};
 use crate::neatogen::par;
@@ -35,24 +36,17 @@ use graphviz_pure_core::math;
 use std::cell::Cell;
 use std::ops::Range;
 
-/// Smallest graph that precomputes repulsive terms.
+/// Smallest level that precomputes repulsive terms.
 ///
-/// Each level is gated on its own `n`. With the gate at 64, four threads
-/// were slower than one on every full sfdp run through 5000 nodes, because
-/// the coarse levels spawned and lost. Gating those levels off removes the
-/// loss. On x86-64-v3, median `-Tsvg` wall, four threads against one:
-/// `gen_rnd2000` 297 ms against 319 ms; sparse 5000 about 850–890 ms against
-/// 932 ms; sparse 20000 about 3.87 s against 4.46 s when levels of 2000 and
-/// up ran, and 4.08 s when only the finest level did. Sparse 2000 was inside
-/// the noise. Two threads lost on sparse 20000, so fewer than four threads
-/// stay on the sequential term. Below [`super::QUADTREE_SIZE`] there is no tree.
-pub(super) const MIN_N: usize = 2000;
+/// Each level is gated on its own `n`. Four threads at 2000 nodes were
+/// 1.04× one thread, the samples overlapped, and the run used about 28%
+/// more CPU. The gate is 5000. Fewer than four threads stay on the
+/// sequential term: two threads lost on the 20000-node graph. Below
+/// [`super::QUADTREE_SIZE`] there is no tree.
+pub(super) const MIN_N: usize = 5000;
 
 /// Two threads lost on the 20000-node graph. Four is the default count.
 const MIN_THREADS: usize = 4;
-
-/// First window, before the observed supernode count sizes the next one.
-const PROBE_NODES: usize = 64;
 
 /// Resident precomputed terms. `4_000_000` `f64`s is 32 MiB.
 const TERM_BUDGET_F64S: usize = 4_000_000;
@@ -61,6 +55,7 @@ const TERM_BUDGET_F64S: usize = 4_000_000;
 thread_local! {
     static THREADS_OVERRIDE: Cell<Option<usize>> = const { Cell::new(None) };
     static MIN_NODES_OVERRIDE: Cell<Option<usize>> = const { Cell::new(None) };
+    static TERM_BUDGET_OVERRIDE: Cell<Option<usize>> = const { Cell::new(None) };
 }
 
 #[cfg(test)]
@@ -105,6 +100,28 @@ impl Drop for MinNodesOverride {
     }
 }
 
+#[cfg(test)]
+pub(super) struct TermBudgetOverride {
+    prev: Option<usize>,
+}
+
+#[cfg(test)]
+impl TermBudgetOverride {
+    /// Cap stored term floats at `n` for this thread. `0` is one float.
+    pub(super) fn set(n: usize) -> Self {
+        let prev = TERM_BUDGET_OVERRIDE.with(|cell| cell.replace(Some(n.max(1))));
+        Self { prev }
+    }
+}
+
+#[cfg(test)]
+impl Drop for TermBudgetOverride {
+    fn drop(&mut self) {
+        let prev = self.prev;
+        TERM_BUDGET_OVERRIDE.with(|cell| cell.set(prev));
+    }
+}
+
 fn run_threads() -> usize {
     #[cfg(test)]
     if let Some(n) = THREADS_OVERRIDE.with(Cell::get) {
@@ -144,6 +161,8 @@ pub(super) struct Scratch {
     chunks: Vec<Chunk>,
     #[cfg(test)]
     max_term_f64s: usize,
+    #[cfg(test)]
+    windows: usize,
 }
 
 impl Scratch {
@@ -209,15 +228,22 @@ fn accumulate_with_threads(
         return;
     }
     let mut start = 0;
-    let mut window = probe_limit(n, dim);
     while start < n {
+        // `n` supernodes per node is every node as its own supernode.
+        // Sizing from the previous window's average let a later window
+        // with more supernodes pass the budget.
+        let window = window_limit(n, dim);
         let end = (start + window).min(n);
         precompute(qt, x, dim, start..end, threads, kp, p, scratch);
         let terms: usize = scratch.chunks.iter().map(|chunk| chunk.terms.len()).sum();
-        let per = (terms / (end - start).max(1)).max(1);
-        window = (TERM_BUDGET_F64S / per).clamp(1, n);
+        debug_assert!(
+            terms <= term_budget() || n.saturating_mul(dim) > term_budget(),
+            "window stored {terms} floats, budget {}",
+            term_budget()
+        );
         #[cfg(test)]
         {
+            scratch.windows += 1;
             scratch.max_term_f64s = scratch.max_term_f64s.max(terms);
         }
         consume(
@@ -238,12 +264,23 @@ fn accumulate_with_threads(
     }
 }
 
-/// Worst-case probe: every other node is one supernode, and the stored
-/// terms stay inside [`TERM_BUDGET_F64S`].
-fn probe_limit(n: usize, dim: usize) -> usize {
-    let worst_per_node = n.saturating_mul(dim).max(1);
-    let by_budget = (TERM_BUDGET_F64S / worst_per_node).max(1);
-    by_budget.min(PROBE_NODES).min(n).max(1)
+fn term_budget() -> usize {
+    #[cfg(test)]
+    if let Some(n) = TERM_BUDGET_OVERRIDE.with(Cell::get) {
+        return n.max(1);
+    }
+    TERM_BUDGET_F64S
+}
+
+/// Nodes that fit in [`term_budget`] when each stores `n * dim` floats.
+///
+/// That is one supernode per node. `get_supernodes` skips the query node
+/// and replaces an opened subtree with one average, so the count is at
+/// most `n`. One node is always taken, even when that worst case alone
+/// is larger than the budget.
+fn window_limit(n: usize, dim: usize) -> usize {
+    let per = n.saturating_mul(dim).max(1);
+    (term_budget() / per).clamp(1, n.max(1))
 }
 
 fn precompute(
@@ -433,7 +470,7 @@ mod tests {
         crk: f64,
         step: f64,
         threads: usize,
-    ) -> (f64, f64, f64, usize) {
+    ) -> (f64, f64, f64, usize, usize) {
         let mut f = vec![0.0; dim];
         let mut fnorm = 0.0;
         let mut counts_avg = 0.0;
@@ -456,7 +493,13 @@ mod tests {
             threads,
             &mut scratch,
         );
-        (fnorm, counts_avg, nsuper_avg, scratch.resident_terms())
+        (
+            fnorm,
+            counts_avg,
+            nsuper_avg,
+            scratch.resident_terms(),
+            scratch.windows,
+        )
     }
 
     fn assert_one_tree(
@@ -473,7 +516,7 @@ mod tests {
         let mut x_seq = x0.to_vec();
         let mut x_par = x0.to_vec();
         let (f_seq, c_seq, s_seq) = oracle(a, dim, &mut x_seq, n, qt, kp, p, 0.2, 0.1);
-        let (f_par, c_par, s_par, resident) =
+        let (f_par, c_par, s_par, resident, _) =
             parallel(a, dim, &mut x_par, n, qt, kp, p, 0.2, 0.1, threads);
         assert_eq!(f_seq.to_bits(), f_par.to_bits(), "fnorm {label}");
         assert_eq!(c_seq.to_bits(), c_par.to_bits(), "counts {label}");
@@ -493,7 +536,7 @@ mod tests {
             tree_seq.rebuild_from_point_list(dim, n, 10, &x_seq);
             tree_par.rebuild_from_point_list(dim, n, 10, &x_par);
             let (f_seq, c_seq, s_seq) = oracle(&a, dim, &mut x_seq, n, &tree_seq, kp, p, 0.2, 0.1);
-            let (f_par, c_par, s_par, _) =
+            let (f_par, c_par, s_par, _, _) =
                 parallel(&a, dim, &mut x_par, n, &tree_par, kp, p, 0.2, 0.1, threads);
             let label = format!("n={n} dim={dim} p={p} threads={threads} iter={iter}");
             assert_eq!(f_seq.to_bits(), f_par.to_bits(), "fnorm {label}");
@@ -528,9 +571,37 @@ mod tests {
         const {
             assert!(MIN_N >= QUADTREE_SIZE);
         }
+        // `sfdp_bytes_6000` in scripts/bench/synth.py stays strictly above the gate.
         const {
-            assert!(MIN_N <= 5000);
+            assert!(MIN_N < 6_000);
         }
+    }
+
+    /// A budget smaller than the level still matches, and every window stays
+    /// inside that budget. The window length is the worst case (`n` supernodes),
+    /// not the previous window's average.
+    #[test]
+    fn a_short_budget_splits_the_level_and_stays_inside_it() {
+        let n = 80;
+        let dim = 2;
+        let budget = n * dim * 10;
+        let _budget = TermBudgetOverride::set(budget);
+        let a = path_graph(n);
+        let x = positions(n, dim, 0x51);
+        let mut tree = QuadTree::default();
+        tree.rebuild_from_point_list(dim, n, 10, &x);
+        let mut x_seq = x.clone();
+        let mut x_par = x.clone();
+        let (f_seq, c_seq, s_seq) = oracle(&a, dim, &mut x_seq, n, &tree, 0.35, -1.0, 0.2, 0.1);
+        let (f_par, c_par, s_par, resident, windows) =
+            parallel(&a, dim, &mut x_par, n, &tree, 0.35, -1.0, 0.2, 0.1, 4);
+        assert_eq!(f_seq.to_bits(), f_par.to_bits(), "fnorm");
+        assert_eq!(c_seq.to_bits(), c_par.to_bits(), "counts");
+        assert_eq!(s_seq.to_bits(), s_par.to_bits(), "nsuper");
+        assert_bits(&x_par, &x_seq, "short budget");
+        assert_eq!(windows, n / 10, "windows={windows}");
+        assert!(resident <= budget, "resident={resident} budget={budget}");
+        assert!(resident > 0);
     }
 
     #[test]
