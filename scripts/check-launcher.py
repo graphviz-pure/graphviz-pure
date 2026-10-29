@@ -2,6 +2,7 @@
 """Exercise a compiled baseline launcher with controlled child processes (Unix).
 Usage: scripts/check-launcher.py LAUNCHER
 """
+import os
 import pathlib
 import shutil
 import signal
@@ -17,16 +18,16 @@ with tempfile.TemporaryDirectory(prefix="graphviz launcher ") as tmp:
     for child in children:
         child.parent.mkdir()
     for child in children:
-        child.write_text('#!/bin/sh\ncat\nprintf "%s\\n" "$@"\nprintf diagnostic >&2\nexit 37\n')
+        child.write_text('#!/bin/sh\ncat\nprintf "%s\\n" "$@"\nprintf "%s\\n" "$GRAPHVIZ_PURE_ARGV0" >&2\n\nexit 37\n')
         child.chmod(0o755)
-    result = subprocess.run([str(launcher), "a b", "; echo injected", "--"], input=b"stdin\n", capture_output=True)
-    assert (result.returncode, result.stdout, result.stderr) == (37, b"stdin\na b\n; echo injected\n--\n", b"diagnostic"), result
+    result = subprocess.run([str(launcher), "a b", "; echo injected", "--"], input=b"stdin\n", capture_output=True, env=dict(os.environ, GRAPHVIZ_PURE_ARGV0="inherited name must be replaced"))
+    assert (result.returncode, result.stdout, result.stderr) == (37, b"stdin\na b\n; echo injected\n--\n", os.fsencode(str(launcher)) + b"\n"), result
     alias_dir = root / "aliases"
     alias_dir.mkdir()
     alias = alias_dir / "neato"
     alias.symlink_to(launcher)
-    result = subprocess.run([str(alias), "alias argument"], input=b"alias stdin\n", capture_output=True)
-    assert (result.returncode, result.stdout, result.stderr) == (37, b"alias stdin\nalias argument\n", b"diagnostic"), result
+    result = subprocess.run([str(alias), "alias argument"], input=b"alias stdin\n", capture_output=True, env=dict(os.environ, GRAPHVIZ_PURE_ARGV0="inherited name must be replaced"))
+    assert (result.returncode, result.stdout, result.stderr) == (37, b"alias stdin\nalias argument\n", os.fsencode(str(alias)) + b"\n"), result
     for child in children:
         child.write_text('#!/bin/sh\nkill -TERM $$\n')
     result = subprocess.run([str(launcher)])

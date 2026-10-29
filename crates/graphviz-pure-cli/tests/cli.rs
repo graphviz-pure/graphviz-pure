@@ -1198,6 +1198,46 @@ fn version_and_help_exit_successfully() {
     assert!(ok && out.contains("Usage:"));
 }
 
+// The safe launcher forwards the name typed by the caller even when the Windows
+// child process has a canonical variant path as its real argv[0].
+#[test]
+fn launcher_argv0_preserves_usage_and_usage_errors() {
+    let binary = env!("CARGO_BIN_EXE_graphviz-pure");
+    let caller = "typed directory/graphviz-pure.exe";
+    for flag in ["-?", "-n0"] {
+        let direct = Command::new(binary)
+            .arg(flag)
+            .env_remove("GRAPHVIZ_PURE_ARGV0")
+            .output()
+            .unwrap();
+        let forwarded = Command::new(binary)
+            .arg(flag)
+            .env("GRAPHVIZ_PURE_ARGV0", caller)
+            .output()
+            .unwrap();
+        assert_eq!(direct.status, forwarded.status);
+        for (before, after) in [
+            (&direct.stdout, &forwarded.stdout),
+            (&direct.stderr, &forwarded.stderr),
+        ] {
+            let before = String::from_utf8(before.clone()).unwrap();
+            assert_eq!(before.replace(binary, caller).as_bytes(), after, "{flag}");
+        }
+        let usage = if flag == "-?" {
+            &direct.stdout
+        } else {
+            &direct.stderr
+        };
+        assert!(String::from_utf8_lossy(usage).contains(&format!("Usage: {binary} ")));
+        let usage = if flag == "-?" {
+            &forwarded.stdout
+        } else {
+            &forwarded.stderr
+        };
+        assert!(String::from_utf8_lossy(usage).contains(&format!("Usage: {caller} ")));
+    }
+}
+
 #[test]
 fn no_layout_mode_keeps_positions() {
     let laid = "digraph{a [pos=\"127,118\"]; b [pos=\"127,18\"]; a -> b [pos=\"e,127,36 127,100 127,80 127,60 127,46\"]}";

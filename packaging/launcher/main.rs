@@ -64,6 +64,12 @@ fn run() -> io::Result<()> {
     }
     let mut command = Command::new(binary);
     command.args(env::args_os().skip(1));
+    // Internal launcher/CLI handoff: Command cannot set argv[0] on Windows.
+    // Always replace any inherited value with the name used for this invocation.
+    command.env(
+        "GRAPHVIZ_PURE_ARGV0",
+        env::args_os().next().unwrap_or_default(),
+    );
     // Command inherits all three standard streams. exec preserves Unix signals
     // and status exactly, without a shell or an unsafe system-call wrapper.
     #[cfg(unix)]

@@ -39,6 +39,26 @@ Source installation stays baseline unless the user sets RUSTFLAGS.
 CI tests the v3 workspace fidelity ratchets and compares v1/v3 output for every
 `tests/**/*.gv` input with its own `layout=` engine. No goldens change.
 
+### Gate before 1.1.0
+
+After merge, a release dry run from master must pass before 1.1.0 is tagged. The
+coordinator owns this gate: a branch dispatch prepares master's release tree and
+cannot validate the unmerged launcher/packaging code. The cancelled branch run
+is not release-readiness evidence.
+
+Second-to-merge rule: [homebrew-tap#3](https://github.com/graphviz-pure/homebrew-tap/pull/3)
+and [scoop-bucket#3](https://github.com/graphviz-pure/scoop-bucket/pull/3) must merge
+before the 1.1.0 release, so both package managers install the safe CPU bundle.
+
+### Internal launcher handoff
+
+`GRAPHVIZ_PURE_ARGV0` is an internal launcher-to-CLI environment variable, set
+only by the launcher to the caller's original argv[0]. It preserves usage text,
+diagnostics and executable-name engine selection when Windows supplies a
+canonical child path. The launcher overwrites inherited values; users should not
+set it. When it is absent, the CLI uses its actual argv[0] exactly as before.
+This is an internal packaging contract, not a supported configuration setting.
+
 ## Before dispatching
 
 `scripts/release-check.sh` prints the checklist the workflow runs, and changes nothing:
