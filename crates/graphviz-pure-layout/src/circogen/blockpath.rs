@@ -1,7 +1,6 @@
 //! `lib/circogen/blockpath.c`: lay out a single block on a circle.
 
 use super::circular::{Circ, NEIGHBOR_F, PARENT_F, PATH_F, VISITED_F};
-use super::edgelist::{add_edge, init_edgelist, remove_edge};
 use super::graph::CGraph;
 use super::nodelist::{append_nodelist, insert_nodelist, realign_nodelist, reverse_append};
 use crate::cutil::qsort_by;
@@ -288,37 +287,87 @@ fn block_graph(c: &mut Circ, g: &CGraph, sn: usize) {
     c.blocks[sn].sub_graph = subg;
 }
 
-/// `count_all_crossings(list, subg)`.
-fn count_all_crossings(c: &mut Circ, list: &[usize], subg: &CGraph) -> i32 {
-    let mut open = init_edgelist();
-    let mut crossings = 0;
-    let mut order = 1;
-    for n in subg.nodes() {
-        for e in subg.outs(n) {
-            c.arena.order[e] = 0;
+/// C: lib/circogen/blockpath.c:count_all_crossings, reduce_edge_crossings
+/// Immutable block adjacency and scratch shared by all tentative moves.
+struct Crossings {
+    nodes: Vec<usize>,
+    offsets: Vec<std::ops::Range<usize>>,
+    edges: Vec<usize>,
+    open: Vec<u64>,
+}
+
+impl Crossings {
+    fn new(c: &Circ, subg: &CGraph) -> Self {
+        let nodes = subg.nodes();
+        let mut offsets = vec![0..0; c.nd.len()];
+        let mut edges = Vec::new();
+        let mut ni = nodes.iter().peekable();
+        for (n, offset) in offsets.iter_mut().enumerate().take(c.nd.len()) {
+            let start = edges.len();
+            if ni.peek() == Some(&&n) {
+                edges.extend(subg.edges(n));
+                ni.next();
+            }
+            *offset = start..edges.len();
+        }
+        Self {
+            nodes,
+            offsets,
+            edges,
+            open: vec![0; (c.arena.order.len() << 1).div_ceil(64)],
         }
     }
+}
+
+/// C: lib/circogen/blockpath.c:count_all_crossings
+fn count_all_crossings(c: &mut Circ, list: &[usize], scratch: &mut Crossings) -> i32 {
+    scratch.open.fill(0);
+    let mut crossings = 0;
+    for &e in &scratch.edges {
+        if let Some(order) = c.arena.order.get_mut(e) {
+            *order = 0;
+        }
+    }
+    let mut order = 1;
     for &n in list {
-        let edges = subg.edges(n);
-        // the half of each edge as seen from n
-        let half = |c: &Circ, e: usize| (e, c.arena.tail[e] != n);
-        for &e in &edges {
+        let Some(range) = scratch.offsets.get(n) else {
+            continue;
+        };
+        let Some(edges) = scratch.edges.get(range.clone()) else {
+            continue;
+        };
+        for &e in edges {
             if c.arena.order[e] > 0 {
-                for &(ep, _) in &open {
-                    if c.arena.order[ep] > c.arena.order[e]
-                        && c.arena.head[ep] != n
-                        && c.arena.tail[ep] != n
-                    {
-                        crossings += 1;
+                // Ascending (edge id, half), exactly the old BTreeSet order.
+                for (word_index, &word) in scratch.open.iter().enumerate() {
+                    let mut bits = word;
+                    while bits != 0 {
+                        let half = (word_index << 6) | bits.trailing_zeros() as usize;
+                        let ep = half / 2;
+                        if c.arena.order[ep] > c.arena.order[e]
+                            && c.arena.head[ep] != n
+                            && c.arena.tail[ep] != n
+                        {
+                            crossings += 1;
+                        }
+                        bits &= bits.wrapping_sub(1);
                     }
                 }
-                remove_edge(&mut open, half(c, e));
+                // C's two edge halves are distinct keys: closing at the other
+                // end must not erase the half opened at the first endpoint.
+                let half = (e << 1) | usize::from(c.arena.tail[e] != n);
+                if let Some(word) = scratch.open.get_mut(half / 64) {
+                    *word &= !(1u64.wrapping_shl((half % 64) as u32));
+                }
             }
         }
-        for &e in &edges {
+        for &e in edges {
             if c.arena.order[e] == 0 {
                 c.arena.order[e] = order;
-                add_edge(&mut open, half(c, e));
+                let half = (e << 1) | usize::from(c.arena.tail[e] != n);
+                if let Some(word) = scratch.open.get_mut(half / 64) {
+                    *word |= 1u64.wrapping_shl((half % 64) as u32);
+                }
             }
         }
         order += 1;
@@ -330,18 +379,33 @@ const CROSS_ITER: i32 = 10;
 
 /// `reduce(list, subg, cnt)`: move nodes next to their neighbours while that
 /// lowers the crossing count.
-fn reduce(c: &mut Circ, mut list: Vec<usize>, subg: &CGraph, cnt: &mut i32) -> Vec<usize> {
+fn reduce(
+    c: &mut Circ,
+    mut list: Vec<usize>,
+    scratch: &mut Crossings,
+    cnt: &mut i32,
+) -> Vec<usize> {
     let mut crossings = *cnt;
-    for curnode in subg.nodes() {
-        for e in subg.edges(curnode) {
+    let mut list_copy = Vec::with_capacity(list.len());
+    for ni in 0..scratch.nodes.len() {
+        let Some(&curnode) = scratch.nodes.get(ni) else {
+            continue;
+        };
+        let Some(range) = scratch.offsets.get(curnode).cloned() else {
+            continue;
+        };
+        for ei in range {
+            let Some(&e) = scratch.edges.get(ei) else {
+                continue;
+            };
             let mut neighbor = c.arena.tail[e];
             if neighbor == curnode {
                 neighbor = c.arena.head[e];
             }
             for j in 0..2 {
-                let list_copy = list.clone();
+                list_copy.clone_from(&list);
                 insert_nodelist(&mut list, curnode, neighbor, j);
-                let new_crossings = count_all_crossings(c, &list, subg);
+                let new_crossings = count_all_crossings(c, &list, scratch);
                 if new_crossings < crossings {
                     crossings = new_crossings;
                     if crossings == 0 {
@@ -349,7 +413,7 @@ fn reduce(c: &mut Circ, mut list: Vec<usize>, subg: &CGraph, cnt: &mut i32) -> V
                         return list;
                     }
                 } else {
-                    list = list_copy;
+                    list.clone_from(&list_copy);
                 }
             }
         }
@@ -360,13 +424,14 @@ fn reduce(c: &mut Circ, mut list: Vec<usize>, subg: &CGraph, cnt: &mut i32) -> V
 
 /// `reduce_edge_crossings(list, subg)`.
 fn reduce_edge_crossings(c: &mut Circ, mut list: Vec<usize>, subg: &CGraph) -> Vec<usize> {
-    let mut crossings = count_all_crossings(c, &list, subg);
+    let mut scratch = Crossings::new(c, subg);
+    let mut crossings = count_all_crossings(c, &list, &mut scratch);
     if crossings == 0 {
         return list;
     }
     for _ in 0..CROSS_ITER {
         let orig_crossings = crossings;
-        list = reduce(c, list, subg, &mut crossings);
+        list = reduce(c, list, &mut scratch, &mut crossings);
         if orig_crossings == crossings || crossings == 0 {
             return list;
         }
@@ -484,4 +549,89 @@ pub fn layout_block(c: &mut Circ, g: &CGraph, sn: usize, min_dist: f64) -> Vec<u
     b.parent_pos = -1.0;
     b.sub_graph = subg;
     longest_path
+}
+
+#[cfg(test)]
+mod tests {
+    use super::super::circular::CData;
+    use super::super::edgelist::{add_edge, init_edgelist, remove_edge};
+    use super::super::graph::EdgeArena;
+    use super::*;
+
+    fn reference(c: &mut Circ, list: &[usize], g: &CGraph) -> i32 {
+        let mut open = init_edgelist();
+        let mut crossings = 0;
+        for n in g.nodes() {
+            for e in g.outs(n) {
+                c.arena.order[e] = 0;
+            }
+        }
+        for (i, &n) in list.iter().enumerate() {
+            let edges = g.edges(n);
+            for &e in &edges {
+                if c.arena.order[e] > 0 {
+                    for &(ep, _) in &open {
+                        if c.arena.order[ep] > c.arena.order[e]
+                            && c.arena.head[ep] != n
+                            && c.arena.tail[ep] != n
+                        {
+                            crossings += 1;
+                        }
+                    }
+                    remove_edge(&mut open, (e, c.arena.tail[e] != n));
+                }
+            }
+            for &e in &edges {
+                if c.arena.order[e] == 0 {
+                    c.arena.order[e] = i as i32 + 1;
+                    add_edge(&mut open, (e, c.arena.tail[e] != n));
+                }
+            }
+        }
+        crossings
+    }
+
+    #[test]
+    fn crossing_sequence_matches_edge_half_set() {
+        let mut c = Circ {
+            nd: vec![CData::default(); 7],
+            pos: vec![],
+            width: vec![],
+            height: vec![],
+            arena: EdgeArena::default(),
+            blocks: vec![],
+            bl: vec![],
+            order_count: 1,
+            min_dist: 0.0,
+            rootname: None,
+            n_root: false,
+            node_root: vec![],
+            names: vec![],
+        };
+        let mut unused = CGraph::default();
+        for n in 0..30 {
+            unused.edge(&mut c.arena, n, n);
+        }
+        let mut g = CGraph::default();
+        // Edge halves straddle a bitset word boundary.
+        // Mixed orientations, a loop, sparse node ids, and an isolated node.
+        for (t, h) in [(5, 0), (0, 2), (2, 5), (4, 0), (2, 4), (4, 5), (2, 2)] {
+            g.edge(&mut c.arena, t, h);
+        }
+        g.add_node(6);
+        let mut scratch = Crossings::new(&c, &g);
+        fn permutations(c: &mut Circ, g: &CGraph, s: &mut Crossings, list: &mut [usize], i: usize) {
+            if i == list.len() {
+                let expected = reference(c, list, g);
+                assert_eq!(count_all_crossings(c, list, s), expected, "{list:?}");
+                return;
+            }
+            for j in i..list.len() {
+                list.swap(i, j);
+                permutations(c, g, s, list, i + 1);
+                list.swap(i, j);
+            }
+        }
+        permutations(&mut c, &g, &mut scratch, &mut [0, 2, 4, 5, 6], 0);
+    }
 }

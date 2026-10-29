@@ -41,10 +41,10 @@
    "instructions": 846884248
   },
   "tests/circo/wild_gv16_directed_sdh_29b016.gv -Tsvg": {
-   "heap_blocks": 678425,
-   "heap_bytes": 37859280,
-   "heap_peak_bytes": 991839,
-   "instructions": 1543976720
+   "heap_blocks": 28953,
+   "heap_bytes": 2888864,
+   "heap_peak_bytes": 993215,
+   "instructions": 531358486
   },
   "tests/fdp/wild_gv16_graphs_b69_4b5b48.gv -Tsvg": {
    "heap_blocks": 320901,
