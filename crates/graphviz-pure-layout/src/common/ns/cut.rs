@@ -35,12 +35,12 @@ use super::{Ctx, NsGraph, dfs_range_impl, exchange_tree_edges, seq, slack, tree_
 
 /// Selector: graphs with fewer nodes than this keep C's search. Their subtree walks are short,
 /// and the cut sets' storage would not pay for itself.
-const CUT_SETS_MIN_NODES: usize = 1000;
+const CUT_SETS_MIN_NODES: usize = 1500;
 
 /// Selector: the largest estimated cost ratio, (mean tree-cycle length × mean cut-set size) /
 /// node count, for which the cut sets are faster than C's walks. Tuned on the corpus
 /// (`docs/perf/ns-cut-sets.md`, "The selector").
-const CUT_SETS_MAX_COST: f64 = 2.0;
+const CUT_SETS_MAX_COST: f64 = 1.0;
 
 /// Selector: how many non-tree edges are sampled to estimate the mean tree-cycle length.
 const CUT_SETS_SAMPLE: usize = 64;
@@ -616,7 +616,13 @@ impl CutStore {
     /// with every bit flipped and `f` replaced by `e` (against `f`), in place.
     fn move_cut_sets(&mut self, se: usize, ke: u32, kf: u32) {
         let set_e = self.tree(se);
-        for p in 0..self.work.len() {
+        // e's members after the path in `work`: pushes may move e's segment in the pool
+        let steps = self.work.len();
+        for i in 0..set_e.len {
+            let x = self.entry(set_e.start.wrapping_add(i));
+            self.work.push(x);
+        }
+        for p in 0..steps {
             let Some(&step) = self.work.get(p) else {
                 break;
             };
@@ -635,9 +641,10 @@ impl CutStore {
                     es.slot = i;
                 }
             }
-            for i in 0..set_e.len {
-                // a push may compact the pool: e's set may have moved
-                let x = self.entry(self.tree(se).start.wrapping_add(i));
+            for q in steps..self.work.len() {
+                let Some(&x) = self.work.get(q) else {
+                    break;
+                };
                 let k = x & ID;
                 if k == kf {
                     continue;
