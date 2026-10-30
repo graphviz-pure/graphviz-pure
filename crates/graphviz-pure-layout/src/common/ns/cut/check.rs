@@ -6,32 +6,33 @@
 //! every pivot. [`super::begin`] takes the cut-set path on every graph in this mode, whatever
 //! the selector would say.
 
-use super::{AGAINST, CutStore, FORWARD, ID, NsGraph};
+use super::{AGAINST, CutStore, FORWARD, ID, NsGraph, tree_slot};
 use crate::common::ns::{Ctx, invalidate_path, seq, slack};
 
 pub(super) const ON: bool = true;
-
-thread_local! {
-    /// How many runs fell back to C's functions, for the tests.
-    pub(super) static FALLBACKS: std::cell::Cell<u32> = const { std::cell::Cell::new(0) };
-}
-
-pub(super) fn fell_back() {
-    FALLBACKS.with(|f| f.set(f.get() + 1));
-}
 
 /// Events the tests want to see happen at least once.
 pub(super) type Counter = std::thread::LocalKey<std::cell::Cell<u32>>;
 
 thread_local! {
+    /// Runs that fell back to C's functions.
+    pub(super) static FALLBACKS: std::cell::Cell<u32> = const { std::cell::Cell::new(0) };
     /// C's `rerank` from the root, which moves the whole tree (ns.c:697, `ND_par(root)` is NULL).
     pub(super) static WHOLE_TREE: std::cell::Cell<u32> = const { std::cell::Cell::new(0) };
-    /// Entering edges chosen among several of the same slack.
+    /// Candidates of the same slack, ordered by C's scan.
     pub(super) static TIES: std::cell::Cell<u32> = const { std::cell::Cell::new(0) };
+    /// Cut sets moved to a bigger segment.
+    pub(super) static RELOCATIONS: std::cell::Cell<u32> = const { std::cell::Cell::new(0) };
+    /// Pool compactions.
+    pub(super) static COMPACTIONS: std::cell::Cell<u32> = const { std::cell::Cell::new(0) };
 }
 
 pub(super) fn count(c: &'static Counter) {
     c.with(|n| n.set(n.get() + 1));
+}
+
+pub(super) fn fell_back() {
+    count(&FALLBACKS);
 }
 
 /// The parent pointers the cut-set pivot set, to compare with `dfs_range`'s.
@@ -51,16 +52,18 @@ pub(super) fn enter_edge<G: NsGraph + ?Sized>(
     let child = if g.lim(t) < g.lim(h) { t } else { h };
     assert_eq!(g.par(child), Some(e), "parent pointer of e's child");
     let (low, lim) = (g.low(child), g.lim(child));
-    let set = store.edge(e);
+    let s = tree_slot(g, e).expect("a tree edge has a tree index");
+    let set = store.tree(s);
+    assert_eq!(store.edge(set.edge).edge as usize, e, "tree slot of edge {e}");
     let mut members: Vec<(usize, bool)> = (0..set.len)
-        .map(|i| store.entry((set.start + i) as usize))
-        .map(|x| ((x & ID) as usize, x & AGAINST != 0))
+        .map(|i| store.entry(set.start + i))
+        .map(|x| (store.edge(x & ID).edge as usize, x & AGAINST != 0))
         .collect();
     members.sort_unstable();
     let mut crossing = Vec::new();
     for &u in g.nlist() {
         for &x in g.out_edges(u) {
-            if x == e || g.tree_index(x) >= 0 {
+            if g.tree_index(x) >= 0 {
                 continue;
             }
             let tail_in = seq(g, g.tail(x), low, lim);
@@ -76,7 +79,6 @@ pub(super) fn enter_edge<G: NsGraph + ?Sized>(
     assert_eq!(members, crossing, "cut set of tree edge {e}");
     let mut cutvalue = g.weight(e);
     for &(x, against) in &members {
-        assert_eq!(store.slack(x), slack(g, x), "slack of edge {x}");
         cutvalue = if against {
             cutvalue.wrapping_sub(g.weight(x))
         } else {
@@ -84,6 +86,10 @@ pub(super) fn enter_edge<G: NsGraph + ?Sized>(
         };
     }
     assert_eq!(cutvalue, g.cutvalue(e), "cut value of tree edge {e}");
+    for (k, es) in store.edges.iter().enumerate() {
+        let x = es.edge as usize;
+        assert_eq!(es.slack, slack(g, x), "slack of edge {x} (local {k})");
+    }
     let c = crate::common::ns::enter_edge(g, ctx, e);
     assert_eq!(f, c, "entering edge for leaving edge {e}");
 }
@@ -93,16 +99,25 @@ pub(super) fn rerank<G: NsGraph + ?Sized>(g: &mut G, ctx: &mut Ctx, node: usize,
     crate::common::ns::rerank(g, ctx, node, delta);
 }
 
-/// f's tree cycle and LCA are what C's two `treeupdate` walks visit, in the same order and
-/// with the same sign; then C's `invalidate_path`. Returns `low(lca)` for `dfs_range`.
+/// f's tree cycle (in `store.work`, as tree slots) and LCA are what C's two `treeupdate`
+/// walks visit, in the same order and with the same sign; then C's `invalidate_path`.
+/// Returns `low(lca)` for `dfs_range`.
 pub(super) fn path<G: NsGraph + ?Sized>(
     g: &mut G,
+    store: &CutStore,
     e: usize,
     f: usize,
     lca: usize,
-    path: &[u32],
 ) -> i32 {
     let (ft, fh) = (g.tail(f), g.head(f));
+    let path: Vec<u32> = store
+        .work
+        .iter()
+        .map(|&step| {
+            let t = store.edge(store.tree((step & ID) as usize).edge).edge;
+            t | (step & FORWARD)
+        })
+        .collect();
     let mut walked = Vec::new();
     let mut tops = Vec::new();
     for (start, other, dir) in [(ft, fh, true), (fh, ft, false)] {
@@ -156,21 +171,19 @@ pub(super) fn dfs_range<G: NsGraph + ?Sized>(
     }
 }
 
+/// After a pivot, every slack is C's, and every tree slot holds its tree edge.
+pub(super) fn slacks<G: NsGraph + ?Sized>(g: &G, store: &CutStore, e: usize, f: usize) {
+    for es in &store.edges {
+        let x = es.edge as usize;
+        assert_eq!(es.slack, slack(g, x), "slack of edge {x} after pivot {e} -> {f}");
+    }
+    for (s, ts) in store.tree.iter().enumerate() {
+        let t = store.edge(ts.edge).edge as usize;
+        assert_eq!(g.tree_index(t), s as i32, "tree slot {s} after pivot {e} -> {f}");
+    }
+}
+
 /// The rank written from the slacks is C's.
 pub(super) fn rank<G: NsGraph + ?Sized>(g: &G, u: usize, r: i32) {
     assert_eq!(r, g.rank(u), "rank of node {u}");
-}
-
-/// After a pivot, every slack the cut sets keep is C's.
-pub(super) fn slacks<G: NsGraph + ?Sized>(g: &G, store: &CutStore, e: usize, f: usize) {
-    for &u in g.nlist() {
-        for &x in g.out_edges(u) {
-            assert_eq!(
-                store.slack(x),
-                slack(g, x),
-                "slack of edge {x} (tree: {}) after pivot {e} -> {f}",
-                g.tree_index(x) >= 0
-            );
-        }
-    }
 }

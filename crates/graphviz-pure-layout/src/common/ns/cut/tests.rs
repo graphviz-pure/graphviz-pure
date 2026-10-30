@@ -101,8 +101,14 @@ fn same_both_ways(g: &NsData, balance: i32, maxiter: i32, search: i32, case: &st
 #[test]
 fn random_dags_rank_the_same_on_both_paths() {
     let mut rng = Rng(0x9e37_79b9_7f4a_7c15);
-    super::check::WHOLE_TREE.with(|n| n.set(0));
-    super::check::TIES.with(|n| n.set(0));
+    for counter in [
+        &super::check::WHOLE_TREE,
+        &super::check::TIES,
+        &super::check::RELOCATIONS,
+        &super::check::COMPACTIONS,
+    ] {
+        counter.with(|n| n.set(0));
+    }
     for case in 0..3000 {
         let n = 2 + rng.below(70) as usize;
         let extra = rng.below(2 * n as u64 + 1) as usize;
