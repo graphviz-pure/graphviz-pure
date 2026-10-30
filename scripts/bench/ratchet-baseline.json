@@ -83,10 +83,10 @@
    "instructions": 24895682
   },
   "tests/patchwork/wild_gv16_graphs_b51_33bcb0.gv -Tsvg": {
-   "heap_blocks": 16797,
-   "heap_bytes": 2097681,
+   "heap_blocks": 14215,
+   "heap_bytes": 1919668,
    "heap_peak_bytes": 759560,
-   "instructions": 20207584
+   "instructions": 16948173
   },
   "tests/sfdp/gen_grid20x20.gv -Tsvg": {
    "heap_blocks": 54478,
