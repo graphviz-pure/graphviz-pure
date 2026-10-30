@@ -273,10 +273,13 @@ fixed on `master` and ships with the next dispatch. A re-run asks for the approv
   npmjs.com with your passkey. After approval, re-run **verify**, not **npm**. GitHub allows
   [re-runs within 30 days of the original run](https://docs.github.com/en/actions/how-tos/manage-workflow-runs/re-run-workflows-and-jobs);
   the release-commit bundle is retained for 90 days.
-  After the 30-day re-run window, use `scripts/release-verify.sh X.Y.Z` locally.
+  After the 30-day re-run window, use `scripts/release-verify.sh X.Y.Z` locally and close the
+  X.Y.Z milestone by hand.
 - `jsr`: a re-run is safe if the job failed before publishing. A published version is immutable.
   A re-run keeps the original actor. For `actorNotScopeMember`, if no release tag exists, start
-  a new owner-dispatched run. If the tag already exists, `prepare` refuses another release of
+  a new owner-dispatched run. If npm has already staged that version, the new run's `npm` job
+  fails, because the stage reserves the number: approve the existing stage on npmjs.com, check it
+  with `scripts/release-verify.sh X.Y.Z` locally, and close the milestone by hand. If the tag already exists, `prepare` refuses another release of
   that version: recover by publishing the attested npm tarball's JSR files by hand, as for 1.0.0.
   Download the release's tarball, verify its Sigstore attestation and `SHA256SUMS`, unpack it,
   then run `deno publish` from the unpacked `package/` directory and approve with a passkey.
