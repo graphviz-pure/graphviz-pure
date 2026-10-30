@@ -131,6 +131,10 @@ pub struct Rank {
     pub candidate: bool,
     pub valid: bool,
     pub cache_nc: i64,
+    /// Remote-order columns are current for this mincross rank window.
+    pub(super) mincross_snapshot: bool,
+    /// Positional exchange proof, invalidated by restores or mixed-rank writes.
+    pub(super) mincross_position: Option<bool>,
     pub flat: Option<AdjMatrix>,
 }
 
