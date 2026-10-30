@@ -219,10 +219,10 @@ impl Output {
             let Some(bzs) = ed.spl.as_ref() else {
                 edge_layout.push(el);
                 // A lost edge (no spline) still draws its placed label (emit_edge);
-                // the output writer skips edges without splines. `routed` is false
-                // when the root has no edge type: with `splines=none`, and in the pack
-                // branch, where only the components route.
-                let routed = d.et != crate::common::types::EdgeType::None;
+                // the output writer skips edges without splines. `splines_done` is
+                // C's `State == GVSPLINES`: false with `splines=none`, but true after
+                // normal or pack-component spline layout, when the root's edge type is none.
+                let routed = d.splines_done;
                 match ed
                     .label
                     .filter(|&l| routed && ed.edge_type != IGNORED && d.labels[l].set)
