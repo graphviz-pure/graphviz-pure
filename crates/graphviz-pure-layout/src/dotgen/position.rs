@@ -141,6 +141,7 @@ impl Dot<'_> {
             let it = self.nsiter2(g);
             self.ns_rank(g, 2, it)?;
         }
+        self.ns_scratch.clear();
         self.set_xcoords(g);
         self.set_aspect(g);
         self.remove_aux_edges(g);

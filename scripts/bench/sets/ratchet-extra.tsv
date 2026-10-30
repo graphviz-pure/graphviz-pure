@@ -5,3 +5,4 @@
 tests/wild/gv16_graphs_b143_5416de.gv                         plain
 laid/tests/wild/gv16_graphs_b29_d1e4db.gv                     canon   -Knop2
 laid/tests/wild/gv16_graphs_b29_d1e4db.gv                     svg     -Knop2
+synth/dot_components_1000.gv                                    svg

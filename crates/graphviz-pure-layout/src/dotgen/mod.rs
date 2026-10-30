@@ -96,6 +96,7 @@ pub struct Dot<'a> {
     pub nodes: Vec<NodeInfo>,
     pub edges: Vec<EdgeInfo>,
     pub graphs: Vec<GraphInfo>,
+    ns_scratch: ns::NsScratch,
     pub labels: Vec<TextLabel>,
     /// Backing storage of `rank_t.v`/`av` arrays.
     pub bufs: Vec<Vec<Option<N>>>,
@@ -160,6 +161,7 @@ impl<'a> Dot<'a> {
             nodes: Vec::new(),
             edges: Vec::new(),
             graphs: Vec::new(),
+            ns_scratch: ns::NsScratch::default(),
             labels: Vec::new(),
             bufs: Vec::new(),
             n_real_nodes: 0,
