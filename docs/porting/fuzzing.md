@@ -298,15 +298,19 @@ most four workers, with C timeouts of 30 seconds:
 | patchwork | 530 | 530 | 530 | 100.00% | 100.00% | 0 | 0 | 0 | 0 | 0 |
 | **all** | **6,000** | **5,921** | **5,864** | **99.04%** | **99.44%** | **54** | **3** | **4** | **18** | **57** |
 
+The rates describe this run, not a stable property across environments: C's output can move with
+the allocator and other environment details, so triage and match counts can move too (for example,
+seeds `46017` and `49928`).
+
 There were **0** `port_crash`, **0** `port_timeout` and **0** `debug_diff` cases. All 54 `svg_diff`
 cases, all 3 `exit_diff` cases and the `stderr_diff` note on a `same` case were triaged: **port
 bugs: 1** (#661), and 53 accepted `svg_diff` cases:
 
 | Class | Cause | Cases | Seeds / notes |
 |---|---|---:|---|
-| Port bug | dot drops the label on a lost edge after C and the port report the same spline-routing failure; C emits the label, the port emits an empty edge group (#661; also present in 1.0.0, not a performance-batch regression) | 1 | dot: `49553`, minimised to 32 lines |
+| Port bug | dot drops the label on a lost edge after C and the port report the same spline-routing failure; C emits the label, the port emits an empty edge group (#661; also present in 1.0.0, not a performance-batch regression). Follow-up #676 covers the same seed's missing `getsplinepoints` diagnostic and spurious empty edge groups, so #668 alone does not make it byte-identical to C | 1 | dot: `49553`, minimised to 32 lines |
 | Platform / libc | Linux x86-64 negative quiet NaN sign only; byte-identical after `-nan` → `nan` | 24 | dot (3): `47140`, `47188`, `50466`; neato (3): `48036`, `49944`, `51576`; fdp (16): `46114`, `46305`, `46423`, `46552`, `46649`, `46652`, `47448`, `48011`, `48258`, `48270`, `48573`, `48726`, `49010`, `50044`, `51278`, `51395`; osage (2): `46262`, `51351` |
-| C nondeterminism | fdp cluster layout orders derived-graph edges and ports by `Agnode_t *` heap address (`025-fdp-cluster-address-dependent-layout`, #34); all 25 inputs have derived cluster graphs, 11 match C byte for byte after changing glibc's allocator settings, and the others follow the same source-level class | 25 | fdp: `46055`, `46129`, `46313`, `46339`, `47181`, `47739`, `47749`, `47787`, `47818`, `48006`, `48108`, `49050`, `49081`, `49156`, `49212`, `49243`, `49390`, `49928`, `50384`, `50405`, `50453`, `50727`, `50728`, `51248`, `51734` |
+| C nondeterminism | fdp orders work by `Agnode_t *` heap address (`025-fdp-cluster-address-dependent-layout`, #34); this is broader than derived cluster graphs: a 1,000-node fdp graph with no clusters can also match only under bump/nodeheap allocation. All 24 differing cases in the adversarial review matched under `libnodeheap`; in this run, 11 matched after changing glibc's allocator settings and the others follow the same source-level class | 25 | fdp: `46055`, `46129`, `46313`, `46339`, `47181`, `47739`, `47749`, `47787`, `47818`, `48006`, `48108`, `49050`, `49081`, `49156`, `49212`, `49243`, `49390`, `49928`, `50384`, `50405`, `50453`, `50727`, `50728`, `51248`, `51734` |
 | C nondeterminism | VPSC pointer-address ties (#225); the minimised case matches C byte for byte with a sequential bump allocator | 1 | neato: `51891` (`mode=ipsep`, `diredgeconstraints=true`) |
 | C error path | dot `pack` with nodes in non-nested clusters lays components out on shared records (`036-dot-pack-node-in-two-clusters`, #101) | 2 | dot: `46198`, `46446` |
 | C crash / assertion | C aborts or segfaults on repeated triage runs; the port produces a drawing instead | 4 | `exit_diff`: neato `46134`, dot `46264`, sfdp `46307`; `svg_diff`: dot `46265` |
@@ -314,6 +318,8 @@ bugs: 1** (#661), and 53 accepted `svg_diff` cases:
 The `stderr_diff` note on dot seed `46249` was a `same` case in the main run, but C segfaulted when
 regenerated for diagnostic comparison, so it joins the C-nondeterminism class rather than a port
 bug. The 18 C timeouts and 57 C crashes in the main run were excluded from the comparable count.
+Seed `50917` remains unverified: plain C segfaults, while under bump/nodeheap C draws a degenerate
+graph and the port exits 1 with `build_skeleton: no rank leader`.
 
 A separate large-graph campaign generated 32 short-span dot DAGs of 3,000–8,000 nodes (four
 variants: the base shape, rank direction and spacing, edge weights/minlen/constraint, and no
