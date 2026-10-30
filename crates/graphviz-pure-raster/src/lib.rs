@@ -168,11 +168,11 @@ fn encode_png(pixels: &[u8], width: u32, height: u32) -> Result<Vec<u8>, png::En
     Ok(data)
 }
 
-fn rasterize_inner(
-    svg: &str,
-    format: RasterFormat,
-    explicit_dpi: bool,
-) -> Result<Vec<u8>, GraphvizError> {
+/// Draws the SVG and returns the picture.
+///
+/// `explicit_dpi` says whether the graph set `dpi` or `resolution` (then the SVG is
+/// already scaled and is drawn at one pixel per point).
+fn render_pixmap(svg: &str, explicit_dpi: bool) -> Result<tiny_skia::Pixmap, GraphvizError> {
     let opt = usvg::Options {
         fontdb: fontdb(),
         font_family: "Tinos".to_string(),
@@ -200,6 +200,16 @@ fn rasterize_inner(
         tiny_skia::Transform::from_scale(scale, scale),
         &mut pixmap.as_mut(),
     );
+    Ok(pixmap)
+}
+
+fn rasterize_inner(
+    svg: &str,
+    format: RasterFormat,
+    explicit_dpi: bool,
+) -> Result<Vec<u8>, GraphvizError> {
+    let pixmap = render_pixmap(svg, explicit_dpi)?;
+    let (w, h) = (pixmap.width(), pixmap.height());
     match format {
         // `Pixmap::encode_png` copies the whole pixmap into a second buffer before it
         // encodes it, which for a big drawing is a copy of every pixel. The pixels are
@@ -263,38 +273,25 @@ mod tests {
 
     // The PNG the raster path writes is the one `tiny_skia`'s `Pixmap::encode_png`
     // writes for the same drawing: the pixels are encoded where they are drawn,
-    // without a copy of the whole pixmap first. A drawing with a transparent
-    // background covers the pixels that are not opaque.
+    // without a copy of the whole pixmap first. Both sides demultiply the pixels
+    // the same way, so what this pins is the encoder.
+    //
+    // The drawing is the one the raster path draws, so the two cannot drift; a
+    // drawing with a transparent background covers the pixels that are not opaque.
     #[test]
     fn png_bytes_match_the_pixmap_encoder() {
         const TRANSPARENT: &str = r#"<svg width="62pt" height="116pt" viewBox="0.00 0.00 62.00 116.00" xmlns="http://www.w3.org/2000/svg">
 <g transform="scale(1 1) rotate(0) translate(4 112)"><ellipse fill="none" stroke="black" cx="27" cy="-90" rx="27" ry="18"/>
 <text text-anchor="middle" x="27" y="-85.8" font-family="Times,serif" font-size="14.00">a</text></g></svg>"#;
         for svg in [SVG, TRANSPARENT] {
-            let opt = usvg::Options {
-                fontdb: fontdb(),
-                font_family: "Tinos".to_string(),
-                image_href_resolver: usvg::ImageHrefResolver {
-                    resolve_data: Box::new(|_, _, _| None),
-                    resolve_string: Box::new(|_, _| None),
-                },
-                ..usvg::Options::default()
-            };
-            let tree = usvg::Tree::from_str(svg, &opt).unwrap();
-            let size = tree.size();
-            let (w, h) = (
-                size.width().round().max(1.0) as u32,
-                size.height().round().max(1.0) as u32,
-            );
-            let mut pixmap = tiny_skia::Pixmap::new(w, h).unwrap();
-            resvg::render(
-                &tree,
-                tiny_skia::Transform::from_scale(1.0, 1.0),
-                &mut pixmap.as_mut(),
-            );
-            let reference = pixmap.encode_png().unwrap();
-            let ours = rasterize(svg, RasterFormat::Png, false).unwrap();
-            assert_eq!(ours.output(), &reference);
+            for explicit_dpi in [false, true] {
+                let reference = render_pixmap(svg, explicit_dpi)
+                    .unwrap()
+                    .encode_png()
+                    .unwrap();
+                let ours = rasterize(svg, RasterFormat::Png, explicit_dpi).unwrap();
+                assert_eq!(ours.output(), &reference);
+            }
         }
     }
 
