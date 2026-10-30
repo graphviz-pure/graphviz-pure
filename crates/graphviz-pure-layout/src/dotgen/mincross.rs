@@ -820,9 +820,15 @@ impl Dot<'_> {
         // C's `goto done` on a failed pass runs cleanup2, which reports the crossings so far;
         // the port abandons the layout, so it reports them alone
         macro_rules! pass {
-            ($e:expr) => {
+            ($e:expr, $has_vlists:expr) => {
                 match $e {
-                    Ok(v) => v,
+                    Ok(v) => {
+                        if v < 0 {
+                            self.cleanup2(g, nc, $has_vlists)?;
+                            return Err(ABORT_LAYOUT.to_string());
+                        }
+                        v
+                    }
                     Err(e) => {
                         self.report_crossings(g, nc);
                         return Err(e);
@@ -832,18 +838,18 @@ impl Dot<'_> {
         }
         for comp in 0..self.graphs[g].comp.len() {
             self.init_mccomp(g, comp);
-            nc += pass!(self.mincross(g, 0));
+            nc += pass!(self.mincross(g, 0), false);
         }
         self.merge2(g);
         for c in self.graphs[g].clust.clone() {
-            nc += pass!(self.mincross_clust(c));
+            nc += pass!(self.mincross_clust(c), false);
         }
         if !self.graphs[g].clust.is_empty() {
             let rem = self.agget(g, "remincross");
             if rem.is_none() || mapbool(rem) {
                 self.mark_lowclusters(g);
                 self.remincross = true;
-                nc = pass!(self.mincross(g, 2));
+                nc = pass!(self.mincross(g, 2), true);
             }
         }
         let result = self.cleanup2(g, nc, true);

@@ -4413,6 +4413,29 @@ fn weight_overflow_fails_the_layout_like_c() {
     }
 }
 
+// Issue #681: 33 parallel edges make the crossing total negative. C's `goto done` on a negative
+// `mc` runs cleanup2 and abandons position/splines without adding a diagnostic; it does not run
+// network simplex with that total (`lib/dotgen/mincross.c:362-365`). The port continued normally.
+#[test]
+fn negative_mincross_total_abandons_position_like_c() {
+    let src = format!(
+        "digraph G {{ node [group=\"g\"]; {} n0 -> n3; n1 -> n2; n1 -> n3; }}",
+        "n0 -> n2;".repeat(33)
+    );
+    let expected = format!(
+        "graph 1 0 0\n\
+         node n0 0.013889 0 0.75 0.5 n0 solid ellipse black lightgrey\n\
+         node n2 0 0 0.75 0.5 n2 solid ellipse black lightgrey\n\
+         node n3 0.013889 0 0.75 0.5 n3 solid ellipse black lightgrey\n\
+         node n1 0 0 0.75 0.5 n1 solid ellipse black lightgrey\n\
+         {}stop\n",
+        " solid black\n".repeat(36)
+    );
+    let (out, err, ok) = run(&["-Tplain"], &src);
+    assert!(ok, "{err}");
+    assert_eq!(out, expected);
+}
+
 // Weights that wrap negative where C has no check leave a tree edge with a negative cut value
 // and no edge to replace it. C passes the NULL edge to `update` and crashes (ns.c:710); the
 // port fails the layout there. Before, it went on and panicked in mincross (with a cluster)
