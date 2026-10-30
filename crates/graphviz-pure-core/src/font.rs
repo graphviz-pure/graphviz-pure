@@ -1375,25 +1375,56 @@ mod tests {
             }
             labels.push(charset::decode(bytes));
         }
-        let ctx = LabelSubstContext {
+        let node = LabelSubstContext {
             graph_name: "G",
             label_text: "main label",
             has_label: true,
             ..LabelSubstContext::for_node("node_0123456789")
         };
+        let graph = LabelSubstContext {
+            graph_name: "G",
+            label_text: "graph label",
+            has_label: true,
+            ..Default::default()
+        };
+        let edge = LabelSubstContext {
+            graph_name: "G",
+            tail_name: "tail",
+            head_name: "head",
+            tail_port: Some("p"),
+            head_port: Some("q"),
+            label_text: "edge label",
+            has_label: true,
+            is_edge: true,
+            is_directed: true,
+            ..Default::default()
+        };
+        // For graph and edge objects, \N stays literal in substitution and
+        // subsequently becomes N in the line scanner. Include both edge kinds.
+        let contexts = [
+            node,
+            graph,
+            edge.clone(),
+            LabelSubstContext {
+                is_directed: false,
+                ..edge
+            },
+        ];
         crate::diag::quietly(|| {
-            for cs in [Charset::Utf8, Charset::Latin1, Charset::Big5] {
-                for label in &labels {
-                    for size in [14.0, -0.0, f64::NAN] {
-                        textfont_dict_reset();
-                        let substituted = substitute_reference(label, &ctx, false);
-                        let converted = convert_label_text(&substituted, cs);
-                        let mut expected =
-                            make_simple_label_reference(&converted, "Times-Roman", size, cs);
-                        expected.source = converted;
-                        textfont_dict_reset();
-                        let actual = make_text_label(label, &ctx, "Times-Roman", size, cs);
-                        assert_layout_bits(&actual, &expected);
+            for ctx in &contexts {
+                for cs in [Charset::Utf8, Charset::Latin1, Charset::Big5] {
+                    for label in &labels {
+                        for size in [14.0, -0.0, f64::NAN] {
+                            textfont_dict_reset();
+                            let substituted = substitute_reference(label, ctx, false);
+                            let converted = convert_label_text(&substituted, cs);
+                            let mut expected =
+                                make_simple_label_reference(&converted, "Times-Roman", size, cs);
+                            expected.source = converted;
+                            textfont_dict_reset();
+                            let actual = make_text_label(label, ctx, "Times-Roman", size, cs);
+                            assert_layout_bits(&actual, &expected);
+                        }
                     }
                 }
             }
