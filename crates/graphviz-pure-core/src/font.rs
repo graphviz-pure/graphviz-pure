@@ -860,6 +860,9 @@ fn strdup_and_subst_obj0(s: &str, ctx: &LabelSubstContext<'_>, esc_backslash: bo
             (g, "\\N".into(), t, h)
         }
     };
+    if s == "\\N" {
+        return n_str.into_owned();
+    }
     let (g_str, n_str, t_str, h_str) = (&*g_str, &*n_str, &*t_str, &*h_str);
     let l_str = if !ctx.has_label && ctx.label_text.is_empty() {
         "\\L"
@@ -970,6 +973,15 @@ pub fn make_simple_label_cs(
     if text.is_empty() {
         return layout;
     }
+    // The byte scanner below copies ordinary ASCII without changing it. Keep one
+    // owned line directly, with only one slot in each output vector. Non-ASCII,
+    // raw bytes, escapes and literal newlines retain the original scanner.
+    if text.is_ascii() && !text.contains(['\\', '\n']) {
+        layout.lines.reserve_exact(1);
+        layout.line_widths.reserve_exact(1);
+        storeline(&mut layout, text.to_string(), TextJustify::Center);
+        return layout;
+    }
     let bytes = charset::encode(text);
     let s: &[u8] = &bytes;
     let big5 = cs == Charset::Big5;
@@ -1037,7 +1049,15 @@ pub fn make_text_label(
     // `\L` is the object's main label (`ND_label(n)->text`, ...): callers pass an empty
     // `label_text` while that label itself is being made, which leaves `\L` literal.
     let substituted = strdup_and_subst_obj0(label, ctx, false);
-    let converted = convert_label_text(&substituted, cs);
+    let converted =
+        if cs != Charset::Latin1 && !substituted.contains('&') && !charset::has_raw(&substituted) {
+            // htmlEntityUTF8 still enters at precisely this point, even when its
+            // no-conversion path can reuse the substituted buffer as lp->text.
+            charset::enter_html_entity_utf8();
+            substituted
+        } else {
+            convert_label_text(&substituted, cs)
+        };
     let mut layout = make_simple_label_cs(&converted, font_name, font_size, cs);
     layout.source = converted;
     layout
@@ -1138,6 +1158,247 @@ mod tests {
         let expected_h = 14.0 * 1.20;
         assert!((w - expected_w).abs() < 1e-9);
         assert!((h - expected_h).abs() < 1e-9);
+    }
+
+    // The old byte scanner calls live storeline/textfont_intern: their arithmetic
+    // and lookup order are unchanged by the buffer fast paths.
+    fn substitute_reference(s: &str, ctx: &LabelSubstContext<'_>, esc_backslash: bool) -> String {
+        if !s.contains('\\') {
+            return s.to_string();
+        }
+        let kind = ctx.obj_kind();
+        // The names are `agnameof`'s, taken before any is used: those in its static buffer all
+        // show the last one taken (labels.c:297-318).
+        let agname = |name, buffer| crate::graph::AgName {
+            name: std::borrow::Cow::Borrowed(name),
+            buffer,
+        };
+        let b = ctx.in_buffer;
+        let (g_str, n_str, t_str, h_str) = match kind {
+            SubstObjKind::Graph => (
+                ctx.graph_name.into(),
+                "\\N".into(),
+                "\\T".into(),
+                "\\H".into(),
+            ),
+            SubstObjKind::Node => {
+                let [g, n] = crate::graph::agnameof_buffer([
+                    agname(ctx.graph_name, b.graph),
+                    agname(ctx.node_name, b.node),
+                ]);
+                (g, n, "\\T".into(), "\\H".into())
+            }
+            SubstObjKind::Edge => {
+                let [g, t, h] = crate::graph::agnameof_buffer([
+                    agname(ctx.graph_name, b.graph),
+                    agname(ctx.tail_name, b.tail),
+                    agname(ctx.head_name, b.head),
+                ]);
+                (g, "\\N".into(), t, h)
+            }
+        };
+        let (g_str, n_str, t_str, h_str) = (&*g_str, &*n_str, &*t_str, &*h_str);
+        let l_str = if !ctx.has_label && ctx.label_text.is_empty() {
+            "\\L"
+        } else {
+            ctx.label_text
+        };
+        let mut out = String::with_capacity(s.len());
+        let mut chars = s.chars();
+        while let Some(c) = chars.next() {
+            if c != '\\' {
+                out.push(c);
+                continue;
+            }
+            let Some(next) = chars.clone().next() else {
+                out.push('\\');
+                continue;
+            };
+            chars.next();
+            match next {
+                'G' => out.push_str(g_str),
+                'N' => out.push_str(n_str),
+                'E' => {
+                    if kind == SubstObjKind::Edge {
+                        out.push_str(t_str);
+                        if let Some(tp) = ctx.tail_port.filter(|p| !p.is_empty()) {
+                            out.push(':');
+                            out.push_str(tp);
+                        }
+                        out.push_str(if ctx.is_directed { "->" } else { "--" });
+                        out.push_str(h_str);
+                        if let Some(hp) = ctx.head_port.filter(|p| !p.is_empty()) {
+                            out.push(':');
+                            out.push_str(hp);
+                        }
+                    }
+                }
+                'T' => out.push_str(t_str),
+                'H' => out.push_str(h_str),
+                'L' => out.push_str(l_str),
+                '\\' if esc_backslash => out.push('\\'),
+                other => {
+                    out.push('\\');
+                    out.push(other);
+                }
+            }
+        }
+        out
+    }
+
+    fn make_simple_label_reference(
+        text: &str,
+        font_name: &str,
+        font_size: f64,
+        cs: Charset,
+    ) -> TextLabelLayout {
+        let mut layout = TextLabelLayout {
+            font_name: font_name.to_string(),
+            font_size,
+            ..TextLabelLayout::default()
+        };
+        if text.is_empty() {
+            return layout;
+        }
+        let bytes = charset::encode(text);
+        let s: &[u8] = &bytes;
+        let big5 = cs == Charset::Big5;
+        let mut line: Vec<u8> = Vec::new();
+        // C appends the NUL after a trailing backslash, which makes the buffer non-empty without
+        // adding visible text.
+        let mut pending_nul = false;
+        let take = |line: &mut Vec<u8>| charset::decode(std::mem::take(line));
+        let mut i = 0;
+        while i < s.len() {
+            let c = s[i];
+            i += 1;
+            if big5 && (0xA1..=0xFE).contains(&c) {
+                line.push(c);
+                match s.get(i) {
+                    Some(&n) => {
+                        line.push(n);
+                        i += 1;
+                    }
+                    // NB. C protects against an unexpected end here.
+                    None => break,
+                }
+            } else if c == b'\\' {
+                match s.get(i) {
+                    Some(&j @ (b'n' | b'l' | b'r')) => {
+                        i += 1;
+                        storeline(
+                            &mut layout,
+                            take(&mut line),
+                            TextJustify::from_char(char::from(j)),
+                        );
+                        pending_nul = false;
+                    }
+                    Some(&other) => {
+                        i += 1;
+                        if !pending_nul {
+                            line.push(other);
+                        }
+                    }
+                    None => pending_nul = true,
+                }
+            } else if c == b'\n' {
+                storeline(&mut layout, take(&mut line), TextJustify::Center);
+                pending_nul = false;
+            } else if !pending_nul {
+                line.push(c);
+            }
+        }
+        if !line.is_empty() || pending_nul {
+            storeline(&mut layout, take(&mut line), TextJustify::Center);
+        }
+        layout
+    }
+
+    fn assert_layout_bits(actual: &TextLabelLayout, expected: &TextLabelLayout) {
+        assert_eq!(actual.source, expected.source);
+        assert_eq!(actual.font_name, expected.font_name);
+        assert_eq!(actual.font_size.to_bits(), expected.font_size.to_bits());
+        assert_eq!(actual.width.to_bits(), expected.width.to_bits());
+        assert_eq!(actual.height.to_bits(), expected.height.to_bits());
+        assert_eq!(actual.lines.len(), expected.lines.len());
+        assert_eq!(
+            actual
+                .line_widths
+                .iter()
+                .map(|x| x.to_bits())
+                .collect::<Vec<_>>(),
+            expected
+                .line_widths
+                .iter()
+                .map(|x| x.to_bits())
+                .collect::<Vec<_>>()
+        );
+        for (a, e) in actual.lines.iter().zip(&expected.lines) {
+            assert_eq!(a.text, e.text);
+            assert_eq!(a.justify, e.justify);
+            assert_eq!(a.width.to_bits(), e.width.to_bits());
+            assert_eq!(a.height.to_bits(), e.height.to_bits());
+            assert_eq!(a.font_size.to_bits(), e.font_size.to_bits());
+        }
+    }
+
+    #[test]
+    fn label_buffers_match_old_scanner_and_conversion_bitwise() {
+        let mut labels = [
+            "",
+            "plain",
+            "long ordinary ASCII line 0123456789",
+            "\\N",
+            "\\G",
+            "\\N\\nright\\rleft\\l",
+            "one\ntwo",
+            "one\\n",
+            "one\\",
+            "\\\\N",
+            "&amp;",
+            "&#0;",
+            "&#x41;",
+            "&#xffff;",
+            "a\0b",
+            "é",
+            "\\L",
+        ]
+        .map(str::to_string)
+        .to_vec();
+        let mut state = 56789_u64;
+        for _ in 0..3000 {
+            state = state.wrapping_mul(6364136223846793005).wrapping_add(1);
+            let mut bytes = Vec::new();
+            for _ in 0..(state as usize % 80) {
+                state = state.wrapping_mul(6364136223846793005).wrapping_add(1);
+                bytes.push((state >> 32) as u8);
+            }
+            labels.push(charset::decode(bytes));
+        }
+        let ctx = LabelSubstContext {
+            graph_name: "G",
+            label_text: "main label",
+            has_label: true,
+            ..LabelSubstContext::for_node("node_0123456789")
+        };
+        crate::diag::quietly(|| {
+            for cs in [Charset::Utf8, Charset::Latin1, Charset::Big5] {
+                for label in &labels {
+                    for size in [14.0, -0.0, f64::NAN] {
+                        textfont_dict_reset();
+                        let substituted = substitute_reference(label, &ctx, false);
+                        let converted = convert_label_text(&substituted, cs);
+                        let mut expected =
+                            make_simple_label_reference(&converted, "Times-Roman", size, cs);
+                        expected.source = converted;
+                        textfont_dict_reset();
+                        let actual = make_text_label(label, &ctx, "Times-Roman", size, cs);
+                        assert_layout_bits(&actual, &expected);
+                    }
+                }
+            }
+        });
+        textfont_dict_reset();
     }
 
     #[test]

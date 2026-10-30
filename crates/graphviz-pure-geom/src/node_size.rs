@@ -374,26 +374,26 @@ fn get_pen_color(attrs: &AttrMap) -> Option<&str> {
 /// substituted, charset-converted text of a plain label, the source of an HTML label, or
 /// `"<TABLE>"` for an HTML table.
 pub fn label_text(l: &LabelGeometry, raw: &str) -> String {
-    label_l_text(l, raw, false)
+    label_l_text(l, raw, false).to_string()
 }
 
 /// `lp->text` of a made label, which a later label's `\L` expands to (`make_label`):
 /// the raw string for a record, the substituted text for plain text, the HTML source
 /// for HTML text and `<TABLE>` for a table (`make_html_label`).
-fn label_l_text(l: &LabelGeometry, raw: &str, is_record: bool) -> String {
+fn label_l_text<'a>(l: &'a LabelGeometry, raw: &'a str, is_record: bool) -> &'a str {
     if is_record {
-        return raw.to_string();
+        return raw;
     }
     if let Some(t) = &l.text {
-        return t.source.clone();
+        return &t.source;
     }
     if l.html {
         if matches!(l.html_label.as_deref(), Some(HtmlLabel::Table(_))) {
-            return "<TABLE>".to_string();
+            return "<TABLE>";
         }
-        return raw.to_string();
+        return raw;
     }
-    String::new()
+    ""
 }
 
 /// `make_label` for the plain-text and HTML cases: returns the label geometry with
@@ -536,13 +536,12 @@ fn node_geometry_measured(node: &NodeData, env: &NodeSizeEnv<'_>) -> Result<Node
         )
     };
     // common_init_node makes ND_label first, so the xlabel's `\L` is its text.
-    let ltext = label_l_text(&label, label_str, init == ShapeInit::Record);
-    let xobj = LabelSubstContext {
-        label_text: &ltext,
-        has_label: true,
-        ..obj.clone()
-    };
     let xlabel = attrs.get("xlabel").filter(|s| !s.is_empty()).map(|s| {
+        let xobj = LabelSubstContext {
+            label_text: label_l_text(&label, label_str, init == ShapeInit::Record),
+            has_label: true,
+            ..obj.clone()
+        };
         let html = attrs.is_html("xlabel");
         make_label(s, html, &xobj, font_name, font_size, env.charset)
     });
@@ -567,7 +566,14 @@ fn node_geometry_measured(node: &NodeData, env: &NodeSizeEnv<'_>) -> Result<Node
         }
         ShapeInit::Epsf => epsf_init(node, &mut geom),
         ShapeInit::Point => point_init(node, desc.map_or(1, |d| d.peripheries), &mut geom)?,
-        ShapeInit::Record => record_init(node, label_str, &xobj, env, &mut geom),
+        ShapeInit::Record => {
+            let xobj = LabelSubstContext {
+                label_text: label_str,
+                has_label: true,
+                ..obj
+            };
+            record_init(node, label_str, &xobj, env, &mut geom);
+        }
     }
     Ok(geom)
 }
@@ -772,9 +778,9 @@ pub fn edge_label_geometry(
     // Later labels see `\L` = the main label's `lp->text`.
     let ltext = match (&label, attrs.get("label")) {
         (Some(l), Some(raw)) => label_l_text(l, raw, false),
-        _ => String::new(),
+        _ => "",
     };
-    obj.label_text = &ltext;
+    obj.label_text = ltext;
     obj.has_label = label.is_some();
     let lobj = LabelSubstContext {
         font_color: Some(lfontcolor),
