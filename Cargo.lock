@@ -312,6 +312,7 @@ dependencies = [
  "graphviz-pure-core",
  "jpeg-encoder",
  "kurbo",
+ "png",
  "resvg",
  "sha2",
 ]

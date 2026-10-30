@@ -152,11 +152,27 @@ pub fn rasterize(
     }
 }
 
-fn rasterize_inner(
-    svg: &str,
-    format: RasterFormat,
-    explicit_dpi: bool,
-) -> Result<Vec<u8>, GraphvizError> {
+/// Encodes straight (not premultiplied) RGBA pixels as a PNG.
+///
+/// This is what `tiny_skia`'s `PixmapRef::encode_png` does, on pixels that are not in a
+/// pixmap: the same `png` calls on the same pixels give the same bytes.
+fn encode_png(pixels: &[u8], width: u32, height: u32) -> Result<Vec<u8>, png::EncodingError> {
+    let mut data = Vec::new();
+    {
+        let mut encoder = png::Encoder::new(&mut data, width, height);
+        encoder.set_color(png::ColorType::Rgba);
+        encoder.set_depth(png::BitDepth::Eight);
+        let mut writer = encoder.write_header()?;
+        writer.write_image_data(pixels)?;
+    }
+    Ok(data)
+}
+
+/// Draws the SVG and returns the picture.
+///
+/// `explicit_dpi` says whether the graph set `dpi` or `resolution` (then the SVG is
+/// already scaled and is drawn at one pixel per point).
+fn render_pixmap(svg: &str, explicit_dpi: bool) -> Result<tiny_skia::Pixmap, GraphvizError> {
     let opt = usvg::Options {
         fontdb: fontdb(),
         font_family: "Tinos".to_string(),
@@ -184,10 +200,26 @@ fn rasterize_inner(
         tiny_skia::Transform::from_scale(scale, scale),
         &mut pixmap.as_mut(),
     );
+    Ok(pixmap)
+}
+
+fn rasterize_inner(
+    svg: &str,
+    format: RasterFormat,
+    explicit_dpi: bool,
+) -> Result<Vec<u8>, GraphvizError> {
+    let pixmap = render_pixmap(svg, explicit_dpi)?;
+    let (w, h) = (pixmap.width(), pixmap.height());
     match format {
-        RasterFormat::Png => pixmap
-            .encode_png()
-            .map_err(|e| GraphvizError::render(format!("encoding the PNG: {e}"))),
+        // `Pixmap::encode_png` copies the whole pixmap into a second buffer before it
+        // encodes it, which for a big drawing is a copy of every pixel. The pixels are
+        // taken out of the pixmap instead and encoded where they are; the bytes are the
+        // same (the same `png` calls on the same pixels).
+        RasterFormat::Png => {
+            let pixels = pixmap.take_demultiplied();
+            encode_png(&pixels, w, h)
+                .map_err(|e| GraphvizError::render(format!("encoding the PNG: {e}")))
+        }
         RasterFormat::Jpeg => {
             // JPEG has no alpha: composite onto white, as Graphviz's background is.
             let mut rgb = Vec::with_capacity((w * h * 3) as usize);
@@ -237,6 +269,30 @@ mod tests {
             u32::from_be_bytes(png.output()[16..20].try_into().unwrap()),
             62
         );
+    }
+
+    // The PNG the raster path writes is the one `tiny_skia`'s `Pixmap::encode_png`
+    // writes for the same drawing: the pixels are encoded where they are drawn,
+    // without a copy of the whole pixmap first. Both sides demultiply the pixels
+    // the same way, so what this pins is the encoder.
+    //
+    // The drawing is the one the raster path draws, so the two cannot drift; a
+    // drawing with a transparent background covers the pixels that are not opaque.
+    #[test]
+    fn png_bytes_match_the_pixmap_encoder() {
+        const TRANSPARENT: &str = r#"<svg width="62pt" height="116pt" viewBox="0.00 0.00 62.00 116.00" xmlns="http://www.w3.org/2000/svg">
+<g transform="scale(1 1) rotate(0) translate(4 112)"><ellipse fill="none" stroke="black" cx="27" cy="-90" rx="27" ry="18"/>
+<text text-anchor="middle" x="27" y="-85.8" font-family="Times,serif" font-size="14.00">a</text></g></svg>"#;
+        for svg in [SVG, TRANSPARENT] {
+            for explicit_dpi in [false, true] {
+                let reference = render_pixmap(svg, explicit_dpi)
+                    .unwrap()
+                    .encode_png()
+                    .unwrap();
+                let ours = rasterize(svg, RasterFormat::Png, explicit_dpi).unwrap();
+                assert_eq!(ours.output(), &reference);
+            }
+        }
     }
 
     #[test]

@@ -23,6 +23,9 @@ include = [
 [dependencies]
 graphviz-pure-core.workspace = true
 resvg = { version = "0.48.1", default-features = false, features = ["text"] }
+# The PNG encoder, so the pixels can be encoded where they are drawn, without a
+# copy of the whole pixmap first. Already in the tree through tiny-skia.
+png = "0.18"
 jpeg-encoder = { version = "0.7.1", default-features = false, features = ["std"] }
 
 [dev-dependencies]
