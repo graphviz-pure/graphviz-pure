@@ -320,7 +320,8 @@ impl CutStore {
             size = next;
         }
         self.pool.clear();
-        self.pool.reserve_exact((size as usize).saturating_add((size as usize).wrapping_div(8)));
+        self.pool
+            .reserve_exact((size as usize).saturating_add((size as usize).wrapping_div(8)));
         self.pool.resize(size as usize, 0);
         for s in 0..self.tree.len() {
             let ts = self.tree(s);
@@ -408,7 +409,11 @@ impl CutStore {
         let end = |e: usize| if insearch { g.head(e) } else { g.tail(e) };
         let (sc, sw) = (end(c), end(w));
         if sc == sw {
-            let list = if insearch { g.in_edges(sc) } else { g.out_edges(sc) };
+            let list = if insearch {
+                g.in_edges(sc)
+            } else {
+                g.out_edges(sc)
+            };
             return first_of(list, c, w);
         }
         // both ancestor paths up to v, one after the other
@@ -499,11 +504,9 @@ impl CutStore {
         let mut parked = [false, false];
         loop {
             for i in 0..2 {
-                let (Some(&u), Some(&mine), Some(&theirs)) = (
-                    at.get(i),
-                    marks.get(i),
-                    marks.get(i.wrapping_add(1) & 1),
-                ) else {
+                let (Some(&u), Some(&mine), Some(&theirs)) =
+                    (at.get(i), marks.get(i), marks.get(i.wrapping_add(1) & 1))
+                else {
                     return None;
                 };
                 let Some(t) = g.par(u) else {

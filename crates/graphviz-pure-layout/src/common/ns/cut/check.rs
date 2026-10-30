@@ -54,7 +54,11 @@ pub(super) fn enter_edge<G: NsGraph + ?Sized>(
     let (low, lim) = (g.low(child), g.lim(child));
     let s = tree_slot(g, e).expect("a tree edge has a tree index");
     let set = store.tree(s);
-    assert_eq!(store.edge(set.edge).edge as usize, e, "tree slot of edge {e}");
+    assert_eq!(
+        store.edge(set.edge).edge as usize,
+        e,
+        "tree slot of edge {e}"
+    );
     let mut members: Vec<(usize, bool)> = (0..set.len)
         .map(|i| store.entry(set.start + i))
         .map(|x| (store.edge(x & ID).edge as usize, x & AGAINST != 0))
@@ -175,11 +179,19 @@ pub(super) fn dfs_range<G: NsGraph + ?Sized>(
 pub(super) fn slacks<G: NsGraph + ?Sized>(g: &G, store: &CutStore, e: usize, f: usize) {
     for es in &store.edges {
         let x = es.edge as usize;
-        assert_eq!(es.slack, slack(g, x), "slack of edge {x} after pivot {e} -> {f}");
+        assert_eq!(
+            es.slack,
+            slack(g, x),
+            "slack of edge {x} after pivot {e} -> {f}"
+        );
     }
     for (s, ts) in store.tree.iter().enumerate() {
         let t = store.edge(ts.edge).edge as usize;
-        assert_eq!(g.tree_index(t), s as i32, "tree slot {s} after pivot {e} -> {f}");
+        assert_eq!(
+            g.tree_index(t),
+            s as i32,
+            "tree slot {s} after pivot {e} -> {f}"
+        );
     }
 }
 
