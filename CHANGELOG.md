@@ -6,6 +6,12 @@ All notable changes are listed here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- splines no longer panic when a spline meets a point barrier more than four times: the root
+  buffer keeps the four roots C's buffer holds, where C writes past the end of its own array
+  (#635).
+
 ## [1.0.0] - 2026-10-29
 
 The first stable release. Every stable input in the corpus is byte-identical to C Graphviz 16.1.0, and a new differential fuzz round over 6,000 generated graphs on all eight engines found no remaining difference in the port. The public API is now stable: only the `graphviz-pure` facade and `graphviz-pure-raster` are covered by semver, the library returns diagnostics as values instead of writing to stderr, and the JavaScript package throws `GraphvizError` objects and ships checked TypeScript types. Rust and JavaScript users should read the Breaking section; docs/versioning.md is the contract from here on.
