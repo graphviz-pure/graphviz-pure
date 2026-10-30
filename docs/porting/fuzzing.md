@@ -195,6 +195,7 @@ Identity is the share of comparable cases (excluding `c_unstable`, `c_timeout` a
 | 3 | 20001–25000 | 5000 | 96.8 | 98.6 | 97.3 | 99.2 | 99.6 | 99.2 | 99.8 | 100 | 98.4 |
 | 4 | 30001–36000 | 6000 | 98.5 | 98.8 | 96.1 | 99.8 | 99.5 | 99.5 | 99.8 | 100 | 98.8 |
 | 5 | 40001–46000 | 6000 | 99.8 | 99.2 | 92.4 | 99.8 | 99.8 | 100 | 98.5 | 100 | 98.9 |
+| 6 | 46001–52000 | 6000 | 99.5 | 99.4 | 93.2 | 99.8 | 100 | 100 | 99.6 | 100 | 99.0 |
 
 Each round ran on the fixes from the rounds before it. Rounds 3, 4 and 5 also hit inputs
 that C crashes on (61, 55 and 82 cases), mostly `SIGSEGV` in dot with nodes in two
@@ -276,6 +277,49 @@ stderr and exit status, with 5,833 / 5,899 comparable cases (98.88%; 5,858 / 5,8
 99.57%, twopi 99.84%, circo 100%, osage 98.47%, patchwork 100%), **0 port bugs**, **0**
 `port_crash`/`port_timeout`/`exit_diff`/`debug_diff` outcomes, and no new stderr differences on
 any `svg_diff` case.
+
+### Round 6 (before 1.1.0, #660)
+
+Round 6 ran 6,000 new seeds (`46001–52000`) on `origin/master` (`a2596f55`) against the same
+Linux x86-64 C 16.1.0 setup as round 5 (`clang -O2 -mfma`, `libc++`, GTS, pango-free plugins and
+`graphviz-pure-portable-libm --features apple-libc`). The port used an x86-64-v3 release build
+(`RUSTFLAGS="-C target-cpu=x86-64-v3"`) and an overflow-checked v3 release build. The run used at
+most four workers, with C timeouts of 30 seconds:
+
+| Engine | Cases | Comparable | Same | Same % | Same % (`-nan` → `nan`) | `svg_diff` | `exit_diff` | `c_unstable` | `c_timeout` | `c_crash` |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| dot | 1,766 | 1,731 | 1,723 | 99.54% | 99.71% | 7 | 1 | 0 | 13 | 22 |
+| neato | 885 | 875 | 870 | 99.43% | 99.77% | 4 | 1 | 0 | 0 | 10 |
+| fdp | 614 | 604 | 563 | 93.21% | 95.86% | 41 | 0 | 1 | 1 | 8 |
+| sfdp | 475 | 467 | 466 | 99.79% | 99.79% | 0 | 1 | 1 | 0 | 7 |
+| twopi | 627 | 624 | 624 | 100.00% | 100.00% | 0 | 0 | 1 | 0 | 2 |
+| circo | 571 | 563 | 563 | 100.00% | 100.00% | 0 | 0 | 1 | 4 | 3 |
+| osage | 532 | 527 | 525 | 99.62% | 100.00% | 2 | 0 | 0 | 0 | 5 |
+| patchwork | 530 | 530 | 530 | 100.00% | 100.00% | 0 | 0 | 0 | 0 | 0 |
+| **all** | **6,000** | **5,921** | **5,864** | **99.04%** | **99.44%** | **54** | **3** | **4** | **18** | **57** |
+
+There were **0** `port_crash`, **0** `port_timeout` and **0** `debug_diff` cases. All 54 `svg_diff`
+cases, all 3 `exit_diff` cases and the `stderr_diff` note on a `same` case were triaged: **port
+bugs: 1** (#661), and 53 accepted `svg_diff` cases:
+
+| Class | Cause | Cases | Seeds / notes |
+|---|---|---:|---|
+| Port bug | dot drops the label on a lost edge after C and the port report the same spline-routing failure; C emits the label, the port emits an empty edge group (#661; also present in 1.0.0, not a performance-batch regression) | 1 | dot: `49553`, minimised to 32 lines |
+| Platform / libc | Linux x86-64 negative quiet NaN sign only; byte-identical after `-nan` → `nan` | 24 | dot (3): `47140`, `47188`, `50466`; neato (3): `48036`, `49944`, `51576`; fdp (16): `46114`, `46305`, `46423`, `46552`, `46649`, `46652`, `47448`, `48011`, `48258`, `48270`, `48573`, `48726`, `49010`, `50044`, `51278`, `51395`; osage (2): `46262`, `51351` |
+| C nondeterminism | fdp cluster layout orders derived-graph edges and ports by `Agnode_t *` heap address (`025-fdp-cluster-address-dependent-layout`, #34); all 25 inputs have derived cluster graphs, 11 match C byte for byte after changing glibc's allocator settings, and the others follow the same source-level class | 25 | fdp: `46055`, `46129`, `46313`, `46339`, `47181`, `47739`, `47749`, `47787`, `47818`, `48006`, `48108`, `49050`, `49081`, `49156`, `49212`, `49243`, `49390`, `49928`, `50384`, `50405`, `50453`, `50727`, `50728`, `51248`, `51734` |
+| C nondeterminism | VPSC pointer-address ties (#225); the minimised case matches C byte for byte with a sequential bump allocator | 1 | neato: `51891` (`mode=ipsep`, `diredgeconstraints=true`) |
+| C error path | dot `pack` with nodes in non-nested clusters lays components out on shared records (`036-dot-pack-node-in-two-clusters`, #101) | 2 | dot: `46198`, `46446` |
+| C crash / assertion | C aborts or segfaults on repeated triage runs; the port produces a drawing instead | 4 | `exit_diff`: neato `46134`, dot `46264`, sfdp `46307`; `svg_diff`: dot `46265` |
+
+The `stderr_diff` note on dot seed `46249` was a `same` case in the main run, but C segfaulted when
+regenerated for diagnostic comparison, so it joins the C-nondeterminism class rather than a port
+bug. The 18 C timeouts and 57 C crashes in the main run were excluded from the comparable count.
+
+A separate large-graph campaign generated 32 short-span dot DAGs of 3,000–8,000 nodes (four
+variants: the base shape, rank direction and spacing, edge weights/minlen/constraint, and no
+splines). These are the shapes for which `common/ns/cut.rs` selects cut sets above its 2,500-node
+minimum. With a 120-second C timeout, **all 32 / 32 were byte-identical**, with no port timeouts,
+crashes or overflow-check differences.
 
 ### After all fixes
 
