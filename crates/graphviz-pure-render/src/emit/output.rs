@@ -299,29 +299,14 @@ pub(crate) fn propagate_inherited(g: &mut Graph, orig: &Graph, explicit: &[BTree
     }
 }
 
-/// The hash the plain strings are collected with: FNV-1a, which is much cheaper than
-/// SipHash and is enough for the strings of one graph. The set is only looked up, never
-/// iterated, so the hash does not reach the output.
-#[derive(Default)]
-struct FnvHasher {
-    hash: u64,
-}
-
-impl std::hash::Hasher for FnvHasher {
-    fn finish(&self) -> u64 {
-        self.hash
-    }
-
-    fn write(&mut self, bytes: &[u8]) {
-        for &b in bytes {
-            self.hash ^= u64::from(b);
-            self.hash = self.hash.wrapping_mul(0x0000_0100_0000_01b3);
-        }
-    }
-}
-
 /// The plain strings of one graph.
-type PlainStrings<'g> = HashSet<&'g str, std::hash::BuildHasherDefault<FnvHasher>>;
+///
+/// The set uses the standard library's hasher: the plain writer runs in servers on
+/// untrusted DOT input, and an unkeyed hash would let crafted labels make the set build
+/// quadratically. The cheaper hash this pull request first used was worth 0.39% to 0.87%
+/// of the instructions of the 20,000-node plain outputs — not enough to trade the
+/// resistance for.
+type PlainStrings<'g> = HashSet<&'g str>;
 
 /// The plain strings (not HTML ones) the root graph's string dictionary holds: a name, an
 /// attribute name or a plain attribute value. C answers this with one hash lookup
@@ -339,10 +324,8 @@ fn plain_strings(g: &Graph) -> PlainStrings<'_> {
     }
     // The set holds at least the name of every object: start it there, so that it does
     // not have to grow as often while it is filled.
-    let mut set = PlainStrings::with_capacity_and_hasher(
-        g.nodes.len() + g.edges.len() + g.subgraphs.len() + 16,
-        Default::default(),
-    );
+    let mut set =
+        PlainStrings::with_capacity(g.nodes.len() + g.edges.len() + g.subgraphs.len() + 16);
     if !g.empty_name {
         set.insert(g.name.as_str());
     }
