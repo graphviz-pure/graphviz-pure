@@ -2,7 +2,7 @@
 """Checks that cargo-binstall finds every release archive: for each graphviz-pure-VERSION-TARGET
 archive in DIST (scripts/release-package.py; not the WASI one, which cargo cannot install), the
 `[package.metadata.binstall]` of MANIFEST (crates/graphviz-pure-cli/Cargo.toml, or the one
-published on crates.io) must name that file, in the format of its extension, and the binary's
+published on crates.io) must name its selected archive (compat on x86-64), in the format of its extension, and the binary's
 path inside it.
 
 The templates are rendered the way cargo-binstall does (SUPPORT.md): `{ repo }`, `{ version }`,
@@ -43,9 +43,25 @@ archives = sorted(
 if not archives:
     sys.exit(f"no graphviz-pure-{version}-TARGET archive in {dist}")
 targets = {re.fullmatch(rf"graphviz-pure-{re.escape(version)}-(.+)\.(tar\.gz|zip)", a).group(1) for a in archives}
-bad = [f"override {k!r} is not a release target (cfg() overrides are not checked)" for k in overrides if k not in targets]
+# CPU variants are not Rust target triples. Keep old releases verifiable too:
+# the published manifest decides whether a target selects compat or the ordinary asset.
+normal_targets = {t.removesuffix("-compat") for t in targets}
+
+def uses_compat(target):
+    return "-compat" in {**meta, **overrides.get(target, {})}["pkg-url"]
+
+bad = []
+for target in normal_targets:
+    if uses_compat(target) and target + "-compat" not in targets:
+        bad.append(f"{target}: missing baseline -compat archive")
+bad += [f"override {k!r} is not a release target (cfg() overrides are not checked)" for k in overrides if k not in normal_targets]
+selected = 0
 for archive in archives:
-    target = re.fullmatch(rf"graphviz-pure-{re.escape(version)}-(.+)\.(tar\.gz|zip)", archive).group(1)
+    variant = re.fullmatch(rf"graphviz-pure-{re.escape(version)}-(.+)\.(tar\.gz|zip)", archive).group(1)
+    target = variant.removesuffix("-compat")
+    if variant.endswith("-compat") != uses_compat(target):
+        continue
+    selected += 1
     opts = {**meta, **overrides.get(target, {})}
     fmt = opts.get("pkg-fmt", "tgz")  # binstall's default
     if fmt not in suffixes:
@@ -80,4 +96,4 @@ for archive in archives:
     print(f"{target}: {archive} → {', '.join(render(opts['bin-dir'], bin=b) for b in bins)}")
 if bad:
     sys.exit("cargo-binstall would not find:\n  " + "\n  ".join(bad))
-print(f"cargo-binstall finds all {len(archives)} archives")
+print(f"cargo-binstall finds all {selected} selected archives")

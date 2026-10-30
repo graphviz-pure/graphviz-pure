@@ -158,7 +158,7 @@ binstall_dry_run() { # binstall_dry_run TARGET: one attempt
     --install-path "$work/binstall/bin" "graphviz-pure-cli@$version" > "$work/binstall/dry-$1.log" 2>&1 < /dev/null
 }
 binstall_dry_runs() {
-  local archive target bad=() n=0
+  local archive target compat_archive bad=() n=0
   # The archives check-binstall.py checks: .tar.gz and .zip, not the WASI one.
   for archive in "$work"/binstall/dist/graphviz-pure-"$version"-*.tar.gz "$work"/binstall/dist/graphviz-pure-"$version"-*.zip; do
     [ -f "$archive" ] || continue
@@ -166,6 +166,13 @@ binstall_dry_runs() {
     target=${archive##*/graphviz-pure-"$version"-}
     target=${target%.tar.gz}
     target=${target%.zip}
+    compat_archive=${archive%.tar.gz}
+    compat_archive=${compat_archive%.zip}
+    if [[ "$target" == x86_64* && "$target" != *-compat ]] &&
+      { [ -f "$compat_archive-compat.tar.gz" ] || [ -f "$compat_archive-compat.zip" ]; }; then
+      continue
+    fi
+    target=${target%-compat}
     n=$((n + 1))
     if ! retry binstall_dry_run "$target"; then
       bad+=("$target")

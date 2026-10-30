@@ -27,7 +27,18 @@ pkg-fmt = "tgz"
 # Never third-party builds (cargo-quickinstall); compiling from crates.io stays the fallback.
 disabled-strategies = ["quick-install"]
 
+# CPU features are not a binstall target dimension: choose baseline on x86-64.
+[package.metadata.binstall.overrides.x86_64-unknown-linux-musl]
+pkg-url = "{ repo }/releases/download/v{ version }/graphviz-pure-{ version }-{ target }-compat{ archive-suffix }"
+bin-dir = "graphviz-pure-{ version }-{ target }-compat/{ bin }{ binary-ext }"
+
+[package.metadata.binstall.overrides.x86_64-apple-darwin]
+pkg-url = "{ repo }/releases/download/v{ version }/graphviz-pure-{ version }-{ target }-compat{ archive-suffix }"
+bin-dir = "graphviz-pure-{ version }-{ target }-compat/{ bin }{ binary-ext }"
+
 [package.metadata.binstall.overrides.x86_64-pc-windows-msvc]
+pkg-url = "{ repo }/releases/download/v{ version }/graphviz-pure-{ version }-{ target }-compat{ archive-suffix }"
+bin-dir = "graphviz-pure-{ version }-{ target }-compat/{ bin }{ binary-ext }"
 pkg-fmt = "zip"
 
 [package.metadata.binstall.overrides.aarch64-pc-windows-msvc]

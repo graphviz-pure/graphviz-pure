@@ -21,14 +21,16 @@ conflicts=("$_name")
 # Keep the installed binary byte-identical to the attested release binary.
 options=('!strip' '!debug')
 _release="https://github.com/graphviz-pure/$_name/releases/download/v$pkgver"
-source_x86_64=("$_release/$_name-$pkgver-x86_64-unknown-linux-musl.tar.gz")
+source_x86_64=("$_release/$_name-$pkgver-x86_64-unknown-linux-musl-compat.tar.gz")
 source_aarch64=("$_release/$_name-$pkgver-aarch64-unknown-linux-musl.tar.gz")
 # TODO(release): placeholders, filled in by packaging/aur/update.sh. Never replace with 'SKIP'.
 sha256sums_x86_64=('0000000000000000000000000000000000000000000000000000000000000000')
 sha256sums_aarch64=('0000000000000000000000000000000000000000000000000000000000000000')
 
 package() {
-  cd "$_name-$pkgver-$CARCH-unknown-linux-musl"
+  local suffix=""
+  if [[ "$CARCH" == x86_64 ]]; then suffix=-compat; fi
+  cd "$_name-$pkgver-$CARCH-unknown-linux-musl$suffix"
   install -Dm755 "$_name" "$pkgdir/usr/bin/$_name"
   install -Dm644 -t "$pkgdir/usr/share/licenses/$pkgname/" LICENSE NOTICE THIRD-PARTY-LICENSES.md \
     LICENSES/*

@@ -279,8 +279,20 @@ jobs:
         env:
           TARGET: ${{ matrix.target }}
           # Windows: link the C runtime statically, so the binary needs no VC++ redistributable.
-          RUSTFLAGS: ${{ contains(matrix.target, 'windows') && '-C target-feature=+crt-static' || '' }}
+          RUSTFLAGS: ${{ format('{0} {1}', startsWith(matrix.target, 'x86_64') && '-C target-cpu=x86-64-v3' || '', contains(matrix.target, 'windows') && '-C target-feature=+crt-static' || '') }}
         run: cargo build --release --locked --target "$TARGET" -p graphviz-pure-cli
+      - name: Build x86-64 compat binary and baseline launcher
+        if: startsWith(matrix.target, 'x86_64')
+        env:
+          TARGET: ${{ matrix.target }}
+          RUSTFLAGS: ${{ contains(matrix.target, 'windows') && '-C target-feature=+crt-static' || '' }}
+        run: |
+          CARGO_TARGET_DIR=target-compat cargo build --release --locked --target "$TARGET" -p graphviz-pure-cli
+          mkdir -p target-launcher
+          ext=""
+          case "$TARGET" in *windows*) ext=.exe ;; esac
+          rustc --edition=2024 --target "$TARGET" -C opt-level=2 -C target-cpu=x86-64 $RUSTFLAGS \
+            packaging/launcher/main.rs -o "target-launcher/graphviz-pure-launcher$ext"
       - name: Smoke test (byte-identical gallery samples)
         env:
           TARGET: ${{ matrix.target }}
@@ -289,6 +301,9 @@ jobs:
           exe=target/$TARGET/release/graphviz-pure
           case "$TARGET" in *windows*) exe=$exe.exe ;; esac
           "$PYTHON" scripts/release-smoke.py "$exe"
+          if [[ "$TARGET" == x86_64* ]]; then
+            "$PYTHON" scripts/release-smoke.py "${exe/target\//target-compat/}"
+          fi
       - name: Package
         env:
           TARGET: ${{ matrix.target }}
@@ -298,6 +313,9 @@ jobs:
           SOURCE_DATE_EPOCH=$(git log -1 --format=%ct)
           export SOURCE_DATE_EPOCH
           "$PYTHON" scripts/release-package.py "$TARGET" "$VERSION" dist
+          if [[ "$TARGET" == x86_64* ]]; then
+            "$PYTHON" scripts/release-package.py "$TARGET" "$VERSION" dist --compat
+          fi
           "$PYTHON" scripts/check-package-notices.py dist/graphviz-pure-*
       # The PyPI wheel: the archive's binary in a wheel's scripts directory, installed with pip
       # into a fresh environment on this runner, which must then pass the smoke test and hold
@@ -307,7 +325,9 @@ jobs:
           TARGET: ${{ matrix.target }}
           PYTHON: ${{ runner.os == 'Windows' && 'python' || 'python3' }}
         run: |
-          "$PYTHON" scripts/release-wheel.py dist/graphviz-pure-*-"$TARGET".* wheel
+          compat=()
+          if [[ "$TARGET" == x86_64* ]]; then compat=(--compat dist/graphviz-pure-*-"$TARGET"-compat.*); fi
+          "$PYTHON" scripts/release-wheel.py dist/graphviz-pure-*-"$TARGET".* wheel "${compat[@]}"
           # A relative path, as for the binary above (on Windows, RUNNER_TEMP is a Windows path).
           "$PYTHON" -m venv wheel-venv
           case "$TARGET" in
@@ -315,8 +335,16 @@ jobs:
             *) bin=wheel-venv/bin exe=graphviz-pure ;;
           esac
           "$bin/python" -m pip install --quiet --no-index --no-deps wheel/*.whl
-          cmp "$bin/$exe" "target/$TARGET/release/$exe"
-          "$PYTHON" scripts/release-smoke.py "$bin/$exe"
+          if [[ "$TARGET" == x86_64* ]]; then
+            cmp "$bin/$exe" "target-launcher/graphviz-pure-launcher${exe#graphviz-pure}"
+            cmp "$bin/v3/$exe" "target/$TARGET/release/$exe"
+            cmp "$bin/compat/$exe" "target-compat/$TARGET/release/$exe"
+          else
+            cmp "$bin/$exe" "target/$TARGET/release/$exe"
+          fi
+          compare=()
+          if [[ "$TARGET" == x86_64* ]]; then compare=(--compare "$bin/v3/$exe" --compare "$bin/compat/$exe"); fi
+          "$PYTHON" scripts/release-smoke.py "$bin/$exe" "${compare[@]}"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: bin-${{ matrix.target }}
@@ -612,6 +640,17 @@ jobs:
           function Entry($target) {
             $name = "graphviz-pure-$env:VERSION-$target-pc-windows-msvc"
             $zip = (Resolve-Path "dist\$name.zip").Path
+            if ($target -eq 'x86_64') {
+              $compatName = "$name-compat"
+              $compatZip = (Resolve-Path "dist\$compatName.zip").Path
+              return [ordered]@{
+                url = @(('file:///' + $zip.Replace('\', '/')), ('file:///' + $compatZip.Replace('\', '/')))
+                hash = @((Get-FileHash $zip -Algorithm SHA256).Hash.ToLower(), (Get-FileHash $compatZip -Algorithm SHA256).Hash.ToLower())
+                extract_dir = @($name, $compatName)
+                extract_to = @('v3', 'compat')
+                pre_install = 'Move-Item -LiteralPath "$dir\v3\graphviz-pure-launcher.exe" -Destination "$dir\graphviz-pure.exe"'
+              }
+            }
             [ordered]@{
               url = 'file:///' + $zip.Replace('\', '/')
               hash = (Get-FileHash $zip -Algorithm SHA256).Hash.ToLower()

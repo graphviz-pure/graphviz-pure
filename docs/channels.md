@@ -37,11 +37,22 @@ not be confirmed from the channel's documentation.
 
 ### Free with what is shipped (document only)
 
-- **mise:** `mise use github:graphviz-pure/graphviz-pure` works with no registry entry. mise's
-  `github:` backend picks the archive for the host, checks the GitHub API's digest and verifies
-  the build-provenance attestation (`github.github_attestations` defaults to on). A fresh release
-  is hidden for a while by mise's default `minimum_release_age`.
-- **eget:** `eget graphviz-pure/graphviz-pure` picks the archive by target name.
+- **mise:** on x86-64 use
+  `mise use 'github:graphviz-pure/graphviz-pure[matching=-compat.]'`.
+  The bare `github:` backend scores both CPU variants equally and breaks ties by
+  shortest asset name, selecting the v3 archive. The explicit `matching` filter selects
+  the baseline compat asset and is safe on pre-AVX2 CPUs. ARM64 has one native asset per
+  OS and can use `mise use github:graphviz-pure/graphviz-pure` unchanged. See the
+  [backend's asset selection rules](https://mise.jdx.dev/dev-tools/backends/github.html).
+  Attestation verification remains enabled; `minimum_release_age` can delay visibility.
+- **eget:** on x86-64 use
+  `eget graphviz-pure/graphviz-pure --asset='-compat.'`.
+  Automatic OS/architecture filtering alone leaves both default and compat assets;
+  the explicit [asset filter](https://github.com/zyedidia/eget#usage) avoids a choice
+  prompt and selects the safe baseline binary. ARM64 has no compat variant and needs
+  no CPU selector. For a known v3-capable x86-64 CPU, use `--asset='^-compat.'
+  --file=graphviz-pure` (Windows: `--file=graphviz-pure.exe`) to exclude compat and
+  select the CLI rather than the launcher carried in the plain archive.
 - **npm CDNs:** replace `X.Y.Z` with the release version. jsDelivr (`https://cdn.jsdelivr.net/npm/@graphviz-pure/wasm@X.Y.Z/+esm`,
   `https://esm.run/@graphviz-pure/wasm@X.Y.Z`), unpkg
   (`https://unpkg.com/@graphviz-pure/wasm@X.Y.Z/pkg/graphviz_pure_wasm_bg.wasm`), esm.sh
@@ -49,6 +60,17 @@ not be confirmed from the channel's documentation.
   `.wasm` as `application/wasm`. jsDelivr's `/gh/` mirror serves files of the repository at a tag,
   not release assets.
 - **Deno:** `npm:` and `jsr:` specifiers already work.
+
+### CPU requirements of plain archives
+
+The ordinary x86-64 Linux musl, macOS Intel and Windows archives require
+**x86-64-v3 (AVX2/FMA and BMI1/2)**. Their `-compat` counterparts use the x86-64-v1
+baseline. ARM64 and WASM are unchanged. Homebrew, Scoop, PyPI wheels and containers
+install the baseline launcher plus `v3/graphviz-pure[.exe]` and
+`compat/graphviz-pure[.exe]`, and select the CPU variant automatically.
+Cargo-binstall and AUR's binary recipe select compat. Direct archive installers
+must select compat on older CPUs; archive names and inner directory names retain
+`-compat` before the extension.
 
 ## Ranked
 

@@ -140,6 +140,14 @@ jobs:
           ID: ${{ matrix.id }}
           LABEL: ${{ matrix.label }}
         run: scripts/cross-platform-render.sh "out/$ID" "$ID" "$LABEL"
+      - name: Windows launcher version and diagnostics
+        if: matrix.id == 'windows-x86_64'
+        run: |
+          mkdir -p launcher-test/v3 launcher-test/compat
+          rustc --edition=2024 -D warnings -C target-cpu=x86-64 packaging/launcher/main.rs -o launcher-test/graphviz-pure.exe
+          cp target/release/graphviz-pure.exe launcher-test/v3/graphviz-pure.exe
+          cp target/release/graphviz-pure.exe launcher-test/compat/graphviz-pure.exe
+          python scripts/release-smoke.py launcher-test/graphviz-pure.exe --compare launcher-test/v3/graphviz-pure.exe --compare launcher-test/compat/graphviz-pure.exe
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: xp-${{ matrix.id }}

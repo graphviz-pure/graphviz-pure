@@ -74,6 +74,19 @@ Output is identical in every row. The ortho speedup comes from data structures w
 
 ---
 
+### x86-64 CPU support
+
+Release x86-64 archives use AVX2/FMA (`x86-64-v3`). Use the matching `-compat`
+archive on older CPUs. Homebrew, Scoop, PyPI wheels and the container select v3 or compat
+automatically; cargo-binstall selects compat. ARM64 and WASM are unchanged.
+
+`cargo install graphviz-pure-cli --locked` builds the x86-64-v1 baseline.
+On a CPU supporting x86-64-v3, build the faster version with:
+
+```sh
+RUSTFLAGS="-C target-cpu=x86-64-v3" cargo install graphviz-pure-cli --locked
+```
+
 ## Crates
 
 - [`graphviz-pure-core`](crates/graphviz-pure-core): graph IR, geometry, font metric tables, colour tables with `colorxlate` semantics, charset handling, and the math module (`math`: the same pure-Rust functions on every target).

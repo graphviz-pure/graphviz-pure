@@ -881,8 +881,12 @@ fn main() -> ExitCode {
 fn dot_main() -> ExitCode {
     // `args_os`: `args` panics on an argument that is not valid UTF-8.
     let raw: Vec<OsString> = env::args_os().collect();
-    let argv0 = raw
-        .first()
+    // Internal launcher handoff, especially for Windows where Command cannot set
+    // argv[0]. With no handoff, preserve the direct CLI's original behavior.
+    let launcher_argv0 = env::var_os("GRAPHVIZ_PURE_ARGV0");
+    let argv0 = launcher_argv0
+        .as_ref()
+        .or(raw.first())
         .map_or_else(|| "dot".to_string(), |a| arg_text(a));
     let mut opts = match parse_args(&argv0, raw.get(1..).unwrap_or_default()) {
         Parsed::Run(o) => o,
