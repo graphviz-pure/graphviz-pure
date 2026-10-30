@@ -9,6 +9,7 @@
 //! Coincident points are merged like `gts_delaunay_add_vertex`.
 
 use super::robust::{incircle, orient2d};
+use graphviz_pure_core::math;
 
 #[derive(Clone, Copy)]
 struct Tri {
@@ -50,14 +51,14 @@ pub(crate) fn triangle_enclosing(pts: &[(f64, f64)], scale: f64) -> [(f64, f64);
     let yo = (ymax + ymin) / 2.0;
     let dx = xmax - xo;
     let dy = ymax - yo;
-    let mut r = scale * dx.mul_add(dx, dy * dy).sqrt();
+    let mut r = scale * math::fma(dx, dx, dy * dy).sqrt();
     if r == 0.0 {
         r = scale;
     }
     [
-        (r.mul_add(SQRT3, xo), yo - r),
-        (xo, r.mul_add(2.0, yo)),
-        ((-r).mul_add(SQRT3, xo), yo - r),
+        (math::fma(r, SQRT3, xo), yo - r),
+        (xo, math::fma(r, 2.0, yo)),
+        (math::fma(-r, SQRT3, xo), yo - r),
     ]
 }
 
@@ -194,14 +195,14 @@ pub fn ug_graph(x: &[f64], y: &[f64]) -> Vec<Vec<usize>> {
         while j < g[i].len() {
             let nj = g[i][j];
             let (xj, yj) = (x[nj], y[nj]);
-            let dist_ij = (xj - xi).mul_add(xj - xi, (yj - yi) * (yj - yi));
+            let dist_ij = math::fma(xj - xi, xj - xi, (yj - yi) * (yj - yi));
             let mut removed = false;
             let mut k = 0;
             while k < g[i].len() && !removed {
                 let nk = g[i][k];
-                let dist_ik = (x[nk] - xi).mul_add(x[nk] - xi, (y[nk] - yi) * (y[nk] - yi));
+                let dist_ik = math::fma(x[nk] - xi, x[nk] - xi, (y[nk] - yi) * (y[nk] - yi));
                 if dist_ik < dist_ij {
-                    let dist_jk = (x[nk] - xj).mul_add(x[nk] - xj, (y[nk] - yj) * (y[nk] - yj));
+                    let dist_jk = math::fma(x[nk] - xj, x[nk] - xj, (y[nk] - yj) * (y[nk] - yj));
                     if dist_jk < dist_ij {
                         g[i].swap_remove(j);
                         if let Some(p) = g[nj].iter().position(|&v| v == i) {

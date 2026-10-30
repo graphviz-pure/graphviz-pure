@@ -1,4 +1,4 @@
-# An exact software FMA for wasm32 (T1b)
+# An exact software FMA for wasm32 and x86-64 musl (T1b)
 
 wasm32 has no deterministic scalar fused multiply-add, so every `f64::mul_add` and
 `f32::mul_add` in the port (389 call sites) is a call into a software `fma`/`fmaf`. This note
@@ -11,9 +11,15 @@ user cycles** of fdp, sfdp and spline-routing runs under node, with byte-identic
 Catalogue row: T1b in [`docs/roadmap/post-1.0.md`](../roadmap/post-1.0.md). Baseline:
 [`baseline.md`](baseline.md#wasm).
 
-The end-to-end measurements below predate the merged `pow` fast paths (#543, #532).
-Those paths remove much of sfdp's measured FMA work; the reported sfdp gain is historical,
-not a measurement of the current port. The software FMA prototype remains research.
+**Shipped (#549, #601):** `graphviz_pure_core::math::fma(a, b, c)` calls `math::portable::fma`
+(the Boldo–Melquiond fast path with a zero-factor shortcut and `libm::fma` outside the window) on
+`target_family = "wasm"` (`wasm32`/`wasm64`, `#[inline(never)]`) and on `x86_64` musl without
+`target_feature = "fma"` (`#[inline(always)]` on the static Linux `-compat` binary of #531, where
+musl's `libc.a` links its ~145–170-instruction integer `fma` instead of compiler-builtins'
+runtime-dispatched one). Everywhere else (glibc x86-64 with IFUNC hardware `fma`, `x86-64-v3` /
+`+fma`, and `aarch64`) `math::fma` calls `a.mul_add(b, c)`, and `f32` stays on `f32::mul_add`. The
+end-to-end measurements below predate the merged `pow` fast paths (#543, #532), which remove much
+of sfdp's earlier `pow`-internal FMA work.
 
 ## Headlines
 
@@ -43,10 +49,10 @@ not a measurement of the current port. The software FMA prototype remains resear
   rare fix-up) costs 1.5 ns against 1.0 ns for an unfused `a*b + c`. A round-to-odd `fmaf` is
   slower (2.9 ns). Inlining `libm::fmaf` cut neato's instructions by 22%, but its cycles did
   not move measurably on this machine.
-- **Recommendation:** do it, for f64 only, as `math::fma` in `graphviz-pure-core` with the
-  fast path compiled on wasm32 only. One design decision is open (inline the fast path at all
-  389 sites, +139 KB, about +1.3% of the WASI module, or call it out of line, −29 KB with
-  40–60% of the gain on fdp and sfdp); see [Recommendation](#recommendation).
+- **Recommendation (implemented in #549 / #601):** do it, for f64 only, as `math::fma` in
+  `graphviz-pure-core`, with `portable::fma` inlined on `x86_64` musl without
+  `target_feature = "fma"` and out-of-line (`#[inline(never)]`) on `wasm32`/`wasm64`; see
+  [Recommendation](#recommendation).
 
 ## 1. What `mul_add` compiles to on wasm32
 
@@ -396,60 +402,52 @@ cycle ratios: halving a 60–76% share predicts 1.4–1.6×.
 
 ## Recommendation
 
-**Worth doing, for f64.** It is the only WASM-specific item in the catalogue, it cannot change
-a byte (the result is the IEEE value), and it takes up to a third off the user cycles of fdp, sfdp
-and spline routing under node. Expected end-to-end gain under node, before #543: sfdp 1.4–1.5×,
-fdp 1.1–1.3×, spline routing (twopi/neato/fdp with `splines=true`) about 1.4×, and no change
-for dot, circo, osage, patchwork and neato's stress majorization. After #543, sfdp's gain
-shrinks to whatever fma share remains outside `pow`. The fdp `xlayout`/`hypot` and routing
-gains stay.
+**Shipped (#549, #601), for f64.** It cannot change a byte (the result is the IEEE value), and it
+takes 1.1–1.6× off the user cycles of fdp, sfdp and spline routing under node while shrinking the
+WASM modules slightly, as well as making the static `x86_64-unknown-linux-musl` v1 build 1.36–2.20×
+faster on `f64`-heavy layouts.
 
-What a production PR would touch:
+What shipped in #601:
 
-- `crates/graphviz-pure-core/src/math/`: a new `math::fma(a, b, c)` (and maybe
-  `math::fmaf`). On `cfg(target_arch = "wasm32")` it calls a new `portable::fma` (the code
-  above, with the zero-factor shortcut and `libm::fma` as the fallback). Elsewhere it calls
-  `a.mul_add(b, c)`, so native builds keep hardware FMA (T1) and nothing changes there.
-  `core::math` is the C-mirror module for `<math.h>`, so `math::fma` is also C's name for it.
-  The `math-trace` hook does not need to log it.
-- The 389 `x.mul_add(y, z)` sites become `math::fma(x, y, z)`: a mechanical rewrite with the
-  operand order unchanged, in 60 files (4 core, 6 geom, 44 layout, 6 render).
-- `clippy.toml`: add `f64::mul_add` (and `f32::mul_add` if `math::fmaf` is added) to
-  `disallowed-methods`, allowed only inside `math`, the same way the transcendental functions
-  are fenced. Update the comment that says `mul_add` stays allowed, and `docs/porting/libm.md`
-  ("Fused multiply-adds"), which says `mul_add` is a software `fma` on wasm32.
-- Tests in `math/tests.rs`: run natively against hardware/`libm::fma` with a few million
-  samples per class from §4, plus an `#[ignore]`d long run. `cross-platform.yml` already runs the
-  fidelity ratchet on wasm (add the wasm32 differential test there if it is cheap enough).
-- Perf evidence: #518's harness on the quick set for the native binary (should be unchanged),
-  plus a node/WASI before-and-after on fdp, sfdp and twopi on a quiet machine.
+- `crates/graphviz-pure-core/src/math/`: `math::fma(a, b, c)` and `math::portable::fma(a, b, c)`.
+  On `cfg(any(target_family = "wasm", all(target_arch = "x86_64", target_env = "musl", not(target_feature = "fma"))))`
+  it calls `portable::fma` (the code above, with the zero-factor shortcut and `libm::fma` as the
+  fallback), inlined (`#[inline(always)]`) on native targets (`x86_64` musl) and out-of-line
+  (`#[inline(never)]`) on `target_family = "wasm"`. Elsewhere it calls `a.mul_add(b, c)`, so gnu
+  builds, `x86-64-v3` (`+fma`) and `aarch64` keep hardware FMA.
+- The 397 `f64::mul_add` sites across 57 files became `math::fma(x, y, z)` with the operand
+  order unchanged.
+- `clippy.toml` adds `f64::mul_add` to `disallowed-methods`, allowed only inside `math`.
+  `docs/porting/libm.md` documents `math::fma` and `portable::fma`.
+- `crates/graphviz-pure-core/src/math/tests.rs` runs the differential test against hardware
+  FMA / `libm::fma` on every target, plus an `#[ignore]`d long run.
 
-Open decisions for the maintainer:
+Maintainer decisions (#549, revised in #601):
 
-1. **Inline or out of line.** Inlining the fast path at every site gives the full gain and adds
-   139 KB (+1.25%) to the WASI module. The post-1.0 target says WASM size no larger than 1.0.
-   Out of line gives 40–60% of the gain on fdp and sfdp (sfdp 1.31× against 1.50×, fdp
-   `viewport` 1.12× against 1.31×, fdp `b69` none) and all of it on twopi routing,
-   and makes the module 29.6 KB *smaller*. A middle way: `#[inline]` on the
-   function and let LLVM decide per site. The npm build uses `opt-level=z`, which inlines less,
-   so its size and speed must be measured separately.
-2. **f32.** The round-to-odd `fmaf` is slower than musl's. Calling `libm::fmaf` (inlinable
-   Rust, same algorithm as musl) instead of wasi-libc's cut neato's instructions by 22% but
-   not its cycles here. Leave f32 alone unless a quiet-machine measurement shows a gain.
+1. **Inline on `x86_64` musl (`#[inline(always)]`), out-of-line (`#[inline(never)]`) on
+   `target_family = "wasm"`:** inlining all 397 sites grew `graphviz_pure_wasm.wasm` by +173.0 KB
+   (+4.29%, `4,032,225 B → 4,205,221 B`) vs +141.1 KB (+1.31%, `10,807,756 B → 10,948,895 B`) on
+   the larger WASI CLI. Keeping `portable::fma` `#[inline(never)]` on `wasm` shrinks
+   `graphviz_pure_wasm.wasm` by −6.6 KB (−0.16%, `4,025,669 B`) and `graphviz-pure.wasm` by
+   −32.0 KB (−0.30%, `10,775,758 B`) while retaining 1.14–1.64× cycle speedups (1.13–1.56× fewer
+   instructions) under node, whereas `x86_64` musl v1 keeps the full inlined speedup (1.44× wall
+   on `fdp/viewport`, 1.36× on `sfdp/gen_rnd2000`, 2.20× on `twopi/ngk10_4`).
+2. **Keep `f32` on `f32::mul_add`:** musl's `fmaf` is already 1.5 ns, and a round-to-odd `fmaf`
+   is slower.
 
 Risks:
 
 - **Correctness rests on the Boldo–Melquiond theorem plus the window argument above**, and on
   testing (9.4 × 10^10 native and 1.5 × 10^9 wasm triples, 7.2 × 10^8 real calls, mutation
-  checks). There is no machine-checked proof of the window bounds. The production PR should
-  keep the differential test in CI.
+  checks). There is no machine-checked proof of the window bounds. The differential test runs
+  in CI.
 - Rust never contracts or reassociates float operations, and wasm requires IEEE
   round-to-nearest for `f64.add`/`sub`/`mul` on every engine, so the error-free transformations
   compute the same bits everywhere. The algorithm must not be built with fast-math-style flags,
   which Rust doesn't offer anyway.
 - NaN payloads may differ from libm's on the fallback path. The port never prints a NaN's bits.
 - After the change both wasm targets compute every `mul_add` with the same Rust code, which
-  removes today's wasi-libc vs compiler-builtins signed-zero difference.
+  removes the earlier wasi-libc vs compiler-builtins signed-zero difference.
 - `relaxed_madd` (relaxed SIMD) stays ruled out: the spec lets it fuse or not.
 
 ## Reproducing

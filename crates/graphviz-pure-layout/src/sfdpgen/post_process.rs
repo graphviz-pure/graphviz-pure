@@ -63,7 +63,7 @@ fn conjugate_gradient(
         if iter > 1 {
             let beta = rho / rho_old;
             for i in 0..n {
-                p[i] = beta.mul_add(p[i], z[i]);
+                p[i] = math::fma(beta, p[i], z[i]);
             }
         } else {
             p.copy_from_slice(&z);
@@ -71,10 +71,10 @@ fn conjugate_gradient(
         a.multiply_vector(&p, &mut q);
         let alpha = rho / vector_product(n, &p, &q);
         for i in 0..n {
-            x[i] = alpha.mul_add(p[i], x[i]);
+            x[i] = math::fma(alpha, p[i], x[i]);
         }
         for i in 0..n {
-            r[i] = (-alpha).mul_add(q[i], r[i]);
+            r[i] = math::fma(-alpha, q[i], r[i]);
         }
         res = vector_product(n, &r, &r).sqrt() / n as f64;
         rho_old = rho;
@@ -115,7 +115,7 @@ fn total_distance(m: usize, dim: usize, x: &[f64], y: &[f64]) -> f64 {
         let mut d = 0.0f64;
         for j in 0..dim {
             let t = y[i * dim + j] - x[i * dim + j];
-            d = t.mul_add(t, d);
+            d = math::fma(t, t, d);
         }
         total += d.sqrt();
     }
@@ -185,7 +185,7 @@ impl StressMajorizationSmoother {
                                 for k in 0..dim {
                                     let r = drand();
                                     x[c * dim + k] =
-                                        (0.0001 * (r + 0.0001)).mul_add(dij, x[c * dim + k]);
+                                        math::fma(0.0001 * (r + 0.0001), dij, x[c * dim + k]);
                                 }
                                 dist = distance(x, dim, i, c);
                             }
@@ -199,7 +199,7 @@ impl StressMajorizationSmoother {
             lwdd.multiply_dense(x, &mut y, dim);
             for i in 0..m {
                 for j in 0..dim {
-                    y[i * dim + j] = self.lambda[i].mul_add(x0[i * dim + j], y[i * dim + j]);
+                    y[i * dim + j] = math::fma(self.lambda[i], x0[i * dim + j], y[i * dim + j]);
                 }
             }
             if let Some(x00) = x00.as_ref().filter(|_| constraints.is_some()) {
@@ -489,8 +489,8 @@ pub fn stress_majorization_smoother2_new(
                 jd.push(k as i32);
                 let dv = wv * dist;
                 d.push(dv);
-                stop = dv.mul_add(distance(x, dim, i, k), stop);
-                sbot = dv.mul_add(dist, sbot);
+                stop = math::fma(dv, distance(x, dim, i, k), stop);
+                sbot = math::fma(dv, dist, sbot);
                 diag_d += dv;
                 nz += 1;
             }
@@ -504,7 +504,7 @@ pub fn stress_majorization_smoother2_new(
                     let dist = match ideal_dist_scheme {
                         IDEAL_GRAPH_DIST => 2.0,
                         IDEAL_AVG_DIST => {
-                            (2.0f64.mul_add(avg_dist[k], avg_dist[i]) + avg_dist[kl]) * 0.5
+                            (math::fma(2.0, avg_dist[k], avg_dist[i]) + avg_dist[kl]) * 0.5
                         }
                         _ => math::powf(distance_cropped(x, dim, i, kl), 0.4),
                     };
@@ -515,8 +515,8 @@ pub fn stress_majorization_smoother2_new(
                     jd.push(kl as i32);
                     let dv = wv * dist;
                     d.push(dv);
-                    stop = dv.mul_add(distance(x, dim, kl, k), stop);
-                    sbot = dv.mul_add(dist, sbot);
+                    stop = math::fma(dv, distance(x, dim, kl, k), stop);
+                    sbot = math::fma(dv, dist, sbot);
                     diag_d += dv;
                     nz += 1;
                 }
@@ -581,8 +581,8 @@ pub fn sparse_stress_majorization_smoother_new(
                 jd.push(k as i32);
                 let dv = -dist;
                 d.push(dv);
-                stop = dv.mul_add(distance(x, dim, i, k), stop);
-                sbot = dv.mul_add(dist, sbot);
+                stop = math::fma(dv, distance(x, dim, i, k), stop);
+                sbot = math::fma(dv, dist, sbot);
                 diag_d += dv;
                 nz += 1;
             }
@@ -655,8 +655,8 @@ pub fn triangle_smoother_new(
             w[j] = 1.0 / (dist * dist);
             diag_w += w[j];
             d[j] = w[j] * dist;
-            stop = d[j].mul_add(distance(x, dim, i, k), stop);
-            sbot = d[j].mul_add(dist, sbot);
+            stop = math::fma(d[j], distance(x, dim, i, k), stop);
+            sbot = math::fma(d[j], dist, sbot);
             diag_d += d[j];
         }
         lambda[i] *= -diag_w;

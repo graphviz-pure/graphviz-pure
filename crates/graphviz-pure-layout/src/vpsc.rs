@@ -15,6 +15,7 @@
 //! block constraint heaps, the cycle checks and logging.
 
 use crate::cutil::libcxx;
+use graphviz_pure_core::math;
 use std::collections::BTreeSet;
 
 const NONE: usize = usize::MAX;
@@ -251,9 +252,7 @@ impl Solver {
         let var = &self.vars[v];
         let blk = &mut self.blocks[b];
         blk.weight += var.weight;
-        blk.wposn = var
-            .weight
-            .mul_add(var.desired_position - var.offset, blk.wposn);
+        blk.wposn = math::fma(var.weight, var.desired_position - var.offset, blk.wposn);
         blk.posn = blk.wposn / blk.weight;
     }
 
@@ -262,7 +261,7 @@ impl Solver {
         let mut wp = 0.0f64;
         for &v in &self.blocks[b].vars {
             let var = &self.vars[v];
-            wp = (var.desired_position - var.offset).mul_add(var.weight, wp);
+            wp = math::fma(var.desired_position - var.offset, var.weight, wp);
         }
         wp
     }
@@ -286,7 +285,7 @@ impl Solver {
         let (bw, bwp) = (self.blocks[b].weight, self.blocks[b].wposn);
         {
             let t = &mut self.blocks[this];
-            t.wposn += (-dist).mul_add(bw, bwp);
+            t.wposn += math::fma(-dist, bw, bwp);
             t.weight += bw;
             t.posn = t.wposn / t.weight;
         }
@@ -489,7 +488,7 @@ impl Solver {
         for &v in &self.blocks[b].vars {
             let var = &self.vars[v];
             let diff = self.position(v) - var.desired_position;
-            c = (var.weight * diff).mul_add(diff, c);
+            c = math::fma(var.weight * diff, diff, c);
         }
         c
     }

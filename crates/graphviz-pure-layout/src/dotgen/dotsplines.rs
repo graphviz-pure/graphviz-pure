@@ -26,6 +26,7 @@ use crate::common::splines::{
 use crate::common::types::EdgeType;
 use graphviz_pure_core::Point;
 use graphviz_pure_core::cnum::{c_max, c_min};
+use graphviz_pure_core::math;
 use std::cmp::Ordering;
 use std::f64::consts::PI;
 
@@ -156,7 +157,7 @@ fn box_ok(b: &BoxF) -> bool {
 /// `leftOf(p1, p2, p3)`: whether `p3` is left of the ray `p1 -> p2`.
 fn left_of(p1: Point, p2: Point, p3: Point) -> bool {
     // C (clang) fuses this multiply-subtract.
-    (p1.y - p2.y).mul_add(p3.x - p2.x, -((p3.y - p2.y) * (p1.x - p2.x))) > 0.0
+    math::fma(p1.y - p2.y, p3.x - p2.x, -((p3.y - p2.y) * (p1.x - p2.x))) > 0.0
 }
 
 /// The attribute symbols `make_flat_adj_edges`' aux graph is laid out with (`cloneGraph`,
@@ -1617,15 +1618,15 @@ impl Dot<'_> {
             // C (clang) fuses the `(i + 1) * step` multiply-adds of this loop.
             let b0 = BoxF::new(
                 b.ll.x,
-                (-fi).mul_add(stepy, b.ll.y),
-                fi.mul_add(stepx, b.ur.x),
+                math::fma(-fi, stepy, b.ll.y),
+                math::fma(fi, stepx, b.ur.x),
                 b.ll.y,
             );
             let tl = *tend.boxes.last().unwrap();
             let hl = *hend.boxes.last().unwrap();
             let b1 = BoxF::new(tl.ll.x, b0.ll.y - stepy, hl.ur.x, b0.ll.y);
             let b = hl;
-            let b2 = BoxF::new((-fi).mul_add(stepx, b.ll.x), b1.ur.y, b.ur.x, b.ll.y);
+            let b2 = BoxF::new(math::fma(-fi, stepx, b.ll.x), b1.ur.y, b.ur.x, b.ll.y);
             for bx in &tend.boxes {
                 add_box(&mut p, *bx);
             }
@@ -1721,14 +1722,14 @@ impl Dot<'_> {
             let b0 = BoxF::new(
                 b.ll.x,
                 b.ur.y,
-                fi.mul_add(stepx, b.ur.x),
-                fi.mul_add(stepy, b.ur.y),
+                math::fma(fi, stepx, b.ur.x),
+                math::fma(fi, stepy, b.ur.y),
             );
             let tl = *tend.boxes.last().unwrap();
             let hl = *hend.boxes.last().unwrap();
             let b1 = BoxF::new(tl.ll.x, b0.ur.y, hl.ur.x, b0.ur.y + stepy);
             let b = hl;
-            let b2 = BoxF::new((-fi).mul_add(stepx, b.ll.x), b.ur.y, b.ur.x, b1.ll.y);
+            let b2 = BoxF::new(math::fma(-fi, stepx, b.ll.x), b.ur.y, b.ur.x, b1.ll.y);
             for bx in &tend.boxes {
                 add_box(&mut p, *bx);
             }

@@ -170,7 +170,7 @@ impl X {
                 continue;
             }
             let disp = nd.disp;
-            let len2 = disp[0].mul_add(disp[0], disp[1] * disp[1]);
+            let len2 = math::fma(disp[0], disp[0], disp[1] * disp[1]);
             if len2 < temp2 {
                 nd.pos[0] += disp[0];
                 nd.pos[1] += disp[1];
@@ -187,8 +187,8 @@ impl X {
 /// `DISP(n) += delta * force`, fused as clang compiles it.
 fn add_disp(dg: &mut DG, n: usize, xdelta: f64, ydelta: f64, force: f64) {
     let d = &mut dg.nodes[n].disp;
-    d[0] = xdelta.mul_add(force, d[0]);
-    d[1] = ydelta.mul_add(force, d[1]);
+    d[0] = math::fma(xdelta, force, d[0]);
+    d[1] = math::fma(ydelta, force, d[1]);
 }
 
 /// `x_layout(g, pxpms, tries)`: returns the overlaps that remain.

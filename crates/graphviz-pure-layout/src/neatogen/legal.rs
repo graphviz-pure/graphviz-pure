@@ -2,6 +2,7 @@
 //! polygons intersect or nest? A plane sweep over polygon sides.
 
 use crate::cutil::qsort_by;
+use graphviz_pure_core::math;
 use graphviz_pure_core::{BoundingBox, Point};
 
 struct Verts<'a> {
@@ -50,8 +51,8 @@ fn sgnarea(vs: &Verts<'_>, l: usize, m: usize) -> [i32; 3] {
     let f = vs.pos[m].y - b;
     let g = vs.pos[vs.after(m)].x - a;
     let h = vs.pos[vs.after(m)].y - b;
-    let i0 = sign(c.mul_add(f, -(d * e)));
-    let i1 = sign(c.mul_add(h, -(d * g)));
+    let i0 = sign(math::fma(c, f, -(d * e)));
+    let i1 = sign(math::fma(c, h, -(d * g)));
     [i0, i1, i0 * i1]
 }
 
@@ -108,18 +109,18 @@ fn intpoint(vs: &Verts<'_>, l: usize, m: usize, cond: i32) -> Option<Point> {
         3 => {
             if ls.x == le.x {
                 let x = ls.x;
-                Some(Point::new(x, slope(ms, me).mul_add(x - me.x, me.y)))
+                Some(Point::new(x, math::fma(slope(ms, me), x - me.x, me.y)))
             } else if ms.x == me.x {
                 let x = ms.x;
-                Some(Point::new(x, slope(ls, le).mul_add(x - le.x, le.y)))
+                Some(Point::new(x, math::fma(slope(ls, le), x - le.x, le.y)))
             } else {
                 let m1 = slope(ms, me);
                 let m2 = slope(ls, le);
-                let c1 = (-m1).mul_add(ms.x, ms.y);
-                let c2 = (-m2).mul_add(ls.x, ls.y);
+                let c1 = math::fma(-m1, ms.x, ms.y);
+                let c2 = math::fma(-m2, ls.x, ls.y);
                 Some(Point::new(
                     (c2 - c1) / (m1 - m2),
-                    m1.mul_add(c2, -(c1 * m2)) / (m1 - m2),
+                    math::fma(m1, c2, -(c1 * m2)) / (m1 - m2),
                 ))
             }
         }

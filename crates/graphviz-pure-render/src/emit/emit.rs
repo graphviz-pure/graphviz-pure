@@ -226,12 +226,12 @@ fn label_overlaps(l: &TextLabel, b: BoundingBox) -> bool {
 fn pt_to_line2(a: Point, b: Point, p: Point) -> f64 {
     let dx = b.x - a.x;
     let dy = b.y - a.y;
-    let mut a2 = (p.y - a.y).mul_add(dx, -((p.x - a.x) * dy));
+    let mut a2 = math::fma(p.y - a.y, dx, -((p.x - a.x) * dy));
     a2 *= a2;
     if a2 < 0.000_000_000_1 {
         return 0.0;
     }
-    a2 / dx.mul_add(dx, dy * dy)
+    a2 / math::fma(dx, dx, dy * dy)
 }
 
 /// `check_control_points` (`emit.c:745`).
@@ -1181,7 +1181,7 @@ impl<'a, E: Engine> Emitter<'a, E> {
                 lastx
             } else {
                 // C (clang) fuses `pts[0].x + xdelta * s.t`.
-                xdelta.mul_add(s.t, pts[0].x)
+                math::fma(xdelta, s.t, pts[0].x)
             };
             pts[1].x = x;
             pts[2].x = x;
@@ -1855,7 +1855,7 @@ impl<'a, E: Engine> Emitter<'a, E> {
                 off[j + 2] = q;
                 // C (clang) fuses each `pf.x - numc2 * offlist[j].x`.
                 let outer = |pf: Point, o: Point| {
-                    Point::new((-numc2).mul_add(o.x, pf.x), (-numc2).mul_add(o.y, pf.y))
+                    Point::new(math::fma(-numc2, o.x, pf.x), math::fma(-numc2, o.y, pf.y))
                 };
                 tmp[j] = outer(pf0, off[j]);
                 tmp[j + 1] = outer(pf1, off[j + 1]);
@@ -1864,8 +1864,8 @@ impl<'a, E: Engine> Emitter<'a, E> {
             }
             off[j] = super::geom::computeoffset_p(pf2, pf3, SEP);
             tmp[j] = Point::new(
-                (-numc2).mul_add(off[j].x, pf3.x),
-                (-numc2).mul_add(off[j].y, pf3.y),
+                math::fma(-numc2, off[j].x, pf3.x),
+                math::fma(-numc2, off[j].y, pf3.y),
             );
             offs.push(off);
             tmps.push(tmp);
@@ -2102,10 +2102,13 @@ fn find_ortho_corners(pts: &[Point], radius: f64) -> Vec<Corner> {
             idx: i,
             // C (clang) fuses `curr ± d * radius`.
             trunc_prev: Point::new(
-                (-dx1).mul_add(radius, curr.x),
-                (-dy1).mul_add(radius, curr.y),
+                math::fma(-dx1, radius, curr.x),
+                math::fma(-dy1, radius, curr.y),
             ),
-            trunc_next: Point::new(dx2.mul_add(radius, curr.x), dy2.mul_add(radius, curr.y)),
+            trunc_next: Point::new(
+                math::fma(dx2, radius, curr.x),
+                math::fma(dy2, radius, curr.y),
+            ),
             center: Point::new(cx, cy),
             angle1: a1,
             angle2: a2,

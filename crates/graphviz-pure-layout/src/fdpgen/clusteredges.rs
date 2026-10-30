@@ -11,6 +11,7 @@ use crate::neatogen::legal::plegal_arrangement;
 use crate::neatogen::neatosplines::make_self_arcs;
 use crate::neatogen::routing::make_obstacle;
 use graphviz_pure_core::Point;
+use graphviz_pure_core::math;
 use graphviz_pure_geom::pathplan::{POLYID_NONE, Pedge, Vconfig, pobsopen, pobspath, proutespline};
 
 /// The cluster hierarchy as `compoundEdges` sees it.
@@ -57,10 +58,10 @@ fn make_clust_obs(lg: &LGraph<'_>, c: usize, pm: &Expand) -> Vec<Point> {
         let dx = pm.x - 1.0;
         let dy = pm.y - 1.0;
         (
-            pm.x.mul_add(bb.ll.x, -(dx * ctr.x)),
-            pm.y.mul_add(bb.ll.y, -(dy * ctr.y)),
-            pm.x.mul_add(bb.ur.x, -(dx * ctr.x)),
-            pm.y.mul_add(bb.ur.y, -(dy * ctr.y)),
+            math::fma(pm.x, bb.ll.x, -(dx * ctr.x)),
+            math::fma(pm.y, bb.ll.y, -(dy * ctr.y)),
+            math::fma(pm.x, bb.ur.x, -(dx * ctr.x)),
+            math::fma(pm.y, bb.ur.y, -(dy * ctr.y)),
         )
     };
     vec![

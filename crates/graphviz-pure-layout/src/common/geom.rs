@@ -2,6 +2,7 @@
 //! floating-point contraction clang applies to them (`SQR(a) + SQR(b)` is
 //! compiled as `fma(a, a, b * b)`).
 
+use graphviz_pure_core::math;
 use graphviz_pure_core::{BoundingBox, Point};
 
 /// `DIST2(p, q)`.
@@ -9,7 +10,7 @@ use graphviz_pure_core::{BoundingBox, Point};
 pub fn dist2(p: Point, q: Point) -> f64 {
     let dx = p.x - q.x;
     let dy = p.y - q.y;
-    dx.mul_add(dx, dy * dy)
+    math::fma(dx, dx, dy * dy)
 }
 
 /// `DIST(p, q)`.

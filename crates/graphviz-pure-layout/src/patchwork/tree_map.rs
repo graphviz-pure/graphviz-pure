@@ -1,6 +1,7 @@
 //! Squarified treemap, ported from `lib/patchwork/tree_map.c`.
 
 use graphviz_pure_core::diag::{fmt_f, fprintf_stderr, verbose_on};
+use graphviz_pure_core::math;
 
 /// `rectangle`: centre `x` and full `size`.
 #[derive(Debug, Clone, Copy, Default, PartialEq)]
@@ -116,7 +117,7 @@ pub fn tree_map(area: &[f64], fillrec: Rectangle) -> Option<Vec<Rectangle>> {
         total += a;
     }
     // C (clang) fuses this multiply-add.
-    if total > fillrec.size[0].mul_add(fillrec.size[1], 0.001) {
+    if total > math::fma(fillrec.size[0], fillrec.size[1], 0.001) {
         return None;
     }
     let mut recs = vec![Rectangle::default(); area.len()];

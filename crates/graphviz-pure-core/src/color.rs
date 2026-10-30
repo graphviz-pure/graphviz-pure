@@ -2,6 +2,7 @@
 //! Graphviz 16.1.0 (`lib/common/colxlate.c`, `lib/common/colortbl.h`, `lib/common/color.h`).
 
 use crate::color_table::COLOR_LIB;
+use crate::math;
 use std::fmt;
 
 /// Resolved 8-bit RGBA color (`r`, `g`, `b`, `a`).
@@ -158,8 +159,8 @@ pub fn hsv2rgb(mut h: f64, s: f64, v: f64) -> (f64, f64, f64) {
         let f = h - f64::from(i);
         let p = v * (1.0 - s);
         // C (clang) fuses `1 - s * …` into one fma.
-        let q = v * (-s).mul_add(f, 1.0);
-        let t = v * (-s).mul_add(1.0 - f, 1.0);
+        let q = v * math::fma(-s, f, 1.0);
+        let t = v * math::fma(-s, 1.0 - f, 1.0);
         match i {
             0 => (v, t, p),
             1 => (q, v, p),

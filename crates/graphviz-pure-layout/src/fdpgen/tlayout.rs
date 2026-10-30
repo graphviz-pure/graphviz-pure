@@ -230,8 +230,8 @@ fn do_rep(
 /// `DISP(n)[i] += delta * force`, fused as clang compiles it.
 fn add_disp(dg: &mut DG, n: usize, xdelta: f64, ydelta: f64, force: f64) {
     let d = &mut dg.nodes[n].disp;
-    d[0] = xdelta.mul_add(force, d[0]);
-    d[1] = ydelta.mul_add(force, d[1]);
+    d[0] = math::fma(xdelta, force, d[0]);
+    d[1] = math::fma(ydelta, force, d[1]);
 }
 
 /// `applyRep(p, q)`.
@@ -287,11 +287,11 @@ fn grid_repulse(st: &mut TState, dg: &mut DG, grid: &Grid, (i, j): (i32, i32), n
 fn apply_attr(st: &mut TState, dg: &mut DG, p: usize, q: usize, e: usize) {
     let mut xdelta = dg.nodes[q].pos[0] - dg.nodes[p].pos[0];
     let mut ydelta = dg.nodes[q].pos[1] - dg.nodes[p].pos[1];
-    let mut dist2 = xdelta.mul_add(xdelta, ydelta * ydelta);
+    let mut dist2 = math::fma(xdelta, xdelta, ydelta * ydelta);
     while dist2 == 0.0 {
         xdelta = f64::from(5 - crate::cutil::rand() % 10);
         ydelta = f64::from(5 - crate::cutil::rand() % 10);
-        dist2 = xdelta.mul_add(xdelta, ydelta * ydelta);
+        dist2 = math::fma(xdelta, xdelta, ydelta * ydelta);
     }
     let dist = dist2.sqrt();
     let ed = &dg.edges[e];
@@ -320,12 +320,15 @@ fn update_pos(st: &TState, dg: &mut DG, comp: &Comp, temp: f64, has_ports: bool)
         }
         let dx = nd.disp[0];
         let dy = nd.disp[1];
-        let len2 = dx.mul_add(dx, dy * dy);
+        let len2 = math::fma(dx, dx, dy * dy);
         let (x, y) = if len2 < temp2 {
             (nd.pos[0] + dx, nd.pos[1] + dy)
         } else {
             let fact = temp / len2.sqrt();
-            (dx.mul_add(fact, nd.pos[0]), dy.mul_add(fact, nd.pos[1]))
+            (
+                math::fma(dx, fact, nd.pos[0]),
+                math::fma(dy, fact, nd.pos[1]),
+            )
         };
         if has_ports {
             let (wd, ht) = (st.t.wd, st.t.ht);
@@ -486,8 +489,8 @@ fn init_positions(st: &mut TState, dg: &mut DG, comp: &Comp, has_ports: bool) ->
             // two into `__sincos_stret`, whose sine differs from `sin()` in the last bit on
             // some inputs (issue #15). `black_box` keeps LLVM from merging them in the port.
             // (The `atan2` block above and the random placement below are merged in C too.)
-            nd.pos[0] = wd.mul_add(math::cos(alpha), ctr.x);
-            nd.pos[1] = ht.mul_add(math::sin(std::hint::black_box(alpha)), ctr.y);
+            nd.pos[0] = math::fma(wd, math::cos(alpha), ctr.x);
+            nd.pos[1] = math::fma(ht, math::sin(std::hint::black_box(alpha)), ctr.y);
             nd.pinned = P_SET;
         }
         for &np in &comp.nodes {
@@ -511,8 +514,8 @@ fn init_positions(st: &mut TState, dg: &mut DG, comp: &Comp, has_ports: bool) ->
                     }
                     let o = dg.nodes[op].pos;
                     if cnt > 0 {
-                        px = px.mul_add(f64::from(cnt), o[0]) / f64::from(cnt + 1);
-                        py = py.mul_add(f64::from(cnt), o[1]) / f64::from(cnt + 1);
+                        px = math::fma(px, f64::from(cnt), o[0]) / f64::from(cnt + 1);
+                        py = math::fma(py, f64::from(cnt), o[1]) / f64::from(cnt + 1);
                     } else {
                         px = o[0];
                         py = o[1];
@@ -523,8 +526,8 @@ fn init_positions(st: &mut TState, dg: &mut DG, comp: &Comp, has_ports: bool) ->
                     dg.nodes[np].pos = [px, py];
                 } else if cnt == 1 {
                     dg.nodes[np].pos = [
-                        0.98f64.mul_add(px, 0.1 * ctr.x),
-                        0.9f64.mul_add(py, 0.1 * ctr.y),
+                        math::fma(0.98, px, 0.1 * ctr.x),
+                        math::fma(0.9, py, 0.1 * ctr.y),
                     ];
                 } else {
                     let angle = PI * 2.0 * crate::cutil::drand48();
@@ -560,7 +563,7 @@ fn init_positions(st: &mut TState, dg: &mut DG, comp: &Comp, has_ports: bool) ->
 
 /// `2.0 * drand48() - 1.0` (fused).
 fn rnd() -> f64 {
-    2.0f64.mul_add(crate::cutil::drand48(), -1.0)
+    math::fma(2.0, crate::cutil::drand48(), -1.0)
 }
 
 /// `fdp_tLayout(g, xpms)`.

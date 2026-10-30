@@ -6,6 +6,7 @@
 //! trust, it is recomputed exactly with integer arithmetic on the binary
 //! expansions of the inputs. Only the sign of the result is meaningful.
 
+use graphviz_pure_core::math;
 use std::cmp::Ordering;
 
 // Shewchuk's `(3 + 16ε)ε` and `(10 + 96ε)ε` (ε = 2^-53) as GTS's generated
@@ -220,20 +221,26 @@ pub fn incircle(a: (f64, f64), b: (f64, f64), c: (f64, f64), d: (f64, f64)) -> f
     // but callers use only the sign, which is exact either way, so no output depends on it.
     let bdxcdy = bdx * cdy;
     let cdxbdy = cdx * bdy;
-    let alift = adx.mul_add(adx, ady * ady);
+    let alift = math::fma(adx, adx, ady * ady);
     let cdxady = cdx * ady;
     let adxcdy = adx * cdy;
-    let blift = bdx.mul_add(bdx, bdy * bdy);
+    let blift = math::fma(bdx, bdx, bdy * bdy);
     let adxbdy = adx * bdy;
     let bdxady = bdx * ady;
-    let clift = cdx.mul_add(cdx, cdy * cdy);
-    let det = clift.mul_add(
-        adxbdy - bdxady,
-        alift.mul_add(bdxcdy - cdxbdy, blift * (cdxady - adxcdy)),
-    );
-    let permanent = (adxbdy.abs() + bdxady.abs()).mul_add(
+    let clift = math::fma(cdx, cdx, cdy * cdy);
+    let det = math::fma(
         clift,
-        (bdxcdy.abs() + cdxbdy.abs()).mul_add(alift, (cdxady.abs() + adxcdy.abs()) * blift),
+        adxbdy - bdxady,
+        math::fma(alift, bdxcdy - cdxbdy, blift * (cdxady - adxcdy)),
+    );
+    let permanent = math::fma(
+        adxbdy.abs() + bdxady.abs(),
+        clift,
+        math::fma(
+            bdxcdy.abs() + cdxbdy.abs(),
+            alift,
+            (cdxady.abs() + adxcdy.abs()) * blift,
+        ),
     );
     if det.abs() > ICC_ERRBOUND_A * permanent {
         return det;

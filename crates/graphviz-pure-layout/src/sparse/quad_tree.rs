@@ -58,7 +58,7 @@ pub fn point_distance(p1: &[f64], p2: &[f64], dim: usize) -> f64 {
     let mut d = 0.0f64;
     for i in 0..dim {
         let t = p1[i] - p2[i];
-        d = t.mul_add(t, d);
+        d = math::fma(t, t, d);
     }
     d.sqrt()
 }
@@ -228,7 +228,7 @@ impl QuadTree {
             c.total_weight += weight;
             let n = f64::from(c.n);
             for i in 0..dim {
-                average[i] = average[i].mul_add(n, coord[i]) / (n + 1.0);
+                average[i] = math::fma(average[i], n, coord[i]) / (n + 1.0);
             }
             let first = match c.qts {
                 Some(first) => first,
@@ -256,7 +256,7 @@ impl QuadTree {
             // C increments n before averaging with n + 1.
             let n = f64::from(c.n);
             for i in 0..dim {
-                average[i] = average[i].mul_add(n, coord[i]) / (n + 1.0);
+                average[i] = math::fma(average[i], n, coord[i]) / (n + 1.0);
             }
             self.points[p].next = c.l;
             c.l = Some(p);
@@ -450,7 +450,7 @@ impl QuadTree {
                 let wgt2 = node.node_weight / wgt;
                 for k in 0..dim {
                     let t = &mut force[node.id * dim + k];
-                    *t = wgt2.mul_add(cell_force[k], *t);
+                    *t = math::fma(wgt2, cell_force[k], *t);
                 }
                 l = node.next;
             }
@@ -467,7 +467,7 @@ impl QuadTree {
             for (kq, kc) in span(q, dim).zip(span(c, dim)) {
                 let fk = self.force[kq];
                 let t = &mut self.force[kc];
-                *t = wgt2.mul_add(fk, *t);
+                *t = math::fma(wgt2, fk, *t);
             }
             self.repulsive_force_accumulate(c, force, counts);
         }

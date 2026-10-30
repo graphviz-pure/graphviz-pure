@@ -116,7 +116,7 @@ fn get_overlap_graph(
                 let (bbsta, bbsto) = (sy[neighbor].x, sy[neighbor + n].x);
                 if neighbor != k
                     && (0.5 * (bsta + bsto) - 0.5 * (bbsta + bbsto)).abs()
-                        < 0.5f64.mul_add(bsto - bsta, 0.5 * (bbsto - bbsta))
+                        < math::fma(0.5, bsto - bsta, 0.5 * (bbsto - bbsta))
                 {
                     a.coordinate_form_add_entry(neighbor as i32, k as i32, 1.0);
                     if check_only {
@@ -335,7 +335,7 @@ fn average_edge_length(a: &mut SparseMatrix, dim: usize, coord: &[f64]) -> f64 {
             for k in 0..dim {
                 // C indexes coord[dim * ja[j]] without `+ k`.
                 let t = coord[dim * i + k] - coord[dim * c];
-                d = t.mul_add(t, d);
+                d = math::fma(t, t, d);
             }
             dist += d.sqrt();
         }

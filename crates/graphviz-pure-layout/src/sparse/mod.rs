@@ -7,6 +7,8 @@
 
 #![allow(clippy::needless_range_loop, clippy::too_many_arguments)]
 
+use graphviz_pure_core::math;
+
 pub mod matrix_ext;
 pub mod quad_tree;
 
@@ -288,7 +290,7 @@ impl SparseMatrix {
             for j in self.ia[i]..self.ia[i + 1] {
                 let (j, c) = (j as usize, self.ja[j as usize] as usize);
                 for k in 0..dim {
-                    res[i * dim + k] = a[j].mul_add(v[c * dim + k], res[i * dim + k]);
+                    res[i * dim + k] = math::fma(a[j], v[c * dim + k], res[i * dim + k]);
                 }
             }
         }
@@ -300,7 +302,7 @@ impl SparseMatrix {
         for i in 0..self.m {
             u[i] = 0.0;
             for j in self.ia[i]..self.ia[i + 1] {
-                u[i] = a[j as usize].mul_add(v[self.ja[j as usize] as usize], u[i]);
+                u[i] = math::fma(a[j as usize], v[self.ja[j as usize] as usize], u[i]);
             }
         }
     }
@@ -393,7 +395,7 @@ pub fn distance(x: &[f64], dim: usize, i: usize, j: usize) -> f64 {
     let mut d = 0.0f64;
     for k in 0..dim {
         let t = x[i * dim + k] - x[j * dim + k];
-        d = t.mul_add(t, d);
+        d = math::fma(t, t, d);
     }
     d.sqrt()
 }
@@ -407,7 +409,7 @@ pub fn distance_cropped(x: &[f64], dim: usize, i: usize, j: usize) -> f64 {
 pub fn vector_product(n: usize, x: &[f64], y: &[f64]) -> f64 {
     let mut r = 0.0f64;
     for i in 0..n {
-        r = x[i].mul_add(y[i], r);
+        r = math::fma(x[i], y[i], r);
     }
     r
 }

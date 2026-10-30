@@ -242,9 +242,15 @@ fn star_vertices(sz0: Point) -> (Vec<Point>, Point) {
     let mut i = 0;
     while i < 10 {
         // C (clang) fuses `r * sin(theta) - offset`.
-        v[i] = Point::new(r * math::cos(theta), r.mul_add(math::sin(theta), -offset));
+        v[i] = Point::new(
+            r * math::cos(theta),
+            math::fma(r, math::sin(theta), -offset),
+        );
         theta += ALPHA2;
-        v[i + 1] = Point::new(r0 * math::cos(theta), r0.mul_add(math::sin(theta), -offset));
+        v[i + 1] = Point::new(
+            r0 * math::cos(theta),
+            math::fma(r0, math::sin(theta), -offset),
+        );
         theta += ALPHA2;
         i += 2;
     }
@@ -258,7 +264,7 @@ fn cylinder_vertices(bb: Point) -> Vec<Point> {
     let mut v = vec![Point::default(); 19];
     v[0] = Point::new(x, y - yr);
     // C (clang) fuses `y - (1 - 0.551784) * yr`.
-    v[1] = Point::new(x, (-(1.0 - 0.551784f64)).mul_add(yr, y));
+    v[1] = Point::new(x, math::fma(-(1.0 - 0.551784f64), yr, y));
     v[2] = Point::new(0.551784 * x, y);
     v[3] = Point::new(0.0, y);
     v[4] = Point::new(-0.551784 * x, y);
@@ -301,14 +307,14 @@ fn regular_unit_vertices(sides: usize, orientation: f64, distortion: f64, skew: 
         sinx = math::sin(angle);
         cosx = math::cos(angle);
         // C (clang) fuses these multiply-adds (the `fmadd`s in poly_init of libgvc).
-        r.x = sidelength.mul_add(cosx, r.x);
-        r.y = sidelength.mul_add(sinx, r.y);
+        r.x = math::fma(sidelength, cosx, r.x);
+        r.y = math::fma(sidelength, sinx, r.y);
         let mut p = Point::new(
-            r.x.mul_add(r.y.mul_add(gdistortion, skewdist), r.y * gskew),
+            math::fma(r.x, math::fma(r.y, gdistortion, skewdist), r.y * gskew),
             r.y,
         );
         // RADIANS(orientation) + atan2(P.y, P.x), fused
-        let alpha = (orientation / 180.0).mul_add(PI, math::atan2(p.y, p.x));
+        let alpha = math::fma(orientation / 180.0, PI, math::atan2(p.y, p.x));
         let (s, c) = (math::sin(alpha), math::cos(alpha));
         let h = math::hypot(p.x, p.y);
         p.x = h * c;
@@ -632,9 +638,9 @@ pub struct InsideCtx {
 fn same_side(p0: Point, p1: Point, l0: Point, l1: Point) -> bool {
     let a = -(l1.y - l0.y);
     let b = l1.x - l0.x;
-    let c = a.mul_add(l0.x, b * l0.y);
-    let s0 = a.mul_add(p0.x, b * p0.y) - c >= 0.0;
-    let s1 = a.mul_add(p1.x, b * p1.y) - c >= 0.0;
+    let c = math::fma(a, l0.x, b * l0.y);
+    let s0 = math::fma(a, p0.x, b * p0.y) - c >= 0.0;
+    let s1 = math::fma(a, p1.x, b * p1.y) - c >= 0.0;
     s0 == s1
 }
 

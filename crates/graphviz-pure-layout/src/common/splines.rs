@@ -26,8 +26,8 @@ pub fn bezier_split(v: &[Point; 4], t: f64) -> (Point, [Point; 4], [Point; 4]) {
     for i in 1..=3 {
         for j in 0..=(3 - i) {
             // (1.0 - t) * a + t * b, contracted to fma(1 - t, a, t * b).
-            vt[i][j].x = (1.0 - t).mul_add(vt[i - 1][j].x, t * vt[i - 1][j + 1].x);
-            vt[i][j].y = (1.0 - t).mul_add(vt[i - 1][j].y, t * vt[i - 1][j + 1].y);
+            vt[i][j].x = math::fma(1.0 - t, vt[i - 1][j].x, t * vt[i - 1][j + 1].x);
+            vt[i][j].y = math::fma(1.0 - t, vt[i - 1][j].y, t * vt[i - 1][j + 1].y);
         }
     }
     let left = [vt[0][0], vt[1][0], vt[2][0], vt[3][0]];
@@ -865,12 +865,12 @@ const SMALL: f64 = 0.000_000_000_1;
 pub fn pt_to_line2(a: Point, b: Point, p: Point) -> f64 {
     let dx = b.x - a.x;
     let dy = b.y - a.y;
-    let mut a2 = (p.y - a.y).mul_add(dx, -((p.x - a.x) * dy));
+    let mut a2 = math::fma(p.y - a.y, dx, -((p.x - a.x) * dy));
     a2 *= a2;
     if a2 < SMALL {
         return 0.0;
     }
-    a2 / dx.mul_add(dx, dy * dy)
+    a2 / math::fma(dx, dx, dy * dy)
 }
 
 fn check_control_points(cp: &[Point; 4]) -> bool {
@@ -1303,12 +1303,15 @@ pub fn place_portlabel<S: SplineGraph + ?Sized>(g: &mut S, e: usize, head_p: boo
         }
     };
     // atan2(..) + RADIANS(a), with RADIANS(d) = d/180.0 * M_PI fused into the sum
-    let angle =
-        (angle_attr / 180.0).mul_add(std::f64::consts::PI, math::atan2(pf.y - pe.y, pf.x - pe.x));
+    let angle = math::fma(
+        angle_attr / 180.0,
+        std::f64::consts::PI,
+        math::atan2(pf.y - pe.y, pf.x - pe.x),
+    );
     let d = PORT_LABEL_DISTANCE * dist_attr;
     let pos = Point::new(
-        d.mul_add(math::cos(angle), pe.x),
-        d.mul_add(math::sin(angle), pe.y),
+        math::fma(d, math::cos(angle), pe.x),
+        math::fma(d, math::sin(angle), pe.y),
     );
     let k = if head_p {
         LabelKind::Head
@@ -1471,8 +1474,8 @@ fn polyline_midpoint(spl: &[Bezier]) -> Point {
             let seg = dist(pf, qf);
             if seg >= dd {
                 return Point::new(
-                    qf.x.mul_add(dd, pf.x * (seg - dd)) / seg,
-                    qf.y.mul_add(dd, pf.y * (seg - dd)) / seg,
+                    math::fma(qf.x, dd, pf.x * (seg - dd)) / seg,
+                    math::fma(qf.y, dd, pf.y * (seg - dd)) / seg,
                 );
             }
             dd -= seg;

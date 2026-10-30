@@ -14,6 +14,7 @@ use crate::common::types::{Bezier, LGraph, P_PIN, Sub};
 use crate::common::utils::{compute_bb, coord, scan_d};
 use crate::cutil::qsort_by;
 use graphviz_pure_core::diag::{fmt_f, fprintf_stderr, verbose_byte, verbose_on};
+use graphviz_pure_core::math;
 
 pub mod cccomps;
 use graphviz_pure_core::{BoundingBox, Point};
@@ -472,9 +473,9 @@ fn compute_step(bbs: &[BoundingBox], margin: u32) -> i32 {
         let w = bb.ur.x - bb.ll.x + 2.0 * f64::from(margin);
         let h = bb.ur.y - bb.ll.y + 2.0 * f64::from(margin);
         b -= w + h;
-        c = (-w).mul_add(h, c);
+        c = math::fma(-w, h, c);
     }
-    let d = b.mul_add(b, -(4.0 * a * c));
+    let d = math::fma(b, b, -(4.0 * a * c));
     // C asserts `d >= 0`. A box whose width or height is NaN (`inf - inf`: a component
     // whose nodes are all at `-inf`, #239) makes `d` NaN, C aborts, and the NaN step would
     // fill cells without end. Return 0 instead, which takes the callers' `stepSize <= 0`
@@ -502,8 +503,8 @@ fn compute_step(bbs: &[BoundingBox], margin: u32) -> i32 {
             l2 as i32,
             f(l2),
             // clang: fmuladd(a * l, l, b * l) + c
-            f((a * l1).mul_add(l1, b * l1) + c),
-            f((a * l2).mul_add(l2, b * l2) + c),
+            f(math::fma(a * l1, l1, b * l1) + c),
+            f(math::fma(a * l2, l2, b * l2) + c),
         ));
     }
     root

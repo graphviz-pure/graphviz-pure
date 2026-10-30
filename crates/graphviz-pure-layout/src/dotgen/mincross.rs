@@ -7,6 +7,7 @@ use super::Dot;
 use super::qsort::qsort;
 use super::types::*;
 use super::utils::*;
+use graphviz_pure_core::math;
 use graphviz_pure_core::strtod::atof;
 use std::collections::VecDeque;
 
@@ -1522,8 +1523,11 @@ impl Dot<'_> {
                             ((list[lm] + list[rm]) / 2) as f64
                         } else {
                             // C (clang) fuses this multiply-add.
-                            let w = (list[lm] as f64)
-                                .mul_add(rspan as f64, list[rm] as f64 * lspan as f64);
+                            let w = math::fma(
+                                list[lm] as f64,
+                                rspan as f64,
+                                list[rm] as f64 * lspan as f64,
+                            );
                             w / (lspan + rspan) as f64
                         }
                     }

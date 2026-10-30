@@ -846,9 +846,15 @@ fn star_vertices(vertices: &mut [Point], bb: &mut Point) {
     let mut theta = alpha;
     for i in (0..10).step_by(2) {
         // C (clang) fuses `r * sin(theta) - offset`.
-        vertices[i] = Point::new(r * math::cos(theta), r.mul_add(math::sin(theta), -offset));
+        vertices[i] = Point::new(
+            r * math::cos(theta),
+            math::fma(r, math::sin(theta), -offset),
+        );
         theta += alpha2;
-        vertices[i + 1] = Point::new(r0 * math::cos(theta), r0.mul_add(math::sin(theta), -offset));
+        vertices[i + 1] = Point::new(
+            r0 * math::cos(theta),
+            math::fma(r0, math::sin(theta), -offset),
+        );
         theta += alpha2;
     }
     *bb = sz;
@@ -867,7 +873,7 @@ fn cylinder_vertices(v: &mut [Point], bb: &mut Point) {
     let yr = bb.y / 11.0;
     v[0] = Point::new(x, y - yr);
     // C (clang) fuses `y - (1 - 0.551784) * yr`.
-    v[1] = Point::new(x, (-(1.0 - 0.551784f64)).mul_add(yr, y));
+    v[1] = Point::new(x, math::fma(-(1.0 - 0.551784f64), yr, y));
     v[2] = Point::new(0.551784 * x, y);
     v[3] = Point::new(0.0, y);
     v[4] = Point::new(-0.551784 * x, y);
@@ -1061,7 +1067,7 @@ fn poly_init(
         if height > temp && valign == 'c' {
             // clang contracts `1. - SQR(r)` into a fused multiply-subtract.
             let r = bb.y / height;
-            bb.x *= (1.0 / (-r).mul_add(r, 1.0)).sqrt();
+            bb.x *= (1.0 / math::fma(-r, r, 1.0)).sqrt();
         } else {
             bb.x *= SQRT2;
             bb.y = temp;
@@ -1202,14 +1208,14 @@ fn poly_init(
                 cosx = math::cos(angle);
                 // C (clang, -ffp-contract=on) fuses these multiply-adds; see
                 // the `fmadd`s in poly_init of libgvc.
-                r.x = sidelength.mul_add(cosx, r.x);
-                r.y = sidelength.mul_add(sinx, r.y);
+                r.x = math::fma(sidelength, cosx, r.x);
+                r.y = math::fma(sidelength, sinx, r.y);
                 let mut p = Point::new(
-                    r.x.mul_add(r.y.mul_add(gdistortion, skewdist), r.y * gskew),
+                    math::fma(r.x, math::fma(r.y, gdistortion, skewdist), r.y * gskew),
                     r.y,
                 );
                 // RADIANS(orientation) + atan2(..) = (o / 180) * M_PI + atan2(..), fused.
-                let alpha = (orientation / 180.0).mul_add(PI, math::atan2(p.y, p.x));
+                let alpha = math::fma(orientation / 180.0, PI, math::atan2(p.y, p.x));
                 sinx = math::sin(alpha);
                 cosx = math::cos(alpha);
                 let h = math::hypot(p.x, p.y);

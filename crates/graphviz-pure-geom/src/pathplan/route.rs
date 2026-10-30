@@ -27,7 +27,7 @@ fn scale(p: Ppoint, c: f64) -> Ppoint {
     Ppoint::new(p.x * c, p.y * c)
 }
 fn dot(p1: Ppoint, p2: Ppoint) -> f64 {
-    p1.x.mul_add(p2.x, p1.y * p2.y)
+    math::fma(p1.x, p2.x, p1.y * p2.y)
 }
 fn b0(t: f64) -> f64 {
     let tmp = 1.0 - t;
@@ -46,15 +46,15 @@ fn b3(t: f64) -> f64 {
 }
 fn b01(t: f64) -> f64 {
     let tmp = 1.0 - t;
-    tmp * tmp * 3.0f64.mul_add(t, tmp)
+    tmp * tmp * math::fma(3.0, t, tmp)
 }
 fn b23(t: f64) -> f64 {
     let tmp = 1.0 - t;
-    t * t * 3.0f64.mul_add(tmp, t)
+    t * t * math::fma(3.0, tmp, t)
 }
 
 fn normv(mut v: Ppoint) -> Ppoint {
-    let mut d = v.x.mul_add(v.x, v.y * v.y);
+    let mut d = math::fma(v.x, v.x, v.y * v.y);
     if d > 1e-6 {
         d = d.sqrt();
         v.x /= d;
@@ -106,13 +106,15 @@ fn really_route_spline(
     let mut maxd = -1.0;
     for i in 1..inpn.saturating_sub(1) {
         let t = tnas[i].t;
-        let px = b3(t).mul_add(
+        let px = math::fma(
+            b3(t),
             p2.x,
-            b2(t).mul_add(cp2.x, b0(t).mul_add(p1.x, b1(t) * cp1.x)),
+            math::fma(b2(t), cp2.x, math::fma(b0(t), p1.x, b1(t) * cp1.x)),
         );
-        let py = b3(t).mul_add(
+        let py = math::fma(
+            b3(t),
             p2.y,
-            b2(t).mul_add(cp2.y, b0(t).mul_add(p1.y, b1(t) * cp1.y)),
+            math::fma(b2(t), cp2.y, math::fma(b0(t), p1.y, b1(t) * cp1.y)),
         );
         let d = dist(Ppoint::new(px, py), inps[i]);
         if d > maxd {
@@ -155,9 +157,9 @@ fn mkspline(
         x[0] += dot(tnas[i].a[0], tmp);
         x[1] += dot(tnas[i].a[1], tmp);
     }
-    let det01 = c[0][0].mul_add(c[1][1], -(c[1][0] * c[0][1]));
-    let det0x = c[0][0].mul_add(x[1], -(c[0][1] * x[0]));
-    let detx1 = x[0].mul_add(c[1][1], -(x[1] * c[0][1]));
+    let det01 = math::fma(c[0][0], c[1][1], -(c[1][0] * c[0][1]));
+    let det0x = math::fma(c[0][0], x[1], -(c[0][1] * x[0]));
+    let detx1 = math::fma(x[0], c[1][1], -(x[1] * c[0][1]));
     let (mut scale0, mut scale3) = (0.0, 0.0);
     if det01.abs() >= 1e-6 {
         scale0 = detx1 / det01;
@@ -243,15 +245,17 @@ fn splineisinside(edges: &[Pedge], sps: &[Ppoint; 4]) -> bool {
             let tc = 3.0 * t * t * (1.0 - t);
             let tb = 3.0 * t * (1.0 - t) * (1.0 - t);
             let ta = (1.0 - t) * (1.0 - t) * (1.0 - t);
-            let ipx = td.mul_add(
+            let ipx = math::fma(
+                td,
                 sps[3].x,
-                tc.mul_add(sps[2].x, ta.mul_add(sps[0].x, tb * sps[1].x)),
+                math::fma(tc, sps[2].x, math::fma(ta, sps[0].x, tb * sps[1].x)),
             );
-            let ipy = td.mul_add(
+            let ipy = math::fma(
+                td,
                 sps[3].y,
-                tc.mul_add(sps[2].y, ta.mul_add(sps[0].y, tb * sps[1].y)),
+                math::fma(tc, sps[2].y, math::fma(ta, sps[0].y, tb * sps[1].y)),
             );
-            let ds = |q: Ppoint| (ipx - q.x).mul_add(ipx - q.x, (ipy - q.y) * (ipy - q.y));
+            let ds = |q: Ppoint| math::fma(ipx - q.x, ipx - q.x, (ipy - q.y) * (ipy - q.y));
             if ds(lps[0]) < EPSILON1 || ds(lps[1]) < EPSILON1 {
                 continue;
             }
@@ -272,13 +276,13 @@ fn points2coeff(v0: f64, v1: f64, v2: f64, v3: f64) -> [f64; 4] {
     [
         v0,
         3.0 * (v1 - v0),
-        (-6.0f64).mul_add(v1, 3.0f64.mul_add(v0, 3.0 * v2)),
-        3.0f64.mul_add(v1, v3) - 3.0f64.mul_add(v2, v0),
+        math::fma(-6.0, v1, math::fma(3.0, v0, 3.0 * v2)),
+        math::fma(3.0, v1, v3) - math::fma(3.0, v2, v0),
     ]
 }
 
 fn horner(s: &[f64; 4], tv: f64) -> f64 {
-    tv.mul_add(tv.mul_add(tv.mul_add(s[3], s[2]), s[1]), s[0])
+    math::fma(tv, math::fma(tv, math::fma(tv, s[3], s[2]), s[1]), s[0])
 }
 
 fn splineintersectsline(sps: &[Ppoint; 4], lps: &[Ppoint; 2], roots: &mut [f64; 4]) -> usize {
@@ -336,9 +340,9 @@ fn splineintersectsline(sps: &[Ppoint; 4], lps: &[Ppoint; 2], roots: &mut [f64; 
         }
     } else {
         let rat = yc[1] / xc[1];
-        let f = |p: Ppoint| (-rat).mul_add(p.x, p.y);
+        let f = |p: Ppoint| math::fma(-rat, p.x, p.y);
         let mut s = points2coeff(f(sps[0]), f(sps[1]), f(sps[2]), f(sps[3]));
-        s[0] += rat.mul_add(xc[0], -yc[0]);
+        s[0] += math::fma(rat, xc[0], -yc[0]);
         let xn = solve3(&s, &mut xr);
         if xn == 4 {
             return 4;

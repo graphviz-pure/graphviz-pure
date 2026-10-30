@@ -15,6 +15,7 @@ use super::matrix_ops::*;
 use super::{MODEL_CIRCUIT, MODEL_MDS, MODEL_SUBSET, NeatoParams};
 use crate::common::types::{LGraph, P_FIX};
 use graphviz_pure_core::diag::{elapsed_sec, fmt_f, fprintf_stderr, start_timer, verbose_on};
+use graphviz_pure_core::math;
 
 pub const TOLERANCE_CG: f64 = 1e-3;
 pub const DFLT_ITERATIONS: i64 = 200;
@@ -93,7 +94,7 @@ pub fn circuit_model(graph: &[VtxData], ng: usize) -> Option<Vec<f32>> {
             let v = if i == j {
                 0.0
             } else {
-                (-2.0f64).mul_add(gm_inv[i][j], gm_inv[i][i] + gm_inv[j][j]) as f32
+                math::fma(-2.0, gm_inv[i][j], gm_inv[i][i] + gm_inv[j][j]) as f32
             };
             dij.push(v);
         }
@@ -246,7 +247,7 @@ fn compute_stressf(coords: &[Vec<f32>], lap: &[f32], dim: usize, n: usize, exp: 
             let l = f64::from(lap.next().copied().unwrap_or_default());
             let dij = if exp == 2 { 1.0 / l.sqrt() } else { 1.0 / l };
             // C (clang) fuses this: fmadd((Dij - dist)^2, lap, sum)
-            sum = ((dij - dist) * (dij - dist)).mul_add(l, sum);
+            sum = math::fma((dij - dist) * (dij - dist), l, sum);
         }
     }
     sum
@@ -332,7 +333,7 @@ pub fn stress_majorization_kd_mkernel(
                 *v /= max;
             }
             for v in c.iter_mut().take(n) {
-                *v = 1e-6f64.mul_add(crate::cutil::drand48() - 0.5, *v);
+                *v = math::fma(1e-6, crate::cutil::drand48() - 0.5, *v);
             }
             orthog1(&mut c[..n]);
         }

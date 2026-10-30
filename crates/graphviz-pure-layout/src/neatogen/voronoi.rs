@@ -210,7 +210,7 @@ fn make_poly(g: &LGraph<'_>, n: usize, xm: f64, ym: f64, add: bool) -> Option<Po
 }
 
 fn area_2(a: Point, b: Point, c: Point) -> f64 {
-    (a.y - b.y).mul_add(c.x - b.x, -((c.y - b.y) * (a.x - b.x)))
+    math::fma(a.y - b.y, c.x - b.x, -((c.y - b.y) * (a.x - b.x)))
 }
 
 fn left_of(a: Point, b: Point, c: Point) -> bool {
@@ -218,17 +218,16 @@ fn left_of(a: Point, b: Point, c: Point) -> bool {
 }
 
 fn intersection(a: Point, b: Point, c: Point, d: Point) -> bool {
-    let denom = c.x.mul_add(
+    let denom = math::fma(
+        c.x,
         a.y - b.y,
-        d.x.mul_add(b.y - a.y, a.x.mul_add(d.y - c.y, b.x * (c.y - d.y))),
+        math::fma(d.x, b.y - a.y, math::fma(a.x, d.y - c.y, b.x * (c.y - d.y))),
     );
     if denom == 0.0 {
         return false;
     }
-    let s =
-        d.x.mul_add(c.y - a.y, a.x.mul_add(d.y - c.y, c.x * (a.y - d.y))) / denom;
-    let t =
-        -c.x.mul_add(b.y - a.y, a.x.mul_add(c.y - b.y, b.x * (a.y - c.y))) / denom;
+    let s = math::fma(d.x, c.y - a.y, math::fma(a.x, d.y - c.y, c.x * (a.y - d.y))) / denom;
+    let t = -math::fma(c.x, b.y - a.y, math::fma(a.x, c.y - b.y, b.x * (a.y - c.y))) / denom;
     (0.0..=1.0).contains(&s) && (0.0..=1.0).contains(&t)
 }
 
@@ -283,7 +282,7 @@ fn in_poly(vertex: &[Point], q: Point) -> bool {
             continue;
         }
         if (tp[i].y >= 0.0 && tp[i1].y <= 0.0) || (tp[i1].y >= 0.0 && tp[i].y <= 0.0) {
-            let x = tp[i].x.mul_add(tp[i1].y, -(tp[i1].x * tp[i].y)) / (tp[i1].y - tp[i].y);
+            let x = math::fma(tp[i].x, tp[i1].y, -(tp[i1].x * tp[i].y)) / (tp[i1].y - tp[i].y);
             if x == 0.0 {
                 return true;
             }
@@ -319,7 +318,7 @@ fn poly_overlap(p: Point, pp: &Poly, q: Point, qp: &Poly) -> bool {
         let d = pp.corner.x - pp.origin.x + qp.corner.x - qp.origin.x;
         let dx = p.x - q.x;
         let dy = p.y - q.y;
-        return dx.mul_add(dx, dy * dy) <= d * d / 4.0;
+        return math::fma(dx, dx, dy * dy) <= d * d / 4.0;
     }
     let tp1: Vec<Point> = pp
         .verts
@@ -466,7 +465,7 @@ impl Vor<'_> {
                 ab = dyp >= e.b * dxp;
                 fast = ab;
             } else {
-                ab = p.y.mul_add(e.b, p.x) > e.c;
+                ab = math::fma(p.y, e.b, p.x) > e.c;
                 if e.b < 0.0 {
                     ab = !ab;
                 }
@@ -476,19 +475,19 @@ impl Vor<'_> {
             }
             if !fast {
                 let dxs = topsite.x - self.sites[e.reg[0]].coord.x;
-                ab = e.b * dxp.mul_add(dxp, -(dyp * dyp))
-                    < dxs * dyp * e.b.mul_add(e.b, 1.0 + 2.0 * dxp / dxs);
+                ab = e.b * math::fma(dxp, dxp, -(dyp * dyp))
+                    < dxs * dyp * math::fma(e.b, e.b, 1.0 + 2.0 * dxp / dxs);
                 if e.b < 0.0 {
                     ab = !ab;
                 }
             }
             above = ab;
         } else {
-            let yl = (-e.a).mul_add(p.x, e.c);
+            let yl = math::fma(-e.a, p.x, e.c);
             let t1 = p.y - yl;
             let t2 = p.x - topsite.x;
             let t3 = yl - topsite.y;
-            above = t1 * t1 > t2.mul_add(t2, t3 * t3);
+            above = t1 * t1 > math::fma(t2, t2, t3 * t3);
         }
         if pm == LE { above } else { !above }
     }
@@ -552,9 +551,11 @@ impl Vor<'_> {
         let (c1, c2) = (self.sites[s1].coord, self.sites[s2].coord);
         let dx = c2.x - c1.x;
         let dy = c2.y - c1.y;
-        let mut c = dx
-            .mul_add(dx, dy * dy)
-            .mul_add(0.5, c1.x.mul_add(dx, c1.y * dy));
+        let mut c = math::fma(
+            math::fma(dx, dx, dy * dy),
+            0.5,
+            math::fma(c1.x, dx, c1.y * dy),
+        );
         let (a, b);
         if dx.abs() > dy.abs() {
             a = 1.0;
@@ -583,12 +584,12 @@ impl Vor<'_> {
         if ed1.reg[1] == ed2.reg[1] {
             return None;
         }
-        let d = ed1.a.mul_add(ed2.b, -(ed1.b * ed2.a));
+        let d = math::fma(ed1.a, ed2.b, -(ed1.b * ed2.a));
         if -1.0e-10 < d && d < 1.0e-10 {
             return None;
         }
-        let xint = ed1.c.mul_add(ed2.b, -(ed2.c * ed1.b)) / d;
-        let yint = ed2.c.mul_add(ed1.a, -(ed1.c * ed2.a)) / d;
+        let xint = math::fma(ed1.c, ed2.b, -(ed2.c * ed1.b)) / d;
+        let yint = math::fma(ed2.c, ed1.a, -(ed1.c * ed2.a)) / d;
         let (r1, r2) = (self.sites[ed1.reg[1]].coord, self.sites[ed2.reg[1]].coord);
         let (el, e) = if r1.y < r2.y || (r1.y == r2.y && r1.x < r2.x) {
             (el1, ed1)
@@ -717,12 +718,12 @@ impl Vor<'_> {
                         x1 = self.sites[s].coord.x;
                     } else {
                         y1 = pymin;
-                        x1 = (-e.b).mul_add(y1, e.c);
+                        x1 = math::fma(-e.b, y1, e.c);
                     }
                 }
                 None => {
                     y1 = pymin;
-                    x1 = (-e.b).mul_add(y1, e.c);
+                    x1 = math::fma(-e.b, y1, e.c);
                 }
             }
             match s2 {
@@ -734,12 +735,12 @@ impl Vor<'_> {
                         x2 = self.sites[s].coord.x;
                     } else {
                         y2 = pymax;
-                        x2 = (-e.b).mul_add(y2, e.c);
+                        x2 = math::fma(-e.b, y2, e.c);
                     }
                 }
                 None => {
                     y2 = pymax;
-                    x2 = (-e.b).mul_add(y2, e.c);
+                    x2 = math::fma(-e.b, y2, e.c);
                 }
             }
             if (x1 > pxmax && x2 > pxmax) || (x1 < pxmin && x2 < pxmin) {
@@ -771,12 +772,12 @@ impl Vor<'_> {
                         y1 = self.sites[s].coord.y;
                     } else {
                         x1 = pxmin;
-                        y1 = (-e.a).mul_add(x1, e.c);
+                        y1 = math::fma(-e.a, x1, e.c);
                     }
                 }
                 None => {
                     x1 = pxmin;
-                    y1 = (-e.a).mul_add(x1, e.c);
+                    y1 = math::fma(-e.a, x1, e.c);
                 }
             }
             match s2 {
@@ -788,12 +789,12 @@ impl Vor<'_> {
                         y2 = self.sites[s].coord.y;
                     } else {
                         x2 = pxmax;
-                        y2 = (-e.a).mul_add(x2, e.c);
+                        y2 = math::fma(-e.a, x2, e.c);
                     }
                 }
                 None => {
                     x2 = pxmax;
-                    y2 = (-e.a).mul_add(x2, e.c);
+                    y2 = math::fma(-e.a, x2, e.c);
                 }
             }
             if (y1 > pymax && y2 > pymax) || (y1 < pymin && y2 < pymin) {
@@ -1004,7 +1005,7 @@ fn add_vertex(ip: &mut Info, origin: Point, tmp: Point) {
 
 fn dist_2(p: Point, q: Point) -> f64 {
     let (dx, dy) = (p.x - q.x, p.y - q.y);
-    dx.mul_add(dx, dy * dy)
+    math::fma(dx, dx, dy * dy)
 }
 
 fn count_overlap(info: &mut [Info], iter: u32) -> u32 {
@@ -1069,7 +1070,7 @@ fn rm_equality(info: &mut [Info]) -> Vec<usize> {
             for (i, j) in ((ip + 1)..kp).enumerate() {
                 // C (clang) fuses `coord.x += i * xdel`.
                 let x = &mut info[order[j]].coord.x;
-                *x = ((i + 1) as f64).mul_add(xdel, *x);
+                *x = math::fma((i + 1) as f64, xdel, *x);
             }
         } else {
             for (a, j) in (ip..).zip((ip + 1)..kp) {
@@ -1086,9 +1087,7 @@ fn rm_equality(info: &mut [Info]) -> Vec<usize> {
 }
 
 fn area_of(a: Point, b: Point, c: Point) -> f64 {
-    c.x.mul_add(a.y - b.y, a.x.mul_add(b.y - c.y, b.x * (c.y - a.y)))
-        .abs()
-        / 2.0
+    math::fma(c.x, a.y - b.y, math::fma(a.x, b.y - c.y, b.x * (c.y - a.y))).abs() / 2.0
 }
 
 // `newpos` (`lib/neatogen/adjust.c`). The fan from `verts[0]` needs three
@@ -1109,8 +1108,8 @@ fn newpos(ip: &mut Info) {
             let area = area_of(anchor, p, q);
             let x = (anchor.x + p.x + q.x) / 3.0;
             let y = (anchor.y + p.y + q.y) / 3.0;
-            cx = area.mul_add(x, cx);
-            cy = area.mul_add(y, cy);
+            cx = math::fma(area, x, cx);
+            cy = math::fma(area, y, cy);
             total += area;
         }
     }

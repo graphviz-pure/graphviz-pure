@@ -176,7 +176,11 @@ pub fn scan_graph_mode(
     p.initial_dist = match g.gattr("defaultdist").filter(|s| !s.is_empty()) {
         Some(s) => p.epsilon.max(atof(s)),
         // C (clang) fuses `total_len / nE * sqrt(nV) + 1`.
-        None => (total_len / (if ne > 0 { ne } else { 1 }) as f64).mul_add((nv as f64).sqrt(), 1.0),
+        None => math::fma(
+            total_len / (if ne > 0 { ne } else { 1 }) as f64,
+            (nv as f64).sqrt(),
+            1.0,
+        ),
     };
     let kk = (mode == MODE_KK).then(|| KkState {
         dist: vec![vec![p.initial_dist; nv]; nv],
@@ -244,7 +248,7 @@ fn distvec(p0: &[f64], p1: &[f64], vec: &mut [f64], ndim: usize) -> f64 {
     let mut dist = 0.0f64;
     for k in 0..ndim {
         vec[k] = p0[k] - p1[k];
-        dist = vec[k].mul_add(vec[k], dist);
+        dist = math::fma(vec[k], vec[k], dist);
     }
     dist.sqrt()
 }
@@ -307,11 +311,11 @@ fn total_e(g: &LGraph<'_>, kk: &KkState, ng: usize) -> f64 {
             let mut t0 = 0.0f64;
             for (a, b) in pi.pos.iter().zip(&pj.pos).take(g.ndim) {
                 let t1 = a - b;
-                t0 = t1.mul_add(t1, t0);
+                t0 = math::fma(t1, t1, t0);
             }
             // C (clang) fuses all three: fma(spring, fma(-2 d, sqrt(t0), fma(d, d, t0)), e)
-            let x = (-2.0 * dij).mul_add(t0.sqrt(), dij.mul_add(dij, t0));
-            e = sij.mul_add(x, e);
+            let x = math::fma(-2.0 * dij, t0.sqrt(), math::fma(dij, dij, t0));
+            e = math::fma(sij, x, e);
         }
     }
     e
@@ -365,19 +369,19 @@ fn d2e(g: &LGraph<'_>, kk: &KkState, ng: usize, n: usize, m: &mut [f64]) {
         let mut sq = 0.0f64;
         for k in 0..ndim {
             t[k] = vn[k] - vi[k];
-            sq = t[k].mul_add(t[k], sq);
+            sq = math::fma(t[k], t[k], sq);
         }
         let scale = 1.0 / math::powf(sq, 1.5);
         let kni = kk.spring[n][i];
         let dni = kk.dist[n][i];
         for k in 0..ndim {
             for l in 0..k {
-                m[l * ndim + k] = (kni * dni * t[k] * t[l]).mul_add(scale, m[l * ndim + k]);
+                m[l * ndim + k] = math::fma(kni * dni * t[k] * t[l], scale, m[l * ndim + k]);
             }
             // K * (1 - D * (sq - t*t) * scale)
-            let inner = (-t[k]).mul_add(t[k], sq);
-            let paren = (-(dni * inner)).mul_add(scale, 1.0);
-            m[k * ndim + k] = kni.mul_add(paren, m[k * ndim + k]);
+            let inner = math::fma(-t[k], t[k], sq);
+            let paren = math::fma(-(dni * inner), scale, 1.0);
+            m[k * ndim + k] = math::fma(kni, paren, m[k * ndim + k]);
         }
     }
     for k in 1..ndim {
@@ -404,7 +408,7 @@ fn choose_node(g: &LGraph<'_>, kk: &KkState, ng: usize, p: &NeatoParams) -> Opti
         }
         let mut m = 0.0f64;
         for k in 0..g.ndim {
-            m = kk.sum_t[i][k].mul_add(kk.sum_t[i][k], m);
+            m = math::fma(kk.sum_t[i][k], kk.sum_t[i][k], m);
         }
         if m > max {
             choice = Some(i);
@@ -435,7 +439,7 @@ fn move_node(g: &mut LGraph<'_>, kk: &mut KkState, ng: usize, m: usize, p: &Neat
     let np = kk.nlist[m];
     for i in 0..ndim {
         let r = crate::cutil::drand48();
-        b[i] *= (2.0 * (1.0 - p.damping)).mul_add(r, p.damping);
+        b[i] *= math::fma(2.0 * (1.0 - p.damping), r, p.damping);
         g.nodes[np].pos[i] += b[i];
     }
     kk.moves += 1;
@@ -662,7 +666,7 @@ fn circuit_model_kk(g: &LGraph<'_>, sub: &Sub, kk: &mut KkState, ng: usize) -> b
     if rv {
         for i in 0..ng {
             for j in 0..ng {
-                kk.dist[i][j] = (-2.0f64).mul_add(gm_inv[i][j], gm_inv[i][i] + gm_inv[j][j]);
+                kk.dist[i][j] = math::fma(-2.0, gm_inv[i][j], gm_inv[i][i] + gm_inv[j][j]);
             }
         }
     }

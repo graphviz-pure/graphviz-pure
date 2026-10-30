@@ -18,6 +18,7 @@ use super::{MODEL_CIRCUIT, MODEL_MDS, MODEL_SUBSET, SolverError};
 use crate::common::types::LGraph;
 use crate::cutil::qsort_by;
 use graphviz_pure_core::cnum::c_max;
+use graphviz_pure_core::math;
 
 const LOCAL_CONSTR_MAJOR_ITERATIONS: i32 = 15;
 const LEVELS_SEP_TOL: f64 = 1e-1;
@@ -158,7 +159,7 @@ fn mat_mult_vec_orthog(
     for i in 0..dim1 {
         let mut sum = 0.0f64;
         for j in 0..dim2 {
-            sum = f64::from(mat[i][j]).mul_add(vec[j], sum);
+            sum = math::fma(f64::from(mat[i][j]), vec[j], sum);
         }
         result[i] = sum;
     }
@@ -276,8 +277,8 @@ fn compute_avgs(dij: &[Vec<DistType>], n: usize) -> (Vec<f32>, f32) {
         let mut sum_row = 0.0f64;
         for j in 0..n {
             let d = f64::from(dij[i][j]);
-            sum = d.mul_add(d, sum);
-            sum_row = d.mul_add(d, sum_row);
+            sum = math::fma(d, d, sum);
+            sum_row = math::fma(d, d, sum_row);
         }
         row_avg[i] = sum_row as f32 / n as f32;
     }
@@ -352,9 +353,9 @@ pub fn imds_given_dim(
         for i in 1..n {
             for j in 0..i {
                 let ad = (x[i] - x[j]).abs();
-                sum1 = (1.0 / f64::from(dij[i][j])).mul_add(ad, sum1);
+                sum1 = math::fma(1.0 / f64::from(dij[i][j]), ad, sum1);
                 let dd = dij[i][j].wrapping_mul(dij[i][j]);
-                sum2 = ((1.0 / f64::from(dd)) * ad).mul_add(ad, sum2);
+                sum2 = math::fma((1.0 / f64::from(dd)) * ad, ad, sum2);
             }
         }
         uni_length = if sum2.is_infinite() { 0.0 } else { sum1 / sum2 };
@@ -388,7 +389,7 @@ pub fn imds_given_dim(
         for j in 0..i {
             let d = f64::from(dij[i][j]);
             let dx = pos_i - x[j];
-            let diff = d.mul_add(d, -(dx * dx));
+            let diff = math::fma(d, d, -(dx * dx));
             let v = if diff > 0.0 {
                 diff.sqrt() as DistType
             } else {
@@ -715,7 +716,8 @@ fn constrained_majorization_new_with_gaps(
                         prefix_des_place = suffix_des_place;
                     }
                 }
-                let movement = f64::from((blen - i) as f32).mul_add(
+                let movement = math::fma(
+                    f64::from((blen - i) as f32),
                     f64::from(suffix_des_place - cur_place).abs(),
                     f64::from(i as f32) * f64::from(prefix_des_place - cur_place).abs(),
                 );
@@ -793,7 +795,7 @@ fn distance_kd(coords: &[Vec<f64>], dim: usize, i: usize, j: usize) -> f64 {
     let mut sum = 0.0f64;
     for c in coords.iter().take(dim) {
         let d = c[i] - c[j];
-        sum = d.mul_add(d, sum);
+        sum = math::fma(d, d, sum);
     }
     sum.sqrt()
 }

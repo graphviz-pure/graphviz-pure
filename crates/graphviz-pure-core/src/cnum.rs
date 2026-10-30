@@ -21,6 +21,8 @@
 //! `int` arithmetic that C does not check wraps in the reference build; the port uses
 //! `wrapping_*` there (see `docs/porting/crashes.md`, "C's own overflow checks").
 
+use crate::math;
+
 pub use crate::diag::fmt_g;
 
 /// C's `MIN(a,b)`: `a < b ? a : b`. With a NaN in either operand the test is false and the
@@ -67,9 +69,9 @@ pub fn c_round(f: f64) -> i32 {
 #[inline]
 pub fn c_round_mul(a: f64, b: f64) -> i32 {
     if a * b >= 0.0 {
-        a.mul_add(b, 0.5) as i32
+        math::fma(a, b, 0.5) as i32
     } else {
-        a.mul_add(b, -0.5) as i32
+        math::fma(a, b, -0.5) as i32
     }
 }
 

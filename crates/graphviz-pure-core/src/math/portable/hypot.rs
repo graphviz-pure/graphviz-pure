@@ -30,7 +30,7 @@ pub fn hypot(x: f64, y: f64) -> f64 {
     // commutes with rounding there, so the scaled path gives the same bits wherever the
     // direct one does not overflow or underflow.
     if big < pow2(500) && small > pow2(-500) {
-        return small.mul_add(small, big * big).sqrt();
+        return crate::math::fma(small, small, big * big).sqrt();
     }
     // Scale `big` into [1, 2). `small` may become subnormal or zero; its square is then
     // below half an ulp of `big * big` and cannot change the sum.
@@ -46,5 +46,5 @@ pub fn hypot(x: f64, y: f64) -> f64 {
         big * pow2(-half) * pow2(-rest),
         small * pow2(-half) * pow2(-rest),
     );
-    s.mul_add(s, b * b).sqrt() * pow2(half) * pow2(rest)
+    crate::math::fma(s, s, b * b).sqrt() * pow2(half) * pow2(rest)
 }
