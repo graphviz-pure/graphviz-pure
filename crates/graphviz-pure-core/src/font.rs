@@ -3,6 +3,7 @@
 //! and `lib/common/labels.c`).
 
 use crate::charset::{self, Charset};
+use std::rc::Rc;
 
 /// Default font family name in Graphviz (`Times-Roman`).
 pub const DEFAULT_FONT_NAME: &str = "Times-Roman";
@@ -73,17 +74,25 @@ pub struct TextLineLayout {
 /// A `textfont_t` key in C's font dictionary (`gvc->textfont_dt`).
 #[derive(Debug, Clone)]
 struct TextFontKey {
-    name: Option<String>,
-    color: Option<String>,
+    name: Option<Rc<str>>,
+    color: Option<Rc<str>>,
     flags: u32,
     size: f64,
+}
+
+/// Rust-only cache of the last request's owned names. Size and flags are supplied
+/// separately on every lookup; changing them need not allocate the names again.
+#[derive(Clone)]
+struct FontStrings {
+    name: Option<Rc<str>>,
+    color: Option<Rc<str>>,
 }
 
 /// `textfont_comparf` (`lib/common/textspan.c`): names, colours, flags, then sizes with
 /// `<` and `>`, so a NaN size compares equal to any size.
 fn textfont_cmp(k1: &TextFontKey, k2: &TextFontKey) -> std::cmp::Ordering {
     use std::cmp::Ordering::{Equal, Greater, Less};
-    fn opt(a: &Option<String>, b: &Option<String>) -> std::cmp::Ordering {
+    fn opt(a: &Option<Rc<str>>, b: &Option<Rc<str>>) -> std::cmp::Ordering {
         match (a, b) {
             (None, None) => Equal,
             (None, Some(_)) => Less,
@@ -112,12 +121,15 @@ fn textfont_cmp(k1: &TextFontKey, k2: &TextFontKey) -> std::cmp::Ordering {
 }
 
 /// A font key with its size's bits, for [`TextFontDict::log`].
-type LogKey = (Option<String>, Option<String>, u32, u64);
+type LogKey = (Option<Rc<str>>, Option<Rc<str>>, u32, u64);
 
 /// `gvc->textfont_dt`, and what the port needs to measure a label more than once.
 #[derive(Default)]
 struct TextFontDict {
     dt: crate::cdt::Cdt<TextFontKey>,
+    /// Own the last request once. Sharing its strings does not cache the dictionary
+    /// answer: every first measurement still performs the same Cdt insert.
+    request: Option<FontStrings>,
     /// The sizes `dtinsert` returned during the current layout, per key (with the size's
     /// bits), in order; with the next one to replay.
     log: std::collections::HashMap<LogKey, (Vec<f64>, usize)>,
@@ -125,15 +137,49 @@ struct TextFontDict {
     remeasuring: u32,
     /// The sizes each object's labels got when layout first measured them, by
     /// [`textfont_recording`]'s tag: what C keeps in each span's `font`.
-    objects: std::collections::HashMap<String, Vec<f64>>,
+    objects: std::collections::HashMap<String, FontSizes>,
     /// The open [`textfont_recording`] (tag, sizes) and [`textfont_replaying`] (sizes,
     /// next) scopes, innermost last.
     scopes: Vec<Scope>,
 }
 
 enum Scope {
-    Record(String, Vec<f64>),
-    Replay(Vec<f64>, usize),
+    Record(String, FontSizes),
+    Replay(FontSizes, usize),
+}
+
+/// Rust-only storage for C's per-span font sizes. An ordinary one-span label needs
+/// neither a recording allocation nor a replay copy; larger labels keep their order.
+#[derive(Clone, Default)]
+enum FontSizes {
+    #[default]
+    Empty,
+    One(f64),
+    Many(Vec<f64>),
+}
+
+impl FontSizes {
+    fn push(&mut self, size: f64) {
+        match self {
+            Self::Empty => *self = Self::One(size),
+            Self::One(first) => {
+                // Match Vec<f64>'s original first growth, so labels with three or
+                // four spans do not gain a second allocation on this transition.
+                let mut sizes = Vec::with_capacity(4);
+                sizes.extend([*first, size]);
+                *self = Self::Many(sizes);
+            }
+            Self::Many(sizes) => sizes.push(size),
+        }
+    }
+
+    fn get(&self, index: usize) -> Option<&f64> {
+        match self {
+            Self::Empty => None,
+            Self::One(size) => (index == 0).then_some(size),
+            Self::Many(sizes) => sizes.get(index),
+        }
+    }
 }
 
 thread_local! {
@@ -152,13 +198,6 @@ thread_local! {
 /// that layout makes twice). Inside [`textfont_remeasuring`] the tree is left alone and
 /// each key gets the sizes the current layout's lookups returned, in order.
 pub fn textfont_intern(name: Option<&str>, color: Option<&str>, flags: u32, size: f64) -> f64 {
-    let key = TextFontKey {
-        name: name.map(str::to_string),
-        color: color.map(str::to_string),
-        flags,
-        size,
-    };
-    let lkey = (key.name.clone(), key.color.clone(), flags, size.to_bits());
     TEXTFONT_DT.with(|d| {
         let mut d = d.borrow_mut();
         if let Some(Scope::Replay(sizes, next)) = d.scopes.last_mut() {
@@ -166,6 +205,27 @@ pub fn textfont_intern(name: Option<&str>, color: Option<&str>, flags: u32, size
             *next += 1;
             return v;
         }
+        // Replay above needs no key at all. Otherwise share owned strings for an
+        // identical name/color pair, including when the size or flags change.
+        // The Cdt lookup below still runs and preserves every splay operation.
+        let repeated = d
+            .request
+            .as_ref()
+            .is_some_and(|key| key.name.as_deref() == name && key.color.as_deref() == color);
+        if !repeated {
+            d.request = None;
+        }
+        let names = d.request.get_or_insert_with(|| FontStrings {
+            name: name.map(Rc::from),
+            color: color.map(Rc::from),
+        });
+        let key = TextFontKey {
+            name: names.name.clone(),
+            color: names.color.clone(),
+            flags,
+            size,
+        };
+        let lkey = (key.name.clone(), key.color.clone(), flags, size.to_bits());
         if d.remeasuring > 0 {
             return match d.log.get_mut(&lkey) {
                 Some((sizes, next)) if !sizes.is_empty() => {
@@ -208,7 +268,7 @@ pub fn textfont_object<R>(tag: String, f: impl FnOnce() -> R) -> R {
 /// guard is dropped.
 pub fn textfont_other_graph() -> impl Drop {
     type Saved = (
-        std::collections::HashMap<String, Vec<f64>>,
+        std::collections::HashMap<String, FontSizes>,
         std::collections::HashMap<LogKey, (Vec<f64>, usize)>,
     );
     struct Guard(Option<Saved>);
@@ -246,7 +306,8 @@ fn textfont_recording<R>(tag: impl Into<String>, f: impl FnOnce() -> R) -> R {
         let mut d = d.borrow_mut();
         let replaying = d.remeasuring > 0 || matches!(d.scopes.last(), Some(Scope::Replay(..)));
         if !replaying {
-            d.scopes.push(Scope::Record(tag.into(), Vec::new()));
+            d.scopes
+                .push(Scope::Record(tag.into(), FontSizes::default()));
         }
         replaying
     });
@@ -475,19 +536,41 @@ fn font_in_list_permissive(value: &str, list: &[&str]) -> bool {
 /// `get_metrics_for_font_family` from `lib/common/textspan_lut.c`: the first family whose
 /// name list matches, else the `Times` metrics (C emits a once-only warning).
 fn get_metrics_for_font_family(font_name: &str) -> &'static FontFamilyMetrics {
-    font_tables::FONT_METRICS
+    // Rust-only one-entry cache of the pure successful LUT lookup. Unknown names
+    // still take the original warning path on every call (including quiet repeats).
+    thread_local! {
+        static FAMILY: std::cell::RefCell<Option<(String, &'static FontFamilyMetrics)>> =
+            const { std::cell::RefCell::new(None) };
+    }
+    if let Some(metrics) = FAMILY.with(|cache| {
+        cache
+            .borrow()
+            .as_ref()
+            .and_then(|(name, metrics)| (name == font_name).then_some(*metrics))
+    }) {
+        return metrics;
+    }
+    if let Some(metrics) = font_tables::FONT_METRICS
         .iter()
         .find(|m| font_in_list_permissive(font_name, m.font_names))
-        .unwrap_or_else(|| {
-            let warning = format!(
-                "Warning: no hard-coded metrics for '{font_name}'.  Falling back to 'Times' metrics\n"
-            );
-            // A quiet repeat leaves the warning to the measurement C makes.
-            if crate::diag::reporting() && crate::diag::emit_once(&warning) {
-                crate::diag::agwarningf(&warning);
-            }
-            &font_tables::FONT_METRICS[0]
-        })
+    {
+        FAMILY.with(|cache| {
+            let mut cache = cache.borrow_mut();
+            let (name, cached_metrics) = cache.get_or_insert_with(|| (String::new(), metrics));
+            name.clear();
+            name.push_str(font_name);
+            *cached_metrics = metrics;
+        });
+        return metrics;
+    }
+    let warning = format!(
+        "Warning: no hard-coded metrics for '{font_name}'.  Falling back to 'Times' metrics\n"
+    );
+    // A quiet repeat leaves the warning to the measurement C makes.
+    if crate::diag::reporting() && crate::diag::emit_once(&warning) {
+        crate::diag::agwarningf(&warning);
+    }
+    &font_tables::FONT_METRICS[0]
 }
 
 /// `get_metrics_for_font_variant` from `lib/common/textspan_lut.c`.
@@ -1114,6 +1197,131 @@ mod tests {
         });
         assert_eq!(textfont_intern(t, None, 0, f64::NAN), 20.0);
         textfont_dict_reset();
+    }
+
+    #[test]
+    fn shared_font_requests_preserve_dictionary_answers_bitwise() {
+        // The old path always constructed and inserted an owned key. In particular,
+        // a repeated request must not bypass the splay search, even with NaNs.
+        let mut reference = crate::cdt::Cdt::new();
+        textfont_dict_reset();
+        let sizes = [
+            30.0,
+            20.0,
+            f64::NAN,
+            -0.0,
+            0.0,
+            f64::INFINITY,
+            f64::from_bits(0x7ff8_0000_0000_1234),
+            14.0,
+            f64::NEG_INFINITY,
+        ];
+        let mut state = 1234567_u64;
+        for i in 0..20_000 {
+            state = state.wrapping_mul(6364136223846793005).wrapping_add(1);
+            let name =
+                [None, Some("Times-Roman"), Some("Courier"), Some("")][(state >> 32) as usize % 4];
+            let color = [None, Some("black"), Some("")][(state >> 40) as usize % 3];
+            let flags = (state >> 48) as u32 % 3;
+            let size = sizes[(state >> 16) as usize % sizes.len()];
+            for _ in 0..3 {
+                let key = TextFontKey {
+                    name: name.map(Rc::from),
+                    color: color.map(Rc::from),
+                    flags,
+                    size,
+                };
+                let cmp = |e: &TextFontKey| textfont_cmp(&key, e);
+                let (index, _) = reference.insert(key.clone(), &cmp);
+                assert_eq!(
+                    textfont_intern(name, color, flags, size).to_bits(),
+                    reference.get(index).size.to_bits(),
+                    "request {i}"
+                );
+            }
+        }
+        textfont_dict_reset();
+    }
+
+    #[test]
+    fn inline_font_sizes_preserve_nested_recording_and_replay() {
+        textfont_dict_reset();
+        let font = Some("Times-Roman");
+        textfont_object("outer".into(), || {
+            assert_eq!(textfont_intern(font, None, 0, 10.0), 10.0);
+            textfont_object("inner".into(), || {
+                assert_eq!(textfont_intern(font, None, 0, 20.0), 20.0);
+            });
+            assert_eq!(textfont_intern(font, None, 0, f64::NAN), 20.0);
+            assert_eq!(
+                textfont_intern(font, None, 0, -0.0).to_bits(),
+                (-0.0_f64).to_bits()
+            );
+        });
+        // Replay ignores the new request's names, flags and size, and consumes only
+        // the innermost scope. The outer record crossed One -> Many and grew again.
+        textfont_object("outer".into(), || {
+            assert_eq!(textfont_intern(None, None, 99, 100.0), 10.0);
+            textfont_object("inner".into(), || {
+                assert_eq!(textfont_intern(None, None, 99, 100.0), 20.0);
+                assert_eq!(textfont_intern(None, None, 99, 101.0), 101.0);
+            });
+            assert_eq!(textfont_intern(None, None, 99, 100.0), 20.0);
+            assert_eq!(
+                textfont_intern(None, None, 99, 100.0).to_bits(),
+                (-0.0_f64).to_bits()
+            );
+            assert_eq!(textfont_intern(None, None, 99, 102.0), 102.0);
+        });
+        // Saving/restoring another graph and starting a new layout keep their old
+        // lifetimes; empty records also remain valid replay scopes.
+        textfont_object("empty".into(), || {});
+        textfont_object("empty".into(), || {
+            assert_eq!(textfont_intern(font, None, 0, 103.0), 103.0);
+        });
+        {
+            let _other = textfont_other_graph();
+            textfont_object("inner".into(), || {
+                assert_eq!(textfont_intern(font, None, 0, 40.0), 40.0);
+            });
+        }
+        textfont_object("inner".into(), || {
+            assert_eq!(textfont_intern(font, None, 0, 100.0), 20.0);
+        });
+        textfont_layout_begin();
+        textfont_object("inner".into(), || {
+            assert_eq!(textfont_intern(font, None, 0, 50.0), 50.0);
+        });
+        textfont_dict_reset();
+    }
+
+    #[test]
+    fn cached_font_families_match_the_original_lookup() {
+        // Check hits, misses, case/punctuation aliases and intervening unknown
+        // fonts. Only successful exact-name requests may bypass the LUT scan.
+        let names = font_tables::FONT_METRICS
+            .iter()
+            .flat_map(|m| m.font_names.iter().copied())
+            .chain([
+                "T!i!m!e!s",
+                "courier NEW",
+                "",
+                "Unknown font",
+                "Times-Bold",
+                "Times-Roman",
+            ]);
+        for name in names {
+            let expected = font_tables::FONT_METRICS
+                .iter()
+                .find(|m| font_in_list_permissive(name, m.font_names))
+                .unwrap_or(&font_tables::FONT_METRICS[0]);
+            for _ in 0..2 {
+                assert!(
+                    std::ptr::eq(get_metrics_for_font_family(name), expected),
+                    "{name}"
+                );
+            }
+        }
     }
 
     #[test]
