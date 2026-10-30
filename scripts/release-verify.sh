@@ -8,7 +8,8 @@
 #           names every release archive and the binary in it (scripts/check-binstall.py), and,
 #           where cargo-binstall is on PATH, `cargo-binstall --dry-run` fetches and unpacks the
 #           archive for every release target from the published crate
-#   jsr     @graphviz-pure/wasm VERSION in JSR's meta.json, not yanked
+#   jsr     @graphviz-pure/wasm VERSION in JSR's meta.json, not yanked; if latest, every
+#           scored item must be full (including OIDC provenance and declared runtimes)
 #   ghcr    VERSION's attestation verifies, and X.Y and latest point at VERSION's digest where
 #           VERSION should hold them: X.Y if it is the newest stable X.Y.*, latest if it is the
 #           newest stable version among the image's tags (as the ghcr job moves them; a
@@ -191,9 +192,32 @@ jsr_ok() {
   curl -fsS "https://jsr.io/@graphviz-pure/wasm/meta.json" -o "$work/jsr.json" 2> /dev/null &&
     jq -e --arg v "$version" '.versions[$v] != null and (.versions[$v].yanked // false) == false' "$work/jsr.json" > /dev/null
 }
+jsr_score_ok() {
+  # The score describes latest, not arbitrary historical versions. Refresh metadata on each
+  # retry so a newer release appearing while we wait cannot be attributed to this version.
+  jsr_ok || return 1
+  [ "$(jq -r .latest "$work/jsr.json")" = "$version" ] || return 0
+  echo "score unavailable" > "$work/jsr-score-short.txt"
+  curl -fsS "https://api.jsr.io/scopes/graphviz-pure/packages/wasm/score" -o "$work/jsr-score.json" 2> /dev/null || return 1
+  jq -r '[
+    "hasReadme", "hasReadmeExamples", "allEntrypointsDocs", "allFastCheck",
+    "hasProvenance", "hasDescription", "atLeastOneRuntimeCompatible",
+    "multipleRuntimesCompatible"
+  ] as $flags | . as $score |
+    ([$flags[] | select($score[.] != true)] +
+      [if .percentageDocumentedSymbols == 1 then empty else "percentageDocumentedSymbols" end]) |
+    join(", ")' "$work/jsr-score.json" > "$work/jsr-score-short.txt" ||
+    { echo "invalid score response" > "$work/jsr-score-short.txt"; return 1; }
+  [ -z "$(cat "$work/jsr-score-short.txt")" ]
+}
 jsr() {
-  if retry jsr_ok; then result jsr 1 "@graphviz-pure/wasm $version (latest: $(jq -r .latest "$work/jsr.json"))"
-  else result jsr 0 "@graphviz-pure/wasm $version is not in meta.json"; fi
+  if ! retry jsr_ok; then
+    result jsr 0 "@graphviz-pure/wasm $version is not in meta.json (or is yanked)"
+  elif retry jsr_score_ok; then
+    result jsr 1 "@graphviz-pure/wasm $version (latest: $(jq -r .latest "$work/jsr.json")); score full when latest"
+  else
+    result jsr 0 "JSR latest $version must have a full score; short items: $(cat "$work/jsr-score-short.txt" 2>/dev/null || echo 'score unavailable'); see docs/releasing.md"
+  fi
 }
 
 ghcr_token() { curl -fsS "https://ghcr.io/token?scope=repository:$REPO:pull" | jq -r .token; }

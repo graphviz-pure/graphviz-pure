@@ -342,6 +342,25 @@ jobs:
         run: |
           (cd web && npm pack --pack-destination "$RUNNER_TEMP")
           python3 scripts/check-package-notices.py "$RUNNER_TEMP"/graphviz-pure-wasm-*.tgz
+      # Use the release's checksum-pinned Deno for registry validation, independent of npm.
+      - name: Install Deno for JSR checks
+        working-directory: ${{ runner.temp }}
+        env:
+          DENO_VERSION: "2.9.7"
+          DENO_SHA256: c6527f24f4b16031d3ae4fa9f658d5f11534c8d84ce7dc8502420280919c3490
+        run: |
+          curl --fail --silent --show-error --location --proto '=https' --output deno.zip \
+            "https://github.com/denoland/deno/releases/download/v$DENO_VERSION/deno-x86_64-unknown-linux-gnu.zip"
+          echo "$DENO_SHA256  deno.zip" | sha256sum --check --strict
+          unzip -q deno.zip deno
+      - name: JSR documentation, licence and publish dry run
+        run: |
+          mkdir "$RUNNER_TEMP/jsr"
+          tar -xzf "$RUNNER_TEMP"/graphviz-pure-wasm-*.tgz -C "$RUNNER_TEMP/jsr"
+          node scripts/check-jsr-license.mjs "$RUNNER_TEMP/jsr/package/jsr.json"
+          cd "$RUNNER_TEMP/jsr/package"
+          "$RUNNER_TEMP/deno" doc --lint pkg/graphviz_pure_wasm.d.ts
+          "$RUNNER_TEMP/deno" publish --dry-run
       # Install without running any package's lifecycle scripts, check every package's registry
       # signature, and only then run the scripts (which unpack the deno, bun and workerd binaries).
       - name: Install the runtimes (no scripts)

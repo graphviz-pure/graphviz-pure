@@ -1,6 +1,9 @@
 # Releasing graphviz-pure
 
-To release: dispatch Release (`gh workflow run release.yml [-f version=X.Y.Z]`, or ask any agent); approve the `release` deployment when GitHub notifies you. That's it.
+To release: dispatch Release from the owner's GitHub account, which must be a JSR scope member
+(`gh workflow run release.yml [-f version=X.Y.Z]`); approve the `release` deployment when GitHub
+notifies you, then review and approve the staged npm package on npmjs.com with your passkey.
+An agent using the release App must not dispatch a real release: JSR refuses its actor.
 
 `version` is optional. Empty means the next version: while the version is `0.x`, a pull request labelled `breaking` bumps the minor version and anything else the patch version; from 1.0, `breaking` bumps the major version ([versioning policy](versioning.md)). After a pre-release tag the next version is the version it pre-released. `intro` is optional changelog text; empty means a line counted from the entries (`3 changes: 1 added, 2 fixed.`). `dry_run` (default false) builds, fuzzes, smoke-tests and attests, and does not publish:
 
@@ -128,6 +131,14 @@ newest version); npm's
 against a lockfile the script writes from it), and `npm audit signatures`; the tap's formula,
 the bucket's manifest and
 their newest `update.yml` run. Attestations come from `release.yml`. The certificate's source ref is `refs/heads/master`. Its subject digest is the dispatch SHA, master's HEAD when the run started, not the release commit. Releases through 0.2.3 were attested for the tag. The `verify` job runs the script with `--ci` (every channel but the tap and bucket) once the publishing jobs finish, and reports a channel whose publishing job failed without polling it.
+If npm staged successfully but the version is not live yet, the job reports pending approval
+in its summary and leaves only npm out of the script's channel list. It does not claim npm
+passed. After approving on npmjs.com, re-run **verify** or run the script locally to check npm's
+live bytes, provenance and signatures. The script itself still fails for an unpublished npm version.
+For JSR's latest version it also requires every scored item to be full, retrying within `--wait`
+while JSR computes the score. Historical versions do not inherit the latest version's score.
+This gate applies to releases going forward: manually published 1.0.0 has no JSR provenance and
+fails while it is latest (its documentation and runtime declarations also fall short).
 
 ### The `breaking` label
 
@@ -178,8 +189,12 @@ environment, and each publishes on its own:
 - `github-release` creates the GitHub release with all files;
 - `crates-io` publishes the eight crates to crates.io (trusted publishing,
   `cargo publish --workspace`, leaving out any crate whose version is already there);
-- `npm` publishes `@graphviz-pure/wasm` (`npm publish --provenance --access public`). The
-  trusted publisher has to allow `npm publish`. The version is live when the job finishes;
+- `npm` stages `@graphviz-pure/wasm` (`npm stage publish --access public`). The trusted
+  publisher allows staging only. The owner reviews the Staged Packages tab on npmjs.com and
+  approves with a passkey before the version goes live. OIDC automatically generates provenance;
+  `--provenance` is supported but unnecessary, as the staged 0.2.3 attestation confirms
+  ([npm documentation](https://docs.npmjs.com/trusted-publishers/),
+  [stage command](https://docs.npmjs.com/cli/v11/commands/npm-stage/));
 - `pypi` publishes the six attested wheels to PyPI as `graphviz-pure` with a pinned uv
   (trusted publishing, OIDC: the job exchanges the run's token for a short-lived PyPI token, as
   PyPI documents, and `uv publish` uses it). PyPI has no staging: the version is live when the
@@ -204,7 +219,8 @@ environment, and each publishes on its own:
 
 Then `verify` checks what they published (`scripts/release-verify.sh --ci`) and closes a milestone
 titled X.Y.Z if one is open and every publishing job that ran succeeded. A skipped job does not
-block that; a failed one leaves the milestone open. The same approval's `github-release` job
+block that; a failed one or pending npm approval leaves the milestone open. Re-run **verify**
+after npm approval to verify that channel and close the milestone. The same approval's `github-release` job
 dispatches `update.yml` in `graphviz-pure/homebrew-tap` and `graphviz-pure/scoop-bucket`; those
 workflows verify each asset and commit the new formula and manifest. Their verifiers accept an
 attestation whose source ref is the tag or `refs/heads/master` (the dispatch SHA is the subject
@@ -220,8 +236,9 @@ the container image included, without publishing anything.
 
 Through 0.1.2, the registries' jobs waited for the GitHub release, so a release took two approvals.
 One approval now starts all seven publishing jobs at once. The checks that used to sit between
-those approvals run first: the readiness checklist, fuzzing, and every smoke test. npm publishes
-in that same approval. What is given up: a registry can publish even if the GitHub release fails,
+those approvals run first: the readiness checklist, fuzzing, and every smoke test. npm stages
+in that same approval and waits separately for the owner's passkey approval on npmjs.com.
+A registry can publish even if the GitHub release fails,
 and nothing is left to stop between the GitHub release and the registries. Keep
 `environment: release` on every publishing job (the crates.io, npm and PyPI trusted publishers
 are bound to it) and keep its approval manual: JSR and PyPI have no staging. Its deployment
@@ -249,8 +266,12 @@ fixed on `master` and ships with the next dispatch. A re-run asks for the approv
   `uv publish --check-url https://pypi.org/simple/` first asks PyPI which files it already has:
   identical ones are skipped (PyPI itself answers a re-upload with 400), so only what is missing
   goes up, and a file that differs from PyPI's fails the job.
-- `npm`, `jsr`: a re-run is safe if the job failed before publishing. If the version went up,
-  there is nothing to re-run: the registries keep a published version.
+- `npm`: a re-run is safe only if staging did not succeed. A staged version reserves its version
+  number, so do not re-run a successful staging job: review and approve the existing stage on
+  npmjs.com with your passkey. After approval, re-run **verify**, not **npm**.
+- `jsr`: a re-run is safe if the job failed before publishing. A published version is immutable.
+  A re-run keeps the original actor; `actorNotScopeMember` needs a new owner-dispatched run,
+  not an App re-run or a relaxed scope restriction.
 - `wasmer`: safe to re-run. A version already in the registry is left as it is (versions there
   cannot be replaced), and `release-verify.sh` checks that it holds the attested module.
 - `ghcr`: safe to re-run. Pushing the same image again changes nothing, and `X.Y`/`latest`
@@ -333,8 +354,9 @@ once with placeholder releases:
    `@graphviz-pure/wasm`, and deprecates it.
 3. Package settings → Trusted publishers → GitHub Actions: organization `graphviz-pure`,
    repository `graphviz-pure`, workflow `release.yml`, environment `release`. Under **Allowed
-   actions**, allow `npm publish`. Leave `npm dist-tag` unchecked: `npm publish` sets the
-   `latest` tag for a stable version. The `release` environment's approval is the only gate.
+   actions**, allow `npm stage publish` only; leave `npm publish` and `npm dist-tag` unchecked.
+   Staging sets the eventual `latest` tag; the owner must approve on npmjs.com with a passkey.
+   Keep these restrictions: the `release` approval authorizes staging, not direct publication.
 4. Package settings → Publishing access → **"Require two-factor authentication and disallow
    tokens"**. `npm logout`.
 
@@ -373,17 +395,29 @@ description is `packaging/pypi/README.md`.
 1. Log in to jsr.io with GitHub and create the scope `@graphviz-pure`, then the package `wasm`.
 2. Package settings → **GitHub repository**: link `graphviz-pure/graphviz-pure`. JSR accepts an
    OIDC publish only from a workflow in the linked repository.
-3. Scope settings: publishing from GitHub Actions can stay restricted to scope members. The
-   workflow run's actor is whoever dispatched it. A dispatch by the release App is that App,
-   which is not a scope member, so JSR refuses the publish until the restriction is off or the
-   App is accepted. Once the first version is out, also consider requiring every version to be
-   published from CI.
+3. Keep scope settings restricted to scope members for GitHub Actions publishing. The workflow
+   run's actor is whoever dispatched it: the owner must dispatch from their own GitHub account.
+   The release App is not a scope member and JSR refuses it with `actorNotScopeMember`; approving
+   an environment or re-running its job does not change that actor. Do not relax the restriction.
+4. Set the repository Actions variable `JSR_PUBLISH_ACTOR` to the owner's scope-member GitHub
+   login. The JSR job fails before downloading or publishing if the variable is absent, the
+   dispatch actor differs, or it is a bot. Keep OIDC `deno publish` for provenance; no manual
+   token publish. Require publishing from CI in JSR's package settings.
+5. In JSR's package settings, declare the tested runtime compatibility (Node.js, Deno, Bun,
+   browsers and Workers). CI exercises these runtimes; JSR's score needs the declarations too.
+   Keep a description and README examples. The post-publish verifier requires all nine scored
+   items, including provenance, full documentation coverage and multiple compatible runtimes.
 
 `deno publish` makes the version live, and the `release` environment's approval is the only
 gate. The JSR package holds the npm tarball's
 files as listed in `web/jsr.json` (README.md, LICENSE, NOTICE, THIRD-PARTY-LICENSES.md,
 `LICENSES/MIT-CORE-MATH.txt`, `LICENSES/MIT-EXPAT.txt` and `pkg/`), so both registries show `web/README.md`; npm's
-`package.json` is not part of it.
+`package.json` is not part of it. `web/jsr.json` declares `EPL-2.0`, because JSR's server
+accepts a single recognised identifier rather than an SPDX expression. npm retains
+`EPL-2.0 AND MIT`; both packages still ship the MIT licence texts.
+The existing **WASM package (Node.js, Deno, Bun, Workers, Chrome)** CI job runs
+`deno doc --lint`, the single-identifier licence check and `deno publish --dry-run`
+on the packed files, using checksum-pinned Deno. The release dry run repeats these gates.
 In Deno, `init()` fetches the `.wasm` next to the module, so a script importing
 `jsr:@graphviz-pure/wasm` needs `--allow-net=jsr.io` (or passes the bytes to `init`).
 

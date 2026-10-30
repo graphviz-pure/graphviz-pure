@@ -113,5 +113,5 @@ the JSR package publish. CI typechecks a sample against it (`deno check`, Deno 2
 
 Each release is built by GitHub Actions and published with npm provenance; check it with
 `npm audit signatures`. Documentation, fidelity evidence and the source:
-https://graphviz-pure.github.io/ and https://github.com/graphviz-pure/graphviz-pure. Licence: EPL-2.0 AND MIT.
-The package ships `NOTICE` and the licence texts in `LICENSES/`.
+https://graphviz-pure.github.io/ and https://github.com/graphviz-pure/graphviz-pure. Licence: EPL-2.0 AND MIT on npm; JSR lists EPL-2.0 because it accepts only one identifier.
+Both packages ship `NOTICE` and the MIT licence texts in `LICENSES/`.
