@@ -5,7 +5,7 @@
 //! scanner's `line_num` once bison has read the lookahead token it rejects. Each expected
 //! message below is `dot`'s stderr without its `Error: <file>: ` prefix.
 
-use graphviz_pure_parser::{GlobalAttrs, parse_dot_all_partial};
+use graphviz_pure_parser::{GlobalAttrs, GraphStream, parse_dot_all_partial};
 
 fn error_of(src: &str) -> Option<String> {
     parse_dot_all_partial(src, &GlobalAttrs::default())
@@ -133,6 +133,18 @@ fn end_of_input_reports_no_token() {
     check("digraph", "syntax error in line 1");
 }
 
+/// C: lib/cgraph/grammar.y:qatom, lib/cgraph/scan.l:aagerror
+#[test]
+fn concatenation_reports_the_token_after_plus_or_eof() {
+    // C 16.1.0 exits 1 for each input; the CLI tests also check its full stderr.
+    check(
+        "digraph { a = \"x\" + ; }\n",
+        "syntax error in line 1 near ';'",
+    );
+    check("digraph { a = \"x\" +", "syntax error in line 1");
+    check("digraph { a = \"x\" +\n", "syntax error in line 2");
+}
+
 #[test]
 fn end_of_input_inside_a_string_or_comment_reports_the_scanner_state() {
     // tests/fuzz-open/022-stderr-syntax-error-message/repro.gv
@@ -208,6 +220,36 @@ fn line_numbers_restart_with_each_graph() {
         "digraph G {\n a -> b\n}\n \"x\"\n",
         "syntax error in line 1 near '\"'",
     );
+}
+
+/// C: lib/cgraph/grammar.y:aagparse, lib/cgraph/scan.l:aagerror
+#[test]
+fn a_second_graph_error_keeps_the_first_and_ends_the_stream() {
+    let src = "digraph G { a }\ndigraph H {\n b = \"x\" + ;\n}\ndigraph I { c }\n";
+    let mut stream = GraphStream::new(src, &GlobalAttrs::default());
+    let first = stream.next_graph(|_| {}).unwrap().unwrap();
+    assert_eq!(first.name, "G");
+    let error = stream.next_graph(|_| {}).unwrap().unwrap_err();
+    assert_eq!(error.to_string(), "syntax error in line 2 near ';'");
+    assert!(stream.next_graph(|_| {}).is_none());
+}
+
+/// C: lib/cgraph/io.c:ioread, lib/cgraph/grammar.y:aagparse
+#[test]
+fn trailing_junk_is_rejected_on_a_new_line_but_dropped_on_the_closing_line() {
+    for (src, names, error) in [
+        (
+            "digraph G { a }\ndigraph H { b }\njunk\n",
+            &["G", "H"][..],
+            Some("syntax error in line 1 near 'junk'"),
+        ),
+        ("digraph G { a } junk\n", &["G"][..], None),
+    ] {
+        let (graphs, got_error) = parse_dot_all_partial(src, &GlobalAttrs::default());
+        let got_names: Vec<_> = graphs.iter().map(|g| g.name.as_str()).collect();
+        assert_eq!(got_names, names, "{src}");
+        assert_eq!(got_error.map(|e| e.to_string()).as_deref(), error, "{src}");
+    }
 }
 
 #[test]

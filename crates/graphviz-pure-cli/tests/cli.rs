@@ -5093,6 +5093,72 @@ fn syntax_errors_are_reported_as_c_does() {
     assert_eq!(err, "Error: <stdin>: syntax error in line 1 near ';'\n");
 }
 
+/// C: lib/cgraph/grammar.y:aagparse, lib/cgraph/scan.l:aagerror
+/// Exact stdout, stderr and exit codes from C Graphviz 16.1.0 `dot -Tcanon` (#535).
+#[test]
+fn concatenation_errors_keep_c_stderr_and_exit_code() {
+    for (src, expected_out, expected_err, expected_code) in [
+        (
+            "digraph { a = \"x\" + ; }\n",
+            "",
+            "Error: <stdin>: syntax error in line 1 near ';'\n",
+            1,
+        ),
+        (
+            "digraph { a = \"x\" +",
+            "",
+            "Error: <stdin>: syntax error in line 1\n",
+            1,
+        ),
+        (
+            "digraph { a = \"x\" +\n",
+            "",
+            "Error: <stdin>: syntax error in line 2\n",
+            1,
+        ),
+    ] {
+        let (out, err, code) = run_in(&std::env::temp_dir(), &["-Tcanon"], src);
+        assert_eq!(
+            (out.as_str(), err.as_str(), code),
+            (expected_out, expected_err, expected_code),
+            "{src:?}"
+        );
+    }
+}
+
+/// C: lib/cgraph/grammar.y:aagparse, lib/cgraph/scan.l:aagerror
+/// Exact stdout, stderr and exit codes from C Graphviz 16.1.0 `dot -Tcanon` (#535).
+#[test]
+fn stream_errors_keep_completed_graphs_and_c_exit_codes() {
+    for (src, expected_out, expected_err, expected_code) in [
+        (
+            "digraph G { a }\ndigraph H {\n b = \"x\" + ;\n}\ndigraph I { c }\n",
+            "digraph G {\n\tnode [label=\"\\N\"];\n\ta;\n}\n",
+            "Error: <stdin>: syntax error in line 2 near ';'\n",
+            1,
+        ),
+        (
+            "digraph G { a }\ndigraph H { b }\njunk\n",
+            "digraph G {\n\tnode [label=\"\\N\"];\n\ta;\n}\ndigraph H {\n\tnode [label=\"\\N\"];\n\tb;\n}\n",
+            "Error: <stdin>: syntax error in line 1 near 'junk'\n",
+            1,
+        ),
+        (
+            "digraph G { a } junk\n",
+            "digraph G {\n\tnode [label=\"\\N\"];\n\ta;\n}\n",
+            "",
+            0,
+        ),
+    ] {
+        let (out, err, code) = run_in(&std::env::temp_dir(), &["-Tcanon"], src);
+        assert_eq!(
+            (out.as_str(), err.as_str(), code),
+            (expected_out, expected_err, expected_code),
+            "{src:?}"
+        );
+    }
+}
+
 // Issue #199, reduced from `tests/golden/sfdp/attr_label_scheme_4_overlap.dot`. sfdp throws
 // the nodes out to ~1e143 (C too), and a segment's trapezoid then has no upper neighbour in
 // `lib/ortho/trapezoid.c:update_trapezoid`. C reads `LIST_GET(tr, SIZE_MAX)`: depending on

@@ -3,6 +3,8 @@
 //! nested subgraphs and clusters.
 
 use crate::lexer::{Lexer, ScanInput, ScanState, Token, TokenKind};
+use std::borrow::Cow;
+use std::sync::Arc;
 type AttrMap2 = std::collections::BTreeMap<String, graphviz_pure_core::AttrSym>;
 
 use graphviz_pure_core::{
@@ -16,8 +18,8 @@ const YYMAXDEPTH: usize = 10000;
 /// An atom as grammar.y's semantic values carry it: its text, and whether cgraph's
 /// `aghtmlstr` is set on it (an HTML string, `<...>`, whose text is the inner part).
 #[derive(Debug, Clone)]
-struct Atom {
-    text: String,
+struct Atom<'a> {
+    text: Cow<'a, str>,
     html: bool,
 }
 
@@ -74,9 +76,10 @@ pub struct Parser<'a> {
     /// Read a token at a time, as bison calls `yylex`, so the scanner's warnings come when
     /// C's do: never past the token where a syntax error stops the graph.
     lexer: Lexer<'a>,
-    /// The tokens read so far; the last is [`TokenKind::Eof`] once the input has ended.
-    tokens: Vec<Token>,
-    pos: usize,
+    /// C: lib/cgraph/grammar.y:aagparse (one yylex lookahead)
+    lookahead: Option<Token<'a>>,
+    /// C: lib/cgraph/scan.l:aagerror (last scanner result, even after a shift)
+    last_scanned: Option<LastScanned<'a>>,
     graph: Graph,
     scope_stack: Vec<SubgraphId>,
     globals: GlobalAttrs,
@@ -107,6 +110,43 @@ pub struct Parser<'a> {
     exhausted: bool,
 }
 
+/// C: lib/cgraph/scan.l:aagerror
+/// Only scanner diagnostics are retained after a shift, without the token's semantic value.
+struct LastScanned<'a> {
+    text: Cow<'a, str>,
+    state: ScanState<'a>,
+    c_line: i32,
+    col: usize,
+    file: Option<Arc<str>>,
+    eof: bool,
+}
+
+impl<'a> From<&Token<'a>> for LastScanned<'a> {
+    fn from(token: &Token<'a>) -> Self {
+        Self {
+            text: token.text.clone(),
+            state: token.state.clone(),
+            c_line: token.c_line,
+            col: token.col,
+            file: token.file.clone(),
+            eof: token.kind == TokenKind::Eof,
+        }
+    }
+}
+
+impl LastScanned<'_> {
+    fn error(&self, message: &str) -> GraphvizError {
+        scanner_error(
+            message,
+            self.c_line,
+            self.col,
+            &self.text,
+            self.file.as_deref(),
+            &self.state,
+        )
+    }
+}
+
 /// Which dictionary of a graph an attribute belongs to.
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum DictKind {
@@ -119,8 +159,8 @@ impl<'a> Parser<'a> {
     fn new(lexer: Lexer<'a>, globals: &GlobalAttrs) -> Self {
         Self {
             lexer,
-            tokens: Vec::new(),
-            pos: 0,
+            lookahead: None,
+            last_scanned: None,
             graph: Graph::new("", GraphKind::Undirected, false),
             scope_stack: Vec::new(),
             globals: globals.clone(),
@@ -179,32 +219,26 @@ impl<'a> Parser<'a> {
         (graphs, None)
     }
 
-    fn peek(&mut self) -> &Token {
-        self.peek_n(0)
+    /// C: lib/cgraph/grammar.y:aagparse
+    fn peek(&mut self) -> &Token<'a> {
+        if self.lookahead.is_none() {
+            let token = self.lexer.scan();
+            self.last_scanned = Some(LastScanned::from(&token));
+            self.lookahead = Some(token);
+        }
+        self.lookahead.as_ref().expect("lookahead scanned above")
     }
 
-    /// The token `offset` places ahead, scanning up to it (the end of input stays the last).
-    fn peek_n(&mut self, offset: usize) -> &Token {
-        let want = self.pos + offset;
-        while self.tokens.len() <= want
-            && self.tokens.last().is_none_or(|t| t.kind != TokenKind::Eof)
-        {
-            self.tokens.push(self.lexer.scan());
+    /// C: lib/cgraph/grammar.y:aagparse
+    fn advance(&mut self) -> Token<'a> {
+        if self.peek().kind == TokenKind::Eof {
+            return self.peek().clone();
         }
-        let i = want.min(self.tokens.len() - 1);
-        &self.tokens[i]
-    }
-
-    fn advance(&mut self) -> Token {
-        let tok = self.peek().clone();
-        if tok.kind != TokenKind::Eof {
-            self.pos += 1;
-        }
-        tok
+        self.lookahead.take().expect("lookahead scanned above")
     }
 
     /// Shifts the lookahead if it is `kind`; any other token is a syntax error.
-    fn expect(&mut self, kind: &TokenKind) -> Result<Token> {
+    fn expect(&mut self, kind: &TokenKind<'_>) -> Result<Token<'a>> {
         if &self.peek().kind == kind {
             self.shift()
         } else {
@@ -213,7 +247,7 @@ impl<'a> Parser<'a> {
     }
 
     /// bison shifts the lookahead.
-    fn shift(&mut self) -> Result<Token> {
+    fn shift(&mut self) -> Result<Token<'a>> {
         let tok = self.advance();
         self.push()?;
         Ok(tok)
@@ -234,15 +268,17 @@ impl<'a> Parser<'a> {
             return Ok(());
         }
         self.exhausted = true;
-        let last = self
-            .tokens
-            .last()
-            .cloned()
-            .unwrap_or_else(|| self.peek().clone());
-        Err(parse_error("memory exhausted", &last))
+        if self.last_scanned.is_none() {
+            self.peek();
+        }
+        Err(self
+            .last_scanned
+            .as_ref()
+            .expect("scanner context initialized")
+            .error("memory exhausted"))
     }
 
-    fn is_atom_token(kind: &TokenKind) -> bool {
+    fn is_atom_token(kind: &TokenKind<'_>) -> bool {
         matches!(
             kind,
             TokenKind::Ident(_) | TokenKind::Quoted(_) | TokenKind::Html(_)
@@ -255,31 +291,33 @@ impl<'a> Parser<'a> {
     /// `edge`, `graph`, `digraph`, `subgraph` and `strict` are their own tokens in scan.l
     /// (matched case-insensitively), not `T_atom`, so an unquoted keyword is a syntax error
     /// wherever an atom is expected (issue #29).
-    fn atom(&mut self) -> Result<Atom> {
-        let tok = self.peek().clone();
+    fn atom(&mut self) -> Result<Atom<'a>> {
+        if !Self::is_atom_token(&self.peek().kind) {
+            return Err(syntax_error(self.peek()));
+        }
+        let tok = self.shift()?;
         let mut atom = match tok.kind {
             TokenKind::Ident(text) => {
-                self.shift()?;
                 self.reduce(1)?;
                 return Ok(Atom { text, html: false });
             }
             TokenKind::Quoted(text) => Atom { text, html: false },
             TokenKind::Html(text) => Atom { text, html: true },
-            _ => return Err(syntax_error(&tok)),
+            _ => unreachable!("atom kind checked before shift"),
         };
-        self.shift()?;
         self.reduce(1)?;
         while self.peek().kind == TokenKind::Plus {
             self.shift()?;
-            let next = self.peek().clone();
-            match next.kind {
+            if !matches!(self.peek().kind, TokenKind::Quoted(_) | TokenKind::Html(_)) {
+                return Err(syntax_error(self.peek()));
+            }
+            match self.shift()?.kind {
                 TokenKind::Quoted(s) | TokenKind::Html(s) => {
-                    self.shift()?;
                     atom.html = false;
-                    atom.text.push_str(&s);
+                    atom.text.to_mut().push_str(&s);
                     self.reduce(3)?;
                 }
-                _ => return Err(syntax_error(&next)),
+                _ => unreachable!("quoted atom kind checked before shift"),
             }
         }
         self.reduce(1)?;
@@ -311,10 +349,7 @@ impl<'a> Parser<'a> {
             return result;
         }
         // (unless the input has already ended: the error token was the end, or `@`)
-        if result.is_err()
-            && !self.started
-            && self.tokens.last().is_none_or(|t| t.kind != TokenKind::Eof)
-        {
+        if result.is_err() && !self.started && self.last_scanned.as_ref().is_none_or(|t| !t.eof) {
             while self.lexer.scan().kind != TokenKind::Eof {}
         }
         result
@@ -360,8 +395,9 @@ impl<'a> Parser<'a> {
         if let Some(n) = name.as_ref().filter(|n| n.starts_with('%')) {
             self.local_ids.insert(format!("g{n}"), 1);
         }
-        self.graph = Graph::new(name.clone().unwrap_or_default(), kind, strict);
-        self.graph.empty_name = name.as_deref() == Some("");
+        let empty_name = name.as_deref() == Some("");
+        self.graph = Graph::new(name.unwrap_or_default().into_owned(), kind, strict);
+        self.graph.empty_name = empty_name;
         self.graph.graph_attrs.extend_from(&self.globals.graph);
         self.graph.node_defaults.extend_from(&self.globals.node);
         self.graph.edge_defaults.extend_from(&self.globals.edge);
@@ -530,16 +566,17 @@ impl<'a> Parser<'a> {
     }
 
     /// `attrstmt(T_graph, NULL)` for `graphattrdefs : attrassignment` (`name = value`).
-    fn graph_attr_assignment(&mut self, key: Atom, val: Atom) {
+    fn graph_attr_assignment(&mut self, key: Atom<'a>, val: Atom<'a>) {
         self.html_keys.clear();
         if key.html {
-            self.html_keys.insert(key.text.clone());
+            self.html_keys.insert(key.text.to_string());
         }
         let key = key.text;
         if !self.fixed_at_root(DictKind::Graph, &key) {
             self.attr_stmt(DictKind::Graph, &key, &val.text, val.html);
-            self.current_graph_attrs_mut().set(&key, val.text, val.html);
-        } else if let Some(sym) = self.dict_mut(0, DictKind::Graph).get_mut(&key) {
+            self.current_graph_attrs_mut()
+                .set(&key, val.text.into_owned(), val.html);
+        } else if let Some(sym) = self.dict_mut(0, DictKind::Graph).get_mut(key.as_ref()) {
             sym.print = true;
         }
     }
@@ -645,16 +682,16 @@ impl<'a> Parser<'a> {
             let val = self.atom()?;
             self.reduce(3)?;
             let (key, html) = (key.text, key.html);
-            if !attrs.contains_key(&key) && html {
-                self.html_keys.insert(key.clone());
+            if !attrs.contains_key(key.as_ref()) && html {
+                self.html_keys.insert(key.to_string());
             }
             if items {
                 self.attr_items
-                    .push((key.clone(), val.text.clone(), val.html));
-            } else if !attrs.contains_key(&key) {
-                self.attr_order.push(key.clone());
+                    .push((key.to_string(), val.text.to_string(), val.html));
+            } else if !attrs.contains_key(key.as_ref()) {
+                self.attr_order.push(key.to_string());
             }
-            attrs.set(&key, val.text, val.html);
+            attrs.set(&key, val.text.into_owned(), val.html);
             if matches!(self.peek().kind, TokenKind::Comma | TokenKind::Semi) {
                 self.shift()?;
                 self.reduce(1)?;
@@ -710,7 +747,7 @@ impl<'a> Parser<'a> {
     }
 
     /// `nodelist : node | nodelist ',' node`, from the first node's atom, read already.
-    fn nodelist(&mut self, first: Atom) -> Result<Vec<Endpoint>> {
+    fn nodelist(&mut self, first: Atom<'a>) -> Result<Vec<Endpoint>> {
         let mut nodes = vec![self.node(first)?];
         self.reduce(1)?;
         while self.peek().kind == TokenKind::Comma {
@@ -724,7 +761,7 @@ impl<'a> Parser<'a> {
 
     /// `node : atom | atom ':' atom | atom ':' atom ':' atom`, from its atom, read already;
     /// `appendnode` makes the node.
-    fn node(&mut self, name: Atom) -> Result<Endpoint> {
+    fn node(&mut self, name: Atom<'a>) -> Result<Endpoint> {
         let mut port = None;
         if self.peek().kind == TokenKind::Colon {
             self.shift()?;
@@ -737,7 +774,7 @@ impl<'a> Parser<'a> {
                 port = Some((format!("{}:{}", p1.text, p2.text), false));
             } else {
                 self.reduce(3)?;
-                port = Some((p1.text, p1.html));
+                port = Some((p1.text.into_owned(), p1.html));
             }
         } else {
             self.reduce(1)?;
@@ -840,7 +877,7 @@ impl<'a> Parser<'a> {
     /// `agsubg(S->g, name, 1)`. Only a missing name makes an anonymous subgraph; a name
     /// starting with `%` (`LOCALNAMEPREFIX`) is a local one, which also takes an anonymous
     /// id (`agmapnametoid`).
-    fn open_subgraph(&mut self, name: Option<Atom>) -> SubgraphId {
+    fn open_subgraph(&mut self, name: Option<Atom<'a>>) -> SubgraphId {
         let current_parent = self.scope_stack.last().copied();
         if let Some(name) = &name
             && let Some(existing_id) = self.graph.subgraphs.iter().find_map(|s| {
@@ -868,7 +905,7 @@ impl<'a> Parser<'a> {
 
         let id = SubgraphId(self.graph.subgraphs.len() as u32);
         let named = name.is_some();
-        let (name, html) = name.map_or((String::new(), false), |a| (a.text, a.html));
+        let (name, html) = name.map_or((String::new(), false), |a| (a.text.into_owned(), a.html));
         let empty_name = named && name.is_empty();
         if !named {
             self.graph.anon_subgraph_ids.insert(id.0, self.anon_ctr);
@@ -1346,10 +1383,7 @@ impl<'a> GraphStream<'a> {
             // `dot` lays it out. The next `agread` starts after the line the scanner had
             // read (`fgets`), whatever statement it is in the middle of.
             if parser.exhausted {
-                let at_end = parser
-                    .tokens
-                    .last()
-                    .is_some_and(|t| t.kind == TokenKind::Eof);
+                let at_end = parser.last_scanned.as_ref().is_some_and(|t| t.eof);
                 self.from = if at_end {
                     None
                 } else {
@@ -1368,22 +1402,41 @@ impl<'a> GraphStream<'a> {
 /// `aagerror` (`lib/cgraph/scan.l`) for bison's "syntax error" on lookahead token `tok`:
 /// the line the scanner is on once `tok` is read, then `near '<yytext>'`, or, when yytext
 /// is empty (end of input), the start condition the scanner was left in.
-fn syntax_error(tok: &Token) -> GraphvizError {
+fn syntax_error(tok: &Token<'_>) -> GraphvizError {
     parse_error("syntax error", tok)
 }
 
 /// `aagerror(scanner, msg)` with `tok` the last token read.
-fn parse_error(msg: &str, tok: &Token) -> GraphvizError {
-    let mut message = format!("{msg} in line {}", tok.c_line);
-    if !tok.text.is_empty() {
-        message.push_str(&format!(" near '{}'", tok.text));
+fn parse_error(msg: &str, tok: &Token<'_>) -> GraphvizError {
+    scanner_error(
+        msg,
+        tok.c_line,
+        tok.col,
+        &tok.text,
+        tok.file.as_deref(),
+        &tok.state,
+    )
+}
+
+/// C: lib/cgraph/scan.l:aagerror
+fn scanner_error(
+    msg: &str,
+    c_line: i32,
+    col: usize,
+    text: &str,
+    file: Option<&str>,
+    state: &ScanState<'_>,
+) -> GraphvizError {
+    let mut message = format!("{msg} in line {}", c_line);
+    if !text.is_empty() {
+        message.push_str(&format!(" near '{}'", text));
     } else {
         // `"%.80s"` of `Sbuf`: its first 80 bytes.
         let first_80 = |s: &str| {
             let bytes = graphviz_pure_core::charset::encode(s);
             graphviz_pure_core::charset::decode_slice(&bytes[..bytes.len().min(80)])
         };
-        match &tok.state {
+        match state {
             ScanState::QString(sbuf) => {
                 message.push_str(&format!(
                     " scanning a quoted string (missing endquote? longer than {YY_BUF_SIZE}?)"
@@ -1406,12 +1459,7 @@ fn parse_error(msg: &str, tok: &Token) -> GraphvizError {
             ScanState::Initial => {}
         }
     }
-    GraphvizError::syntax(
-        tok.c_line,
-        tok.col,
-        message,
-        tok.file.as_deref().map(str::to_string),
-    )
+    GraphvizError::syntax(c_line, col, message, file.map(str::to_string))
 }
 
 /// A `tailport`/`headport` value (an HTML string's inner text, as `agget` gives it), split
@@ -1430,5 +1478,35 @@ fn parse_port_str(s: &str) -> Port {
             name: Some(s.to_string()),
             compass: None,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn exhaustion_after_shift_reports_last_scanned_token_without_reading_ahead() {
+        let mut parser = Parser::new(Lexer::new("alpha\nbeta"), &GlobalAttrs::default());
+        parser.advance();
+        parser.yydepth = YYMAXDEPTH - 1;
+        assert_eq!(
+            parser.push().unwrap_err().to_string(),
+            "memory exhausted in line 1 near 'alpha'"
+        );
+        assert_eq!(parser.lexer.line(), 1);
+        assert!(parser.lookahead.is_none());
+    }
+
+    #[test]
+    fn closing_graph_does_not_scan_trailing_input() {
+        let mut parser = Parser::new(
+            Lexer::new("digraph {\na;\n}\n/* unterminated"),
+            &GlobalAttrs::default(),
+        );
+        parser.read_graph().unwrap();
+        assert_eq!(parser.lexer.line(), 3);
+        assert_eq!(parser.last_scanned.as_ref().unwrap().text, "}");
+        assert!(parser.lookahead.is_none());
     }
 }

@@ -1,0 +1,836 @@
+{
+ "base": "b35ebbe2",
+ "cli_fidelity": [
+  {
+   "after_stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "after_stdout": "c7a0c36a09656d8d9b56c752afdcbb551cc269d0cc762623a7e6c230eda4dcc9",
+   "c_stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "c_stdout": "840b29fabe0356a20568ee560cbd4b95046a37677bdaa3503d1ed1c7495ba50b",
+   "format": "svg",
+   "input": "synth/osage_clustered_20000.gv",
+   "reference_stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "reference_stdout": "c7a0c36a09656d8d9b56c752afdcbb551cc269d0cc762623a7e6c230eda4dcc9"
+  },
+  {
+   "after_stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "after_stdout": "b281463084ce8117d239cc208801570738584321e195a393f22ccbe1f58c5580",
+   "c_stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "c_stdout": "9f94666638a493007c2675c125b662a493dd886d2d26d0a706ee17fe4a83a63c",
+   "format": "svg",
+   "input": "synth/patchwork_clustered_20000.gv",
+   "reference_stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "reference_stdout": "b281463084ce8117d239cc208801570738584321e195a393f22ccbe1f58c5580"
+  },
+  {
+   "after_stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "after_stdout": "4d5a60597dfbf85abd84b4685e7fea173d1ef1f89c9c5e5fae6a3b348fef1cf2",
+   "c_stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "c_stdout": "4cbd6fb929d104a06e6a5406708b415b920afa4a84dbe9f8ba030946a419c7fb",
+   "format": "svg",
+   "input": "synth/twopi_tree_20000.gv",
+   "reference_stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "reference_stdout": "4d5a60597dfbf85abd84b4685e7fea173d1ef1f89c9c5e5fae6a3b348fef1cf2"
+  },
+  {
+   "after_stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "after_stdout": "7e334a2ec9d0902cee54de75545569d7d0b6042660b5e3c2e3c0b30ac73629f2",
+   "c_stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "c_stdout": "7e334a2ec9d0902cee54de75545569d7d0b6042660b5e3c2e3c0b30ac73629f2",
+   "format": "canon",
+   "input": "generated/dot_dag_20000_pos.gv",
+   "reference_stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "reference_stdout": "7e334a2ec9d0902cee54de75545569d7d0b6042660b5e3c2e3c0b30ac73629f2"
+  },
+  {
+   "after_stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "after_stdout": "57ddaad86c73303d948aecc5a418fee67e9146f503fe40a40567d35968a990fb",
+   "c_stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "c_stdout": "57ddaad86c73303d948aecc5a418fee67e9146f503fe40a40567d35968a990fb",
+   "format": "canon",
+   "input": "generated/parse_200000_pos.gv",
+   "reference_stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "reference_stdout": "57ddaad86c73303d948aecc5a418fee67e9146f503fe40a40567d35968a990fb"
+  }
+ ],
+ "cli_heap": {
+  "after": [
+   {
+    "bytes": 516761,
+    "flags": [],
+    "format": "svg",
+    "heap": {
+     "heap_blocks": 3019643,
+     "heap_bytes": 225902734,
+     "heap_peak_bytes": 87382226
+    },
+    "input": "synth/osage_clustered_20000.gv",
+    "native": {
+     "cpu_median": 1.0165629999999999,
+     "exit": 0,
+     "rss_kib_max": 94548,
+     "wall_max": 1.185599768999964,
+     "wall_median": 1.0666889660060406,
+     "wall_min": 1.065779433993157
+    },
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "stdout_sha256": "c7a0c36a09656d8d9b56c752afdcbb551cc269d0cc762623a7e6c230eda4dcc9",
+    "uptime_end": "18:08:03 up 4 days, 14:49,  2 users,  load average: 34.89, 48.45, 66.85",
+    "uptime_start": "18:06:07 up 4 days, 14:48,  2 users,  load average: 33.96, 56.03, 71.47"
+   },
+   {
+    "bytes": 516765,
+    "flags": [],
+    "format": "svg",
+    "heap": {
+     "heap_blocks": 2938276,
+     "heap_bytes": 240250929,
+     "heap_peak_bytes": 89862688
+    },
+    "input": "synth/patchwork_clustered_20000.gv",
+    "native": {
+     "cpu_median": 1.086844,
+     "exit": 0,
+     "rss_kib_max": 98716,
+     "wall_max": 1.1902827979647554,
+     "wall_median": 1.1694930029916577,
+     "wall_min": 1.1442633899860084
+    },
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "stdout_sha256": "b281463084ce8117d239cc208801570738584321e195a393f22ccbe1f58c5580",
+    "uptime_end": "18:10:13 up 4 days, 14:52,  2 users,  load average: 40.93, 45.52, 63.33",
+    "uptime_start": "18:08:03 up 4 days, 14:49,  2 users,  load average: 34.89, 48.45, 66.85"
+   },
+   {
+    "bytes": 337734,
+    "flags": [],
+    "format": "svg",
+    "heap": {
+     "heap_blocks": 5279339,
+     "heap_bytes": 348154501,
+     "heap_peak_bytes": 117871237
+    },
+    "input": "synth/twopi_tree_20000.gv",
+    "native": {
+     "cpu_median": 2.238734,
+     "exit": 0,
+     "rss_kib_max": 125932,
+     "wall_max": 2.483733215020038,
+     "wall_median": 2.479653260030318,
+     "wall_min": 1.7871370229986496
+    },
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "stdout_sha256": "4d5a60597dfbf85abd84b4685e7fea173d1ef1f89c9c5e5fae6a3b348fef1cf2",
+    "uptime_end": "18:13:05 up 4 days, 14:54,  2 users,  load average: 40.79, 43.82, 59.71",
+    "uptime_start": "18:10:13 up 4 days, 14:52,  2 users,  load average: 40.93, 45.52, 63.33"
+   },
+   {
+    "bytes": 978652,
+    "flags": [
+     "-Knop2"
+    ],
+    "format": "canon",
+    "heap": {
+     "heap_blocks": 4621642,
+     "heap_bytes": 374311826,
+     "heap_peak_bytes": 150533020
+    },
+    "input": "generated/dot_dag_20000_pos.gv",
+    "native": {
+     "cpu_median": 1.597921,
+     "exit": 0,
+     "rss_kib_max": 168952,
+     "wall_max": 1.6915671859751455,
+     "wall_median": 1.6381296640029177,
+     "wall_min": 1.5904844339820556
+    },
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "stdout_sha256": "7e334a2ec9d0902cee54de75545569d7d0b6042660b5e3c2e3c0b30ac73629f2",
+    "uptime_end": "18:16:31 up 4 days, 14:58,  2 users,  load average: 35.17, 40.58, 55.27",
+    "uptime_start": "18:13:05 up 4 days, 14:54,  2 users,  load average: 40.79, 43.82, 59.71"
+   }
+  ],
+  "before": [
+   {
+    "bytes": 516761,
+    "format": "svg",
+    "heap": {
+     "heap_blocks": 3603164,
+     "heap_bytes": 295483525,
+     "heap_peak_bytes": 87382226
+    },
+    "input": "synth/osage_clustered_20000.gv",
+    "native": {
+     "cpu_median": 1.013055,
+     "exit": 0,
+     "rss_kib_max": 94820,
+     "wall_max": 1.266562681994401,
+     "wall_median": 1.1939067390048876,
+     "wall_min": 1.0688665029592812
+    },
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "stdout_sha256": "c7a0c36a09656d8d9b56c752afdcbb551cc269d0cc762623a7e6c230eda4dcc9",
+    "uptime_end": "18:04:45 up 4 days, 14:46,  2 users,  load average: 43.94, 63.64, 75.08",
+    "uptime_start": "18:02:34 up 4 days, 14:44,  2 users,  load average: 56.02, 74.84, 79.87"
+   },
+   {
+    "bytes": 516765,
+    "format": "svg",
+    "heap": {
+     "heap_blocks": 3521797,
+     "heap_bytes": 309831744,
+     "heap_peak_bytes": 89862688
+    },
+    "input": "synth/patchwork_clustered_20000.gv",
+    "native": {
+     "cpu_median": 0.9280079999999999,
+     "exit": 0,
+     "rss_kib_max": 100536,
+     "wall_max": 1.383408229041379,
+     "wall_median": 1.047544659988489,
+     "wall_min": 0.9433465420152061
+    },
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "stdout_sha256": "b281463084ce8117d239cc208801570738584321e195a393f22ccbe1f58c5580",
+    "uptime_end": "18:07:11 up 4 days, 14:49,  2 users,  load average: 29.99, 50.39, 68.46",
+    "uptime_start": "18:04:45 up 4 days, 14:46,  2 users,  load average: 43.94, 63.64, 75.08"
+   },
+   {
+    "bytes": 337734,
+    "format": "svg",
+    "heap": {
+     "heap_blocks": 5639393,
+     "heap_bytes": 383352972,
+     "heap_peak_bytes": 117871237
+    },
+    "input": "synth/twopi_tree_20000.gv",
+    "native": {
+     "cpu_median": 2.328601,
+     "exit": 0,
+     "rss_kib_max": 125068,
+     "wall_max": 2.49849270604318,
+     "wall_median": 2.4964631060138345,
+     "wall_min": 2.4805256180115975
+    },
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "stdout_sha256": "4d5a60597dfbf85abd84b4685e7fea173d1ef1f89c9c5e5fae6a3b348fef1cf2",
+    "uptime_end": "18:10:43 up 4 days, 14:52,  2 users,  load average: 39.81, 44.87, 62.54",
+    "uptime_start": "18:07:11 up 4 days, 14:49,  2 users,  load average: 29.99, 50.39, 68.46"
+   },
+   {
+    "bytes": 978652,
+    "flags": [
+     "-Knop2"
+    ],
+    "format": "canon",
+    "heap": {
+     "heap_blocks": 5785036,
+     "heap_bytes": 512968828,
+     "heap_peak_bytes": 150533020
+    },
+    "input": "generated/dot_dag_20000_pos.gv",
+    "native": {
+     "cpu_median": 1.578864,
+     "exit": 0,
+     "rss_kib_max": 169420,
+     "wall_max": 1.9231319969985634,
+     "wall_median": 1.8837775660213083,
+     "wall_min": 1.6874376820051111
+    },
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "stdout_sha256": "7e334a2ec9d0902cee54de75545569d7d0b6042660b5e3c2e3c0b30ac73629f2",
+    "uptime_end": "18:16:12 up 4 days, 14:58,  2 users,  load average: 37.00, 41.27, 55.81",
+    "uptime_start": "18:11:12 up 4 days, 14:53,  2 users,  load average: 42.90, 45.13, 62.07"
+   }
+  ]
+ },
+ "cli_wall_paired": [
+  {
+   "after": {
+    "cpu_median": 0.841526,
+    "exit": 0,
+    "rss_kib_max": 95236,
+    "wall_max": 0.970571962010581,
+    "wall_median": 0.8679038550471887,
+    "wall_min": 0.6734620200004429
+   },
+   "bytes": 516761,
+   "c": {
+    "cpu_median": 0.46188299999999993,
+    "exit": 0,
+    "rss_kib_max": 66636,
+    "wall_max": 0.5518393560196273,
+    "wall_median": 0.524967106000986,
+    "wall_min": 0.4304478880367242
+   },
+   "flags": [],
+   "format": "svg",
+   "input": "synth/osage_clustered_20000.gv",
+   "reference": {
+    "cpu_median": 1.217138,
+    "exit": 0,
+    "rss_kib_max": 97652,
+    "wall_max": 1.4860654539661482,
+    "wall_median": 1.3925069109536707,
+    "wall_min": 1.197988988016732
+   },
+   "uptime_end": "18:15:55 up 4 days, 14:57,  2 users,  load average: 37.78, 41.70, 56.25",
+   "uptime_start": "18:15:47 up 4 days, 14:57,  2 users,  load average: 38.37, 41.88, 56.39"
+  },
+  {
+   "after": {
+    "cpu_median": 1.116358,
+    "exit": 0,
+    "rss_kib_max": 100444,
+    "wall_max": 1.2612735450384207,
+    "wall_median": 1.132616039016284,
+    "wall_min": 0.9693268479895778
+   },
+   "bytes": 516765,
+   "c": {
+    "cpu_median": 0.541647,
+    "exit": 0,
+    "rss_kib_max": 69668,
+    "wall_max": 0.6706713460152969,
+    "wall_median": 0.5480053529608995,
+    "wall_min": 0.5400641279993579
+   },
+   "flags": [],
+   "format": "svg",
+   "input": "synth/patchwork_clustered_20000.gv",
+   "reference": {
+    "cpu_median": 1.125449,
+    "exit": 0,
+    "rss_kib_max": 100304,
+    "wall_max": 1.2556649910402484,
+    "wall_median": 1.161163005977869,
+    "wall_min": 1.0755926690180786
+   },
+   "uptime_end": "18:16:04 up 4 days, 14:57,  2 users,  load average: 37.61, 41.54, 56.05",
+   "uptime_start": "18:15:55 up 4 days, 14:57,  2 users,  load average: 37.78, 41.70, 56.25"
+  },
+  {
+   "after": {
+    "cpu_median": 2.316751,
+    "exit": 0,
+    "rss_kib_max": 124484,
+    "wall_max": 2.482457989011891,
+    "wall_median": 2.3463704489986412,
+    "wall_min": 2.2314408340025693
+   },
+   "bytes": 337734,
+   "c": {
+    "cpu_median": 2.424248,
+    "exit": 0,
+    "rss_kib_max": 45844,
+    "wall_max": 2.5650579130160622,
+    "wall_median": 2.4734818169963546,
+    "wall_min": 2.054394371982198
+   },
+   "flags": [],
+   "format": "svg",
+   "input": "synth/twopi_tree_20000.gv",
+   "reference": {
+    "cpu_median": 2.182953,
+    "exit": 0,
+    "rss_kib_max": 123996,
+    "wall_max": 2.5416585839702748,
+    "wall_median": 2.370108980976511,
+    "wall_min": 2.2331073560053483
+   },
+   "uptime_end": "18:16:25 up 4 days, 14:58,  2 users,  load average: 35.93, 40.90, 55.53",
+   "uptime_start": "18:16:04 up 4 days, 14:57,  2 users,  load average: 37.61, 41.54, 56.05"
+  },
+  {
+   "after": {
+    "cpu_median": 1.421995,
+    "exit": 0,
+    "rss_kib_max": 168760,
+    "wall_max": 1.6305373789509758,
+    "wall_median": 1.558500723040197,
+    "wall_min": 1.5555761040304787
+   },
+   "bytes": 978652,
+   "c": {
+    "cpu_median": 0.6771969999999999,
+    "exit": 0,
+    "rss_kib_max": 52816,
+    "wall_max": 0.7941771280020475,
+    "wall_median": 0.7300452970084734,
+    "wall_min": 0.552734958997462
+   },
+   "flags": [
+    "-Knop2"
+   ],
+   "format": "canon",
+   "input": "generated/dot_dag_20000_pos.gv",
+   "reference": {
+    "cpu_median": 1.622151,
+    "exit": 0,
+    "rss_kib_max": 169540,
+    "wall_max": 2.365363900025841,
+    "wall_median": 1.8759333940106444,
+    "wall_min": 1.7688939449726604
+   },
+   "uptime_end": "18:16:38 up 4 days, 14:58,  2 users,  load average: 36.20, 40.70, 55.23",
+   "uptime_start": "18:16:25 up 4 days, 14:58,  2 users,  load average: 35.93, 40.90, 55.53"
+  },
+  {
+   "after": {
+    "cpu_median": 9.042448,
+    "exit": 0,
+    "rss_kib_max": 989920,
+    "wall_max": 10.060406046977732,
+    "wall_median": 9.294218230992556,
+    "wall_min": 9.14083169697551
+   },
+   "bytes": 13800022,
+   "c": {
+    "cpu_median": 3.716222,
+    "exit": 0,
+    "rss_kib_max": 286416,
+    "wall_max": 3.879639374965336,
+    "wall_median": 3.736239122983534,
+    "wall_min": 3.6886216899729334
+   },
+   "flags": [
+    "-Knop2"
+   ],
+   "format": "canon",
+   "input": "generated/parse_200000_pos.gv",
+   "reference": {
+    "cpu_median": 10.988764999999999,
+    "exit": 0,
+    "rss_kib_max": 1036568,
+    "wall_max": 12.195720680989325,
+    "wall_median": 11.620758646982722,
+    "wall_min": 11.105371469981037
+   },
+   "uptime_end": "18:17:52 up 4 days, 14:59,  2 users,  load average: 30.83, 38.06, 53.18",
+   "uptime_start": "18:16:38 up 4 days, 14:58,  2 users,  load average: 36.20, 40.70, 55.23"
+  }
+ ],
+ "date": "2026-10-29",
+ "issue": 535,
+ "parser_only": {
+  "after": {
+   "bytes": 11600022,
+   "heap": {
+    "heap_blocks": 5433360,
+    "heap_bytes": 521964509,
+    "heap_peak_bytes": 200845000
+   },
+   "input": "parse_200000.gv",
+   "native": {
+    "cpu_median": 1.8441539999999998,
+    "exit": 0,
+    "rss_kib_max": 217236,
+    "wall_max": 2.0175092680146918,
+    "wall_median": 1.9356054860400036,
+    "wall_min": 1.7907197729800828
+   },
+   "stdout": "200000 0\n",
+   "uptime_end": "18:16:04 up 4 days, 14:57,  2 users,  load average: 37.61, 41.54, 56.05",
+   "uptime_start": "18:13:15 up 4 days, 14:55,  2 users,  load average: 40.62, 43.62, 59.39"
+  },
+  "before": {
+   "bytes": 11600022,
+   "heap": {
+    "heap_blocks": 17833395,
+    "heap_bytes": 1648905910,
+    "heap_peak_bytes": 755115653
+   },
+   "input": "parse_200000.gv",
+   "native": {
+    "cpu_median": 3.458608,
+    "exit": 0,
+    "rss_kib_max": 676004,
+    "wall_max": 3.799854411976412,
+    "wall_median": 3.734354476968292,
+    "wall_min": 3.4797781219822355
+   },
+   "stdout": "200000 0\n",
+   "uptime_end": "18:18:27 up 4 days, 15:00,  2 users,  load average: 26.95, 36.32, 52.04",
+   "uptime_start": "18:12:23 up 4 days, 14:54,  2 users,  load average: 41.99, 44.54, 60.64"
+  },
+  "c": {
+   "bytes": 11600022,
+   "input": "parse_200000.gv",
+   "native": {
+    "cpu_median": 1.798995,
+    "exit": 0,
+    "rss_kib_max": 63412,
+    "wall_max": 2.253211935982108,
+    "wall_median": 2.1081762140383944,
+    "wall_min": 1.8970325469854288
+   },
+   "stdout": "200000 0\n",
+   "uptime_end": "18:13:23 up 4 days, 14:55,  2 users,  load average: 40.89, 43.62, 59.31",
+   "uptime_start": "18:13:15 up 4 days, 14:55,  2 users,  load average: 40.62, 43.62, 59.39"
+  }
+ },
+ "ratchet": {
+  "after": {
+   "cases": {
+    "laid/tests/wild/gv16_graphs_b29_d1e4db.gv -Tcanon -Knop2": {
+     "exit": 0,
+     "heap_blocks": 149449,
+     "heap_bytes": 9155072,
+     "heap_peak_bytes": 3242338,
+     "instructions": 131136378,
+     "rss_kib": 9752
+    },
+    "laid/tests/wild/gv16_graphs_b29_d1e4db.gv -Tsvg -Knop2": {
+     "exit": 0,
+     "heap_blocks": 132148,
+     "heap_bytes": 7591524,
+     "heap_peak_bytes": 2470442,
+     "instructions": 134712028,
+     "rss_kib": 8852
+    },
+    "synth/dot_dag_1000.gv -Tsvg": {
+     "exit": 0,
+     "heap_blocks": 387552,
+     "heap_bytes": 75850280,
+     "heap_peak_bytes": 13948024,
+     "instructions": 1553358160,
+     "rss_kib": 18728
+    },
+    "synth/twopi_tree_5000.gv -Tsvg": {
+     "exit": 0,
+     "heap_blocks": 934800,
+     "heap_bytes": 74392075,
+     "heap_peak_bytes": 29377345,
+     "instructions": 818582501,
+     "rss_kib": 34896
+    },
+    "tests/circo/wild_gv16_directed_sdh_29b016.gv -Tsvg": {
+     "exit": 0,
+     "heap_blocks": 673828,
+     "heap_bytes": 37308505,
+     "heap_peak_bytes": 991897,
+     "instructions": 1542435955,
+     "rss_kib": 7084
+    },
+    "tests/fdp/wild_gv16_graphs_b69_4b5b48.gv -Tsvg": {
+     "exit": 0,
+     "heap_blocks": 301806,
+     "heap_bytes": 12569419,
+     "heap_peak_bytes": 1221317,
+     "instructions": 5219205051,
+     "rss_kib": 7316
+    },
+    "tests/fixtures/unix.gv -Tpng": {
+     "exit": 0,
+     "heap_blocks": 25403,
+     "heap_bytes": 14078839,
+     "heap_peak_bytes": 7460280,
+     "instructions": 146767932,
+     "rss_kib": 20172
+    },
+    "tests/fixtures/unix.gv -Tsvg": {
+     "exit": 0,
+     "heap_blocks": 13380,
+     "heap_bytes": 2053970,
+     "heap_peak_bytes": 569128,
+     "instructions": 27342155,
+     "rss_kib": 6864
+    },
+    "tests/neato/hw2_random_120.gv -Tsvg": {
+     "exit": 0,
+     "heap_blocks": 23513,
+     "heap_bytes": 2893720,
+     "heap_peak_bytes": 798636,
+     "instructions": 2531937335,
+     "rss_kib": 7096
+    },
+    "tests/osage/wild_gv16_graphs_b51_33bcb0.gv -Tsvg": {
+     "exit": 0,
+     "heap_blocks": 37382,
+     "heap_bytes": 2851272,
+     "heap_peak_bytes": 983896,
+     "instructions": 39764087,
+     "rss_kib": 7548
+    },
+    "tests/patchwork/wild_gv16_graphs_b51_33bcb0.gv -Tsvg": {
+     "exit": 0,
+     "heap_blocks": 31569,
+     "heap_bytes": 2738658,
+     "heap_peak_bytes": 908277,
+     "instructions": 29075878,
+     "rss_kib": 7060
+    },
+    "tests/sfdp/gen_grid20x20.gv -Tsvg": {
+     "exit": 0,
+     "heap_blocks": 83432,
+     "heap_bytes": 8447665,
+     "heap_peak_bytes": 3066521,
+     "instructions": 972118316,
+     "rss_kib": 9120
+    },
+    "tests/twopi/fx_arrows.gv -Tsvg": {
+     "exit": 0,
+     "heap_blocks": 20544,
+     "heap_bytes": 6725353,
+     "heap_peak_bytes": 909648,
+     "instructions": 4303379703,
+     "rss_kib": 6812
+    },
+    "tests/wild/gv16_graphs_b143_5416de.gv -Tplain": {
+     "exit": 0,
+     "heap_blocks": 184011,
+     "heap_bytes": 42228031,
+     "heap_peak_bytes": 8293735,
+     "instructions": 2012030038,
+     "rss_kib": 13080
+    },
+    "tests/wild/gv16_graphs_b143_5416de.gv -Tsvg": {
+     "exit": 0,
+     "heap_blocks": 189565,
+     "heap_bytes": 43053272,
+     "heap_peak_bytes": 8293731,
+     "instructions": 1995098859,
+     "rss_kib": 13080
+    }
+   },
+   "target": "x86_64-unknown-linux-musl"
+  },
+  "before": {
+   "cases": {
+    "laid/tests/wild/gv16_graphs_b29_d1e4db.gv -Tcanon -Knop2": {
+     "exit": 0,
+     "heap_blocks": 227582,
+     "heap_bytes": 18118930,
+     "heap_peak_bytes": 5232504,
+     "instructions": 158817839
+    },
+    "laid/tests/wild/gv16_graphs_b29_d1e4db.gv -Tsvg -Knop2": {
+     "exit": 0,
+     "heap_blocks": 210281,
+     "heap_bytes": 16555382,
+     "heap_peak_bytes": 5232500,
+     "instructions": 162451819
+    },
+    "synth/dot_dag_1000.gv -Tsvg": {
+     "exit": 0,
+     "heap_blocks": 418625,
+     "heap_bytes": 78052004,
+     "heap_peak_bytes": 13948024,
+     "instructions": 1576764535
+    },
+    "synth/twopi_tree_5000.gv -Tsvg": {
+     "exit": 0,
+     "heap_blocks": 1024852,
+     "heap_bytes": 83144869,
+     "heap_peak_bytes": 29377345,
+     "instructions": 850768923
+    },
+    "tests/circo/wild_gv16_directed_sdh_29b016.gv -Tsvg": {
+     "exit": 0,
+     "heap_blocks": 678425,
+     "heap_bytes": 37859338,
+     "heap_peak_bytes": 991897,
+     "instructions": 1544023520
+    },
+    "tests/fdp/wild_gv16_graphs_b69_4b5b48.gv -Tsvg": {
+     "exit": 0,
+     "heap_blocks": 321513,
+     "heap_bytes": 14775233,
+     "heap_peak_bytes": 1407992,
+     "instructions": 5226686832
+    },
+    "tests/fixtures/unix.gv -Tpng": {
+     "exit": 0,
+     "heap_blocks": 26276,
+     "heap_bytes": 14148274,
+     "heap_peak_bytes": 7460280,
+     "instructions": 147087717
+    },
+    "tests/fixtures/unix.gv -Tsvg": {
+     "exit": 0,
+     "heap_blocks": 14253,
+     "heap_bytes": 2123405,
+     "heap_peak_bytes": 569128,
+     "instructions": 27657698
+    },
+    "tests/neato/hw2_random_120.gv -Tsvg": {
+     "exit": 0,
+     "heap_blocks": 26433,
+     "heap_bytes": 3163085,
+     "heap_peak_bytes": 798636,
+     "instructions": 2533010042
+    },
+    "tests/osage/wild_gv16_graphs_b51_33bcb0.gv -Tsvg": {
+     "exit": 0,
+     "heap_blocks": 42661,
+     "heap_bytes": 3457541,
+     "heap_peak_bytes": 983896,
+     "instructions": 41868908
+    },
+    "tests/patchwork/wild_gv16_graphs_b51_33bcb0.gv -Tsvg": {
+     "exit": 0,
+     "heap_blocks": 36848,
+     "heap_bytes": 3344951,
+     "heap_peak_bytes": 908277,
+     "instructions": 31214400
+    },
+    "tests/sfdp/gen_grid20x20.gv -Tsvg": {
+     "exit": 0,
+     "heap_blocks": 97178,
+     "heap_bytes": 9553726,
+     "heap_peak_bytes": 3066521,
+     "instructions": 976529209
+    },
+    "tests/twopi/fx_arrows.gv -Tsvg": {
+     "exit": 0,
+     "heap_blocks": 22546,
+     "heap_bytes": 6865045,
+     "heap_peak_bytes": 909648,
+     "instructions": 4303974486
+    },
+    "tests/wild/gv16_graphs_b143_5416de.gv -Tplain": {
+     "exit": 0,
+     "heap_blocks": 245032,
+     "heap_bytes": 46698167,
+     "heap_peak_bytes": 8293735,
+     "instructions": 2032557242
+    },
+    "tests/wild/gv16_graphs_b143_5416de.gv -Tsvg": {
+     "exit": 0,
+     "heap_blocks": 250586,
+     "heap_bytes": 47523408,
+     "heap_peak_bytes": 8293731,
+     "instructions": 2015261330
+    }
+   },
+   "target": "x86_64-unknown-linux-musl"
+  },
+  "ci_after": {
+   "cases": {
+    "laid/tests/wild/gv16_graphs_b29_d1e4db.gv -Tcanon -Knop2": {
+     "exit": 0,
+     "heap_blocks": 149449,
+     "heap_bytes": 9154830,
+     "heap_peak_bytes": 3242176,
+     "instructions": 131104138,
+     "rss_kib": 7868
+    },
+    "laid/tests/wild/gv16_graphs_b29_d1e4db.gv -Tsvg -Knop2": {
+     "exit": 0,
+     "heap_blocks": 132148,
+     "heap_bytes": 7591282,
+     "heap_peak_bytes": 2470280,
+     "instructions": 134677645,
+     "rss_kib": 6972
+    },
+    "synth/dot_dag_1000.gv -Tsvg": {
+     "exit": 0,
+     "heap_blocks": 387552,
+     "heap_bytes": 75850174,
+     "heap_peak_bytes": 13947942,
+     "instructions": 1571662036,
+     "rss_kib": 15692
+    },
+    "synth/twopi_tree_5000.gv -Tsvg": {
+     "exit": 0,
+     "heap_blocks": 934800,
+     "heap_bytes": 74391961,
+     "heap_peak_bytes": 29377255,
+     "instructions": 818614344,
+     "rss_kib": 32780
+    },
+    "tests/circo/wild_gv16_directed_sdh_29b016.gv -Tsvg": {
+     "exit": 0,
+     "heap_blocks": 673828,
+     "heap_bytes": 37308447,
+     "heap_peak_bytes": 991839,
+     "instructions": 1542435180,
+     "rss_kib": 5236
+    },
+    "tests/fdp/wild_gv16_graphs_b69_4b5b48.gv -Tsvg": {
+     "exit": 0,
+     "heap_blocks": 301806,
+     "heap_bytes": 12569361,
+     "heap_peak_bytes": 1221259,
+     "instructions": 5219168024,
+     "rss_kib": 5484
+    },
+    "tests/fixtures/unix.gv -Tpng": {
+     "exit": 0,
+     "heap_blocks": 25403,
+     "heap_bytes": 14078781,
+     "heap_peak_bytes": 7460222,
+     "instructions": 147438731,
+     "rss_kib": 18308
+    },
+    "tests/fixtures/unix.gv -Tsvg": {
+     "exit": 0,
+     "heap_blocks": 13380,
+     "heap_bytes": 2053912,
+     "heap_peak_bytes": 569070,
+     "instructions": 28012707,
+     "rss_kib": 4768
+    },
+    "tests/neato/hw2_random_120.gv -Tsvg": {
+     "exit": 0,
+     "heap_blocks": 23513,
+     "heap_bytes": 2893662,
+     "heap_peak_bytes": 798578,
+     "instructions": 2531946016,
+     "rss_kib": 5200
+    },
+    "tests/osage/wild_gv16_graphs_b51_33bcb0.gv -Tsvg": {
+     "exit": 0,
+     "heap_blocks": 37382,
+     "heap_bytes": 2851214,
+     "heap_peak_bytes": 983838,
+     "instructions": 39768026,
+     "rss_kib": 5492
+    },
+    "tests/patchwork/wild_gv16_graphs_b51_33bcb0.gv -Tsvg": {
+     "exit": 0,
+     "heap_blocks": 31569,
+     "heap_bytes": 2738600,
+     "heap_peak_bytes": 908219,
+     "instructions": 29081062,
+     "rss_kib": 5116
+    },
+    "tests/sfdp/gen_grid20x20.gv -Tsvg": {
+     "exit": 0,
+     "heap_blocks": 83432,
+     "heap_bytes": 8447607,
+     "heap_peak_bytes": 3066463,
+     "instructions": 972122410,
+     "rss_kib": 7416
+    },
+    "tests/twopi/fx_arrows.gv -Tsvg": {
+     "exit": 0,
+     "heap_blocks": 20544,
+     "heap_bytes": 6725295,
+     "heap_peak_bytes": 909590,
+     "instructions": 4303469859,
+     "rss_kib": 4864
+    },
+    "tests/wild/gv16_graphs_b143_5416de.gv -Tplain": {
+     "exit": 0,
+     "heap_blocks": 184011,
+     "heap_bytes": 42227973,
+     "heap_peak_bytes": 8293677,
+     "instructions": 2019837409,
+     "rss_kib": 11216
+    },
+    "tests/wild/gv16_graphs_b143_5416de.gv -Tsvg": {
+     "exit": 0,
+     "heap_blocks": 189565,
+     "heap_bytes": 43053214,
+     "heap_peak_bytes": 8293673,
+     "instructions": 2002901276,
+     "rss_kib": 11388
+    }
+   },
+   "target": "x86_64-unknown-linux-musl",
+   "wasm_bytes": 4035603
+  }
+ },
+ "reference": "1.0 release candidate f89e21d9 (same Rust sources as base)",
+ "target": "x86_64-unknown-linux-musl, x86-64-v1"
+}
