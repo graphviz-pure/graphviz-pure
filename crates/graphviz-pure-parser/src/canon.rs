@@ -492,8 +492,34 @@ pub fn canon_str(s: &str) -> String {
 /// [`canon_str`] with an explicit maximum output line length (`linelength`; 0 disables
 /// line breaking).
 pub fn canon_str_with(arg: &str, max_line: usize) -> String {
+    let mut out = String::new();
+    let mut scratch = Vec::new();
+    canon_str_with_into(&mut out, &mut scratch, arg, max_line);
+    out
+}
+
+/// The scratch the canonicalizer works on: the bytes of the text it canonicalizes.
+///
+/// A caller that canonicalizes many strings — the plain writer does, one label per node
+/// — keeps one of these, so that the bytes are a buffer of its own instead of an
+/// allocation per string.
+#[derive(Default)]
+pub struct CanonScratch {
+    bytes: Vec<u8>,
+}
+
+impl CanonScratch {
+    /// [`canon_str`], written into `out`.
+    pub fn canon_str_into(&mut self, out: &mut String, s: &str) {
+        canon_str_with_into(out, &mut self.bytes, s, 128);
+    }
+}
+
+/// [`canon_str_with`], written into `out`, with the bytes it works on in `scratch`.
+fn canon_str_with_into(out: &mut String, scratch: &mut Vec<u8>, arg: &str, max_line: usize) {
     if arg.is_empty() {
-        return "\"\"".to_string();
+        out.push_str("\"\"");
+        return;
     }
     // `_agstrcanon` works on C's bytes (`graphviz_pure_core::charset`).
     let bytes = graphviz_pure_core::charset::encode(arg);
@@ -501,8 +527,9 @@ pub fn canon_str_with(arg: &str, max_line: usize) -> String {
     let is_id_char = |c: u8| c.is_ascii_alphanumeric() || c == b'.' || c == b'-' || !c.is_ascii();
     let is_escape =
         |i: usize| b[i] == b'\\' && b.get(i + 1).is_some_and(|&c| is_graphviz_escape_char(c));
-    let mut out: Vec<u8> = Vec::with_capacity(b.len() + 4);
-    out.push(b'"');
+    scratch.clear();
+    scratch.reserve(b.len() + 4);
+    scratch.push(b'"');
     let mut cnt = 0usize;
     let mut dotcnt = 0usize;
     let mut needs_quotes = false;
@@ -513,7 +540,7 @@ pub fn canon_str_with(arg: &str, max_line: usize) -> String {
     while i < b.len() {
         let uc = b[i];
         if uc == b'"' && !part_of_escape {
-            out.push(b'\\');
+            scratch.push(b'\\');
             needs_quotes = true;
         } else if !part_of_escape && is_escape(i) {
             needs_quotes = true;
@@ -541,22 +568,22 @@ pub fn canon_str_with(arg: &str, max_line: usize) -> String {
         } else {
             part_of_escape = false;
         }
-        out.push(uc);
+        scratch.push(uc);
         i += 1;
         cnt += 1;
         if max_line > 0 && i < b.len() {
             let next = b[i];
-            let last = *out.last().unwrap();
+            let last = *scratch.last().unwrap();
             if backslash_pending && !(is_id_char(last) || last == b'\\') && is_id_char(next) {
-                out.push(b'\\');
-                out.push(b'\n');
+                scratch.push(b'\\');
+                scratch.push(b'\n');
                 needs_quotes = true;
                 backslash_pending = false;
                 cnt = 0;
             } else if cnt >= max_line {
                 if !(is_id_char(last) || last == b'\\') && is_id_char(next) {
-                    out.push(b'\\');
-                    out.push(b'\n');
+                    scratch.push(b'\\');
+                    scratch.push(b'\n');
                     needs_quotes = true;
                     cnt = 0;
                 } else {
@@ -565,18 +592,19 @@ pub fn canon_str_with(arg: &str, max_line: usize) -> String {
             }
         }
     }
-    out.push(b'"');
-    let quoted = graphviz_pure_core::charset::decode(out);
-    if needs_quotes || (cnt == 1 && (b[0] == b'.' || b[0] == b'-')) {
-        return quoted;
-    }
-    if ["node", "edge", "strict", "graph", "digraph", "subgraph"]
-        .iter()
-        .any(|t| t.eq_ignore_ascii_case(arg))
+    scratch.push(b'"');
+    if needs_quotes
+        || (cnt == 1 && (b[0] == b'.' || b[0] == b'-'))
+        || ["node", "edge", "strict", "graph", "digraph", "subgraph"]
+            .iter()
+            .any(|t| t.eq_ignore_ascii_case(arg))
     {
-        return quoted;
+        // The quoted form: the bytes are C's, and the port's text form of them.
+        out.push_str(&graphviz_pure_core::charset::decode_slice(scratch));
+        return;
     }
-    arg.to_string()
+    // The plain form: the text itself.
+    out.push_str(arg);
 }
 
 fn is_graphviz_escape_char(b: u8) -> bool {

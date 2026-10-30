@@ -436,29 +436,42 @@ fn decimal_exponent(e: i32) -> i32 {
 /// The value `m·2^e·10^s` as an exact fraction, rounded half to even: the floor of the
 /// value and the rounded one. `None` when the fraction does not fit the arithmetic.
 fn scaled_round(m: u64, e: i32, s: i32) -> Option<(u64, u64)> {
-    let (num, den) = if s >= 0 {
+    if s >= 0 {
         // `m·2^e·10^s = m·5^s·2^(e+s)`.
         let p5 = *G_POW5.get(s as usize)?;
         let m5 = u128::from(m).checked_mul(p5)?;
         if e + s >= 0 {
-            (shl_u128(m5, u32::try_from(e + s).ok()?)?, 1)
-        } else {
-            let k = u32::try_from(-(e + s)).ok()?;
-            (m5, shl_u128(1, k)?)
+            // An integer: there is nothing to round.
+            let num = shl_u128(m5, u32::try_from(e + s).ok()?)?;
+            if num > u128::from(u64::MAX) {
+                return None;
+            }
+            return Some((num as u64, num as u64));
         }
+        // `m5/2^k`: the division is a shift, and the remainder is the low bits.
+        let k = u32::try_from(-(e + s)).ok()?;
+        let den = shl_u128(1, k)?;
+        let q = m5 >> k;
+        let r = m5 & (den - 1);
+        return round_parts(q, r, den);
+    }
+    // `m·2^e·10^s = m·2^(e+s)/5^(-s)`.
+    let d = usize::try_from(-s).ok()?;
+    let p5 = *G_POW5.get(d)?;
+    let (num, den) = if e + s >= 0 {
+        (shl_u128(u128::from(m), u32::try_from(e + s).ok()?)?, p5)
     } else {
-        // `m·2^e·10^s = m·2^(e+s)/5^(-s)`.
-        let d = usize::try_from(-s).ok()?;
-        let p5 = *G_POW5.get(d)?;
-        if e + s >= 0 {
-            (shl_u128(u128::from(m), u32::try_from(e + s).ok()?)?, p5)
-        } else {
-            let k = u32::try_from(-(e + s)).ok()?;
-            (u128::from(m), p5.checked_mul(shl_u128(1, k)?)?)
-        }
+        let k = u32::try_from(-(e + s)).ok()?;
+        (u128::from(m), p5.checked_mul(shl_u128(1, k)?)?)
     };
     let q = num / den;
     let r = num % den;
+    round_parts(q, r, den)
+}
+
+/// The value `q + r/den` rounded half to even: the floor of the value and the rounded
+/// one. `None` when the value does not fit a `u64`.
+fn round_parts(q: u128, r: u128, den: u128) -> Option<(u64, u64)> {
     if q > u128::from(u64::MAX) {
         return None;
     }

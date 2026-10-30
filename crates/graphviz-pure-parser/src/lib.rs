@@ -8,7 +8,9 @@ pub mod canon;
 pub mod lexer;
 pub mod parser;
 
-pub use canon::{canon_str, canon_str_with, canon_value, write_canon, write_canon_forced};
+pub use canon::{
+    CanonScratch, canon_str, canon_str_with, canon_value, write_canon, write_canon_forced,
+};
 pub use lexer::{Lexer, Token, TokenKind, reading_file};
 pub use parser::{GlobalAttrs, GraphStream, Parser};
 

@@ -299,13 +299,37 @@ pub(crate) fn propagate_inherited(g: &mut Graph, orig: &Graph, explicit: &[BTree
     }
 }
 
+/// The hash the plain strings are collected with: FNV-1a, which is much cheaper than
+/// SipHash and is enough for the strings of one graph. The set is only looked up, never
+/// iterated, so the hash does not reach the output.
+#[derive(Default)]
+struct FnvHasher {
+    hash: u64,
+}
+
+impl std::hash::Hasher for FnvHasher {
+    fn finish(&self) -> u64 {
+        self.hash
+    }
+
+    fn write(&mut self, bytes: &[u8]) {
+        for &b in bytes {
+            self.hash ^= u64::from(b);
+            self.hash = self.hash.wrapping_mul(0x0000_0100_0000_01b3);
+        }
+    }
+}
+
+/// The plain strings of one graph.
+type PlainStrings<'g> = HashSet<&'g str, std::hash::BuildHasherDefault<FnvHasher>>;
+
 /// The plain strings (not HTML ones) the root graph's string dictionary holds: a name, an
 /// attribute name or a plain attribute value. C answers this with one hash lookup
 /// (C: lib/common/output.c:canon, lib/cgraph/refstr.c:agstrdup). Build the set once per
 /// graph so label lookups take expected constant time. The keys borrow the graph strings;
 /// the set is never iterated to write output.
-fn plain_strings(g: &Graph) -> HashSet<&str> {
-    fn add_map<'g>(set: &mut HashSet<&'g str>, m: &'g graphviz_pure_core::AttrMap) {
+fn plain_strings(g: &Graph) -> PlainStrings<'_> {
+    fn add_map<'g>(set: &mut PlainStrings<'g>, m: &'g graphviz_pure_core::AttrMap) {
         for (k, v) in m.iter() {
             set.insert(k.as_str());
             if !m.is_html(k) {
@@ -313,7 +337,12 @@ fn plain_strings(g: &Graph) -> HashSet<&str> {
             }
         }
     }
-    let mut set: HashSet<&str> = HashSet::new();
+    // The set holds at least the name of every object: start it there, so that it does
+    // not have to grow as often while it is filled.
+    let mut set = PlainStrings::with_capacity_and_hasher(
+        g.nodes.len() + g.edges.len() + g.subgraphs.len() + 16,
+        Default::default(),
+    );
     if !g.empty_name {
         set.insert(g.name.as_str());
     }
@@ -365,12 +394,20 @@ fn plain_strings(g: &Graph) -> HashSet<&str> {
 /// from run to run or nothing; the port writes the empty field. An HTML edge label whose text
 /// is not also a name or a plain value takes that path, and so does the default label of a
 /// node with an HTML name.
-fn plain_label_canon(g: &HashSet<&str>, earlier: Option<&HashSet<&str>>, text: &str) -> String {
-    let c = graphviz_pure_parser::canon_str(text);
-    if c == text && !g.contains(text) && !earlier.is_some_and(|e| e.contains(text)) {
-        return String::new();
+fn plain_label_canon_into(
+    g: &PlainStrings<'_>,
+    earlier: Option<&PlainStrings<'_>>,
+    text: &str,
+    canon: &mut String,
+    scratch: &mut graphviz_pure_parser::CanonScratch,
+    out: &mut String,
+) {
+    canon.clear();
+    scratch.canon_str_into(canon, text);
+    if *canon == *text && !g.contains(text) && !earlier.is_some_and(|e| e.contains(text)) {
+        return;
     }
-    c
+    out.push_str(canon);
 }
 
 /// `write_plain` (`-Tplain`, `-Tplain-ext`).
@@ -389,6 +426,12 @@ pub(crate) fn write_plain(
     let y_off = y_offset(m.bb);
     let plain = plain_strings(g);
     let earlier = earlier.map(plain_strings);
+    // The canonicalized label texts, and the bytes they are built from: the writer
+    // canonicalizes a label per node, and a buffer of its own for each of them is an
+    // allocation per node.
+    let mut canon = String::new();
+    let mut canon_scratch = graphviz_pure_parser::CanonScratch::default();
+    let mut lbl = String::new();
     out.push_str("graph ");
     g5_into(&mut out, zoom);
     out.push(' ');
@@ -401,11 +444,19 @@ pub(crate) fn write_plain(
         if g.nodes[i].layout.clust_node {
             continue;
         }
-        let lbl = if n.label.is_html {
-            canon_value(a.get("label").unwrap_or(""), true)
+        lbl.clear();
+        if n.label.is_html {
+            lbl.push_str(&canon_value(a.get("label").unwrap_or(""), true));
         } else {
-            plain_label_canon(&plain, earlier.as_ref(), &n.label.text)
-        };
+            plain_label_canon_into(
+                &plain,
+                earlier.as_ref(),
+                &n.label.text,
+                &mut canon,
+                &mut canon_scratch,
+                &mut lbl,
+            );
+        }
         let fill = a
             .nonempty("fillcolor")
             .unwrap_or_else(|| a.late_nnstring("color", "lightgrey"));
@@ -469,11 +520,14 @@ pub(crate) fn write_plain(
                     let gn = &g.nodes[node];
                     if gn.layout.clust_node {
                         // writenodeandport: `canon` of the cluster's name
-                        out.push_str(&plain_label_canon(
+                        plain_label_canon_into(
                             &plain,
                             earlier.as_ref(),
                             m.nodes[node].name,
-                        ));
+                            &mut canon,
+                            &mut canon_scratch,
+                            &mut out,
+                        );
                     } else {
                         out.push_str(&canon_value(m.nodes[node].name, gn.html_name));
                     }
@@ -495,7 +549,14 @@ pub(crate) fn write_plain(
             }
             if let Some(l) = &e.label {
                 out.push(' ');
-                out.push_str(&plain_label_canon(&plain, earlier.as_ref(), &l.text));
+                plain_label_canon_into(
+                    &plain,
+                    earlier.as_ref(),
+                    &l.text,
+                    &mut canon,
+                    &mut canon_scratch,
+                    &mut out,
+                );
                 out.push(' ');
                 g5_into(&mut out, l.pos.x / 72.0);
                 out.push(' ');
