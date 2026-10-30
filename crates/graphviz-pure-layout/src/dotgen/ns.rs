@@ -147,6 +147,8 @@ pub(super) struct NsScratch {
     weight: Vec<i32>,
     cutvalue: Vec<i32>,
     tree_index: Vec<i32>,
+    /// The cut-set pivots' storage (`common::ns::cut`), kept across calls.
+    cut: ns::CutStore,
 }
 
 impl NsScratch {
@@ -462,6 +464,12 @@ impl NsGraph for DotNs<'_, '_> {
     }
     fn set_tree_index(&mut self, e: usize, v: i32) {
         self.scratch.tree_index[e] = v;
+    }
+    fn take_cut_store(&mut self) -> ns::CutStore {
+        std::mem::take(&mut self.scratch.cut)
+    }
+    fn keep_cut_store(&mut self, store: ns::CutStore) {
+        self.scratch.cut = store;
     }
 }
 

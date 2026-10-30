@@ -18,8 +18,17 @@
 //! behaviour in C and the port wraps (`wrapping_*`), as the reference build
 //! does, so extreme `weight`, `minlen` or `nodesep` values reach C's checks
 //! instead of panicking on the way.
+//!
+//! The functions here mirror `ns.c` and are the reference. On large graphs the pivots of
+//! [`rank2`] can instead run on cut sets ([`cut`]): an exact alternative that picks the same
+//! entering edge at every pivot without walking the leaving edge's subtree, with a written
+//! equivalence proof (`docs/perf/ns-cut-sets.md`) and a test-mode cross-check against the
+//! functions here.
 
 use graphviz_pure_core::diag::{elapsed_sec, fmt_f, fprintf_stderr, start_timer, verbose_on};
+
+mod cut;
+pub use cut::CutStore;
 
 pub const SEARCHSIZE: i32 = 30;
 
@@ -74,6 +83,14 @@ pub trait NsGraph {
     fn set_cutvalue(&mut self, e: usize, v: i32);
     fn tree_index(&self, e: usize) -> i32;
     fn set_tree_index(&mut self, e: usize, v: i32);
+
+    /// Storage for the cut-set pivots ([`CutStore`]). A graph that is ranked many times keeps
+    /// it between calls so it is allocated once; the default starts empty every time.
+    fn take_cut_store(&mut self) -> CutStore {
+        CutStore::default()
+    }
+    /// Takes back what [`NsGraph::take_cut_store`] handed out.
+    fn keep_cut_store(&mut self, _store: CutStore) {}
 }
 
 /// A standalone graph for `ns.c` (the constraint graphs of `constraint.c`).
@@ -1180,6 +1197,18 @@ pub fn rank2<G: NsGraph + ?Sized>(
     maxiter: i32,
     search_size: i32,
 ) -> Result<i32, String> {
+    rank2_with(g, balance, maxiter, search_size, true)
+}
+
+/// `rank2`. With `cut_sets`, the pivots run on cut sets ([`cut`]) when its selector expects
+/// them to be faster; without, always on the functions that mirror `ns.c`.
+fn rank2_with<G: NsGraph + ?Sized>(
+    g: &mut G,
+    balance: i32,
+    maxiter: i32,
+    search_size: i32,
+    cut_sets: bool,
+) -> Result<i32, String> {
     let mut ctx = Ctx {
         tree_edge: Vec::new(),
         s_i: 0,
@@ -1232,17 +1261,30 @@ pub fn rank2<G: NsGraph + ?Sized>(
         free_tree_list(g, &mut ctx);
         return Ok(0);
     }
+    let mut cut = if cut_sets {
+        cut::begin(g, &mut ctx)
+    } else {
+        None
+    };
     let mut iter = 0;
     while let Some(e) = leave_edge(g, &mut ctx) {
         // C passes a NULL entering edge to `update`, which dereferences it (`SLACK(f)`,
         // ns.c:710): C crashes. Weights that wrapped negative get here (#252). The port
         // fails the layout.
-        let Some(f) = enter_edge(g, &mut ctx, e) else {
+        let Some(f) = cut::enter_edge(g, &mut ctx, &mut cut, e, true) else {
+            cut::end(g, &mut cut);
             free_tree_list(g, &mut ctx);
             return Err(NO_ENTERING_EDGE.to_string());
         };
-        let err = update(g, &mut ctx, e, f);
+        // `None`: a fallback found the cut sets broken and C's search, asked again, found no
+        // entering edge
+        let Some(err) = cut::update(g, &mut ctx, &mut cut, e, f) else {
+            cut::end(g, &mut cut);
+            free_tree_list(g, &mut ctx);
+            return Err(NO_ENTERING_EDGE.to_string());
+        };
         if err != 0 {
+            cut::end(g, &mut cut);
             free_tree_list(g, &mut ctx);
             return Ok(err);
         }
@@ -1256,13 +1298,16 @@ pub fn rank2<G: NsGraph + ?Sized>(
             break;
         }
     }
+    if balance != 2 {
+        cut::end(g, &mut cut);
+    }
     match balance {
         1 => {
             let balanced = tb_balance(g);
             ctx.tree_edge.clear();
             balanced?;
         }
-        2 => lr_balance(g, &mut ctx),
+        2 => cut::lr_balance(g, &mut ctx, &mut cut),
         _ => {
             scan_and_normalize(g);
             free_tree_list(g, &mut ctx);

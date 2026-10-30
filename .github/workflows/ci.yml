@@ -74,6 +74,26 @@ jobs:
       - name: Check WASI Target
         run: cargo check --target wasm32-wasip1 -p graphviz-pure-cli
 
+  # Network simplex's cut-set pivots (crates/graphviz-pure-layout/src/common/ns/cut.rs) run
+  # beside the functions that mirror ns.c at every pivot of the test suite, and assert that both
+  # agree: the same entering edge, cut sets, slacks, cut values, parent pointers and ranks
+  # (docs/perf/ns-cut-sets.md). The selector is bypassed, so every graph takes the cut sets.
+  ns-check:
+    name: Network simplex check mode
+    needs: lookup
+    if: needs.lookup.outputs.hit != 'true'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install the stable Rust toolchain (rustup is on every runner)
+        shell: bash
+        run: rustup toolchain install stable --profile minimal && rustup default stable
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+      - name: Run Workspace Tests in network simplex check mode
+        run: cargo test --workspace --features graphviz-pure-layout/ns-check
+
   cpu-fidelity:
     name: x86-64-v3 fidelity and v1 byte equality (musl)
     needs: lookup
@@ -413,11 +433,11 @@ jobs:
             echo "The base branch has no scripts/pr-risk.py yet." | tee -a "$GITHUB_STEP_SUMMARY"
           fi
 
-  # Records that these inputs passed, so a later run with the same inputs skips verify, msrv,
-  # wasm-e2e and wasm-runtimes.
+  # Records that these inputs passed, so a later run with the same inputs skips verify,
+  # ns-check, msrv, wasm-e2e, wasm-runtimes, cpu-fidelity and native-pgo.
   record:
     name: Record the result for these inputs
-    needs: [verify, msrv, wasm-e2e, wasm-runtimes, cpu-fidelity, native-pgo]
+    needs: [verify, ns-check, msrv, wasm-e2e, wasm-runtimes, cpu-fidelity, native-pgo]
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
