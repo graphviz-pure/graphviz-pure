@@ -72,6 +72,18 @@ pub struct Supernodes {
 }
 
 impl Supernodes {
+    /// C: lib/sparse/QuadTree.c:QuadTree_get_supernodes_internal
+    /// The fixed-size 2D append lowers to stores rather than a dynamic copy call.
+    fn push_center(&mut self, coordinates: &[f64]) {
+        if let &[x, y] = coordinates {
+            self.center.extend([x, y]);
+        } else {
+            for &coordinate in coordinates {
+                self.center.push(coordinate);
+            }
+        }
+    }
+
     pub fn len(&self) -> usize {
         self.wgts.len()
     }
@@ -298,7 +310,7 @@ impl QuadTree {
             let node = &self.points[p];
             if node.id != nodeid {
                 let coord = &self.coords[span(p, dim)];
-                out.center.extend_from_slice(coord);
+                out.push_center(coord);
                 out.wgts.push(node.node_weight);
                 out.distances.push(point_distance(pt, coord, dim));
             }
@@ -308,7 +320,7 @@ impl QuadTree {
             let dist = point_distance(&self.center[span(q, dim)], pt, dim);
             if c.width < bh * dist {
                 let average = &self.average[span(q, dim)];
-                out.center.extend_from_slice(average);
+                out.push_center(average);
                 out.wgts.push(c.total_weight);
                 out.distances.push(point_distance(average, pt, dim));
             } else {
@@ -325,6 +337,13 @@ impl QuadTree {
         out.center.clear();
         out.wgts.clear();
         out.distances.clear();
+        // Accepted cells cover disjoint point sets, so the point count bounds
+        // the number of supernodes even when no cell is accepted. Reserve
+        // after clear: these capacities then suffice for every query and are
+        // retained across rebuilt trees and embedding iterations.
+        out.center.reserve(self.coords.len());
+        out.wgts.reserve(self.points.len());
+        out.distances.reserve(self.points.len());
         self.get_supernodes_internal(Some(0), bh, pt, nodeid, out, &mut counts);
         counts
     }
@@ -493,6 +512,96 @@ impl QuadTree {
         self.repulsive_force_accumulate(0, force, counts);
         for c in counts.iter_mut() {
             *c /= f64::from(n);
+        }
+    }
+}
+
+#[cfg(test)]
+mod supernode_tests {
+    use super::*;
+    fn reference(
+        tree: &QuadTree,
+        qt: Option<usize>,
+        bh: f64,
+        pt: &[f64],
+        nodeid: usize,
+        out: &mut Supernodes,
+        counts: &mut f64,
+    ) {
+        *counts += 1.0;
+        let Some(q) = qt else { return };
+        let dim = tree.dim;
+        let c = &tree.cells[q];
+        let mut l = c.l;
+        while let Some(p) = l {
+            let node = &tree.points[p];
+            if node.id != nodeid {
+                let coord = &tree.coords[span(p, dim)];
+                out.center.extend_from_slice(coord);
+                out.wgts.push(node.node_weight);
+                out.distances.push(point_distance(pt, coord, dim));
+            }
+            l = node.next;
+        }
+        if let Some(first) = c.qts {
+            let dist = point_distance(&tree.center[span(q, dim)], pt, dim);
+            if c.width < bh * dist {
+                let average = &tree.average[span(q, dim)];
+                out.center.extend_from_slice(average);
+                out.wgts.push(c.total_weight);
+                out.distances.push(point_distance(average, pt, dim));
+            } else {
+                for &child in tree.children(first) {
+                    reference(tree, child, bh, pt, nodeid, out, counts);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn scalar_centers_match_slice_collector_without_regrowth() {
+        for dim in [2, 3] {
+            let n = 31;
+            let x: Vec<f64> = (0..n * dim).map(|i| ((i * 17) % 41) as f64).collect();
+            let mut tree = QuadTree::default();
+            tree.rebuild_from_point_list(dim, n, 10, &x);
+            let mut actual = Supernodes::default();
+            tree.get_supernodes(0.0, &x[..dim], 0, &mut actual);
+            let capacity = (
+                actual.center.capacity(),
+                actual.wgts.capacity(),
+                actual.distances.capacity(),
+            );
+            for bh in [0.0, 0.6, 100.0] {
+                for nodeid in 0..n {
+                    let pt = &x[nodeid * dim..][..dim];
+                    let mut expected = Supernodes::default();
+                    let mut counts = 0.0;
+                    reference(&tree, Some(0), bh, pt, nodeid, &mut expected, &mut counts);
+                    assert_eq!(
+                        tree.get_supernodes(bh, pt, nodeid, &mut actual).to_bits(),
+                        counts.to_bits()
+                    );
+                    for (a, b) in [
+                        (&actual.center, &expected.center),
+                        (&actual.wgts, &expected.wgts),
+                        (&actual.distances, &expected.distances),
+                    ] {
+                        assert_eq!(
+                            a.iter().map(|v| v.to_bits()).collect::<Vec<_>>(),
+                            b.iter().map(|v| v.to_bits()).collect::<Vec<_>>()
+                        );
+                    }
+                    assert_eq!(
+                        (
+                            actual.center.capacity(),
+                            actual.wgts.capacity(),
+                            actual.distances.capacity()
+                        ),
+                        capacity
+                    );
+                }
+            }
         }
     }
 }
