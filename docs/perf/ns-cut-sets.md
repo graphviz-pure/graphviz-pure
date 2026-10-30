@@ -253,10 +253,11 @@ and non-tree edge:
 
 - the build keeps C's functions if its layout already needs more;
 - before a pivot changes anything, its check phase adds the most that pivot can append to the
-  pool. A cut set on f's cycle ends the pivot with at most `len` entries (its own plus e's), and
-  each move doubles its capacity, so its moves append under 4·`len` + 8 words plus at most 32
-  headers. If the total would pass the budget, the pool is compacted first. If it still would,
-  the rest of the run hands over to C's functions (§5);
+  pool. A cut set on f's cycle gains at most e's members (all but `f`, plus `e` itself), so it
+  holds at most its length plus e's at any point of the pivot. It moves only when full, each
+  time to the end of the pool with capacity 2·cap + 4 and a header, and the check replays
+  exactly those moves for that worst case. If the total would pass the budget, the pool is
+  compacted first. If it still would, the rest of the run hands over to C's functions (§5);
 - the pool's capacity is reserved up to the budget, never past it.
 
 So the cut sets never hold more than 96 bytes per node and non-tree edge in the pool, plus

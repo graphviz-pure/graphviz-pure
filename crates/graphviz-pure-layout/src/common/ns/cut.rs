@@ -74,6 +74,23 @@ const ID: u32 = 0x7fff_ffff;
 /// Header words before each cut set in the pool: its tree slot and its capacity.
 const HEADER: u32 = 2;
 
+/// The most pool words a cut set (`set`) can append while it gains at most `gain` entries:
+/// the moves [`CutStore::push`] would make, each to capacity 2·cap + 4 with a header.
+fn moves(set: TreeSlot, gain: usize) -> usize {
+    let last = (set.len as usize).saturating_add(gain);
+    let mut cap = set.cap as usize;
+    let mut words = 0usize;
+    // a capacity at least doubles at each move, so this ends within 64 moves
+    for _ in 0..64 {
+        if cap >= last {
+            break;
+        }
+        cap = cap.saturating_mul(2).saturating_add(4);
+        words = words.saturating_add(cap).saturating_add(HEADER as usize);
+    }
+    words
+}
+
 /// The capacity a cut set of `len` entries gets when it is laid out.
 fn headroom(len: u32) -> u32 {
     len.saturating_add(len.wrapping_div(8)).saturating_add(2)
@@ -507,17 +524,10 @@ impl CutStore {
                 };
                 let forward = if down { g.head(t) == u } else { g.tail(t) == u };
                 self.work.push(s as u32 | if forward { FORWARD } else { 0 });
-                // t's set ends this pivot with at most `len` entries. Each move to the end of
-                // the pool doubles its capacity (2·cap + 4), so the moved segments add up to
-                // under twice the last one, which is at most 2·len + 4; a u32 capacity
-                // doubles at most 32 times, each move with its header.
-                let len = (self.tree(s).len as usize)
-                    .saturating_add(len_e)
-                    .saturating_add(1);
-                let most = len
-                    .saturating_mul(4)
-                    .saturating_add(8usize.saturating_add(32usize.saturating_mul(HEADER as usize)));
-                growth = growth.saturating_add(most);
+                // t's set gains at most e's members (all but f, plus e itself), so it ends
+                // the pivot with at most `last` entries. It moves only when full, each time
+                // to the end of the pool with capacity 2·cap + 4 and a header: replay that
+                growth = growth.saturating_add(moves(self.tree(s), len_e));
                 u = other(g, t, u);
             }
         }
