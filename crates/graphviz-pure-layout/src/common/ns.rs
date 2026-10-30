@@ -1271,12 +1271,18 @@ fn rank2_with<G: NsGraph + ?Sized>(
         // C passes a NULL entering edge to `update`, which dereferences it (`SLACK(f)`,
         // ns.c:710): C crashes. Weights that wrapped negative get here (#252). The port
         // fails the layout.
-        let Some(f) = cut::enter_edge(g, &mut ctx, &mut cut, e) else {
+        let Some(f) = cut::enter_edge(g, &mut ctx, &mut cut, e, true) else {
             cut::end(g, &mut cut);
             free_tree_list(g, &mut ctx);
             return Err(NO_ENTERING_EDGE.to_string());
         };
-        let err = cut::update(g, &mut ctx, &mut cut, e, f);
+        // `None`: a fallback found the cut sets broken and C's search, asked again, found no
+        // entering edge
+        let Some(err) = cut::update(g, &mut ctx, &mut cut, e, f) else {
+            cut::end(g, &mut cut);
+            free_tree_list(g, &mut ctx);
+            return Err(NO_ENTERING_EDGE.to_string());
+        };
         if err != 0 {
             cut::end(g, &mut cut);
             free_tree_list(g, &mut ctx);

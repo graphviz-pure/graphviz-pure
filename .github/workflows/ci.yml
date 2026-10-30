@@ -434,7 +434,7 @@ jobs:
           fi
 
   # Records that these inputs passed, so a later run with the same inputs skips verify,
-  # ns-check, msrv, wasm-e2e and wasm-runtimes.
+  # ns-check, msrv, wasm-e2e, wasm-runtimes, cpu-fidelity and native-pgo.
   record:
     name: Record the result for these inputs
     needs: [verify, ns-check, msrv, wasm-e2e, wasm-runtimes, cpu-fidelity, native-pgo]

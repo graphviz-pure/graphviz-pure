@@ -181,11 +181,28 @@ If `enter_edge` finds a negative candidate slack, Lemma 1 no longer applies. The
 written, `lim`/`low` are renumbered from the root (non-incremental `dfs_range`), and the rest of
 the run, this pivot included, uses C's functions. That is exact by Lemma 2.
 
-The same hand-over happens if a pivot finds the tree is not what the cut sets describe: `e` has
-no tree slot, `f` is not in e's cut set, the LCA climb fails, or an edge of f's cycle has no
-tree slot. `update` checks all of these before it changes anything, so C's `update` gets the
-pivot from a consistent state. `LR_balance` does the same when `f` is missing from e's cut set.
-No test has produced any of these; they keep a broken invariant from going on silently.
+The same hand-over happens in a pivot's **check phase**, which runs in `enter_edge` right after
+the cut sets pick `f` and before that edge is used or anything changes. It fails if:
+
+- `e` has no tree slot;
+- `f` is not in e's cut set;
+- the LCA climb fails, or an edge of f's cycle has no tree slot;
+- the pool could outgrow its budget (§7);
+- the cut set offers no candidate at all.
+
+Then the cut sets' choice is discarded. The ranks are written, `lim`/`low` are renumbered, and
+**C's own `enter_edge(e)` picks the entering edge**, so every edge used after a hand-over is C's
+choice by construction, not the cut sets'. C's functions then run that pivot and the rest of the
+run, exact by Lemma 2.
+
+`update` uses the checked pivot. Nothing changes between `enter_edge` and `update`, so its own
+check cannot fail for the pivot `enter_edge` checked. If it ever ran for another pivot and its
+check failed, it would also discard the cut sets' `f` and ask C's `enter_edge(e)` again.
+`LR_balance` does the same when `f` is missing from e's cut set.
+
+No real input has produced a broken cut set. They keep one from going on silently, and the tests
+break the cut sets on purpose at each of these points (`broken_cut_sets_hand_the_pivot_to_c`,
+`a_full_pool_hands_the_run_to_c`) and get C's results.
 
 > **Lemma 2.** C's network simplex uses `lim`/`low` only to test subtree membership and which
 > end of a tree edge is the child, so any valid post-order numbering of the current tree gives
@@ -228,6 +245,24 @@ Graphs routed to C's functions pay only the sample walks. A store that grew past
 `CUT_SETS_KEEP_WORDS` (2¹⁸ words, 1 MB) is released when its run ends, so a large graph's cut
 sets do not stay allocated for the rest of the layout; smaller stores are reused by the next run.
 
+### The memory bound
+
+The selector's estimate is a sample of the initial tree, and the cut sets change as cycles
+change during the pivots. The bound that holds is `CUT_SETS_MAX_WORDS` (24) pool words per node
+and non-tree edge:
+
+- the build keeps C's functions if its layout already needs more;
+- before a pivot changes anything, its check phase adds the most that pivot can append to the
+  pool. A cut set on f's cycle ends the pivot with at most `len` entries (its own plus e's), and
+  each move doubles its capacity, so its moves append under 4·`len` + 8 words plus at most 32
+  headers. If the total would pass the budget, the pool is compacted first. If it still would,
+  the rest of the run hands over to C's functions (§5);
+- the pool's capacity is reserved up to the budget, never past it.
+
+So the cut sets never hold more than 96 bytes per node and non-tree edge in the pool, plus
+16 bytes per edge and 20 bytes per node for the per-edge and per-tree-edge records. On the
+graphs the selector picks, the pool starts at about 10–15 words per element.
+
 ### What it chooses, and what that costs
 
 `l·m/(n+m)` is the estimated number of entries per node and non-tree edge. The cycles and peak
@@ -260,7 +295,8 @@ The rows that now take C's functions show what the memory term prevents:
 
 **On every graph above that the selector sends to the cut sets, they are faster and add under
 4% to the peak heap.** The selector is still an estimate from a sample: a graph unlike these
-could be slower on cut sets. The output is the same on either path.
+could be slower on cut sets, though never larger than the memory bound above. The output is the
+same on either path.
 
 ### The corpus
 
@@ -289,7 +325,8 @@ exactness is tested.
 ## 8. How it is checked
 
 - **Check mode** (`cfg(test)` in the layout crate, or `--features graphviz-pure-layout/ns-check`
-  anywhere): the cut-set path runs on every graph whatever the selector says. Next to it, C's
+  anywhere): the cut-set path runs on every graph whatever the selector says, and without the
+  pool budget unless a test sets one. Next to it, C's
   `rerank`, `invalidate_path` and `dfs_range` keep the real ranks and `lim`/`low` current. At
   every pivot and every `LR_balance` query it asserts:
   - that `cover[e]` is exactly the set of non-tree edges crossing e's cut, with the right bits;
@@ -306,6 +343,13 @@ exactness is tested.
   edges, every balance mode, several `searchsize`s, runs cut short by `maxiter`) ranked by C's
   functions alone and by the cut-set path. It compares the result, every rank, parent edge,
   mark, tree list, cut value and tree index. It asserts that the cases include tied entering
-  edges and C's whole-tree `rerank`. Another test uses wrapping minimum lengths to reach the
-  fallback.
+  edges, C's whole-tree `rerank`, cut-set relocation and compaction.
+- **Fallback tests**, each comparing against C's functions alone:
+  - wrapping minimum lengths give negative candidate slacks;
+  - `broken_cut_sets_hand_the_pivot_to_c` takes the entering edge out of e's cut set at three
+    points: before the pivot's check phase, before `update` (which must check the pivot
+    again), and in an `LR_balance` query. It asserts every point fell back and that C's search
+    re-picked the edge;
+  - `a_full_pool_hands_the_run_to_c` sets the pool budget to the build's own size, or slightly
+    more.
 - The fidelity ratchets of `cargo test --workspace` run with the selector as shipped.

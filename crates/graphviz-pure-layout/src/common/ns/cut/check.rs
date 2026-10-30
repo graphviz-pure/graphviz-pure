@@ -25,6 +25,16 @@ thread_local! {
     pub(super) static RELOCATIONS: std::cell::Cell<u32> = const { std::cell::Cell::new(0) };
     /// Pool compactions.
     pub(super) static COMPACTIONS: std::cell::Cell<u32> = const { std::cell::Cell::new(0) };
+    /// `LR_balance` queries that found the cut sets broken.
+    pub(super) static BALANCE_FALLBACKS: std::cell::Cell<u32> = const { std::cell::Cell::new(0) };
+    /// Pivots whose entering edge C's search picked again after `update` found them broken.
+    pub(super) static RESELECTIONS: std::cell::Cell<u32> = const { std::cell::Cell::new(0) };
+    /// The tests' corruption: of which kind, and after how many more chances.
+    pub(super) static CORRUPTION: std::cell::Cell<Option<(Corrupt, u32)>> =
+        const { std::cell::Cell::new(None) };
+    /// The tests' pool budget: this many words above what the build lays out.
+    pub(super) static BUDGET_SLACK: std::cell::Cell<Option<usize>> =
+        const { std::cell::Cell::new(None) };
 }
 
 pub(super) fn count(c: &'static Counter) {
@@ -33,6 +43,42 @@ pub(super) fn count(c: &'static Counter) {
 
 pub(super) fn fell_back() {
     count(&FALLBACKS);
+}
+
+/// Where a test breaks the cut sets: after `enter_edge` picks a pivot's edge (before its check
+/// phase), just before `update` (forgetting the checked pivot), or after an `LR_balance` query.
+#[derive(Clone, Copy, PartialEq)]
+pub(super) enum Corrupt {
+    Enter,
+    Update,
+    Balance,
+}
+
+/// Takes `f` out of tree slot `s`'s cut set when the armed corruption of this kind is due.
+pub(super) fn corrupt(store: &mut CutStore, kind: Corrupt, s: usize, f: usize) {
+    let due = CORRUPTION.with(|c| match c.get() {
+        Some((k, 0)) if k == kind => {
+            c.set(None);
+            true
+        }
+        Some((k, n)) if k == kind => {
+            c.set(Some((k, n - 1)));
+            false
+        }
+        _ => false,
+    });
+    if due {
+        if kind == Corrupt::Update {
+            store.prepared = None;
+        }
+        store.remove_member(s, f);
+    }
+}
+
+/// The pool budget in check mode: none, so that every graph runs on the cut sets as with the
+/// selector, unless a test sets one.
+pub(super) fn budget(size: usize) -> Option<usize> {
+    Some(BUDGET_SLACK.with(|b| b.get().map_or(usize::MAX, |slack| size + slack)))
 }
 
 /// The parent pointers the cut-set pivot set, to compare with `dfs_range`'s.

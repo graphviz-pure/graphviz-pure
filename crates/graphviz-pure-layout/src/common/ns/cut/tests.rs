@@ -278,3 +278,77 @@ fn the_selector_keeps_c_when_the_cut_sets_would_be_large() {
     assert_eq!(feasible_tree(&mut g, &mut ctx()), Ok(0));
     assert!(!super::worth_it(&g));
 }
+
+/// The cut-set path with a broken cut set or a pool budget, as the tests arm them.
+fn run_armed(
+    g: &NsData,
+    balance: i32,
+    corruption: Option<(super::check::Corrupt, u32)>,
+    budget_slack: Option<usize>,
+) -> Outcome {
+    super::check::CORRUPTION.with(|c| c.set(corruption));
+    super::check::BUDGET_SLACK.with(|b| b.set(budget_slack));
+    let outcome = run(g, balance, i32::MAX, 30, true);
+    super::check::CORRUPTION.with(|c| c.set(None));
+    super::check::BUDGET_SLACK.with(|b| b.set(None));
+    outcome
+}
+
+fn fallbacks() -> u32 {
+    super::check::FALLBACKS.with(|f| f.get())
+}
+
+#[test]
+fn broken_cut_sets_hand_the_pivot_to_c() {
+    // f taken out of e's cut set: after enter_edge picks f (the pivot's check phase finds
+    // it missing), just before update (which has to check the pivot again), or after an
+    // LR_balance query. Each time C's search picks the edge again and C's functions finish
+    // the run with C's results.
+    use super::check::Corrupt;
+    let mut rng = Rng(0x0123_4567_89ab_cdef);
+    let mut fell = [0u32; 3];
+    for case in 0..300 {
+        let n = 8 + rng.below(60) as usize;
+        let extra = rng.below(2 * n as u64 + 1) as usize;
+        let g = random_dag(&mut rng, n, extra, 3);
+        let c = run(&g, 2, i32::MAX, 30, false);
+        for (i, kind) in [Corrupt::Enter, Corrupt::Update, Corrupt::Balance]
+            .into_iter()
+            .enumerate()
+        {
+            let at = rng.below(6) as u32;
+            let before = fallbacks();
+            let cut = run_armed(&g, 2, Some((kind, at)), None);
+            assert_eq!(cut, c, "case {case}, corruption {i} at {at}");
+            if fallbacks() > before {
+                fell[i] += 1;
+            }
+        }
+    }
+    assert!(
+        fell.iter().all(|&n| n > 0),
+        "every corruption reached its fallback: {fell:?}"
+    );
+    assert!(super::check::BALANCE_FALLBACKS.with(|n| n.get()) > 0);
+    assert!(super::check::RESELECTIONS.with(|n| n.get()) > 0);
+}
+
+#[test]
+fn a_full_pool_hands_the_run_to_c() {
+    // a budget of the build's own size (no pivot fits) or a little more (some pivots fit):
+    // the run falls back before a pivot that could exceed it, with C's results
+    let mut rng = Rng(0x0fed_cba9_8765_4321);
+    let before = fallbacks();
+    for case in 0..200 {
+        let n = 8 + rng.below(60) as usize;
+        let extra = rng.below(2 * n as u64 + 1) as usize;
+        let g = random_dag(&mut rng, n, extra, 3);
+        let balance = rng.below(3) as i32;
+        let c = run(&g, balance, i32::MAX, 30, false);
+        for slack in [0, 64, 256] {
+            let cut = run_armed(&g, balance, None, Some(slack));
+            assert_eq!(cut, c, "case {case}, budget slack {slack}");
+        }
+    }
+    assert!(fallbacks() > before, "no run outgrew its budget");
+}

@@ -22,7 +22,9 @@
 //! cut values, tree lists and parent pointers is `docs/perf/ns-cut-sets.md`; the functions
 //! below name the invariant they keep. [`begin`] picks this path per graph from a sampled cost
 //! estimate. Where C's scan is not an argmin (a candidate with a negative slack, only after
-//! wrapped arithmetic), the rest of the run goes back to the functions that mirror `ns.c`.
+//! wrapped arithmetic), where a pivot's check phase finds the cut sets inconsistent, or where a
+//! pivot could take the pool past its budget ([`CUT_SETS_MAX_WORDS`]), the rest of the run goes
+//! back to the functions that mirror `ns.c`, and C's search picks the entering edge.
 //! Under `cfg(test)` or the `ns-check` feature, every pivot also runs C's search, `rerank`,
 //! `treeupdate` and `dfs_range`, and asserts that both agree (`check.rs`).
 //!
@@ -51,6 +53,12 @@ const CUT_SETS_MAX_ENTRIES: f64 = 10.0;
 
 /// Selector: how many non-tree edges are sampled to estimate the mean tree-cycle length.
 const CUT_SETS_SAMPLE: usize = 64;
+
+/// The cut sets' pool may hold at most this many four-byte words per node and non-tree edge.
+/// The selector's estimate is a sample of the initial tree; this is the bound that holds
+/// during the run. A build that needs more keeps C's functions, and a pivot that could take
+/// the pool past it hands the rest of the run to them, before it changes anything.
+const CUT_SETS_MAX_WORDS: usize = 24;
 
 /// Storage kept between runs, in four-byte words: a store that grew past this is released
 /// when its run ends, so a large graph's cut sets do not stay allocated for the rest of the
@@ -118,9 +126,25 @@ pub struct CutStore {
     /// The root's rank: what it was when the pivots began, moved by C's `rerank` of the
     /// whole tree (from the root, ns.c:697). The other ranks follow from the slacks.
     root_rank: i32,
+    /// The most words the pool may hold ([`CUT_SETS_MAX_WORDS`]).
+    budget: usize,
+    /// The pivot [`CutStore::prepare`] checked, its cycle in `work`, for `update`.
+    prepared: Option<Prepared>,
 }
 
-/// The candidates include a negative slack: C's pruned scan is not an argmin there.
+/// A pivot whose cut sets, LCA, tree cycle and pool budget were checked.
+#[derive(Clone, Copy)]
+struct Prepared {
+    e: usize,
+    f: usize,
+    se: usize,
+    kf: u32,
+    lca: usize,
+}
+
+/// C's functions take over: a candidate has a negative slack (C's pruned scan is not an
+/// argmin there), the tree is not what the cut sets describe, or the pool would outgrow its
+/// budget.
 struct Fallback;
 
 fn other<G: NsGraph + ?Sized>(g: &G, e: usize, u: usize) -> usize {
@@ -255,6 +279,17 @@ impl CutStore {
         self.set_entry(start.wrapping_sub(1), cap);
     }
 
+    /// Check mode's corruption: takes `f` out of tree slot `s`'s cut set.
+    #[cfg(any(test, feature = "ns-check"))]
+    fn remove_member(&mut self, s: usize, f: usize) {
+        let set = self.tree(s);
+        let at = (0..set.len)
+            .find(|&i| self.edge(self.entry(set.start.wrapping_add(i)) & ID).edge as usize == f);
+        if let Some(i) = at {
+            self.remove_at(s, i);
+        }
+    }
+
     /// The local index of `f` among the members of tree slot `s`'s cut set.
     fn member(&self, s: usize, f: usize) -> Option<u32> {
         let set = self.tree(s);
@@ -306,7 +341,10 @@ impl CutStore {
         self.mark_gen = 0;
         self.stamp_gen = 0;
         self.garbage = 0;
+        self.prepared = None;
         self.root_rank = g.nlist().first().map_or(0, |&r| g.rank(r));
+        let nontree = all_edges(g).filter(|&e| !tree_edge(g, e)).count();
+        self.budget = CUT_SETS_MAX_WORDS.saturating_mul(g.nlist().len().saturating_add(nontree));
         for e in all_edges(g) {
             let Ok(edge) = u32::try_from(e) else {
                 return false;
@@ -351,9 +389,13 @@ impl CutStore {
             ts.start = size.wrapping_add(HEADER);
             size = next;
         }
+        self.budget = check::budget(size as usize).unwrap_or(self.budget);
+        if size as usize > self.budget {
+            return false;
+        }
         self.pool.clear();
-        self.pool
-            .reserve_exact((size as usize).saturating_add((size as usize).wrapping_div(8)));
+        let room = (size as usize).saturating_add((size as usize).wrapping_div(8));
+        self.pool.reserve_exact(room.min(self.budget));
         self.pool.resize(size as usize, 0);
         for s in 0..self.tree.len() {
             let ts = self.tree(s);
@@ -384,11 +426,17 @@ impl CutStore {
     /// minimum slack in its scan order, which [`CutStore::scanned_before`] decides between
     /// two tied candidates. That is C's answer only while no candidate has a negative slack:
     /// below 0, C's `Slack > 0` pruning can stop its scan before the minimum ([`Fallback`]).
+    /// A pivot with no candidate at all asks C's search too ([`Fallback`]).
+    ///
+    /// For a pivot (`pivot`), the pivot is then checked ([`CutStore::prepare`]) before the
+    /// edge is returned: if that fails, C's search picks the edge instead.
     fn enter_edge<G: NsGraph + ?Sized>(
         &mut self,
         g: &G,
         e: usize,
+        pivot: bool,
     ) -> Result<Option<usize>, Fallback> {
+        self.prepared = None;
         let Some(s) = tree_slot(g, e) else {
             return Err(Fallback);
         };
@@ -418,7 +466,69 @@ impl CutStore {
                 best = Some((k, sk));
             }
         }
-        Ok(best.map(|(k, _)| self.edge(k).edge as usize))
+        // no candidate: for a pivot, C's search is asked (`rank2` reports it if C finds none
+        // either); `LR_balance` skips such edges, as C does
+        let Some((k, _)) = best else {
+            return if pivot { Err(Fallback) } else { Ok(None) };
+        };
+        let f = self.edge(k).edge as usize;
+        if pivot {
+            check::corrupt(self, check::Corrupt::Enter, s, f);
+            self.prepare(g, e, f)?;
+        }
+        Ok(Some(f))
+    }
+
+    /// The check phase of a pivot, before anything changes: e's tree slot, `f` in e's cut set,
+    /// the LCA of f's ends, f's tree cycle with a tree slot for every edge (left in `work`),
+    /// and room in the pool for the most this pivot can add to it. Any failure is a
+    /// [`Fallback`]; nothing has been changed by then.
+    fn prepare<G: NsGraph + ?Sized>(&mut self, g: &G, e: usize, f: usize) -> Result<(), Fallback> {
+        self.prepared = None;
+        let (Some(se), Some(kf)) = (
+            tree_slot(g, e),
+            tree_slot(g, e).and_then(|s| self.member(s, f)),
+        ) else {
+            return Err(Fallback);
+        };
+        let (ft, fh) = (g.tail(f), g.head(f));
+        let Some(lca) = self.lca(g, ft, fh) else {
+            return Err(Fallback);
+        };
+        // f's tree cycle, oriented along f: from head(f) up to the LCA, then down to tail(f)
+        let len_e = self.tree(se).len as usize;
+        let mut growth = 0usize;
+        self.work.clear();
+        for (start, down) in [(ft, true), (fh, false)] {
+            let mut u = start;
+            while u != lca {
+                let (Some(t), Some(s)) = (g.par(u), g.par(u).and_then(|t| tree_slot(g, t))) else {
+                    return Err(Fallback);
+                };
+                let forward = if down { g.head(t) == u } else { g.tail(t) == u };
+                self.work.push(s as u32 | if forward { FORWARD } else { 0 });
+                // t's set ends this pivot with at most `len` entries. Each move to the end of
+                // the pool doubles its capacity (2·cap + 4), so the moved segments add up to
+                // under twice the last one, which is at most 2·len + 4; a u32 capacity
+                // doubles at most 32 times, each move with its header.
+                let len = (self.tree(s).len as usize)
+                    .saturating_add(len_e)
+                    .saturating_add(1);
+                let most = len
+                    .saturating_mul(4)
+                    .saturating_add(8usize.saturating_add(32usize.saturating_mul(HEADER as usize)));
+                growth = growth.saturating_add(most);
+                u = other(g, t, u);
+            }
+        }
+        if self.pool.len().saturating_add(growth) > self.budget && self.garbage > 0 {
+            self.compact();
+        }
+        if self.pool.len().saturating_add(growth) > self.budget {
+            return Err(Fallback);
+        }
+        self.prepared = Some(Prepared { e, f, se, kf, lca });
+        Ok(())
     }
 
     /// Whether candidate `c` comes before `w` (local indices) in C's scan of the subtree
@@ -588,7 +698,8 @@ impl CutStore {
                     set = self.tree(s);
                 } else {
                     let more = need.max(self.pool.len().wrapping_div(8));
-                    self.pool.reserve_exact(more);
+                    let room = self.budget.saturating_sub(self.pool.len());
+                    self.pool.reserve_exact(more.min(room).max(need));
                 }
             }
             let (from, to) = (set.start as usize, set.start.wrapping_add(set.len) as usize);
@@ -764,32 +875,17 @@ impl CutStore {
         e: usize,
         f: usize,
     ) -> Result<i32, Fallback> {
-        // first, without changing anything: e's slot, f in e's cut set, the LCA and f's tree
-        // cycle with every edge's slot; if the tree is not what the cut sets describe, C's
-        // `update` takes the pivot instead
-        let (Some(se), Some(kf)) = (
-            tree_slot(g, e),
-            tree_slot(g, e).and_then(|s| self.member(s, f)),
-        ) else {
-            return Err(Fallback);
-        };
-        let (ft, fh) = (g.tail(f), g.head(f));
-        let Some(lca) = self.lca(g, ft, fh) else {
-            return Err(Fallback);
-        };
-        // f's tree cycle, oriented along f: from head(f) up to the LCA, then down to tail(f)
-        self.work.clear();
-        for (start, down) in [(ft, true), (fh, false)] {
-            let mut u = start;
-            while u != lca {
-                let (Some(t), Some(s)) = (g.par(u), g.par(u).and_then(|t| tree_slot(g, t))) else {
-                    return Err(Fallback);
-                };
-                let forward = if down { g.head(t) == u } else { g.tail(t) == u };
-                self.work.push(s as u32 | if forward { FORWARD } else { 0 });
-                u = other(g, t, u);
+        // the check phase ran when `enter_edge` picked f, and nothing has changed since; it is
+        // redone only if this is not that pivot
+        let p = match self.prepared.take() {
+            Some(p) if p.e == e && p.f == f => p,
+            _ => {
+                self.prepare(g, e, f)?;
+                self.prepared.take().ok_or(Fallback)?
             }
-        }
+        };
+        let Prepared { se, kf, lca, .. } = p;
+        let (ft, fh) = (g.tail(f), g.head(f));
         let ke = self.tree(se).edge;
         let delta = self.edge(kf).slack;
         let (et, eh) = (g.tail(e), g.head(e));
@@ -931,18 +1027,21 @@ fn push_rank<G: NsGraph + ?Sized>(g: &G, insearch: bool, u: usize, child: usize)
     }
 }
 
-/// `enter_edge(e)`: on the cut sets while they run, else C's search. A [`Fallback`] gives
-/// the rest of the run to C's functions.
+/// `enter_edge(e)`: on the cut sets while they run, else C's search. For a pivot (`pivot`,
+/// as opposed to `LR_balance`'s queries), the pivot's check phase runs before the edge is
+/// used. A [`Fallback`] gives the rest of the run to C's functions, and C's search picks the
+/// edge: the cut sets' choice is not used once a check has failed.
 pub(super) fn enter_edge<G: NsGraph + ?Sized>(
     g: &mut G,
     ctx: &mut Ctx,
     cut: &mut Option<CutStore>,
     e: usize,
+    pivot: bool,
 ) -> Option<usize> {
     let Some(store) = cut.as_mut() else {
         return super::enter_edge(g, ctx, e);
     };
-    match store.enter_edge(g, e) {
+    match store.enter_edge(g, e, pivot) {
         Ok(f) => {
             check::enter_edge(g, ctx, store, e, f);
             f
@@ -954,24 +1053,34 @@ pub(super) fn enter_edge<G: NsGraph + ?Sized>(
     }
 }
 
-/// `update(e, f)`: on the cut sets while they run, else C's. A [`Fallback`] (the tree is not
-/// what the cut sets describe, which no test has produced) gives this pivot and the rest of the
-/// run to C's functions.
+/// `update(e, f)`: on the cut sets while they run, else C's. `enter_edge` already ran this
+/// pivot's check phase and nothing has changed since, so a [`Fallback`] here means `update`
+/// was not called for the pivot `enter_edge` checked. Then C's functions take this pivot and
+/// the rest of the run, with the entering edge picked again by C's search. `None`: C's search
+/// found no entering edge.
 pub(super) fn update<G: NsGraph + ?Sized>(
     g: &mut G,
     ctx: &mut Ctx,
     cut: &mut Option<CutStore>,
     e: usize,
     f: usize,
-) -> i32 {
+) -> Option<i32> {
     let Some(store) = cut.as_mut() else {
-        return super::update(g, ctx, e, f);
+        return Some(super::update(g, ctx, e, f));
     };
+    check::corrupt(
+        store,
+        check::Corrupt::Update,
+        tree_slot(g, e).unwrap_or(usize::MAX),
+        f,
+    );
     match store.update(g, ctx, e, f) {
-        Ok(r) => r,
+        Ok(r) => Some(r),
         Err(Fallback) => {
             fall_back(g, ctx, cut);
-            super::update(g, ctx, e, f)
+            check::count(&check::RESELECTIONS);
+            let f = super::enter_edge(g, ctx, e)?;
+            Some(super::update(g, ctx, e, f))
         }
     }
 }
@@ -994,16 +1103,29 @@ pub(super) fn lr_balance<G: NsGraph + ?Sized>(
             break;
         };
         if g.cutvalue(e) == 0 {
-            let Some(f) = enter_edge(g, ctx, cut, e) else {
+            let Some(mut f) = enter_edge(g, ctx, cut, e, false) else {
                 continue;
             };
-            // f's slack from the cut sets; if f is not in e's (no test has produced that),
-            // C's functions finish the run
+            if let Some(store) = cut.as_mut() {
+                check::corrupt(
+                    store,
+                    check::Corrupt::Balance,
+                    tree_slot(g, e).unwrap_or(usize::MAX),
+                    f,
+                );
+            }
+            // f's slack from the cut sets; if f is not in e's, they are broken: C's functions
+            // finish the run, starting with C's search for this entering edge
             let known = cut
                 .as_ref()
                 .and_then(|store| store.entering_slack(g, e, f).zip(tree_slot(g, e)));
             if cut.is_some() && known.is_none() {
+                check::count(&check::BALANCE_FALLBACKS);
                 fall_back(g, ctx, cut);
+                let Some(c) = super::enter_edge(g, ctx, e) else {
+                    continue;
+                };
+                f = c;
             }
             let delta = known.map_or_else(|| slack(g, f), |(d, _)| d);
             if delta <= 1 {
@@ -1066,6 +1188,21 @@ mod check {
     pub(super) static TIES: Counter = Counter;
     pub(super) static RELOCATIONS: Counter = Counter;
     pub(super) static COMPACTIONS: Counter = Counter;
+    pub(super) static BALANCE_FALLBACKS: Counter = Counter;
+    pub(super) static RESELECTIONS: Counter = Counter;
+
+    pub(super) enum Corrupt {
+        Enter,
+        Update,
+        Balance,
+    }
+
+    #[inline(always)]
+    pub(super) fn corrupt(_: &mut CutStore, _: Corrupt, _: usize, _: usize) {}
+    #[inline(always)]
+    pub(super) fn budget(_: usize) -> Option<usize> {
+        None
+    }
 
     #[inline(always)]
     pub(super) fn count(_: &Counter) {}
