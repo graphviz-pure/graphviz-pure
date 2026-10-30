@@ -47,7 +47,7 @@ const CUT_SETS_MAX_COST: f64 = 1.0;
 /// edge, so this bounds the extra memory to a few percent. It also turns away graphs whose
 /// tree cycles are long compared with their size, where a pivot's cut-set edit can cost more
 /// than C's walk even when the time estimate says otherwise (`docs/perf/ns-cut-sets.md`).
-const CUT_SETS_MAX_ENTRIES: f64 = 16.0;
+const CUT_SETS_MAX_ENTRIES: f64 = 10.0;
 
 /// Selector: how many non-tree edges are sampled to estimate the mean tree-cycle length.
 const CUT_SETS_SAMPLE: usize = 64;
@@ -782,8 +782,7 @@ impl CutStore {
         for (start, down) in [(ft, true), (fh, false)] {
             let mut u = start;
             while u != lca {
-                let (Some(t), Some(s)) = (g.par(u), g.par(u).and_then(|t| tree_slot(g, t)))
-                else {
+                let (Some(t), Some(s)) = (g.par(u), g.par(u).and_then(|t| tree_slot(g, t))) else {
                     return Err(Fallback);
                 };
                 let forward = if down { g.head(t) == u } else { g.tail(t) == u };
