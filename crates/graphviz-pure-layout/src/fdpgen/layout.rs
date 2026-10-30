@@ -275,6 +275,7 @@ impl DG {
     }
 }
 
+/// C: lib/fdpgen/layout.c:mkDeriveNode
 /// Runs `f` on an [`LGraph`] holding the derived nodes `keep` (in order) and
 /// the derived edges among them, then copies node positions back. The third
 /// argument maps derived node indices to [`LGraph`] indices.
@@ -325,7 +326,13 @@ pub fn with_lgraph<R>(
             hops: 0,
             dist: 0.0,
             mark: false,
-            shape: d.shape.clone().unwrap_or(NodeShape::new(&src.nodes[i])?),
+            // Real derived nodes already carry the original shape. Only cluster/port
+            // nodes need the fallback; constructing it eagerly discards its allocation
+            // and can propagate an error from a shape that is never used.
+            shape: match &d.shape {
+                Some(shape) => shape.clone(),
+                None => NodeShape::new(&src.nodes[i])?,
+            },
             xlabel: None,
             // ND_clust(dn) = subg for a cluster's derived node
             clust: match d.kind {
@@ -1365,4 +1372,76 @@ pub fn fdp_layout(graph: &mut Graph) -> Result<()> {
     gv_postprocess(&mut g, false);
     finish(&g, graph);
     Ok(())
+}
+
+#[cfg(test)]
+mod adapter_tests {
+    use super::*;
+
+    fn assert_shape_eq(actual: &NodeShape, expected: &NodeShape) {
+        assert_eq!(
+            (
+                actual.inside,
+                &actual.name,
+                actual.sides,
+                actual.peripheries,
+                actual.regular,
+                actual.no_clip,
+                actual.fixedshape
+            ),
+            (
+                expected.inside,
+                &expected.name,
+                expected.sides,
+                expected.peripheries,
+                expected.regular,
+                expected.no_clip,
+                expected.fixedshape
+            )
+        );
+        let scalars = |shape: &NodeShape| {
+            [
+                shape.orientation,
+                shape.distortion,
+                shape.skew,
+                shape.width,
+                shape.height,
+                shape.outline_width,
+                shape.outline_height,
+                shape.penwidth,
+            ]
+            .map(f64::to_bits)
+        };
+        assert_eq!(scalars(actual), scalars(expected));
+        assert_eq!(actual.vertices, expected.vertices);
+        assert_eq!(actual.record_box, expected.record_box);
+    }
+
+    #[test]
+    fn derived_adapter_preserves_existing_shapes_and_constructs_missing_shapes() {
+        let mut source = Graph::new("shapes", GraphKind::Directed, true);
+        source.ensure_node("box");
+        source.nodes[0].attrs.insert("shape".into(), "box".into());
+        let existing = NodeShape::new(&source.nodes[0]).unwrap();
+        let mut defaults = Graph::new("derived", GraphKind::Directed, true);
+        defaults.ensure_node("0");
+        let fallback = NodeShape::new(&defaults.nodes[0]).unwrap();
+        let mut dg = DG {
+            ndim: 3,
+            ..DG::default()
+        };
+        let mut real = DNode::new(DKind::Real(0));
+        real.shape = Some(existing.clone());
+        real.pos = [1.25, -2.5];
+        dg.add_node(real);
+        dg.add_node(DNode::new(DKind::Port));
+        with_lgraph(&mut dg, &[0, 1], |lg, _, _| {
+            assert_shape_eq(&lg.nodes[0].shape, &existing);
+            assert_shape_eq(&lg.nodes[1].shape, &fallback);
+            assert_eq!(lg.nodes[0].pos, [1.25, -2.5, 0.0]);
+            lg.nodes[0].pos[1] = 4.5;
+        })
+        .unwrap();
+        assert_eq!(dg.nodes[0].pos, [1.25, 4.5]);
+    }
 }
