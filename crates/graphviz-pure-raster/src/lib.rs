@@ -152,6 +152,22 @@ pub fn rasterize(
     }
 }
 
+/// Encodes straight (not premultiplied) RGBA pixels as a PNG.
+///
+/// This is what `tiny_skia`'s `PixmapRef::encode_png` does, on pixels that are not in a
+/// pixmap: the same `png` calls on the same pixels give the same bytes.
+fn encode_png(pixels: &[u8], width: u32, height: u32) -> Result<Vec<u8>, png::EncodingError> {
+    let mut data = Vec::new();
+    {
+        let mut encoder = png::Encoder::new(&mut data, width, height);
+        encoder.set_color(png::ColorType::Rgba);
+        encoder.set_depth(png::BitDepth::Eight);
+        let mut writer = encoder.write_header()?;
+        writer.write_image_data(pixels)?;
+    }
+    Ok(data)
+}
+
 fn rasterize_inner(
     svg: &str,
     format: RasterFormat,
@@ -185,9 +201,15 @@ fn rasterize_inner(
         &mut pixmap.as_mut(),
     );
     match format {
-        RasterFormat::Png => pixmap
-            .encode_png()
-            .map_err(|e| GraphvizError::render(format!("encoding the PNG: {e}"))),
+        // `Pixmap::encode_png` copies the whole pixmap into a second buffer before it
+        // encodes it, which for a big drawing is a copy of every pixel. The pixels are
+        // taken out of the pixmap instead and encoded where they are; the bytes are the
+        // same (the same `png` calls on the same pixels).
+        RasterFormat::Png => {
+            let pixels = pixmap.take_demultiplied();
+            encode_png(&pixels, w, h)
+                .map_err(|e| GraphvizError::render(format!("encoding the PNG: {e}")))
+        }
         RasterFormat::Jpeg => {
             // JPEG has no alpha: composite onto white, as Graphviz's background is.
             let mut rgb = Vec::with_capacity((w * h * 3) as usize);
@@ -237,6 +259,43 @@ mod tests {
             u32::from_be_bytes(png.output()[16..20].try_into().unwrap()),
             62
         );
+    }
+
+    // The PNG the raster path writes is the one `tiny_skia`'s `Pixmap::encode_png`
+    // writes for the same drawing: the pixels are encoded where they are drawn,
+    // without a copy of the whole pixmap first. A drawing with a transparent
+    // background covers the pixels that are not opaque.
+    #[test]
+    fn png_bytes_match_the_pixmap_encoder() {
+        const TRANSPARENT: &str = r#"<svg width="62pt" height="116pt" viewBox="0.00 0.00 62.00 116.00" xmlns="http://www.w3.org/2000/svg">
+<g transform="scale(1 1) rotate(0) translate(4 112)"><ellipse fill="none" stroke="black" cx="27" cy="-90" rx="27" ry="18"/>
+<text text-anchor="middle" x="27" y="-85.8" font-family="Times,serif" font-size="14.00">a</text></g></svg>"#;
+        for svg in [SVG, TRANSPARENT] {
+            let opt = usvg::Options {
+                fontdb: fontdb(),
+                font_family: "Tinos".to_string(),
+                image_href_resolver: usvg::ImageHrefResolver {
+                    resolve_data: Box::new(|_, _, _| None),
+                    resolve_string: Box::new(|_, _| None),
+                },
+                ..usvg::Options::default()
+            };
+            let tree = usvg::Tree::from_str(svg, &opt).unwrap();
+            let size = tree.size();
+            let (w, h) = (
+                size.width().round().max(1.0) as u32,
+                size.height().round().max(1.0) as u32,
+            );
+            let mut pixmap = tiny_skia::Pixmap::new(w, h).unwrap();
+            resvg::render(
+                &tree,
+                tiny_skia::Transform::from_scale(1.0, 1.0),
+                &mut pixmap.as_mut(),
+            );
+            let reference = pixmap.encode_png().unwrap();
+            let ours = rasterize(svg, RasterFormat::Png, false).unwrap();
+            assert_eq!(ours.output(), &reference);
+        }
     }
 
     #[test]
