@@ -5,7 +5,7 @@ the leaving edge's subtree. It still chooses **the same entering edge as `ns.c` 
 ties included**, and leaves the same ranks, cut values, tree lists, tree indices and parent
 pointers. This page is the argument. The functions in `common/ns.rs` mirror `ns.c` and stay the
 reference: the cut-set path is chosen per graph (§7), falls back to them when C's search stops
-being an argmin (§5), and in check mode runs beside them at every pivot (§8).
+being an argmin or an invariant check fails (§5), and in check mode runs beside them at every pivot (§8).
 
 Issue #641; measurements are in its pull request.
 
@@ -74,7 +74,9 @@ For the current tree T:
 - **(I3) Parent pointers.** `par(u)` is u's parent edge in T rooted at the root, as C's.
 - **(I4) Everything C writes**: tree lists `ND_tree_in`/`ND_tree_out` (same order), `Tree_edge`,
   `ED_tree_index`, cut values are C's, because the cut-set path performs C's own operations on
-  them (`exchange_tree_edges`, and the same cut-value additions, §4.2).
+  them (`exchange_tree_edges`, and the same cut-value additions, §4.2). `leave_edge` reads
+  only cut values and the order of `Tree_edge`, from its `S_i` cursor through its
+  `Search_size` window, so by (I4) it leaves the same tree edge as C at every pivot.
 
 `lim`/`low` are left as they were when the pivots began (§6). All four hold when the pivots
 begin: `cover` is built by walking each non-tree edge's tree path with the then-valid
@@ -179,6 +181,12 @@ If `enter_edge` finds a negative candidate slack, Lemma 1 no longer applies. The
 written, `lim`/`low` are renumbered from the root (non-incremental `dfs_range`), and the rest of
 the run, this pivot included, uses C's functions. That is exact by Lemma 2.
 
+The same hand-over happens if a pivot finds the tree is not what the cut sets describe: `e` has
+no tree slot, `f` is not in e's cut set, the LCA climb fails, or an edge of f's cycle has no
+tree slot. `update` checks all of these before it changes anything, so C's `update` gets the
+pivot from a consistent state. `LR_balance` does the same when `f` is missing from e's cut set.
+No test has produced any of these; they keep a broken invariant from going on silently.
+
 > **Lemma 2.** C's network simplex uses `lim`/`low` only to test subtree membership and which
 > end of a tree edge is the child, so any valid post-order numbering of the current tree gives
 > the same ranks, cut values, tree lists and parent pointers.
@@ -205,25 +213,64 @@ Building the cut sets costs Σ over non-tree edges of their tree-path length, an
 about |cut set| × |f's path|, against C's walks of a fraction of the graph. `begin` estimates
 the mean tree-path length `l` from up to `CUT_SETS_SAMPLE` evenly spaced non-tree edges. For `m`
 non-tree edges and `n` nodes, the cut sets then hold about `l·m` entries and a pivot costs about
-`l·(l·m/n)`. It takes the cut-set path when `n ≥ CUT_SETS_MIN_NODES` and `l·(l·m/n)/n ≤
-CUT_SETS_MAX_COST`. Graphs it routes to C's functions pay only the sample walks.
+`l·(l·m/n)`. The cut-set path runs when all three hold:
 
-The constants were tuned by timing every network simplex run of the corpus on both paths: three
-runs each, the fastest kept. The corpus is `tests/wild`, `tests/fixtures`, the 43 neato graphs
-with an `ortho` overlap mode (whose constraint graphs `constraint.c` ranks), and
-`dot_dag_1000`/`dot_dag_5000`. That is 1,885 runs from 594 graphs:
+- **`n ≥ CUT_SETS_MIN_NODES` (2,500).** Below that, C's walks are short and building the cut sets
+  does not pay.
+- **`l·(l·m/n)/n ≤ CUT_SETS_MAX_COST` (1.0)**, the time estimate.
+- **`l·m ≤ CUT_SETS_MAX_ENTRIES·(n + m)` (10)**, the memory estimate. An entry is 4 bytes, against
+  a few hundred bytes per node and edge that dot already holds, so the cut sets add at most a few
+  percent to the peak heap. The term also turns away graphs whose tree cycles are long for their
+  size. There the time estimate is wrong: it assumes C walks a fixed fraction of the graph per
+  pivot, which is not true of every shape.
 
-| selector | total time | runs on cut sets |
-| :-- | --: | :-- |
-| C's functions everywhere | 2,530 ms | none |
-| cut sets everywhere | 622 ms | all |
-| the faster of the two, run by run | 512 ms | |
-| **`CUT_SETS_MIN_NODES` = 2500, `CUT_SETS_MAX_COST` = 1.0** | **529 ms** | dot_dag_1000 (position), dot_dag_5000 (rank, position), b29 (position) |
-| 1000 nodes, cost 2.0 | 517 ms | the above, plus b143, b106, b124, cairo, ngk10_4 ×2, badvoro and dot_dag_1000 (rank) |
+Graphs routed to C's functions pay only the sample walks. A store that grew past
+`CUT_SETS_KEEP_WORDS` (2¹⁸ words, 1 MB) is released when its run ends, so a large graph's cut
+sets do not stay allocated for the rest of the layout; smaller stores are reused by the next run.
 
-The difference between these selectors is about 12 ms of the 2.5 s, so the constants are chosen
-so that no run gets slower. Below 2,500 nodes, C's walks are short, and the runs there are
-slower on cut sets (rechecked with the final code):
+### What it chooses, and what that costs
+
+`l·m/(n+m)` is the estimated number of entries per node and non-tree edge. The cycles and peak
+RSS are x86-64-v3 builds; the peak heap is dhat, as in the perf ratchet. Both compare against
+the same code with only C's functions.
+
+| graph | network simplex runs (nodes, `l·m/(n+m)`, cost) | path | cycles | peak heap |
+| :-- | :-- | :-- | --: | --: |
+| dot_dag_1000 | position (3,949, 8.3, 0.08) | cut sets | 1.16× faster | +3.26% |
+| dot_dag_5000 | rank (5,000, 8.9, 0.07), position (19,476, 8.5, 0.02) | cut sets | 3.26× faster | +2.80% |
+| dot_dag_20000 | rank (20,000, 9.2, 0.02), position (77,796, 8.4, 0.004) | cut sets | 9.23× faster | +2.80% |
+| dot_dag_5000 with `samehead`/`sametail`, `constraint=false` on half the edges | position (20,168, 12.8, 0.04) | C's | | 0 |
+| a DAG whose edges span up to 400 nodes (4,000 nodes) | position (16,723, 66, 1.12) | C's | | 0 |
+| b29 | position (7,029, 38, 0.92) | C's | | 0 |
+| b143 | position (3,041, 34, 1.70) | C's | | 0 |
+
+The rows that now take C's functions show what the memory term prevents:
+
+- **The `samehead` DAG** would run 1.56× faster on cut sets, at +5.75% peak heap.
+- **The span-400 DAG**, forced onto the cut sets, runs network simplex 2.85× slower, at +15%
+  peak RSS. Its time estimate (1.12) already keeps it off them. Another draw of the same shape,
+  a reviewer's (16,744 nodes, cost 0.805), passed the time estimate alone and ran 1.1× slower
+  overall with +15% RSS. The memory estimate (66 entries per element on mine) turns this shape
+  away whatever the time estimate says.
+- **b29** would run 1.17× faster, at +14.6% peak heap.
+- **b143** would run its network simplex 1.3–1.45× faster, at +11% peak heap.
+- A reviewer's DAG with `samehead`/`sametail`/`constraint=false` had a position graph of
+  140,100 nodes (l ≈ 320, 108 entries per element). The cut sets reached 110 MB and peak RSS
+  rose 36%. It now stays on C's functions.
+
+**On every graph above that the selector sends to the cut sets, they are faster and add under
+4% to the peak heap.** The selector is still an estimate from a sample: a graph unlike these
+could be slower on cut sets. The output is the same on either path.
+
+### The corpus
+
+The constants were first tuned by timing every network simplex run of the corpus on both paths:
+three runs each, the fastest kept. The corpus is `tests/wild`, `tests/fixtures`, the 43 neato
+graphs with an `ortho` overlap mode (whose constraint graphs `constraint.c` ranks), and
+`dot_dag_1000`/`dot_dag_5000`. That is 1,885 runs from 594 graphs: 2,530 ms with C's functions
+everywhere, 622 ms with cut sets everywhere, 512 ms with the faster of the two, run by run.
+
+Below 2,500 nodes the runs are slower on cut sets (rechecked with the final code):
 
 | run | nodes | cost | C's functions | cut sets |
 | :-- | --: | --: | --: | --: |
@@ -231,17 +278,12 @@ slower on cut sets (rechecked with the final code):
 | b124, position | 1,950 | 0.51 | 12.0 ms | 11.4 ms |
 | ngk10_4, position | 1,209 | 0.71 | 3.5 ms | 4.4 ms |
 | dot_dag_1000, rank | 1,000 | 0.45 | 2.7 ms | 3.5 ms |
-| b29, position | 7,029 | 0.92 | 347 ms | 228 ms |
 
-The node floor alone keeps b143 (3,041 nodes, cost 1.70) out; the cost limit does too. b143 is
-1.3–1.45× faster on cut sets, but they add 11% to its peak heap and 3% to its instructions in the
-perf ratchet (limits 5% and 2%).
-
-Of the 592 corpus graphs that run network simplex (1,881 runs), b29 takes the cut sets for its
-position pass and 591 keep C's functions everywhere. Among the large inputs, the gain is on graphs
-like dot's synthetic DAGs (`dot_dag_5000` and larger). neato's constraint graphs have at most 118
-nodes in the corpus and are dense (estimated cost 10–60): cut sets would be 8× slower on them,
-and the selector keeps them on C's functions. Check mode runs them on cut sets anyway, so their
+With the memory term, none of the 592 corpus graphs that run network simplex (1,881 runs) takes
+the cut sets: their tree cycles are too long for their size. The cut sets are for large graphs
+shaped like dot's synthetic DAGs. neato's constraint graphs have at most 118 nodes in the corpus
+and are dense (estimated cost 10–60): cut sets would be 8× slower on them, and the selector keeps
+them on C's functions. Check mode runs every one of these graphs on cut sets anyway, so their
 exactness is tested.
 
 ## 8. How it is checked
