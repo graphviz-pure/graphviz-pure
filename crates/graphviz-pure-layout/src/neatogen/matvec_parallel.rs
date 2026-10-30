@@ -25,13 +25,13 @@
 //! Eight chains, not four. One dependent FMA chain retires about one FMA
 //! every four cycles, and four chains were still short of two FMA pipes.
 //! `GRAPHVIZ_PURE_THREADS=1` stays on the sequential kernel. Unset, the count
-//! is [`DEFAULT_THREADS`], and no count exceeds `available_parallelism`.
+//! is [`super::par::DEFAULT_THREADS`], and no count exceeds `available_parallelism`.
 //! Conjugate gradient keeps one worker set for the solve; spawning on every
 //! mat-vec was most of the system time. A spawn the OS refuses runs on the
 //! caller.
 
 use std::ops::Range;
-use std::sync::{Arc, OnceLock, mpsc};
+use std::sync::{Arc, mpsc};
 
 /// Sequential below this.
 ///
@@ -51,15 +51,8 @@ pub(super) const MAX_N: usize = 8192;
 /// Eight independent chains, one per output. Four left the FMA pipes short.
 const BLOCK: usize = 8;
 
-/// Threads used when `GRAPHVIZ_PURE_THREADS` is unset.
-///
-/// Four beat eight on rnd2000-as-neato (4.35 s against 4.58 s median wall).
-/// An explicit count may be higher, and both are capped by
-/// `available_parallelism`.
-const DEFAULT_THREADS: usize = 4;
-
 pub(super) fn use_parallel(n: usize) -> bool {
-    (MIN_N..=MAX_N).contains(&n) && configured_threads() > 1
+    (MIN_N..=MAX_N).contains(&n) && super::par::configured_threads() > 1
 }
 
 /// Packed lower triangle, including the diagonal. Same length as `upper`.
@@ -81,7 +74,14 @@ pub(super) fn right_mult_prepared(
     vector: &[f32],
     result: &mut [f32],
 ) {
-    right_mult_with_lower(upper, lower, n, vector, result, configured_threads());
+    right_mult_with_lower(
+        upper,
+        lower,
+        n,
+        vector,
+        result,
+        super::par::configured_threads(),
+    );
 }
 
 /// One worker set for many mat-vecs of the same matrix.
@@ -123,7 +123,7 @@ pub(super) fn with_team<R>(
     n: usize,
     body: impl FnOnce(&mut MatvecTeam<'_>) -> R,
 ) -> R {
-    let threads = configured_threads().max(1).min(n.max(1));
+    let threads = super::par::configured_threads().max(1).min(n.max(1));
     if n == 0 || threads == 1 {
         let mut team = MatvecTeam {
             upper,
@@ -275,19 +275,7 @@ fn matvec_worker(
 /// Same split as [`super::par`]. The earliest chunk takes the remainder, so
 /// `n = 10`, `threads = 3` is `4 + 3 + 3`.
 fn chunk_ranges(n: usize, threads: usize) -> Vec<Range<usize>> {
-    let threads = threads.max(1).min(n.max(1));
-    let mut ranges = Vec::with_capacity(threads);
-    let mut base = 0;
-    let mut left = n;
-    let mut remaining = threads;
-    while remaining > 0 && left > 0 {
-        let len = left / remaining + usize::from(!left.is_multiple_of(remaining));
-        ranges.push(base..base + len);
-        base += len;
-        left -= len;
-        remaining -= 1;
-    }
-    ranges
+    super::par::split_ranges(n, threads)
 }
 
 /// `threads == 1` still runs the gather, so tests can compare that kernel
@@ -490,53 +478,13 @@ fn upper_row(n: usize, i: usize) -> usize {
     if i == 0 { 0 } else { i * n - i * (i - 1) / 2 }
 }
 
-fn configured_threads() -> usize {
-    static CACHED: OnceLock<usize> = OnceLock::new();
-    *CACHED.get_or_init(|| {
-        let available = std::thread::available_parallelism()
-            .map(|count| count.get())
-            .unwrap_or(1);
-        // The cache stores the first answer for the process. The decision
-        // itself is [`threads_from_env`], which tests can call with
-        // `NotPresent` without racing that cache.
-        threads_from_env(std::env::var("GRAPHVIZ_PURE_THREADS"), available)
-    })
-}
-
-/// What [`configured_threads`] stores.
-///
-/// `NotPresent` is [`DEFAULT_THREADS`], capped by `available`. Returning
-/// `available` here would ignore that cap: this is the arm the `OnceLock`
-/// runs when the variable was never set. An explicit count is capped the
-/// same way. `0`, garbage, and a non-Unicode value stay on one thread.
-fn threads_from_env(value: Result<String, std::env::VarError>, available: usize) -> usize {
-    match value {
-        Ok(value) => parse_threads(Some(&value), available),
-        Err(std::env::VarError::NotPresent) => parse_threads(None, available),
-        Err(std::env::VarError::NotUnicode(_)) => 1,
-    }
-}
-
-/// `None` is [`DEFAULT_THREADS`], capped by `available`. An explicit count is
-/// capped by `available` too. `0` and any other unreadable value are
-/// sequential, so a bad setting does not spawn.
-fn parse_threads(value: Option<&str>, available: usize) -> usize {
-    let available = available.max(1);
-    match value {
-        None => DEFAULT_THREADS.min(available),
-        Some(text) => match text.trim().parse::<usize>() {
-            Ok(count) if count >= 1 => count.min(available),
-            _ => 1,
-        },
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
     fn parse_threads_treats_one_as_sequential_and_rejects_garbage() {
+        use super::super::par::{DEFAULT_THREADS, parse_threads};
         assert_eq!(parse_threads(None, 8), DEFAULT_THREADS);
         assert_eq!(parse_threads(None, 2), 2);
         assert_eq!(parse_threads(None, 0), 1);
@@ -548,34 +496,6 @@ mod tests {
         assert_eq!(parse_threads(Some("0"), 8), 1);
         assert_eq!(parse_threads(Some(""), 8), 1);
         assert_eq!(parse_threads(Some("nope"), 8), 1);
-    }
-
-    /// The `OnceLock` used to return every core on `NotPresent`. `parse_threads(None)`
-    /// was already the cap, and that test did not call the arm the cache runs.
-    #[test]
-    fn unset_threads_is_min_of_available_and_default() {
-        use std::env::VarError;
-        use std::ffi::OsString;
-
-        assert_eq!(
-            threads_from_env(Err(VarError::NotPresent), 8),
-            DEFAULT_THREADS
-        );
-        assert_eq!(
-            threads_from_env(Err(VarError::NotPresent), 28),
-            DEFAULT_THREADS
-        );
-        assert_eq!(threads_from_env(Err(VarError::NotPresent), 2), 2);
-        assert_eq!(threads_from_env(Err(VarError::NotPresent), 0), 1);
-        assert_ne!(threads_from_env(Err(VarError::NotPresent), 8), 8);
-        assert_ne!(threads_from_env(Err(VarError::NotPresent), 28), 28);
-        assert_eq!(threads_from_env(Ok("6".to_string()), 28), 6);
-        assert_eq!(threads_from_env(Ok("100".to_string()), 8), 8);
-        assert_eq!(threads_from_env(Ok("0".to_string()), 8), 1);
-        assert_eq!(
-            threads_from_env(Err(VarError::NotUnicode(OsString::from("x"))), 8),
-            1
-        );
     }
 
     #[test]

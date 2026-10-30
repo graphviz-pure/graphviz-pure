@@ -159,6 +159,10 @@ for n in (250, 500, 1000, 2000):
 # 1-vs-4 byte check reaches the parallel kernel (tests/neato stays under that size).
 EXTRAS = {
     "pinned_neato_1400": lambda: pinned_neato(1400),
+    # Same shape as the bench graph `sfdp_sparse_5000`, written on its own so
+    # the parallel-sfdp byte check can ask for one file. 6000 nodes is
+    # strictly above the repulsive-term threshold (5000).
+    "sfdp_bytes_6000": lambda: sparse(6000, "sfdp"),
 }
 
 

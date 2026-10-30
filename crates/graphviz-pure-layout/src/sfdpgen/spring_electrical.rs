@@ -520,6 +520,9 @@ fn repulsive_supernodes(
 }
 
 /// Repulsive force on node `i` from every other node.
+///
+/// Reads each other node's live position. The quadtree term does not, and
+/// only that term is precomputed when `parallel` is on.
 fn repulsive_all(n: usize, dim: usize, x: &[f64], i: usize, kp: f64, p: f64, f: &mut [f64]) {
     for j in 0..n {
         if j == i {
@@ -573,6 +576,33 @@ fn spring_electrical_embedding(
     let mut tree = QuadTree::default();
     let mut fnorm = 0.0f64;
     let mut iter = 0;
+    #[cfg(all(feature = "parallel", not(target_family = "wasm")))]
+    let parallel_repulsion = use_qt && repulsion_parallel::use_parallel(n);
+    #[cfg(all(feature = "parallel", not(target_family = "wasm")))]
+    let mut repulsion_scratch = repulsion_parallel::Scratch::default();
+    // One copy of the sequential node loop. The parallel path only replaces
+    // the quadtree repulsive term; attraction, `repulsive_all`, and the move
+    // stay here.
+    // `qt`, `counts_avg`, and `nsuper_avg` are born inside the loop, so they
+    // arrive as tokens. A bare name in the body would be the macro's own
+    // binding and would not see them.
+    macro_rules! sequential_force_loop {
+        ($qt:ident, $counts_avg:ident, $nsuper_avg:ident) => {
+            for i in 0..n {
+                f.iter_mut().for_each(|v| *v = 0.0);
+                attractive(&a, dim, x, i, crk, &mut f);
+                if let Some(qt) = $qt {
+                    let counts = qt.get_supernodes(BH, &x[dim * i..dim * i + dim], i, &mut sn);
+                    $counts_avg += counts;
+                    $nsuper_avg += sn.len() as f64;
+                    repulsive_supernodes(&sn, dim, x, i, kp, p, &mut f);
+                } else {
+                    repulsive_all(n, dim, x, i, kp, p, &mut f);
+                }
+                fnorm += move_node(dim, x, i, &mut f, step);
+            }
+        };
+    }
     loop {
         iter += 1;
         let fnorm0 = fnorm;
@@ -586,19 +616,33 @@ fn spring_electrical_embedding(
         } else {
             None
         };
-        for i in 0..n {
-            f.iter_mut().for_each(|v| *v = 0.0);
-            attractive(&a, dim, x, i, crk, &mut f);
-            if let Some(qt) = qt {
-                let counts = qt.get_supernodes(BH, &x[dim * i..dim * i + dim], i, &mut sn);
-                counts_avg += counts;
-                nsuper_avg += sn.len() as f64;
-                repulsive_supernodes(&sn, dim, x, i, kp, p, &mut f);
+        #[cfg(all(feature = "parallel", not(target_family = "wasm")))]
+        if parallel_repulsion {
+            if let Some(tree) = qt {
+                repulsion_parallel::accumulate_iteration(
+                    tree,
+                    &a,
+                    dim,
+                    x,
+                    n,
+                    kp,
+                    p,
+                    crk,
+                    step,
+                    &mut f,
+                    &mut fnorm,
+                    &mut counts_avg,
+                    &mut nsuper_avg,
+                    &mut repulsion_scratch,
+                );
             } else {
-                repulsive_all(n, dim, x, i, kp, p, &mut f);
+                sequential_force_loop!(qt, counts_avg, nsuper_avg);
             }
-            fnorm += move_node(dim, x, i, &mut f, step);
+        } else {
+            sequential_force_loop!(qt, counts_avg, nsuper_avg);
         }
+        #[cfg(not(all(feature = "parallel", not(target_family = "wasm"))))]
+        sequential_force_loop!(qt, counts_avg, nsuper_avg);
         if qt.is_some() {
             nsuper_avg /= n as f64;
             counts_avg /= n as f64;
@@ -619,6 +663,10 @@ fn spring_electrical_embedding(
 
 /// `spring_electrical_spring_embedding(dim, A0, D, ctrl, x)`: spring–electrical
 /// with additional springs of ideal lengths `D` (the spring smoother).
+///
+/// The quadtree repulsive term has the same snapshot inputs as
+/// [`spring_electrical_embedding`]. The spring terms read live positions,
+/// and default smoothing is none, so this loop stays sequential.
 pub fn spring_electrical_spring_embedding(
     dim: usize,
     a0: &SparseMatrix,
@@ -1092,6 +1140,9 @@ pub fn multilevel_spring_electrical_embedding(
     remove_overlap_ctrl(dim, &mut a, x, label_sizes, ctrl, edge_label_nodes);
     *ctrl = ctrl0;
 }
+
+#[cfg(all(feature = "parallel", not(target_family = "wasm")))]
+mod repulsion_parallel;
 
 #[cfg(test)]
 mod tests {

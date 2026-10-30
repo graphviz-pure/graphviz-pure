@@ -24,7 +24,7 @@ env:
 # skipped when the files they read already passed this workflow (scripts/ci-result-cache.sh), so a
 # change to documentation or the site's pages runs none of them; a skipped required check counts
 # as passed. parallel-neato is one of those jobs: the opt-in `parallel` feature, off in every
-# other job.
+# other job. It checks neato's mat-vec and sfdp's quadtree repulsion.
 jobs:
   lookup:
     name: Earlier result for these inputs
@@ -434,10 +434,10 @@ jobs:
             echo "The base branch has no scripts/pr-risk.py yet." | tee -a "$GITHUB_STEP_SUMMARY"
           fi
 
-  # The `parallel` feature is off in verify. This job turns it on for neato's mat-vec,
-  # checks that one thread and four threads render the same bytes (tests/neato, plus one
-  # generated 1400-node graph with pinned nodes, which is large enough to take the
-  # parallel kernel), and refuses the feature on wasm32.
+  # The `parallel` feature is off in verify. This job turns it on for neato's mat-vec
+  # and sfdp's quadtree repulsion, checks that one thread and four threads render
+  # the same bytes (the engine corpora, plus one generated graph large enough to
+  # take each kernel), and refuses the feature on wasm32.
   parallel-neato:
     name: Parallel neato bytes
     needs: lookup
@@ -457,6 +457,8 @@ jobs:
         run: cargo clippy --locked -p graphviz-pure-layout --all-targets --features parallel -- -D warnings
       - name: Test the parallel mat-vec
         run: "cargo test --locked -p graphviz-pure-layout --features parallel --lib neatogen::"
+      - name: Test the parallel sfdp repulsion
+        run: "cargo test --locked -p graphviz-pure-layout --features parallel --lib sfdpgen::spring_electrical::"
       - name: The feature does not build for wasm32
         shell: bash
         run: |
@@ -473,6 +475,8 @@ jobs:
         run: cargo build --locked --release -p graphviz-pure-cli --features parallel
       - name: Neato corpus bytes match at 1 and 4 threads
         run: scripts/parallel-neato-bytes.sh target/release/graphviz-pure
+      - name: Sfdp corpus bytes match at 1 and 4 threads
+        run: scripts/parallel-sfdp-bytes.sh target/release/graphviz-pure
 
   # Records that these inputs passed, so a later run with the same inputs skips verify,
   # ns-check, msrv, wasm-e2e, wasm-runtimes, cpu-fidelity, native-pgo and parallel-neato.
