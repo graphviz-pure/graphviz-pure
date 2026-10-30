@@ -35,6 +35,22 @@ enum ReadMode {
     Comparing,
 }
 
+/// The sizes `reserve` was asked for, largest first: what the scratch arrays may hold.
+#[derive(Clone, Copy, Default)]
+pub(in super::super) struct Largest {
+    rows: usize,
+    positions: usize,
+    widest: usize,
+}
+
+impl Largest {
+    pub(in super::super) fn note(&mut self, rows: usize, positions: usize, widest: usize) {
+        self.rows = self.rows.max(rows);
+        self.positions = self.positions.max(positions);
+        self.widest = self.widest.max(widest);
+    }
+}
+
 #[derive(Default)]
 pub(in super::super) struct Reads {
     mode: ReadMode,
@@ -214,6 +230,7 @@ pub(in super::super) fn after_reorder(
         "reorder: settled order and C's passes differ, rank {r}, reverse {reverse}, hasfixed {hasfixed}"
     );
     assert_snapshots_stand(d, g);
+    assert_scratch_fits(d);
     Ok(())
 }
 
@@ -249,17 +266,30 @@ pub(in super::super) fn after_transpose(d: &mut Dot<'_>, reference: Option<Visib
         "transpose: state differs from C's loop, graph {g}"
     );
     assert_snapshots_stand(d, g);
-    assert_memo_fits(d);
+    assert_scratch_fits(d);
 }
 
-/// The memo's size is fixed by the views: nothing a scan does may have grown it.
-fn assert_memo_fits(d: &Dot<'_>) {
+/// `transpose_scans` declined, so C's loop runs for real. It gets the same cap: it may not end.
+pub(in super::super) fn before_fallback(d: &mut Dot<'_>) {
+    let reads = &mut d.mincross_store.scan.reads;
+    reads.log.clear();
+    reads.next = 0;
+    reads.mode = ReadMode::Recording;
+}
+
+/// The scratch arrays' sizes are fixed by the views: nothing a scan does may have grown them.
+fn assert_scratch_fits(d: &Dot<'_>) {
     let scan = &d.mincross_store.scan;
-    assert!(
-        scan.pairs.len() <= scan.largest_view && scan.pairs.capacity() <= scan.largest_view,
-        "mincross: the pair memo outgrew its views: {} records, capacity {}, largest view {}",
-        scan.pairs.len(),
-        scan.pairs.capacity(),
-        scan.largest_view
-    );
+    let most = scan.largest;
+    for (name, capacity, limit) in [
+        ("items", scan.items.capacity(), most.widest),
+        ("work", scan.work.capacity(), most.widest * 3 + 1),
+        ("ranks", scan.ranks.capacity(), most.rows),
+        ("pairs", scan.pairs.capacity(), most.positions),
+    ] {
+        assert!(
+            capacity <= limit,
+            "mincross: {name} outgrew its views: capacity {capacity}, limit {limit}"
+        );
+    }
 }

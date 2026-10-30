@@ -24,22 +24,23 @@ pub(super) struct ScanStore {
     #[cfg(any(test, feature = "mincross-check"))]
     pub(super) reads: check::Reads,
     #[cfg(any(test, feature = "mincross-check"))]
-    pub(super) largest_view: usize,
+    pub(super) largest: check::Largest,
     /// A test's way to break `forget_pairs`, proving that the cross-check sees it.
     #[cfg(test)]
     pub(super) keep_stale_pairs: bool,
     /// A test's way to break `rotate_ties`, proving that the cross-check sees it.
     #[cfg(test)]
     pub(super) keep_ties: bool,
+    /// A test's way to skip `windows_hold_their_orders`, proving that the check is needed.
+    #[cfg(test)]
+    pub(super) ignore_stale_ties: bool,
 }
 
 impl ScanStore {
     /// Room for a view of `rows` ranks and `positions` rank positions, the widest with `widest`.
     pub(super) fn reserve(&mut self, rows: usize, positions: usize, widest: usize) {
         #[cfg(any(test, feature = "mincross-check"))]
-        {
-            self.largest_view = self.largest_view.max(positions);
-        }
+        self.largest.note(rows, positions, widest);
         // Cleared first: `reserve_exact` counts from the length, and the last view's records would
         // otherwise add to this one's capacity.
         self.items.clear();
@@ -377,7 +378,37 @@ impl Dot<'_> {
             }
             scan.ranks.push(info);
         }
-        true
+        #[cfg(test)]
+        if scan.ignore_stale_ties {
+            return true;
+        }
+        self.windows_hold_their_orders(view, scan)
+    }
+
+    /// (W) of docs/perf/mincross-scans.md §3.1: a node of the view that is not in its rank's
+    /// window has an order outside that window. A cluster's rank is a window of the root's, and
+    /// a neighbour outside it can hold a stale order. If that order tied with a window node, an
+    /// exchange could change a comparison `forget_pairs` does not look at.
+    fn windows_hold_their_orders(&self, view: ScanView, scan: &ScanStore) -> bool {
+        let store = &self.mincross_store;
+        let mut slots = store.meta.iter().zip(&store.order).enumerate();
+        slots.all(|(slot, (meta, &order))| {
+            let row = meta
+                .rank
+                .checked_sub(view.minr)
+                .and_then(|i| usize::try_from(i).ok())
+                .and_then(|i| scan.ranks.get(i));
+            let Some(info) = row else {
+                return true;
+            };
+            let place = order.wrapping_sub(info.base);
+            place < 0
+                || place >= info.n
+                || scan
+                    .pairs
+                    .get(info.start.wrapping_add(place as usize))
+                    .is_some_and(|pair| pair.slot as usize == slot)
+        })
     }
 
     fn run_scans<const CONSTRAINED: bool>(
@@ -756,6 +787,9 @@ pub(super) mod check {
 
     #[inline(always)]
     pub(in super::super) fn after_transpose(_: &mut Dot<'_>, _: Before, _: G) {}
+
+    #[inline(always)]
+    pub(in super::super) fn before_fallback(_: &mut Dot<'_>) {}
 }
 
 #[cfg(test)]

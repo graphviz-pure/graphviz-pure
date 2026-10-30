@@ -1414,6 +1414,7 @@ impl Dot<'_> {
             scan::check::after_transpose(self, before, g);
             return Ok(());
         }
+        scan::check::before_fallback(self);
         self.transpose_loop(g, reverse, minr, maxr)
     }
 

@@ -146,15 +146,31 @@ c0 = in_cross(v, w) + out_cross(v, w)      c1 = in_cross(w, v) + out_cross(w, v)
 
 taking `in_cross` only if r > 0 and `out_cross` only if rank r+1 is not empty. The shortcut applies
 when every node of the view's ranks has all its edges to ranks r−1 and r+1 (`snapshot_valid`,
-`snapshot_adjacent`) and every rank is a proven permutation of its window. Then:
+`snapshot_adjacent`), every rank is a proven permutation of its window, and:
+
+> **(W)** A node of the view that is not in its rank's window has an order outside that window.
+
+A cluster's rank is a window of the root's, and a neighbour outside the window can hold a stale
+order. Nothing about the window proves (W), so `build_scan` checks it before every `transpose`, in
+every build, over all of the view's slots. If it fails, C's loop runs. Then:
 
 > **(F)** c0 and c1 are functions of v's and w's edge lists, penalties and ports, which do not change
 > during a `transpose`, and of the orders of their neighbours, which are in other ranks. The loops add
 > in a fixed order, so equal inputs give the equal integer, wrapped or not.
 
 > **(E)** `exchange(v, w)` swaps two adjacent orders. The counting loops use an order only through
-> the sign of a difference. The sign changes only for the comparison between v's and w's own orders:
-> any other node is on the same side of both.
+> the sign of a difference. The sign changes only for the comparison between v's and w's own orders.
+>
+> *Proof.* Take a node x other than v and w, in their rank. If x is in the window, its order is
+> distinct from theirs, and nothing lies between two adjacent orders, so x is on the same side of
+> both, before and after. If x is outside the window, it does not move, and by (W) its order is
+> outside the window, the range v and w stay in. So again x is on the same side of both. Comparing a
+> node with itself, through parallel edges, gives 0 before and after. ∎
+
+(W) is needed. If a stale order ties with w's, the exchange turns a comparison with v from 1 into 0,
+so a pair's counts change with no edge to w involved. A test turns the check off and asserts that the
+cross-check then fails. The check has not fired on any of the 2,407 `transpose` calls of the 548
+corpus graphs measured.
 
 ### 3.2 The memo
 
@@ -211,19 +227,22 @@ wrapped or not, is what it remembers. Its additions wrap where the reference's p
 release build; they cannot overflow on real penalties.
 
 **Wrapping can stop `transpose` from ending.** Without wrapping, the sum of crossing products falls
-by `delta` each round and never rises, so `delta >= 1` cannot last. A wrapped `out_cross` breaks that.
-With penalties of 2¹⁶ and more set directly on the edges, C's loop in `mincross.rs` often does not
-converge. The shortcut does not change this: it reads what the reference reads, for as long as it
-reads it, and it allocates nothing while doing so. Repeated attempts to reach it from a DOT file
-using `group` and parallel edges all ended, and matched C where compared.
+by `delta` each round and never rises, so `delta >= 1` cannot last. A wrapped `out_cross` breaks that,
+and a small DOT file reaches it. **#682** has eight nodes with `group` set, 40 parallel edges between
+half of the pairs and one edge between the others, so merged penalties are 40,000 and two products
+add up past `i32`. C, the merge base and this code all run past every limit tried on it, so it is not
+a regression, and the matching behaviour is correct for fidelity. `scan/tests.rs` has its ranks. The
+shortcut reads what the reference reads, for as long as it reads it, and allocates nothing while
+doing so, so memory stays flat. #682 records the open question of whether C's loop ever ends.
 
 ## 5. When C's functions run
 
 - **`reorder`:** a constrained view, a rank that is not a proven permutation of its window, an empty
   rank, a node the view has no slot for, or a NaN median.
 - **`transpose`:** any rank of the view that is not a proven permutation, or that has a node with no
-  slot in the view, or with an edge in its own rank or skipping a rank. The decision is taken before
-  anything changes, for the whole `transpose`.
+  slot in the view, or with an edge in its own rank or skipping a rank; or a node outside a window
+  with an order inside it, (W) in §3.1. The decision is taken before anything changes, for the whole
+  `transpose`.
 - **A constrained view** still uses the memo in `transpose`: `left2right` is asked of each pair first,
   as in C, and it does not change what a pair counts.
 
@@ -240,8 +259,8 @@ it grow. `prepare_mincross` reserves everything once for the view, before any sc
 | `work` | 3 × 4 bytes per node of the widest rank, plus 4 |
 | `ranks` | one record per rank of the view |
 
-A test asserts that these capacities do not change during a run, and check mode asserts it after each
-`transpose`.
+A test asserts that these capacities do not change during a run. Check mode asserts all four against
+the largest view's sizes after each `reorder` and `transpose`.
 
 ## 7. Check mode
 
@@ -257,16 +276,20 @@ Under `cfg(test)` or the `mincross-check` feature:
 A check that only compares at the end cannot work here. A wrong memo, or counts that wrap, can keep a
 `transpose` from ending, and its log would then grow without limit. So the log holds at most
 2²⁴ reads (400 MB, and 2¹⁸ in a unit test). A run that reaches the limit stops with an error, every
-read so far having been compared.
+read so far having been compared. When the shortcut declines and C's loop runs for real, that run has
+the same limit.
 
 The tests in `scan/tests.rs` are:
 
 - `settle` against C's loops on plain arrays, 200,000 random ranks in all four modes, ties and
   negative medians included;
 - whole `mincross_step` runs on random ranks: plain, with counts that wrap, with clusters and
-  flat-edge matrices, and on a window of the root's ranks as a cluster has;
-- two tests that break the shortcut on purpose (no remote invalidation; ties left unrotated) and
-  assert that the check fails.
+  flat-edge matrices, on a window of the root's ranks as a cluster has, and with stale orders tying
+  with such a window;
+- that check (W) declines exactly the views that break it;
+- the ranks of #682, which stop at the read limit, as C's loop and as the fallback;
+- three tests that break the shortcut on purpose (no remote invalidation; ties left unrotated; (W)
+  not checked) and assert that the cross-check fails.
 
 CI runs the workspace's tests in check mode, so every corpus graph that reaches a shortcut is
 compared too.

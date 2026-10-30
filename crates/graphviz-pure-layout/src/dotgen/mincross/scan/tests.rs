@@ -139,6 +139,8 @@ struct Shape {
     wrapping: bool,
     /// Clusters and a flat-edge matrix, so that `left2right` answers.
     constrained: bool,
+    /// Nodes outside graph 1's windows whose stale orders tie with nodes inside them.
+    stale_ties: bool,
 }
 
 /// Random ranks, with random edges between adjacent ranks. Graph 1 is a window of graph 0, as a
@@ -182,6 +184,13 @@ fn random_ranks<'a>(rng: &mut Rng, input: &'a Graph, shape: Shape) -> Dot<'a> {
     for r in 0..ranks {
         let n = levels[r as usize].len();
         let skip = rng.below(n as u64) as usize;
+        if shape.stale_ties {
+            for &v in &levels[r as usize][..skip] {
+                if rng.below(2) == 0 {
+                    d.nodes[v].order = (skip + rng.below((n - skip) as u64) as usize) as i32;
+                }
+            }
+        }
         let row = d.rk_mut(1, r);
         row.voff = skip;
         row.n = (n - skip) as i32;
@@ -326,6 +335,159 @@ fn scans_equal_c_under_constraints() -> Result<(), &'static str> {
     for seed in 1..=1_000 {
         run_case(seed, shape)?;
     }
+    Ok(())
+}
+
+/// An exchange can change a comparison with a tied stale order, so the crossings are not a
+/// potential that falls and C's loop may not end here either, even on small penalties.
+#[test]
+fn scans_equal_c_with_stale_orders_outside_the_window() -> Result<(), &'static str> {
+    let shape = Shape {
+        stale_ties: true,
+        ..Shape::default()
+    };
+    let (mut converged, mut endless) = (0, 0);
+    for seed in 1..=300 {
+        match run_case(seed, shape) {
+            Ok(()) => converged += 1,
+            Err(check::NOT_CONVERGED) => endless += 1,
+            Err(error) => return Err(error),
+        }
+    }
+    assert!(converged >= 100, "{converged} converged, {endless} did not");
+    Ok(())
+}
+
+/// Whether a node of graph 1's view outside its rank's window has an order inside that window.
+fn has_stale_tie(d: &Dot<'_>) -> bool {
+    let store = &d.mincross_store;
+    store.nodes.iter().enumerate().any(|(slot, &v)| {
+        let r = store.meta[slot].rank;
+        let (base, n) = (d.rk(1, r).voff as i32, d.rk(1, r).n);
+        let inside = (base..base + n).contains(&store.order[slot]);
+        inside && !(0..n).any(|i| d.rv(1, r, i) == Some(v))
+    })
+}
+
+#[test]
+fn a_stale_order_in_a_window_hands_the_transpose_to_c() -> Result<(), &'static str> {
+    let input = Graph::new("G", GraphKind::Directed, false);
+    let shape = Shape {
+        stale_ties: true,
+        ..Shape::default()
+    };
+    let (mut ties, mut clean) = (0, 0);
+    for seed in 1..=300u64 {
+        let mut rng = Rng(seed.wrapping_mul(0x9e37_79b9_7f4a_7c15) | 1);
+        let mut d = random_ranks(&mut rng, &input, shape);
+        d.prepare_mincross(1)?;
+        let tie = has_stale_tie(&d);
+        assert_eq!(d.transpose_scans(1, false)?, !tie, "seed {seed}");
+        if tie {
+            ties += 1;
+        } else {
+            clean += 1;
+        }
+    }
+    assert!(ties > 0 && clean > 0, "{ties} ties, {clean} clean");
+    Ok(())
+}
+
+#[test]
+#[should_panic(expected = "transpose: ")]
+fn the_cross_check_sees_a_stale_order_tie() {
+    let input = Graph::new("G", GraphKind::Directed, false);
+    let shape = Shape {
+        stale_ties: true,
+        ..Shape::default()
+    };
+    for seed in 1..=2_000u64 {
+        let mut rng = Rng(seed.wrapping_mul(0x9e37_79b9_7f4a_7c15) | 1);
+        let mut d = random_ranks(&mut rng, &input, shape);
+        d.mincross_store.scan.ignore_stale_ties = true;
+        let _ = run_passes(&mut d, 1, &mut rng);
+    }
+}
+
+/// The ranks of #682: 40 parallel edges of penalty 1,000 merge into one of 40,000 when i + j is
+/// even, and a single edge has 1,000. Two such products add up past `out_cross`'s `i32`.
+fn issue_682_ranks<'a>(input: &'a Graph, top: [usize; 4], bottom: [usize; 4]) -> Dot<'a> {
+    let mut d = Dot::empty(input);
+    d.nodes.resize_with(8, NodeInfo::default);
+    for (order, (&a, &b)) in top.iter().zip(&bottom).enumerate() {
+        d.nodes[a].order = order as i32;
+        d.nodes[4 + b].rank = 1;
+        d.nodes[4 + b].order = order as i32;
+    }
+    d.bufs.push(top.iter().map(|&a| Some(a)).collect());
+    d.bufs.push(bottom.iter().map(|&b| Some(4 + b)).collect());
+    d.graphs.push(GraphInfo {
+        minrank: 0,
+        maxrank: 1,
+        rank: vec![Rank::default(); 4],
+        ..GraphInfo::default()
+    });
+    for r in 0..2 {
+        *d.rk_mut(0, r) = Rank {
+            vbuf: r as usize,
+            n: 4,
+            ..Rank::default()
+        };
+    }
+    for a in 0..4 {
+        for b in 0..4 {
+            let e = d.edges.len();
+            d.edges.push(EdgeInfo {
+                tail: a,
+                head: 4 + b,
+                xpenalty: if (a + b) % 2 == 0 { 40_000 } else { 1_000 },
+                ..EdgeInfo::default()
+            });
+            d.nodes[a].out.push(e);
+            d.nodes[4 + b].in_.push(e);
+        }
+    }
+    d
+}
+
+/// Some start of #682's ranks that C's loop does not leave within the read limit.
+fn issue_682_endless<'a>(input: &'a Graph) -> Option<(Dot<'a>, bool)> {
+    const ORDERS: [[usize; 4]; 6] = [
+        [0, 1, 2, 3],
+        [0, 2, 1, 3],
+        [1, 0, 2, 3],
+        [3, 1, 2, 0],
+        [0, 3, 2, 1],
+        [2, 0, 3, 1],
+    ];
+    for top in ORDERS {
+        for bottom in ORDERS {
+            for reverse in [false, true] {
+                let mut d = issue_682_ranks(input, top, bottom);
+                if d.transpose(0, reverse) == Err(check::NOT_CONVERGED) {
+                    return Some((issue_682_ranks(input, top, bottom), reverse));
+                }
+            }
+        }
+    }
+    None
+}
+
+/// `transpose` does not finish on #682's ranks, as in C, and check mode stops it at the limit.
+#[test]
+fn the_ranks_of_issue_682_do_not_converge() {
+    let input = Graph::new("G", GraphKind::Directed, false);
+    assert!(issue_682_endless(&input).is_some());
+}
+
+/// C's loop as the fallback gets the read limit too, or check mode would spin forever here.
+#[test]
+fn a_fallback_stops_at_the_read_limit() -> Result<(), &'static str> {
+    let input = Graph::new("G", GraphKind::Directed, false);
+    let (mut d, reverse) = issue_682_endless(&input).ok_or("mincross: no endless start")?;
+    d.prepare_mincross(0)?;
+    d.rk_mut(0, 0).mincross_position = Some(false);
+    assert_eq!(d.transpose(0, reverse), Err(check::NOT_CONVERGED));
     Ok(())
 }
 
