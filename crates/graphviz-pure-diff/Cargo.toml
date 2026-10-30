@@ -12,6 +12,9 @@ publish = false
 name = "gv-diff"
 path = "src/main.rs"
 
+[features]
+parallel = ["graphviz-pure-layout/parallel"]
+
 [dependencies]
 graphviz-pure-core.workspace = true
 graphviz-pure-parser.workspace = true

@@ -23,7 +23,8 @@ env:
 # GitHub-hosted runners, which are free for a public repository. The build and test jobs are
 # skipped when the files they read already passed this workflow (scripts/ci-result-cache.sh), so a
 # change to documentation or the site's pages runs none of them; a skipped required check counts
-# as passed.
+# as passed. parallel-neato is one of those jobs: the opt-in `parallel` feature, off in every
+# other job.
 jobs:
   lookup:
     name: Earlier result for these inputs
@@ -433,11 +434,51 @@ jobs:
             echo "The base branch has no scripts/pr-risk.py yet." | tee -a "$GITHUB_STEP_SUMMARY"
           fi
 
+  # The `parallel` feature is off in verify. This job turns it on for neato's mat-vec,
+  # checks that one thread and four threads render the same bytes (tests/neato, plus one
+  # generated 1400-node graph with pinned nodes, which is large enough to take the
+  # parallel kernel), and refuses the feature on wasm32.
+  parallel-neato:
+    name: Parallel neato bytes
+    needs: lookup
+    if: needs.lookup.outputs.hit != 'true'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install the stable Rust toolchain (rustup is on every runner)
+        shell: bash
+        run: rustup toolchain install stable --profile minimal --component clippy --target wasm32-unknown-unknown && rustup default stable
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          key: parallel-neato
+      - name: Clippy the parallel feature
+        run: cargo clippy --locked -p graphviz-pure-layout --all-targets --features parallel -- -D warnings
+      - name: Test the parallel mat-vec
+        run: "cargo test --locked -p graphviz-pure-layout --features parallel --lib neatogen::"
+      - name: The feature does not build for wasm32
+        shell: bash
+        run: |
+          if cargo check --locked --target wasm32-unknown-unknown -p graphviz-pure-layout --features parallel >"$RUNNER_TEMP/wasm-par.txt" 2>&1; then
+            echo "parallel feature compiled for wasm32"
+            exit 1
+          fi
+          if ! grep -q "native-only" "$RUNNER_TEMP/wasm-par.txt"; then
+            cat "$RUNNER_TEMP/wasm-par.txt"
+            echo "wasm build failed for a reason other than the native-only compile error"
+            exit 1
+          fi
+      - name: Release binary with the parallel feature
+        run: cargo build --locked --release -p graphviz-pure-cli --features parallel
+      - name: Neato corpus bytes match at 1 and 4 threads
+        run: scripts/parallel-neato-bytes.sh target/release/graphviz-pure
+
   # Records that these inputs passed, so a later run with the same inputs skips verify,
-  # ns-check, msrv, wasm-e2e, wasm-runtimes, cpu-fidelity and native-pgo.
+  # ns-check, msrv, wasm-e2e, wasm-runtimes, cpu-fidelity, native-pgo and parallel-neato.
   record:
     name: Record the result for these inputs
-    needs: [verify, ns-check, msrv, wasm-e2e, wasm-runtimes, cpu-fidelity, native-pgo]
+    needs: [verify, ns-check, msrv, wasm-e2e, wasm-runtimes, cpu-fidelity, native-pgo, parallel-neato]
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

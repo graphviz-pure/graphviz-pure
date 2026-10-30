@@ -82,6 +82,37 @@ def small_clusters(n):
     return "\n".join(out) + "\n"
 
 
+def pinned_neato(n):
+    """Neato graph above the parallel threshold, with four pinned nodes.
+
+    The shape is `sparse`: a spanning tree plus `n/2` extra edges. `pos` is set
+    on four nodes spread through the index space, and `pin=true` is the node
+    default, so those four stay put. The file is a pure function of `n`.
+    """
+    r = Lcg(n * 31 + len("neato-pin"))
+    out = [
+        f"graph pinned_{n} {{",
+        "layout=neato;",
+        'node [shape=circle, width=0.3, label=""];',
+        "node [pin=true];",
+    ]
+    for i, x, y in (
+        (0, 0, 0),
+        (1, 120, 0),
+        (n // 2, 60, 100),
+        (n - 1, 180, 40),
+    ):
+        out.append(f'n{i} [pos="{x},{y}"];')
+    for i in range(1, n):
+        out.append(f"n{r.below(i)} -- n{i};")
+    for _ in range(n // 2):
+        a, b = r.below(n), r.below(n)
+        if a != b:
+            out.append(f"n{a} -- n{b};")
+    out.append("}")
+    return "\n".join(out) + "\n"
+
+
 def clustered(n, engine):
     r = Lcg(n * 13)
     out = [f"graph clustered_{n} {{", f"layout={engine};"]
@@ -124,13 +155,24 @@ for n in (250, 500, 1000):
 for n in (250, 500, 1000, 2000):
     GRAPHS[f"neato_sparse_{n}"] = lambda n=n: sparse(n, "neato")
 
+# Not part of the bench set. The parallel-neato job writes this one graph so the
+# 1-vs-4 byte check reaches the parallel kernel (tests/neato stays under that size).
+EXTRAS = {
+    "pinned_neato_1400": lambda: pinned_neato(1400),
+}
+
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--out", default="target/bench/synth")
+    ap.add_argument("--only", choices=sorted(EXTRAS), help="write this graph instead of the bench set")
     args = ap.parse_args()
     out = pathlib.Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
+    if args.only:
+        (out / f"{args.only}.gv").write_text(EXTRAS[args.only]())
+        print(f"wrote {args.only} to {out}")
+        return
     for name, make in GRAPHS.items():
         (out / f"{name}.gv").write_text(make())
     print(f"wrote {len(GRAPHS)} graphs to {out}")

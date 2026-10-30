@@ -14,6 +14,11 @@ pub fn conjugate_gradient_mkernel(
     tol: f64,
     max_iterations: usize,
 ) -> Result<(), super::SolverError> {
+    #[cfg(all(feature = "parallel", not(target_family = "wasm")))]
+    if super::matvec_parallel::use_parallel(n) {
+        let lower = super::matvec_parallel::pack_lower(a, n);
+        return conjugate_gradient_mkernel_prepared(a, &lower, x, b, n, tol, max_iterations);
+    }
     let mut r = vec![0.0f32; n];
     let mut p = vec![0.0f32; n];
     let mut ap = vec![0.0f32; n];
@@ -51,6 +56,78 @@ pub fn conjugate_gradient_mkernel(
             r_r = r_r_new;
             let bf = beta as f32;
             // `p[j] = fma(beta, p[j], r[j])`, one chain per lane.
+            for (pj, &rj) in p.iter_mut().zip(r.iter()) {
+                *pj = bf.mul_add(*pj, rj);
+            }
+        }
+        i += 1;
+    }
+    Ok(())
+}
+
+/// Same solver as [`conjugate_gradient_mkernel`], reusing a lower triangle
+/// built once for this matrix. The workers stay up for the solve and wait
+/// between mat-vecs. The public function builds that copy itself when the
+/// caller does not have one.
+#[cfg(all(feature = "parallel", not(target_family = "wasm")))]
+pub(super) fn conjugate_gradient_mkernel_prepared(
+    a: &[f32],
+    lower: &[f32],
+    x: &mut [f32],
+    b: &mut [f32],
+    n: usize,
+    tol: f64,
+    max_iterations: usize,
+) -> Result<(), super::SolverError> {
+    super::matvec_parallel::with_team(a, lower, n, |team| {
+        conjugate_gradient_mkernel_on_team(team, x, b, n, tol, max_iterations)
+    })
+}
+
+#[cfg(all(feature = "parallel", not(target_family = "wasm")))]
+fn conjugate_gradient_mkernel_on_team(
+    team: &mut super::matvec_parallel::MatvecTeam<'_>,
+    x: &mut [f32],
+    b: &mut [f32],
+    n: usize,
+    tol: f64,
+    max_iterations: usize,
+) -> Result<(), super::SolverError> {
+    let mut r = vec![0.0f32; n];
+    let mut p = vec![0.0f32; n];
+    let mut ap = vec![0.0f32; n];
+    let mut ax = vec![0.0f32; n];
+    orthog1f(&mut x[..n]);
+    orthog1f(&mut b[..n]);
+    team.multiply(x, &mut ax);
+    orthog1f(&mut ax);
+    for ((ri, &bi), &axi) in r.iter_mut().zip(&b[..n]).zip(ax.iter()) {
+        *ri = bi - axi;
+    }
+    p.copy_from_slice(&r);
+    let mut r_r = vectors_inner_productf(n, &r, &r);
+    let mut i = 0;
+    while i < max_iterations && max_absf(n, &r) > tol {
+        orthog1f(&mut p);
+        orthog1f(&mut x[..n]);
+        orthog1f(&mut r);
+        team.multiply(&p, &mut ap);
+        orthog1f(&mut ap);
+        let p_ap = vectors_inner_productf(n, &p, &ap);
+        if p_ap == 0.0 {
+            break;
+        }
+        let alpha = r_r / p_ap;
+        vectors_mult_additionf(n, x, alpha as f32, &p);
+        if i + 1 < max_iterations {
+            vectors_mult_additionf(n, &mut r, (-alpha) as f32, &ap);
+            let r_r_new = vectors_inner_productf(n, &r, &r);
+            if r_r == 0.0 {
+                return Err(super::SolverError);
+            }
+            let beta = r_r_new / r_r;
+            r_r = r_r_new;
+            let bf = beta as f32;
             for (pj, &rj) in p.iter_mut().zip(r.iter()) {
                 *pj = bf.mul_add(*pj, rj);
             }
