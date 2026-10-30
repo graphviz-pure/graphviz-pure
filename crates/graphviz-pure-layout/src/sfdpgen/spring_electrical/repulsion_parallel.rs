@@ -465,7 +465,7 @@ mod tests {
         for _ in 0..n * dim {
             state = state.wrapping_mul(1664525).wrapping_add(1013904223);
             let unit = f64::from(state >> 8) / f64::from(1u32 << 24);
-            x.push(unit.mul_add(50.0, -10.0));
+            x.push(math::fma(unit, 50.0, -10.0));
         }
         if x.len() > 4 {
             x[0] = -0.0;
