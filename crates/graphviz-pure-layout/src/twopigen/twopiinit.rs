@@ -21,9 +21,9 @@ pub fn twopi_layout(graph: &mut Graph) -> Result<()> {
         crate::common::postproc::labels_at_origin(graph);
         return Ok(());
     }
-    let src = graph.clone();
+    let src = &*graph;
     // twopi_init_graph: EDGETYPE_LINE by default, 2 dimensions.
-    let mut g = LGraph::new(&src, 2, EdgeType::Line)?;
+    let mut g = LGraph::new(src, 2, EdgeType::Line)?;
     let mut ctr: Option<usize> = None;
     let mut set_root = false;
     if let Some(s) = g.gattr("root") {
@@ -95,7 +95,7 @@ pub fn twopi_layout(graph: &mut Graph) -> Result<()> {
         spline_edges(&mut g, &mut root, true);
     }
     gv_postprocess(&mut g, true);
-    g.write_back(graph);
+    g.into_layout_result().write_back(graph);
     for c in local_roots {
         graph.nodes[c]
             .attrs
