@@ -382,8 +382,6 @@ pub fn textfont_dict_reset() {
 pub struct TextLabelLayout {
     /// Measured lines in top-to-bottom order.
     pub lines: Vec<TextLineLayout>,
-    /// Individual line widths in points (mirrors `lines.iter().map(|l| l.width)`).
-    pub line_widths: Vec<f64>,
     /// Total bounding width in points (maximum line width).
     pub width: f64,
     /// Total bounding height in points (sum of line heights).
@@ -395,6 +393,41 @@ pub struct TextLabelLayout {
     /// The label text after object-escape substitution and entity conversion (C's
     /// `lp->text`), still containing the `\\n`/`\\l`/`\\r` line escapes.
     pub source: String,
+}
+
+// Rust-only scratch storage for common one-line labels. Keep at most 16 spans
+// per thread, including across graphs; larger labels release their buffer normally.
+thread_local! {
+    static LABEL_LINES: std::cell::RefCell<Option<Vec<TextLineLayout>>> =
+        const { std::cell::RefCell::new(None) };
+}
+
+fn take_label_lines() -> Vec<TextLineLayout> {
+    LABEL_LINES
+        .try_with(|pool| pool.try_borrow_mut().ok().and_then(|mut pool| pool.take()))
+        .ok()
+        .flatten()
+        .unwrap_or_default()
+}
+
+impl Drop for TextLabelLayout {
+    fn drop(&mut self) {
+        if self.lines.capacity() == 0 || self.lines.capacity() > 16 {
+            return;
+        }
+        let mut lines = std::mem::take(&mut self.lines);
+        lines.clear();
+        // During TLS teardown or a nested borrow, release the buffer normally.
+        let _ = LABEL_LINES.try_with(|pool| {
+            if let Ok(mut pool) = pool.try_borrow_mut()
+                && pool
+                    .as_ref()
+                    .is_none_or(|saved| saved.capacity() < lines.capacity())
+            {
+                *pool = Some(lines);
+            }
+        });
+    }
 }
 
 /// Which names of a [`LabelSubstContext`] are agnameof's static buffer
@@ -1023,7 +1056,6 @@ fn storeline(layout: &mut TextLabelLayout, line: String, terminator: TextJustify
     };
     layout.width = crate::cnum::c_max(layout.width, width);
     layout.height += height;
-    layout.line_widths.push(width);
     layout.lines.push(TextLineLayout {
         text: line,
         width,
@@ -1049,9 +1081,12 @@ pub fn make_simple_label_cs(
     cs: Charset,
 ) -> TextLabelLayout {
     let mut layout = TextLabelLayout {
+        lines: take_label_lines(),
+        width: 0.0,
+        height: 0.0,
         font_name: font_name.to_string(),
         font_size,
-        ..TextLabelLayout::default()
+        source: String::new(),
     };
     if text.is_empty() {
         return layout;
@@ -1061,7 +1096,6 @@ pub fn make_simple_label_cs(
     // raw bytes, escapes and literal newlines retain the original scanner.
     if text.is_ascii() && !text.contains(['\\', '\n']) {
         layout.lines.reserve_exact(1);
-        layout.line_widths.reserve_exact(1);
         storeline(&mut layout, text.to_string(), TextJustify::Center);
         return layout;
     }
@@ -1177,6 +1211,24 @@ pub fn measure_multiline_label_with_context(
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn line_scratch_is_empty_reused_and_bounded() {
+        LABEL_LINES.with(|pool| *pool.borrow_mut() = None);
+        let first = make_simple_label("first", "Times-Roman", 14.0);
+        let allocation = first.lines.as_ptr();
+        drop(first);
+        let second = make_simple_label("second", "Times-Roman", 14.0);
+        assert_eq!(second.lines.as_ptr(), allocation);
+        assert_eq!(second.lines.len(), 1);
+        assert_eq!(second.lines[0].text, "second");
+        drop(second);
+        LABEL_LINES.with(|pool| *pool.borrow_mut() = None);
+        let large = make_simple_label(&"line\n".repeat(40), "Times-Roman", 14.0);
+        assert!(large.lines.capacity() > 16);
+        drop(large);
+        LABEL_LINES.with(|pool| assert!(pool.borrow().is_none()));
+    }
     use super::*;
 
     #[test]
@@ -1461,9 +1513,12 @@ mod tests {
         cs: Charset,
     ) -> TextLabelLayout {
         let mut layout = TextLabelLayout {
+            lines: Vec::new(),
+            width: 0.0,
+            height: 0.0,
             font_name: font_name.to_string(),
             font_size,
-            ..TextLabelLayout::default()
+            source: String::new(),
         };
         if text.is_empty() {
             return layout;
@@ -1529,18 +1584,6 @@ mod tests {
         assert_eq!(actual.width.to_bits(), expected.width.to_bits());
         assert_eq!(actual.height.to_bits(), expected.height.to_bits());
         assert_eq!(actual.lines.len(), expected.lines.len());
-        assert_eq!(
-            actual
-                .line_widths
-                .iter()
-                .map(|x| x.to_bits())
-                .collect::<Vec<_>>(),
-            expected
-                .line_widths
-                .iter()
-                .map(|x| x.to_bits())
-                .collect::<Vec<_>>()
-        );
         for (a, e) in actual.lines.iter().zip(&expected.lines) {
             assert_eq!(a.text, e.text);
             assert_eq!(a.justify, e.justify);
@@ -1645,7 +1688,6 @@ mod tests {
         let layout =
             measure_multiline_label("\\N\\nline two\\lright\\r", "node_1", "Courier", 10.0);
         assert_eq!(layout.lines.len(), 3);
-        assert_eq!(layout.line_widths.len(), 3);
 
         assert_eq!(layout.lines[0].text, "node_1");
         assert_eq!(layout.lines[0].justify, TextJustify::Center);
@@ -1658,9 +1700,9 @@ mod tests {
 
         // Max width is "line two" (8 chars)
         let char_w = 10.0 * (1229.0 / 2048.0);
-        assert!((layout.line_widths[0] - 6.0 * char_w).abs() < 1e-9);
-        assert!((layout.line_widths[1] - 8.0 * char_w).abs() < 1e-9);
-        assert!((layout.line_widths[2] - 5.0 * char_w).abs() < 1e-9);
+        assert!((layout.lines[0].width - 6.0 * char_w).abs() < 1e-9);
+        assert!((layout.lines[1].width - 8.0 * char_w).abs() < 1e-9);
+        assert!((layout.lines[2].width - 5.0 * char_w).abs() < 1e-9);
         assert!((layout.width - 8.0 * char_w).abs() < 1e-9);
         assert!((layout.height - 3.0 * 10.0 * LINESPACING).abs() < 1e-9);
     }

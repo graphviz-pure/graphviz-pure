@@ -121,9 +121,9 @@ impl TextLabel {
     /// Transfers measured label buffers into the emitter instead of copying them.
     pub fn from_owned_geometry(g: LabelGeometry, raw: &str, fontcolor: &str) -> Self {
         let mut spans = Vec::new();
-        let text = if let Some(t) = g.text {
+        let text = if let Some(mut t) = g.text {
             spans.reserve_exact(t.lines.len());
-            for line in t.lines {
+            for line in t.lines.drain(..) {
                 spans.push(TextSpan {
                     str: line.text,
                     just: match line.justify {
@@ -137,7 +137,7 @@ impl TextLabel {
                     font: TextFont::new(&g.font_name, line.font_size, 0),
                 });
             }
-            t.source
+            std::mem::take(&mut t.source)
         } else if g.html && matches!(g.html_label.as_deref(), Some(HtmlLabel::Table(_))) {
             "<TABLE>".to_string()
         } else {
