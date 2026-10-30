@@ -61,31 +61,36 @@ impl<'a> MapEngine<'a> {
             self.out.push('"');
         }
         self.out.push_str(" alt=\"\" coords=\"");
-        let f0 = |v: f64| graphviz_pure_core::cnum::fmt_f(v, 0);
+        let f0 = |out: &mut String, v: f64| {
+            let _ = graphviz_pure_core::cnum::fmt_f_into(out, v, 0);
+        };
         match shape {
             MapShape::Circle => {
-                self.out.push_str(&format!(
-                    "{},{},{}",
-                    f0(af[0].x),
-                    f0(af[0].y),
-                    f0(af[1].x - af[0].x)
-                ));
+                f0(&mut self.out, af[0].x);
+                self.out.push(',');
+                f0(&mut self.out, af[0].y);
+                self.out.push(',');
+                f0(&mut self.out, af[1].x - af[0].x);
             }
             MapShape::Rectangle => {
                 // Y_GOES_DOWN so need UL to LR
-                self.out.push_str(&format!(
-                    "{},{},{},{}",
-                    f0(af[0].x),
-                    f0(af[1].y),
-                    f0(af[1].x),
-                    f0(af[0].y)
-                ));
+                f0(&mut self.out, af[0].x);
+                self.out.push(',');
+                f0(&mut self.out, af[1].y);
+                self.out.push(',');
+                f0(&mut self.out, af[1].x);
+                self.out.push(',');
+                f0(&mut self.out, af[0].y);
             }
             MapShape::Polygon => {
-                self.out
-                    .push_str(&format!("{},{}", f0(af[0].x), f0(af[0].y)));
+                f0(&mut self.out, af[0].x);
+                self.out.push(',');
+                f0(&mut self.out, af[0].y);
                 for p in &af[1..] {
-                    self.out.push_str(&format!(",{},{}", f0(p.x), f0(p.y)));
+                    self.out.push(',');
+                    f0(&mut self.out, p.x);
+                    self.out.push(',');
+                    f0(&mut self.out, p.y);
                 }
             }
         }

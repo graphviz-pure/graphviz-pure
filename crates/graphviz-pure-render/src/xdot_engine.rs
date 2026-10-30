@@ -7,7 +7,7 @@ use crate::emit::job::{
     GVRENDER_DOES_TOOLTIPS, GVRENDER_DOES_TRANSFORM, Job, LoadImage, ObjKind, RGRADIENT,
 };
 use crate::emit::model::TextSpan;
-use crate::emit::num::{trim_zeros, xdot_num};
+use crate::emit::num::{c_fixed_trim_into, xdot_num_into};
 use graphviz_pure_core::math;
 use graphviz_pure_core::usershape::UserShape;
 use graphviz_pure_core::{BoundingBox, Point};
@@ -120,9 +120,9 @@ impl XdotEngine {
 
     /// `xdot_point`: `y` through `yDir` with the offset `attach_attrs_and_arrows` returned.
     fn point(buf: &mut String, p: Point, y_off: f64) {
-        buf.push_str(&xdot_num(p.x));
+        xdot_num_into(buf, p.x);
         buf.push(' ');
-        buf.push_str(&xdot_num(crate::emit::y_dir(p.y, y_off)));
+        xdot_num_into(buf, crate::emit::y_dir(p.y, y_off));
         buf.push(' ');
     }
 
@@ -140,10 +140,9 @@ impl XdotEngine {
         let es = o.emit_state as usize;
         if (o.penwidth - self.penwidth[es]).abs() >= 0.0005 {
             self.penwidth[es] = o.penwidth;
-            let s = format!(
-                "setlinewidth({})",
-                trim_zeros(super::emit::num::c_fixed(o.penwidth, 3))
-            );
+            let mut s = String::from("setlinewidth(");
+            c_fixed_trim_into(&mut s, o.penwidth, 3);
+            s.push(')');
             self.str_(j, "S ", &s);
         }
         let Some(raw) = o.rawstyle.clone() else {
@@ -191,15 +190,15 @@ impl XdotEngine {
             let r1 = r2 / 4.0;
             xb.push('(');
             Self::point(&mut xb, c1, self.y_off);
-            xb.push_str(&xdot_num(r1));
+            xdot_num_into(&mut xb, r1);
             xb.push(' ');
             Self::point(&mut xb, g[0], self.y_off);
-            xb.push_str(&xdot_num(r2));
+            xdot_num_into(&mut xb, r2);
             xb.push(' ');
         }
         xb.push_str("2 ");
         let stop = |xb: &mut String, v: f64, c: [u8; 4]| {
-            xb.push_str(&trim_zeros(super::emit::num::c_fixed(v, 3)));
+            c_fixed_trim_into(xb, v, 3);
             xb.push(' ');
             let cs = Self::color_str(c);
             let _ = write!(
@@ -255,7 +254,7 @@ impl Engine for XdotEngine {
         buf.push_str("I ");
         Self::point(buf, b.ll, y_off);
         for v in [b.ur.x - b.ll.x, b.ur.y - b.ll.y] {
-            buf.push_str(&xdot_num(v));
+            xdot_num_into(buf, v);
             buf.push(' ');
         }
         self.str_(j, "", &us.name);
@@ -351,7 +350,7 @@ impl Engine for XdotEngine {
         {
             let b = self.buf(j);
             b.push_str("F ");
-            b.push_str(&xdot_num(span.font.size));
+            xdot_num_into(b, span.font.size);
             b.push(' ');
         }
         self.str_(j, "", &span.font.name);
@@ -377,7 +376,7 @@ impl Engine for XdotEngine {
             b.push_str("T ");
             Self::point(b, p, y_off);
             let _ = write!(b, "{jst} ");
-            b.push_str(&xdot_num(span.width));
+            xdot_num_into(b, span.width);
             b.push(' ');
         }
         self.str_(j, "", &span.str);
@@ -395,9 +394,9 @@ impl Engine for XdotEngine {
         let y_off = self.y_off;
         let b = self.buf(j);
         Self::point(b, a[0], y_off);
-        b.push_str(&xdot_num(a[1].x - a[0].x));
+        xdot_num_into(b, a[1].x - a[0].x);
         b.push(' ');
-        b.push_str(&xdot_num(a[1].y - a[0].y));
+        xdot_num_into(b, a[1].y - a[0].y);
         b.push(' ');
     }
 

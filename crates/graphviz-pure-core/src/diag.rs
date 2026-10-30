@@ -276,15 +276,9 @@ pub fn elapsed_sec() -> f64 {
 }
 
 /// C `printf("%.{prec}f", v)` (macOS libc): `nan`, `inf` and `-inf` for the non-finite values.
-pub fn fmt_f(v: f64, prec: usize) -> String {
-    if v.is_nan() {
-        "nan".to_string()
-    } else if v.is_infinite() {
-        if v > 0.0 { "inf" } else { "-inf" }.to_string()
-    } else {
-        format!("{v:.prec$}")
-    }
-}
+/// The implementation is in [`crate::cnum`], next to the `*_into` variants that write the
+/// number into the caller's buffer.
+pub use crate::cnum::fmt_f;
 
 /// `fprintf(stderr, msg)`: a message C writes without `agerr`, so with no level, no count and
 /// no escaping. `msg` is written as C's bytes ([`crate::charset::encode`]).
@@ -476,45 +470,9 @@ fn write_stderr(bytes: &[u8]) {
 
 /// C `printf("%.{prec}g", v)` on the reference platform (macOS libc), as diagnostics and
 /// renderers print numbers.
-pub fn fmt_g(v: f64, prec: usize) -> String {
-    fn trim(mut s: String) -> String {
-        if s.contains('.') {
-            while s.ends_with('0') {
-                s.pop();
-            }
-            if s.ends_with('.') {
-                s.pop();
-            }
-        }
-        s
-    }
-    if v.is_nan() {
-        // macOS libc prints `nan` for either sign.
-        return "nan".to_string();
-    }
-    if v.is_infinite() {
-        return if v < 0.0 { "-inf" } else { "inf" }.to_string();
-    }
-    let p = prec.max(1);
-    if v == 0.0 {
-        return if v.is_sign_negative() { "-0" } else { "0" }.to_string();
-    }
-    // The exponent after rounding to `p` significant digits.
-    let e_form = format!("{:.*e}", p - 1, v);
-    let exp: i32 = e_form
-        .rsplit_once('e')
-        .and_then(|(_, e)| e.parse().ok())
-        .unwrap_or(0);
-    if exp < -4 || exp >= p as i32 {
-        let (mant, _) = e_form.rsplit_once('e').unwrap_or((&e_form, "0"));
-        let mant = trim(mant.to_string());
-        let sign = if exp < 0 { '-' } else { '+' };
-        format!("{mant}e{sign}{:02}", exp.abs())
-    } else {
-        let decimals = (p as i32 - 1 - exp).max(0) as usize;
-        trim(format!("{v:.decimals$}"))
-    }
-}
+/// The implementation is in [`crate::cnum`], next to the `*_into` variants that write the
+/// number into the caller's buffer.
+pub use crate::cnum::fmt_g;
 
 /// Number of errors reported on this thread since the last [`reset_errors`].
 pub fn error_count() -> usize {

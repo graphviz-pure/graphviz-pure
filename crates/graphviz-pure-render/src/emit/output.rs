@@ -2,32 +2,49 @@
 //! `set_record_rects` and `rec_attach_bb` in `lib/common/output.c`, and `write_plain`.
 
 use super::model::Model;
-use super::num::fmt_g;
+use super::num::fmt_g_into;
 use super::{y_dir, y_offset};
 use graphviz_pure_core::{Graph, Point, math};
 use graphviz_pure_geom::shapes::{RecordField, ShapeKind};
 use std::collections::{BTreeSet, HashSet};
 use std::fmt::Write;
 
-fn g5(v: f64) -> String {
-    fmt_g(v, 5)
+/// `"%.5g"` of `v`, written into `out`.
+fn g5_into(out: &mut String, v: f64) {
+    fmt_g_into(out, v, 5);
 }
 
-/// `"%.5g,%.5g"` of `p.x, yDir(p.y, y_off)`.
-fn pt(p: Point, y_off: f64) -> String {
-    format!("{},{}", g5(p.x), g5(y_dir(p.y, y_off)))
+/// `"%.5g,%.5g"` of `p.x, yDir(p.y, y_off)`, written into `out`.
+fn pt_into(out: &mut String, p: Point, y_off: f64) {
+    g5_into(out, p.x);
+    out.push(',');
+    g5_into(out, y_dir(p.y, y_off));
+}
+
+/// One `"%.5g"` as a `String`: an attribute value is a `String` of its own.
+fn one_g5(v: f64) -> String {
+    let mut s = String::new();
+    g5_into(&mut s, v);
+    s
+}
+
+/// One `"%.5g,%.5g"` as a `String`: an attribute value is a `String` of its own.
+fn one_pt(p: Point, y_off: f64) -> String {
+    let mut s = String::new();
+    pt_into(&mut s, p, y_off);
+    s
 }
 
 fn record_rects(f: &RecordField, c: Point, y_off: f64, out: &mut String) {
     if f.children.is_empty() {
-        let _ = write!(
-            out,
-            "{},{},{},{} ",
-            g5(f.bbox.ll.x + c.x),
-            g5(y_dir(f.bbox.ll.y + c.y, y_off)),
-            g5(f.bbox.ur.x + c.x),
-            g5(y_dir(f.bbox.ur.y + c.y, y_off))
-        );
+        g5_into(out, f.bbox.ll.x + c.x);
+        out.push(',');
+        g5_into(out, y_dir(f.bbox.ll.y + c.y, y_off));
+        out.push(',');
+        g5_into(out, f.bbox.ur.x + c.x);
+        out.push(',');
+        g5_into(out, y_dir(f.bbox.ur.y + c.y, y_off));
+        out.push(' ');
     }
     for sub in &f.children {
         record_rects(sub, c, y_off, out);
@@ -68,7 +85,9 @@ fn vertices(n: &super::model::RNode<'_>, y_off: f64) -> Option<String> {
                 n.geom.height / 2.0 * math::sin(a),
             )
         };
-        let _ = write!(s, "{} {}", g5(x), g5(yf(y)));
+        g5_into(&mut s, x);
+        s.push(' ');
+        g5_into(&mut s, yf(y));
     }
     Some(s)
 }
@@ -83,7 +102,7 @@ pub(crate) fn attach_attrs(
     let mut g = cgraph.clone();
     let (mut s_arrows, mut e_arrows) = (false, false);
     let y_off = y_offset(m.bb);
-    let pt = |p: Point| pt(p, y_off);
+    let pt = |out: &mut String, p: Point| pt_into(out, p, y_off);
     // `N_vertices`: the input declares `vertices` for nodes.
     let n_vertices = m.g.node_attr_declared("vertices");
     // dim3 = GD_odim(g) >= 3
@@ -94,19 +113,21 @@ pub(crate) fn attach_attrs(
             continue;
         }
         let a = &mut g.nodes[i].attrs;
-        let mut pos = pt(n.coord);
+        let mut pos = String::new();
+        pt(&mut pos, n.coord);
         if dim3 {
             // POINTS_PER_INCH * ND_pos(n)[k] for k in 2..GD_odim(g)
             for k in 2..m.g.layout.odim {
                 let z = layout.higher_dims.get(k - 2).copied().unwrap_or(0.0);
-                let _ = write!(pos, ",{}", g5(z));
+                pos.push(',');
+                g5_into(&mut pos, z);
             }
         }
         a.set("pos", pos, false);
-        a.set("height", g5(n.ht / 72.0), false);
-        a.set("width", g5((n.lw + n.rw) / 72.0), false);
+        a.set("height", one_g5(n.ht / 72.0), false);
+        a.set("width", one_g5((n.lw + n.rw) / 72.0), false);
         if let Some(xl) = n.xlabel.as_ref().filter(|l| l.set) {
-            a.set("xlp", pt(xl.pos), false);
+            a.set("xlp", one_pt(xl.pos, y_off), false);
         }
         if n.geom.shape == ShapeKind::Record
             && let Some(f) = &n.geom.record
@@ -134,47 +155,53 @@ pub(crate) fn attach_attrs(
             }
             if b.sflag != 0 {
                 s_arrows = true;
-                let _ = write!(s, "s,{} ", pt(b.sp));
+                s.push_str("s,");
+                pt(&mut s, b.sp);
+                s.push(' ');
             }
             if b.eflag != 0 {
                 e_arrows = true;
-                let _ = write!(s, "e,{} ", pt(b.ep));
+                s.push_str("e,");
+                pt(&mut s, b.ep);
+                s.push(' ');
             }
             for (j, p) in b.list.iter().enumerate() {
                 if j > 0 {
                     s.push(' ');
                 }
-                s.push_str(&pt(*p));
+                pt(&mut s, *p);
             }
         }
         let a = &mut g.edges[i].attrs;
         a.set("pos", s, false);
         if let Some(l) = &e.label {
-            a.set("lp", pt(l.pos), false);
+            a.set("lp", one_pt(l.pos, y_off), false);
         }
         if let Some(l) = e.xlabel.as_ref().filter(|l| l.set) {
-            a.set("xlp", pt(l.pos), false);
+            a.set("xlp", one_pt(l.pos, y_off), false);
         }
         if let Some(l) = &e.head_label {
-            a.set("head_lp", pt(l.pos), false);
+            a.set("head_lp", one_pt(l.pos, y_off), false);
         }
         if let Some(l) = &e.tail_label {
-            a.set("tail_lp", pt(l.pos), false);
+            a.set("tail_lp", one_pt(l.pos, y_off), false);
         }
     }
     // rec_attach_bb
     let bbs = |b: graphviz_pure_core::BoundingBox| {
-        format!(
-            "{},{},{},{}",
-            g5(b.ll.x),
-            g5(y_dir(b.ll.y, y_off)),
-            g5(b.ur.x),
-            g5(y_dir(b.ur.y, y_off))
-        )
+        let mut s = String::new();
+        g5_into(&mut s, b.ll.x);
+        s.push(',');
+        g5_into(&mut s, y_dir(b.ll.y, y_off));
+        s.push(',');
+        g5_into(&mut s, b.ur.x);
+        s.push(',');
+        g5_into(&mut s, y_dir(b.ur.y, y_off));
+        s
     };
     g.graph_attrs.set("bb", bbs(m.bb), false);
     if let Some(l) = m.label.as_ref().filter(|l| !l.text.is_empty()) {
-        g.graph_attrs.set("lp", pt(l.pos), false);
+        g.graph_attrs.set("lp", one_pt(l.pos, y_off), false);
         g.graph_attrs.set(
             "lwidth",
             graphviz_pure_core::cnum::fmt_f(l.dimen.x / 72.0, 2),
@@ -192,7 +219,7 @@ pub(crate) fn attach_attrs(
         a.set("bb", bbs(c.bb), false);
         explicit[c.sub].insert("bb".into());
         if let Some(l) = c.label.as_ref().filter(|l| !l.text.is_empty()) {
-            a.set("lp", pt(l.pos), false);
+            a.set("lp", one_pt(l.pos, y_off), false);
             a.set(
                 "lwidth",
                 graphviz_pure_core::cnum::fmt_f(l.dimen.x / 72.0, 2),
@@ -357,17 +384,18 @@ pub(crate) fn write_plain(
 ) -> String {
     use graphviz_pure_parser::canon_value;
     let g = m.g;
-    let mut out = String::new();
+    // The plain output holds a line per node and per edge; the numbers are the bulk of it.
+    let mut out = String::with_capacity(m.nodes.len() * 64 + m.edges.len() * 64 + 64);
     let y_off = y_offset(m.bb);
     let plain = plain_strings(g);
     let earlier = earlier.map(plain_strings);
-    let _ = writeln!(
-        out,
-        "graph {} {} {}",
-        g5(zoom),
-        g5(m.bb.ur.x / 72.0),
-        g5(m.bb.ur.y / 72.0)
-    );
+    out.push_str("graph ");
+    g5_into(&mut out, zoom);
+    out.push(' ');
+    g5_into(&mut out, m.bb.ur.x / 72.0);
+    out.push(' ');
+    g5_into(&mut out, m.bb.ur.y / 72.0);
+    out.push('\n');
     for (i, n) in m.nodes.iter().enumerate() {
         let a = n.attrs;
         if g.nodes[i].layout.clust_node {
@@ -381,27 +409,34 @@ pub(crate) fn write_plain(
         let fill = a
             .nonempty("fillcolor")
             .unwrap_or_else(|| a.late_nnstring("color", "lightgrey"));
-        let _ = writeln!(
-            out,
-            "node {} {} {} {} {} {} {} {} {} {}",
-            canon_value(n.name, g.nodes[i].html_name),
-            g5(n.coord.x / 72.0),
-            g5(y_dir(n.coord.y, y_off) / 72.0),
-            g5(n.geom.width),
-            g5(n.geom.height),
-            lbl,
-            a.late_nnstring("style", "solid"),
-            {
-                let sh = a.late_nnstring("shape", "ellipse");
-                if graphviz_pure_core::usershape::binds_custom(sh, a.nonempty("shapefile")) {
-                    "custom"
-                } else {
-                    sh
-                }
-            },
-            a.late_nnstring("color", "black"),
-            fill
-        );
+        out.push_str("node ");
+        out.push_str(&canon_value(n.name, g.nodes[i].html_name));
+        out.push(' ');
+        g5_into(&mut out, n.coord.x / 72.0);
+        out.push(' ');
+        g5_into(&mut out, y_dir(n.coord.y, y_off) / 72.0);
+        out.push(' ');
+        g5_into(&mut out, n.geom.width);
+        out.push(' ');
+        g5_into(&mut out, n.geom.height);
+        out.push(' ');
+        out.push_str(lbl.as_str());
+        out.push(' ');
+        out.push_str(a.late_nnstring("style", "solid"));
+        out.push(' ');
+        {
+            let sh = a.late_nnstring("shape", "ellipse");
+            if graphviz_pure_core::usershape::binds_custom(sh, a.nonempty("shapefile")) {
+                out.push_str("custom");
+            } else {
+                out.push_str(sh);
+            }
+        }
+        out.push(' ');
+        out.push_str(a.late_nnstring("color", "black"));
+        out.push(' ');
+        out.push_str(fill);
+        out.push('\n');
         let _ = i;
     }
     for n in 0..m.nodes.len() {
@@ -451,18 +486,20 @@ pub(crate) fn write_plain(
                 let _ = write!(out, " {npts}");
                 for b in &e.bz {
                     for p in b.list {
-                        let _ = write!(out, " {} {}", g5(p.x / 72.0), g5(y_dir(p.y, y_off) / 72.0));
+                        out.push(' ');
+                        g5_into(&mut out, p.x / 72.0);
+                        out.push(' ');
+                        g5_into(&mut out, y_dir(p.y, y_off) / 72.0);
                     }
                 }
             }
             if let Some(l) = &e.label {
-                let _ = write!(
-                    out,
-                    " {} {} {}",
-                    plain_label_canon(&plain, earlier.as_ref(), &l.text),
-                    g5(l.pos.x / 72.0),
-                    g5(y_dir(l.pos.y, y_off) / 72.0)
-                );
+                out.push(' ');
+                out.push_str(&plain_label_canon(&plain, earlier.as_ref(), &l.text));
+                out.push(' ');
+                g5_into(&mut out, l.pos.x / 72.0);
+                out.push(' ');
+                g5_into(&mut out, y_dir(l.pos.y, y_off) / 72.0);
             }
             let _ = writeln!(
                 out,

@@ -6,13 +6,14 @@ use crate::emit::job::{
     GvColor, Job, LoadImage, ObjKind, PENWIDTH_NORMAL, Pen, RGRADIENT,
 };
 use crate::emit::model::TextSpan;
-use crate::emit::num::{fmt_f6, fmt_g, gvdouble};
+use crate::emit::num::{fmt_f6_into, fmt_g_into, gvdouble_into};
 use graphviz_pure_core::math;
 use graphviz_pure_core::usershape::UserShape;
 use graphviz_pure_core::{BoundingBox, Point};
 use graphviz_pure_geom::html_label::{
     HTML_BF, HTML_IF, HTML_OL, HTML_S, HTML_SUB, HTML_SUP, HTML_UL,
 };
+use std::fmt::Write;
 
 /// Flags for `gv_xml_escape`.
 #[derive(Clone, Copy, Default)]
@@ -339,8 +340,14 @@ impl SvgEngine {
         self.out.push_str(s);
     }
 
+    /// `put` of a formatted string: the text goes straight into the output buffer, without
+    /// a `String` of its own.
+    fn put_fmt(&mut self, args: std::fmt::Arguments<'_>) {
+        let _ = self.out.write_fmt(args);
+    }
+
     fn dbl(&mut self, v: f64) {
-        self.out.push_str(&gvdouble(v));
+        gvdouble_into(&mut self.out, v);
     }
 
     fn print_id_class(&mut self, id: &str, kind: &str, class: Option<&str>) {
@@ -373,7 +380,7 @@ impl SvgEngine {
                 if r[3] == 0 {
                     self.put("none");
                 } else {
-                    self.put(&format!("#{:02x}{:02x}{:02x}", r[0], r[1], r[2]));
+                    self.put_fmt(format_args!("#{:02x}{:02x}{:02x}", r[0], r[1], r[2]));
                 }
             }
         }
@@ -388,7 +395,7 @@ impl SvgEngine {
                 self.put(&xml(id));
                 self.put("_");
             }
-            self.put(&format!(
+            self.put_fmt(format_args!(
                 "{}_{gid})",
                 if filled == GRADIENT { 'l' } else { 'r' }
             ));
@@ -399,10 +406,8 @@ impl SvgEngine {
                 && r[3] > 0
                 && r[3] < 255
             {
-                self.put(&format!(
-                    "\" fill-opacity=\"{}",
-                    fmt_f6(f64::from(f32::from(r[3]) / 255.0))
-                ));
+                self.put("\" fill-opacity=\"");
+                fmt_f6_into(&mut self.out, f64::from(f32::from(r[3]) / 255.0));
             }
         } else {
             self.put("none");
@@ -423,10 +428,8 @@ impl SvgEngine {
             && r[3] > 0
             && r[3] < 255
         {
-            self.put(&format!(
-                "\" stroke-opacity=\"{}",
-                fmt_f6(f64::from(f32::from(r[3]) / 255.0))
-            ));
+            self.put("\" stroke-opacity=\"");
+            fmt_f6_into(&mut self.out, f64::from(f32::from(r[3]) / 255.0));
         }
         self.put("\"");
     }
@@ -437,20 +440,19 @@ impl SvgEngine {
         } else if (offset - 1.0).abs() < 0.0005 {
             self.put("<stop offset=\"1\" style=\"stop-color:");
         } else {
-            self.put(&format!(
-                "<stop offset=\"{}\" style=\"stop-color:",
-                graphviz_pure_core::cnum::fmt_f(offset, 3)
-            ));
+            self.put("<stop offset=\"");
+            let _ = graphviz_pure_core::cnum::fmt_f_into(&mut self.out, offset, 3);
+            self.put("\" style=\"stop-color:");
         }
         match c {
             GvColor::Str(s) if s == "transparent" => self.put("black"),
             GvColor::Str(s) => self.put(s),
-            GvColor::Rgba(r) => self.put(&format!("#{:02x}{:02x}{:02x}", r[0], r[1], r[2])),
+            GvColor::Rgba(r) => self.put_fmt(format_args!("#{:02x}{:02x}{:02x}", r[0], r[1], r[2])),
         }
         self.put(";stop-opacity:");
         match c {
             GvColor::Rgba(r) if r[3] < 255 => {
-                self.put(&fmt_f6(f64::from(f32::from(r[3]) / 255.0)));
+                fmt_f6_into(&mut self.out, f64::from(f32::from(r[3]) / 255.0));
             }
             GvColor::Str(s) if s == "transparent" => self.put("0"),
             _ => self.put("1."),
@@ -468,7 +470,7 @@ impl SvgEngine {
             self.put(&xml(oid));
             self.put("_");
         }
-        self.put(&format!("l_{id}\" gradientUnits=\"userSpaceOnUse\" "));
+        self.put_fmt(format_args!("l_{id}\" gradientUnits=\"userSpaceOnUse\" "));
         self.put("x1=\"");
         self.dbl(g[0].x);
         self.put("\" y1=\"");
@@ -503,11 +505,13 @@ impl SvgEngine {
             self.put(&xml(oid));
             self.put("_");
         }
-        self.put(&format!(
-            "r_{id}\" cx=\"50%\" cy=\"50%\" r=\"75%\" fx=\"{}%\" fy=\"{}%\">\n",
-            graphviz_pure_core::cnum::fmt_f(ifx, 0),
-            graphviz_pure_core::cnum::fmt_f(ify, 0)
+        self.put_fmt(format_args!(
+            "r_{id}\" cx=\"50%\" cy=\"50%\" r=\"75%\" fx=\""
         ));
+        let _ = graphviz_pure_core::cnum::fmt_f_into(&mut self.out, ifx, 0);
+        self.put("%\" fy=\"");
+        let _ = graphviz_pure_core::cnum::fmt_f_into(&mut self.out, ify, 0);
+        self.put("%\">\n");
         let (fc, sc) = (o.fillcolor.clone(), o.stopcolor.clone());
         self.print_stop(0.0, &fc);
         self.print_stop(1.0, &sc);
@@ -569,7 +573,7 @@ impl Engine for SvgEngine {
                 "<!DOCTYPE svg PUBLIC \"-//W3C//DTD SVG 1.1//EN\"\n \"http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd\">\n",
             );
         }
-        self.put(&format!(
+        self.put_fmt(format_args!(
             "<!-- Generated by graphviz version {GRAPHVIZ_VERSION} (graphviz-pure)\n -->\n"
         ));
     }
@@ -581,13 +585,13 @@ impl Engine for SvgEngine {
             self.put(" Title: ");
             self.put(&xml(name));
         }
-        self.put(&format!(" Pages: {} -->\n", j.pages.0 * j.pages.1));
-        self.put(&format!(
+        self.put_fmt(format_args!(" Pages: {} -->\n", j.pages.0 * j.pages.1));
+        self.put_fmt(format_args!(
             "<svg width=\"{}pt\" height=\"{}pt\"\n",
             j.width, j.height
         ));
         let b = j.page_bounding_box;
-        self.put(&format!(
+        self.put_fmt(format_args!(
             " viewBox=\"{}.00 {}.00 {}.00 {}.00\"",
             b[0], b[1], b[2], b[3]
         ));
@@ -622,8 +626,10 @@ impl Engine for SvgEngine {
         let id = o.id.clone().unwrap_or_default();
         self.print_id_class(&id, "graph", Self::obj_class(j, ObjKind::Root));
         self.put(" transform=\"scale(");
-        self.put(&format!("{} {}", fmt_g(j.scale.x, 6), fmt_g(j.scale.y, 6)));
-        self.put(&format!(") rotate({}) translate(", -j.rotation));
+        fmt_g_into(&mut self.out, j.scale.x, 6);
+        self.put(" ");
+        fmt_g_into(&mut self.out, j.scale.y, 6);
+        self.put_fmt(format_args!(") rotate({}) translate(", -j.rotation));
         self.dbl(j.translation.x);
         self.put(" ");
         self.dbl(-j.translation.y);
@@ -792,22 +798,22 @@ impl Engine for SvgEngine {
                     style = pa.style;
                 }
             }
-            self.put(&format!(" font-family=\"{family}"));
+            self.put_fmt(format_args!(" font-family=\"{family}"));
             if !pa.svg_font_family.is_empty() && pa.svg_font_family != family {
-                self.put(&format!(",{}", pa.svg_font_family));
+                self.put_fmt(format_args!(",{}", pa.svg_font_family));
             }
             self.put("\"");
             if let Some(w) = weight {
-                self.put(&format!(" font-weight=\"{w}\""));
+                self.put_fmt(format_args!(" font-weight=\"{w}\""));
             }
             if let Some(s) = pa.stretch {
-                self.put(&format!(" font-stretch=\"{s}\""));
+                self.put_fmt(format_args!(" font-stretch=\"{s}\""));
             }
             if let Some(s) = style {
-                self.put(&format!(" font-style=\"{s}\""));
+                self.put_fmt(format_args!(" font-style=\"{s}\""));
             }
         } else {
-            self.put(&format!(" font-family=\"{}\"", span.font.name));
+            self.put_fmt(format_args!(" font-family=\"{}\"", span.font.name));
         }
         let flags = span.font.flags;
         if flags != 0 {
@@ -844,23 +850,24 @@ impl Engine for SvgEngine {
                 self.put(" baseline-shift=\"sub\"");
             }
         }
-        self.put(&format!(
-            " font-size=\"{}\"",
-            graphviz_pure_core::cnum::fmt_f(span.font.size, 2)
-        ));
+        self.put(" font-size=\"");
+        let _ = graphviz_pure_core::cnum::fmt_f_into(&mut self.out, span.font.size, 2);
+        self.put("\"");
         match &o.pencolor {
             GvColor::Str(s) => {
                 if !s.eq_ignore_ascii_case("black") {
-                    self.put(&format!(" fill=\"{s}\""));
+                    self.put_fmt(format_args!(" fill=\"{s}\""));
                 }
             }
             GvColor::Rgba(r) => {
-                self.put(&format!(" fill=\"#{:02x}{:02x}{:02x}\"", r[0], r[1], r[2]));
+                self.put_fmt(format_args!(
+                    " fill=\"#{:02x}{:02x}{:02x}\"",
+                    r[0], r[1], r[2]
+                ));
                 if r[3] < 255 {
-                    self.put(&format!(
-                        " fill-opacity=\"{}\"",
-                        fmt_f6(f64::from(f32::from(r[3]) / 255.0))
-                    ));
+                    self.put(" fill-opacity=\"");
+                    fmt_f6_into(&mut self.out, f64::from(f32::from(r[3]) / 255.0));
+                    self.put("\"");
                 }
             }
         }
@@ -985,32 +992,38 @@ impl Engine for SvgEngine {
         let height = b.ur.y - b.ll.y;
         let originx = (b.ur.x + b.ll.x - width) / 2.0;
         let originy = (b.ur.y + b.ll.y + height) / 2.0;
-        let g = |v: f64| fmt_g(v, 6);
         self.put("<image xlink:href=\"");
         self.put(&us.name);
+        // The attributes go into the output as they are written, without a `String` each.
         if j.rotation != 0 {
             // C's own FIXME: the size is exchanged and the position is not rotated
-            self.put(&format!(
-                "\" width=\"{}px\" height=\"{}px\" preserveAspectRatio=\"xMidYMid meet\" x=\"{}\" y=\"{}\"",
-                g(height),
-                g(width),
-                g(originx),
-                g(-originy)
-            ));
-            self.put(&format!(
-                " transform=\"rotate({} {} {})\"",
-                j.rotation,
-                g(originx),
-                g(-originy)
-            ));
+            self.out.push_str("\" width=\"");
+            fmt_g_into(&mut self.out, height, 6);
+            self.out.push_str("px\" height=\"");
+            fmt_g_into(&mut self.out, width, 6);
+            self.out
+                .push_str("px\" preserveAspectRatio=\"xMidYMid meet\" x=\"");
+            fmt_g_into(&mut self.out, originx, 6);
+            self.out.push_str("\" y=\"");
+            fmt_g_into(&mut self.out, -originy, 6);
+            self.out.push('"');
+            self.out.push_str(" transform=\"rotate(");
+            let _ = write!(self.out, "{} ", j.rotation);
+            fmt_g_into(&mut self.out, originx, 6);
+            self.out.push(' ');
+            fmt_g_into(&mut self.out, -originy, 6);
+            self.out.push_str(")\"");
         } else {
-            self.put(&format!(
-                "\" width=\"{}px\" height=\"{}px\" preserveAspectRatio=\"xMinYMin meet\" x=\"{}\" y=\"{}\"",
-                g(width),
-                g(height),
-                g(originx),
-                g(-originy)
-            ));
+            self.out.push_str("\" width=\"");
+            fmt_g_into(&mut self.out, width, 6);
+            self.out.push_str("px\" height=\"");
+            fmt_g_into(&mut self.out, height, 6);
+            self.out
+                .push_str("px\" preserveAspectRatio=\"xMinYMin meet\" x=\"");
+            fmt_g_into(&mut self.out, originx, 6);
+            self.out.push_str("\" y=\"");
+            fmt_g_into(&mut self.out, -originy, 6);
+            self.out.push('"');
         }
         self.put("/>\n");
     }
