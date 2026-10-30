@@ -881,6 +881,49 @@ pub(crate) static POSTSCRIPT_ALIASES: [PostscriptFontAlias; 35] = [
     },
 ];
 
+/// Rust-only exact-name storage dispatch; no C counterpart.
+/// Borrow canonical names without searching or caching an owned-name miss.
+pub(crate) fn static_postscript_fontname(name: &str) -> Option<&'static str> {
+    Some(match name {
+        "AvantGarde-Book" => POSTSCRIPT_ALIASES[0].name,
+        "AvantGarde-BookOblique" => POSTSCRIPT_ALIASES[1].name,
+        "AvantGarde-Demi" => POSTSCRIPT_ALIASES[2].name,
+        "AvantGarde-DemiOblique" => POSTSCRIPT_ALIASES[3].name,
+        "Bookman-Demi" => POSTSCRIPT_ALIASES[4].name,
+        "Bookman-DemiItalic" => POSTSCRIPT_ALIASES[5].name,
+        "Bookman-Light" => POSTSCRIPT_ALIASES[6].name,
+        "Bookman-LightItalic" => POSTSCRIPT_ALIASES[7].name,
+        "Courier" => POSTSCRIPT_ALIASES[8].name,
+        "Courier-Bold" => POSTSCRIPT_ALIASES[9].name,
+        "Courier-BoldOblique" => POSTSCRIPT_ALIASES[10].name,
+        "Courier-Oblique" => POSTSCRIPT_ALIASES[11].name,
+        "Helvetica" => POSTSCRIPT_ALIASES[12].name,
+        "Helvetica-Bold" => POSTSCRIPT_ALIASES[13].name,
+        "Helvetica-BoldOblique" => POSTSCRIPT_ALIASES[14].name,
+        "Helvetica-Narrow" => POSTSCRIPT_ALIASES[15].name,
+        "Helvetica-Narrow-Bold" => POSTSCRIPT_ALIASES[16].name,
+        "Helvetica-Narrow-BoldOblique" => POSTSCRIPT_ALIASES[17].name,
+        "Helvetica-Narrow-Oblique" => POSTSCRIPT_ALIASES[18].name,
+        "Helvetica-Oblique" => POSTSCRIPT_ALIASES[19].name,
+        "NewCenturySchlbk-Bold" => POSTSCRIPT_ALIASES[20].name,
+        "NewCenturySchlbk-BoldItalic" => POSTSCRIPT_ALIASES[21].name,
+        "NewCenturySchlbk-Italic" => POSTSCRIPT_ALIASES[22].name,
+        "NewCenturySchlbk-Roman" => POSTSCRIPT_ALIASES[23].name,
+        "Palatino-Bold" => POSTSCRIPT_ALIASES[24].name,
+        "Palatino-BoldItalic" => POSTSCRIPT_ALIASES[25].name,
+        "Palatino-Italic" => POSTSCRIPT_ALIASES[26].name,
+        "Palatino-Roman" => POSTSCRIPT_ALIASES[27].name,
+        "Symbol" => POSTSCRIPT_ALIASES[28].name,
+        "Times-Bold" => POSTSCRIPT_ALIASES[29].name,
+        "Times-BoldItalic" => POSTSCRIPT_ALIASES[30].name,
+        "Times-Italic" => POSTSCRIPT_ALIASES[31].name,
+        "Times-Roman" => POSTSCRIPT_ALIASES[32].name,
+        "ZapfChancery-MediumItalic" => POSTSCRIPT_ALIASES[33].name,
+        "ZapfDingbats" => POSTSCRIPT_ALIASES[34].name,
+        _ => return None,
+    })
+}
+
 /// `ENTITY_NAME_LENGTH_MAX` from `lib/common/entities.h`.
 pub(crate) const ENTITY_NAME_LENGTH_MAX: usize = 8;
 

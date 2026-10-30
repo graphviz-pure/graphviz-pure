@@ -903,7 +903,7 @@ impl<'a, E: Engine> Emitter<'a, E> {
                             height: sp.height,
                             yoffset_centerline: sp.yoffset_centerline,
                             font: super::model::TextFont::new(
-                                &sp.fontname,
+                                graphviz_pure_core::font::shared_font_name(&sp.fontname),
                                 sp.fontsize,
                                 sp.fontflags as u8,
                             ),

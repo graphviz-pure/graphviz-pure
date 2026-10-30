@@ -533,28 +533,14 @@ pub const POSTSCRIPT_FONT_ALIASES: &[PostscriptFontAlias] = &font_tables::POSTSC
 /// Rust-only ownership for C's interned `textfont_t` names.
 pub type FontName = std::borrow::Cow<'static, str>;
 
-/// Retains the exact spelling, borrowing canonical names from the static alias table.
-/// This pure storage lookup leaves font resolution, diagnostics and Cdt untouched.
-/// C: lib/common/textspan.h:textfont_t (Rust-only storage helper)
+/// Retains exact spelling, borrowing canonical names from the static alias table.
+/// Rust-only storage helper; no C counterpart. `textfont_t` is C's font type in
+/// `lib/common/textspan.h`. Resolution, diagnostics and Cdt remain unchanged.
 pub fn shared_font_name(name: &str) -> FontName {
-    thread_local! {
-        static LAST: std::cell::Cell<Option<&'static str>> =
-            const { std::cell::Cell::new(Some(DEFAULT_FONT_NAME)) };
+    match font_tables::static_postscript_fontname(name) {
+        Some(canonical) => std::borrow::Cow::Borrowed(canonical),
+        None => std::borrow::Cow::Owned(name.to_owned()),
     }
-    LAST.with(|last| {
-        if let Some(previous) = last.get()
-            && previous == name
-        {
-            return std::borrow::Cow::Borrowed(previous);
-        }
-        if let Some(alias) = translate_postscript_fontname(name)
-            && alias.name == name
-        {
-            last.set(Some(alias.name));
-            return std::borrow::Cow::Borrowed(alias.name);
-        }
-        std::borrow::Cow::Owned(name.to_owned())
-    })
 }
 
 /// C `strcasecmp` ordering (ASCII case folding, byte comparison).
@@ -1261,13 +1247,39 @@ mod tests {
     fn standard_font_name_storage_preserves_spelling_and_auto_traits() {
         fn send_sync<T: Send + Sync>() {}
         send_sync::<FontName>();
+        assert!(
+            POSTSCRIPT_FONT_ALIASES
+                .windows(2)
+                .all(|w| w[0].name < w[1].name)
+        );
         for alias in POSTSCRIPT_FONT_ALIASES {
             let name = shared_font_name(alias.name);
             assert_eq!(name, alias.name);
+            assert_eq!(name.as_ptr(), alias.name.as_ptr());
             assert!(matches!(name, std::borrow::Cow::Borrowed(_)));
         }
-        for original in ["times-roman", "HELVETICA", "unknown font", "é字体", ""] {
-            assert_eq!(shared_font_name(original), original);
+        let long = "not a canonical font ".repeat(8);
+        for original in [
+            "times-roman",
+            "helvetica",
+            "HELVETICA",
+            "Arial",
+            "verdana",
+            "unknown font",
+            "é字体",
+            "",
+            &long,
+        ] {
+            for _ in 0..3 {
+                let actual = shared_font_name(original);
+                assert_eq!(actual, original);
+                assert!(matches!(actual, std::borrow::Cow::Owned(_)));
+                // Alternating owned/canonical names retain exact spelling and ownership.
+                assert!(matches!(
+                    shared_font_name("Helvetica"),
+                    std::borrow::Cow::Borrowed(_)
+                ));
+            }
         }
         for original in ["Helvetica", "Times-Roman", "Helvetica", "Times-Roman"] {
             assert!(matches!(
