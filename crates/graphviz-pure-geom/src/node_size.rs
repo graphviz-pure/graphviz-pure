@@ -301,7 +301,7 @@ pub struct LabelGeometry {
     /// unconverted source as its text and no spans.
     pub html_failed: bool,
     /// `fontname`, `fontsize` used for the label.
-    pub font_name: String,
+    pub font_name: graphviz_pure_core::font::FontName,
     pub font_size: f64,
 }
 
@@ -423,7 +423,7 @@ pub fn make_label(
             html_failed: lay.label.is_none(),
             html_label: lay.label.map(Box::new),
             text: None,
-            font_name: font_name.to_string(),
+            font_name: graphviz_pure_core::font::shared_font_name(font_name),
             font_size,
         };
     }
@@ -437,7 +437,7 @@ pub fn make_label(
         html_label: None,
         html_failed: false,
         text: Some(layout),
-        font_name: font_name.to_string(),
+        font_name: graphviz_pure_core::font::shared_font_name(font_name),
         font_size,
     }
 }
@@ -522,7 +522,7 @@ fn node_geometry_measured(node: &NodeData, env: &NodeSizeEnv<'_>) -> Result<Node
             html_label: None,
             html_failed: false,
             text: None,
-            font_name: font_name.to_string(),
+            font_name: graphviz_pure_core::font::shared_font_name(font_name),
             font_size,
         }
     } else {

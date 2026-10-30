@@ -24,7 +24,7 @@ use graphviz_pure_geom::shapes::{RecordField, ShapeKind};
 /// `textfont_t`.
 #[derive(Debug, Clone)]
 pub(crate) struct TextFont {
-    pub name: String,
+    pub name: graphviz_pure_core::font::FontName,
     pub size: f64,
     pub flags: u8,
     pub ps: Option<&'static PostscriptFontAlias>,
@@ -33,7 +33,7 @@ pub(crate) struct TextFont {
 impl TextFont {
     pub fn new(name: &str, size: f64, flags: u8) -> Self {
         TextFont {
-            name: name.to_string(),
+            name: graphviz_pure_core::font::shared_font_name(name),
             size,
             flags,
             ps: translate_postscript_fontname(name),
@@ -57,7 +57,7 @@ pub(crate) struct TextSpan {
 #[derive(Debug, Clone)]
 pub(crate) struct TextLabel {
     pub text: String,
-    pub fontname: String,
+    pub fontname: graphviz_pure_core::font::FontName,
     pub fontcolor: String,
     pub fontsize: f64,
     pub dimen: Point,

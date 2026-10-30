@@ -53,7 +53,7 @@ pub fn make_label(
         pos: Point::default(),
         set: false,
         fontsize,
-        fontname: fontname.to_string(),
+        fontname: graphviz_pure_core::font::shared_font_name(fontname),
     }
 }
 

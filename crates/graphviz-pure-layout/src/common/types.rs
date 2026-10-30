@@ -39,7 +39,7 @@ pub struct TextLabel {
     pub pos: Point,
     pub set: bool,
     pub fontsize: f64,
-    pub fontname: String,
+    pub fontname: graphviz_pure_core::font::FontName,
 }
 
 /// `port` (internal edge endpoint specification), shared by all engines.

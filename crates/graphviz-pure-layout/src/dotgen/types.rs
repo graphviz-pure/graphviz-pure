@@ -84,7 +84,7 @@ pub use crate::common::ports::port_center;
 #[derive(Debug, Clone, Default)]
 pub struct TextLabel {
     pub text: String,
-    pub fontname: String,
+    pub fontname: graphviz_pure_core::font::FontName,
     pub fontsize: f64,
     pub dimen: Point,
     pub space: Point,

@@ -89,7 +89,7 @@ impl<E: Engine> Emitter<'_, E> {
         }
         let mut env = Env {
             pos: p,
-            name: tp.fontname.clone(),
+            name: tp.fontname.clone().into_owned(),
             color: tp.fontcolor.clone(),
             size: tp.fontsize,
             objid: parent.id.clone(),
@@ -158,11 +158,11 @@ impl<E: Engine> Emitter<'_, E> {
                 } else {
                     env.size
                 };
-                let name = item.font_name.clone();
+                let name = &item.font_name;
                 let color = item.color.clone().unwrap_or_else(|| env.color.clone());
                 let flags = item.flags;
                 self.set_pencolor(&color);
-                let mut font = TextFont::new(&name, size, flags);
+                let mut font = TextFont::new(name, size, flags);
                 font.ps = graphviz_pure_core::font::translate_postscript_fontname(&item.font_name);
                 let ts = TextSpan {
                     str: item.text.clone(),

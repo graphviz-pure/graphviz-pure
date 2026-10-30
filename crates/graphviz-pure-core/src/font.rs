@@ -387,7 +387,7 @@ pub struct TextLabelLayout {
     /// Total bounding height in points (sum of line heights).
     pub height: f64,
     /// Font family name used for measurement.
-    pub font_name: String,
+    pub font_name: FontName,
     /// Font size in points used for measurement.
     pub font_size: f64,
     /// The label text after object-escape substitution and entity conversion (C's
@@ -529,6 +529,33 @@ mod font_tables;
 /// Standard PostScript font equivalence table (`postscript_alias[]` from `lib/common/textspan.c`,
 /// generated from `ps_font_equiv.h` by `scripts/gen-font-tables.py`).
 pub const POSTSCRIPT_FONT_ALIASES: &[PostscriptFontAlias] = &font_tables::POSTSCRIPT_ALIASES;
+
+/// Rust-only ownership for C's interned `textfont_t` names.
+pub type FontName = std::borrow::Cow<'static, str>;
+
+/// Retains the exact spelling, borrowing canonical names from the static alias table.
+/// This pure storage lookup leaves font resolution, diagnostics and Cdt untouched.
+/// C: lib/common/textspan.h:textfont_t (Rust-only storage helper)
+pub fn shared_font_name(name: &str) -> FontName {
+    thread_local! {
+        static LAST: std::cell::Cell<Option<&'static str>> =
+            const { std::cell::Cell::new(Some(DEFAULT_FONT_NAME)) };
+    }
+    LAST.with(|last| {
+        if let Some(previous) = last.get()
+            && previous == name
+        {
+            return std::borrow::Cow::Borrowed(previous);
+        }
+        if let Some(alias) = translate_postscript_fontname(name)
+            && alias.name == name
+        {
+            last.set(Some(alias.name));
+            return std::borrow::Cow::Borrowed(alias.name);
+        }
+        std::borrow::Cow::Owned(name.to_owned())
+    })
+}
 
 /// C `strcasecmp` ordering (ASCII case folding, byte comparison).
 fn strcasecmp(a: &str, b: &str) -> std::cmp::Ordering {
@@ -1084,7 +1111,7 @@ pub fn make_simple_label_cs(
         lines: take_label_lines(),
         width: 0.0,
         height: 0.0,
-        font_name: font_name.to_string(),
+        font_name: shared_font_name(font_name),
         font_size,
         source: String::new(),
     };
@@ -1228,6 +1255,26 @@ mod tests {
         assert!(large.lines.capacity() > 16);
         drop(large);
         LABEL_LINES.with(|pool| assert!(pool.borrow().is_none()));
+    }
+
+    #[test]
+    fn standard_font_name_storage_preserves_spelling_and_auto_traits() {
+        fn send_sync<T: Send + Sync>() {}
+        send_sync::<FontName>();
+        for alias in POSTSCRIPT_FONT_ALIASES {
+            let name = shared_font_name(alias.name);
+            assert_eq!(name, alias.name);
+            assert!(matches!(name, std::borrow::Cow::Borrowed(_)));
+        }
+        for original in ["times-roman", "HELVETICA", "unknown font", "é字体", ""] {
+            assert_eq!(shared_font_name(original), original);
+        }
+        for original in ["Helvetica", "Times-Roman", "Helvetica", "Times-Roman"] {
+            assert!(matches!(
+                shared_font_name(original),
+                std::borrow::Cow::Borrowed(_)
+            ));
+        }
     }
     use super::*;
 
@@ -1516,7 +1563,7 @@ mod tests {
             lines: Vec::new(),
             width: 0.0,
             height: 0.0,
-            font_name: font_name.to_string(),
+            font_name: font_name.to_string().into(),
             font_size,
             source: String::new(),
         };
