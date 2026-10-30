@@ -7,8 +7,8 @@
 //! `epsf_inside`, `star_inside`), so edges end on that outline.
 //!
 //! Node *sizes* come from `graphviz_pure_geom::shapes` (shared with the other engines);
-//! this module rebuilds C's vertex arrays from the final size, which agrees with
-//! `poly_init` up to rounding because the vertices scale linearly with the size.
+//! measured vertices transfer directly into the clipping shape during initialization.
+//! The standalone constructor can also rebuild arrays from the final size.
 
 use graphviz_pure_core::alloc::{AllocFailure, element_count, gv_calloc_grow, gv_calloc_vec};
 use graphviz_pure_core::cnum::{c_max, c_min, is_exactly_equal, is_exactly_zero};
@@ -30,7 +30,7 @@ pub enum InsideFn {
 }
 
 /// The parts of C's `polygon_t` and node size fields used by the inside tests.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct NodeShape {
     pub inside: InsideFn,
     /// `ND_shape(n)->name`.
@@ -410,16 +410,21 @@ impl NodeShape {
     /// The vertices of the peripheries are C's `gv_calloc` array, which reports a
     /// failed allocation and exits; the port returns the error.
     pub fn new(node: &NodeData) -> Result<Self, AllocFailure> {
+        Self::new_with_size(node, node.width, node.height)
+    }
+
+    /// C: lib/common/shapes.c:poly_init, point_init
+    /// Builds a clipping shape with measured dimensions without copying the node.
+    fn new_with_size(node: &NodeData, width: f64, height: f64) -> Result<Self, AllocFailure> {
         let name = node
             .attrs
             .get("shape")
             .map(String::as_str)
             .filter(|s| !s.is_empty())
-            .unwrap_or("ellipse")
-            .to_string();
-        let desc = describe(&name);
-        let width = node.width * 72.0;
-        let height = node.height * 72.0;
+            .unwrap_or("ellipse");
+        let desc = describe(name);
+        let width = width * 72.0;
+        let height = height * 72.0;
         let penwidth = late_double(node, "penwidth", DEFAULT_NODEPENWIDTH, 0.0);
         let peripheries = late_int(node, "peripheries", desc.peripheries as i32, 0) as usize;
         let mut sides = desc.sides;
@@ -430,7 +435,7 @@ impl NodeShape {
             || crate::common::utils::mapbool(node.attrs.get("regular").map(String::as_str));
         let mut shape = NodeShape {
             inside: desc.inside,
-            name: name.clone(),
+            name: name.to_string(),
             sides,
             peripheries,
             orientation,
@@ -584,6 +589,52 @@ impl NodeShape {
         shape.distortion = distortion;
         shape.skew = skew;
         Ok(shape)
+    }
+
+    /// C: lib/common/shapes.c:poly_init, point_init, record_init, epsf_init
+    /// Uses the exact measured polygon, moving its vertices instead of reconstructing
+    /// and then replacing them. Records and epsf keep the standalone initialization.
+    pub fn from_geometry(
+        node: &NodeData,
+        geom: &mut graphviz_pure_geom::node_size::NodeGeometry,
+    ) -> Result<Self, AllocFailure> {
+        let Some(polygon) = &mut geom.polygon else {
+            let mut shape = Self::new_with_size(node, geom.width, geom.height)?;
+            shape.apply_geometry(geom);
+            return Ok(shape);
+        };
+        let name = node
+            .attrs
+            .get("shape")
+            .map(String::as_str)
+            .filter(|s| !s.is_empty())
+            .unwrap_or("ellipse");
+        let desc = describe(name);
+        let width = geom.width * 72.0;
+        let height = geom.height * 72.0;
+        let penwidth = late_double(node, "penwidth", DEFAULT_NODEPENWIDTH, 0.0);
+        Ok(NodeShape {
+            inside: desc.inside,
+            name: name.to_string(),
+            sides: polygon.sides,
+            peripheries: polygon.peripheries,
+            orientation: polygon.orientation,
+            distortion: polygon.distortion,
+            skew: polygon.skew,
+            regular: polygon.regular,
+            vertices: std::mem::take(&mut polygon.vertices),
+            width,
+            height,
+            outline_width: geom.outline_width * 72.0,
+            outline_height: geom.outline_height * 72.0,
+            penwidth,
+            no_clip: false,
+            fixedshape: node
+                .attrs
+                .get("fixedsize")
+                .is_some_and(|v| v.eq_ignore_ascii_case("shape")),
+            record_box: geom.record.as_ref().map(|r| r.bbox),
+        })
     }
 
     /// Replaces the reconstructed vertices with C's exact `poly_init` /
@@ -789,5 +840,60 @@ impl NodeShape {
         }
         ctx.last = i;
         true
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use graphviz_pure_core::{Graph, GraphKind};
+    use graphviz_pure_geom::{NodeSizeEnv, node_geometry};
+
+    #[test]
+    fn measured_shapes_match_reconstruction_and_transfer_vertices() {
+        for name in [
+            "ellipse", "box", "polygon", "point", "record", "Mrecord", "star", "cylinder",
+        ] {
+            for peripheries in [0, 1, 3] {
+                let mut graph = Graph::new("G", GraphKind::Directed, false);
+                let id = graph.ensure_node("n");
+                let node = &mut graph.nodes[id.0 as usize];
+                for (key, value) in [
+                    ("shape", name),
+                    ("label", "alpha\\nbeta"),
+                    ("width", "2.1"),
+                    ("height", "0.8"),
+                    ("fixedsize", "shape"),
+                    ("sides", "7"),
+                    ("orientation", "23"),
+                    ("distortion", "0.2"),
+                    ("skew", "-0.1"),
+                    ("penwidth", "1.3"),
+                ] {
+                    node.attrs.set(key, value.into(), false);
+                }
+                node.attrs
+                    .set("peripheries", peripheries.to_string(), false);
+                let node = &graph.nodes[id.0 as usize];
+                let mut geom = node_geometry(node, &NodeSizeEnv::from_graph(&graph)).unwrap();
+                let vertices = geom
+                    .polygon
+                    .as_ref()
+                    .filter(|p| !p.vertices.is_empty())
+                    .map(|p| p.vertices.as_ptr());
+                // The former constructor path, including its final geometry replacement.
+                let mut sized = node.clone();
+                sized.width = geom.width;
+                sized.height = geom.height;
+                let mut expected = NodeShape::new(&sized).unwrap();
+                expected.apply_geometry(&geom);
+                let actual = NodeShape::from_geometry(node, &mut geom).unwrap();
+                assert_eq!(actual, expected, "{name}, peripheries={peripheries}");
+                if let Some(vertices) = vertices {
+                    assert_eq!(actual.vertices.as_ptr(), vertices);
+                    assert!(geom.polygon.as_ref().unwrap().vertices.is_empty());
+                }
+            }
+        }
     }
 }
