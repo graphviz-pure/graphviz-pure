@@ -50,10 +50,46 @@ pub(crate) enum EmitState {
     ELabel,
 }
 
+/// C: lib/common/color.c:colorxlate
+/// An immutable renderer colour name shared by copies of the drawing state.
+/// Empty names keep their allocation-free representation.
+#[derive(Clone, PartialEq)]
+pub(crate) struct ColorName(Option<std::sync::Arc<str>>);
+
+impl ColorName {
+    fn new(name: &str) -> Self {
+        Self((!name.is_empty()).then(|| std::sync::Arc::from(name)))
+    }
+    fn as_str(&self) -> &str {
+        self.0.as_deref().unwrap_or("")
+    }
+}
+impl std::ops::Deref for ColorName {
+    type Target = str;
+    fn deref(&self) -> &str {
+        self.as_str()
+    }
+}
+impl PartialEq<str> for ColorName {
+    fn eq(&self, other: &str) -> bool {
+        self.as_str() == other
+    }
+}
+impl std::fmt::Display for ColorName {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        std::fmt::Display::fmt(self.as_str(), f)
+    }
+}
+impl std::fmt::Debug for ColorName {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        std::fmt::Debug::fmt(self.as_str(), f)
+    }
+}
+
 /// `gvcolor_t` as resolved for the renderer.
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) enum GvColor {
-    Str(String),
+    Str(ColorName),
     Rgba([u8; 4]),
 }
 
@@ -598,19 +634,19 @@ impl<'a> Job<'a> {
             .binary_search_by(|k| cmp_ignore_case(k, name))
             .is_ok();
         if known {
-            return GvColor::Str(name.to_string());
+            return GvColor::Str(ColorName::new(name));
         }
         // `colorxlate`: a renderer that takes color names (`COLOR_STRING`) keeps the name,
         // and is warned about an unknown one all the same.
         match graphviz_pure_core::resolve_color_with_scheme(name, self.color_scheme.as_deref()) {
-            Some(_) if !self.features.rgba => GvColor::Str(name.to_string()),
+            Some(_) if !self.features.rgba => GvColor::Str(ColorName::new(name)),
             Some(c) => GvColor::Rgba([c.r, c.g, c.b, c.a]),
             None => {
                 graphviz_pure_core::warn_unknown_color(name);
                 if self.features.rgba {
                     GvColor::Rgba([0, 0, 0, 255])
                 } else {
-                    GvColor::Str(name.to_string())
+                    GvColor::Str(ColorName::new(name))
                 }
             }
         }
@@ -662,7 +698,9 @@ impl<'a, E: Engine> Emitter<'a, E> {
     fn resolve_first_of_list(&self, name: &str) -> GvColor {
         let first = name.split(':').next().unwrap_or("");
         match self.job.resolve_color(first) {
-            GvColor::Str(_) => GvColor::Str(name.to_string()),
+            // Without a list, the resolved name already is the caller's whole string.
+            c @ GvColor::Str(_) if first.len() == name.len() => c,
+            GvColor::Str(_) => GvColor::Str(ColorName::new(name)),
             c => c,
         }
     }
@@ -799,5 +837,26 @@ pub(crate) fn check_pagedir(pagedir: &str) {
     let (major, minor) = (code(b.first().copied()), code(b.get(1).copied()));
     if i32::abs(major.0 + minor.0) != 1 || i32::abs(major.1 + minor.1) != 1 {
         graphviz_pure_core::diag::agwarningf(&format!("pagedir={pagedir} ignored\n"));
+    }
+}
+
+#[cfg(test)]
+mod color_name_tests {
+    use super::*;
+
+    #[test]
+    fn drawing_state_color_names_share_storage_and_preserve_spelling() {
+        let color = GvColor::Str(ColorName::new("Red:Blue"));
+        let copy = color.clone();
+        let (GvColor::Str(original), GvColor::Str(copy)) = (&color, &copy) else {
+            panic!("string colors")
+        };
+        assert_eq!(original.as_str().as_ptr(), copy.as_str().as_ptr());
+        assert_eq!(format!("{original}"), "Red:Blue");
+        assert_eq!(format!("{color:?}"), "Str(\"Red:Blue\")");
+        let empty = ColorName::new("");
+        assert!(empty.0.is_none());
+        assert_eq!(empty.as_str(), "");
+        assert_eq!(format!("{empty}"), "");
     }
 }

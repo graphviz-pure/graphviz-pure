@@ -450,7 +450,7 @@ pub(crate) fn write_plain(
                 let npts: usize = e.bz.iter().map(|b| b.list.len()).sum();
                 let _ = write!(out, " {npts}");
                 for b in &e.bz {
-                    for p in &b.list {
+                    for p in b.list {
                         let _ = write!(out, " {} {}", g5(p.x / 72.0), g5(y_dir(p.y, y_off) / 72.0));
                     }
                 }
