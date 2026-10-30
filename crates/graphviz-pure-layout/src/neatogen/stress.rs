@@ -24,6 +24,14 @@ pub const OPT_SMART_INIT: i32 = 0x4;
 pub const OPT_EXP_FLAG: i32 = 0x3;
 pub const NUM_PIVOTS_STRESS: usize = 40;
 
+/// Largest `n` that keeps a second copy of `sqrt(lap2)`.
+///
+/// The copy is one packed triangle of `f32`. On the musl release build,
+/// n = 1000 peaked at 16,848 KiB, over 1.10 × the 1.0 peak (16,359 KiB).
+/// n = 500 peaked at 9,444 KiB, under its cap (10,168 KiB). See
+/// `docs/perf/1.x-10x.md`.
+const SQRT_CACHE_MAX_N: usize = 500;
+
 /// `hasPos(n)`.
 pub fn has_pos(g: &LGraph<'_>, n: usize) -> bool {
     g.nodes[n].pinned > 0
@@ -229,6 +237,46 @@ pub fn compute_apsp_artificial_weights(graph: &[VtxData], n: usize) -> Vec<Vec<D
     out
 }
 
+/// The rebuild's clamp, as one `f32` test.
+///
+/// `>= f32::MAX` or `< 0` becomes `0`. A `NaN` fails both comparisons and
+/// stays a `NaN`.
+fn clamp_stress_dist(dist: f32) -> f32 {
+    if dist >= f32::MAX || dist < 0.0 {
+        0.0
+    } else {
+        dist
+    }
+}
+
+/// Off-diagonals of a packed triangle are all `>= 0`.
+///
+/// Diagonals are skipped. A stress Laplacian stores a negative degree sum
+/// there, and the rebuild overwrites it without reading the square root.
+/// A `NaN` or negative off-diagonal must not use the cached root: `sqrt_vecf`
+/// leaves that `lap1` entry alone, and the next iteration multiplies whatever
+/// value the previous multiply left behind.
+fn offdiag_sqrt_is_stable(packed: &[f32], n: usize) -> bool {
+    let mut rows = packed;
+    let mut width = n;
+    while width > 1 {
+        let Some((_, rest)) = rows.split_first() else {
+            return false;
+        };
+        let len = width.wrapping_sub(1);
+        if rest.len() < len {
+            return false;
+        }
+        let (off, next) = rest.split_at(len);
+        if off.iter().any(|v| v.is_nan() || *v < 0.0) {
+            return false;
+        }
+        rows = next;
+        width = len;
+    }
+    true
+}
+
 /// `compute_stressf(coords, lap, dim, n, exp)`: the layout's stress.
 fn compute_stressf(coords: &[Vec<f32>], lap: &[f32], dim: usize, n: usize, exp: i32) -> f64 {
     let mut sum = 0.0f64;
@@ -376,9 +424,10 @@ pub fn stress_majorization_kd_mkernel(
             step -= 1;
         }
     }
-    // `lap2` is not written again. The outer loop rebuilds `lap1` from the
-    // current coordinates; `sqrt_vecf` reads `lap2`. One lower triangle serves
-    // every `lap2` mat-vec in this solve, including the ones inside CG.
+    // `lap2` is not written again. One lower triangle serves every `lap2`
+    // mat-vec in this solve, including the ones inside CG. For `stresswt=2`
+    // the rebuild used to take `sqrt` of that triangle on every iteration.
+    let cache_sqrt = exp == 2 && n <= SQRT_CACHE_MAX_N && offdiag_sqrt_is_stable(&lap2, n);
     #[cfg(all(feature = "parallel", not(target_family = "wasm")))]
     let lap2_lower = if super::matvec_parallel::use_parallel(n) {
         Some(super::matvec_parallel::pack_lower(&lap2, n))
@@ -389,7 +438,20 @@ pub fn stress_majorization_kd_mkernel(
     let mut b: Vec<Vec<f32>> = vec![vec![0.0f32; n]; dim];
     let mut tmp_coords = vec![0.0f32; n];
     let mut dist_accumulator = vec![0.0f32; n];
-    let mut lap1 = vec![0.0f32; lap_length];
+    // One block either way. The second half holds `sqrt(lap2)` when the
+    // cache is on; `heap_blocks` stays the same as a single triangle.
+    let mut lap_buf = vec![
+        0.0f32;
+        if cache_sqrt {
+            lap_length.saturating_mul(2)
+        } else {
+            lap_length
+        }
+    ];
+    let (lap1, lap_sqrt) = lap_buf.split_at_mut(lap_length);
+    if cache_sqrt {
+        sqrt_vecf(&lap2, lap_sqrt);
+    }
     let mut old_stress = f64::MAX;
     graphviz_pure_core::diag::verbose_phase("Solving model: ");
     let mut converged = false;
@@ -398,10 +460,10 @@ pub fn stress_majorization_kd_mkernel(
         for d in degrees.iter_mut() {
             *d = 0.0;
         }
-        if exp == 2 {
-            sqrt_vecf(&lap2, &mut lap1);
+        if exp == 2 && !cache_sqrt {
+            sqrt_vecf(&lap2, lap1);
         }
-        let mut count = 0;
+        let mut count: usize = 0;
         for i in 0..n - 1 {
             let len = n - i - 1;
             for v in dist_accumulator.iter_mut().take(len) {
@@ -419,29 +481,42 @@ pub fn stress_majorization_kd_mkernel(
                 }
             }
             invert_sqrt_vec(&mut dist_accumulator[..len]);
-            for v in dist_accumulator.iter_mut().take(len) {
-                if *v >= f32::MAX || *v < 0.0 {
-                    *v = 0.0;
-                }
-            }
-            count += 1;
+            // One range per row. `lap_sqrt[count]` on every off-diagonal stayed
+            // a bounds check, and that check put the instructions back.
+            let off_start = count.wrapping_add(1);
+            count = off_start.wrapping_add(len);
+            let off = &mut lap1[off_start..count];
             let mut degree = 0.0f64;
-            if exp == 2 {
-                for j in 0..len {
-                    lap1[count] *= dist_accumulator[j];
-                    let val = lap1[count];
-                    degree += f64::from(val);
-                    degrees[i + j + 1] -= f64::from(val);
-                    count += 1;
+            if exp == 2 && cache_sqrt {
+                let scales = &lap_sqrt[off_start..count];
+                for ((slot, &scale), dist) in
+                    off.iter_mut().zip(scales).zip(dist_accumulator.iter_mut())
+                {
+                    let dist_c = clamp_stress_dist(*dist);
+                    // `sqrt_vecf` then `*=` is one `f32` multiply, not an FMA.
+                    let val = scale * dist_c;
+                    *slot = val;
+                    *dist = val;
+                }
+            } else if exp == 2 {
+                // `sqrt_vecf` just wrote this row. Read the root, then store.
+                for (slot, dist) in off.iter_mut().zip(dist_accumulator.iter_mut()) {
+                    let dist_c = clamp_stress_dist(*dist);
+                    let val = *slot * dist_c;
+                    *slot = val;
+                    *dist = val;
                 }
             } else {
-                for j in 0..len {
-                    lap1[count] = dist_accumulator[j];
-                    let val = lap1[count];
-                    degree += f64::from(val);
-                    degrees[i + j + 1] -= f64::from(val);
-                    count += 1;
+                for (slot, dist) in off.iter_mut().zip(dist_accumulator.iter_mut()) {
+                    let val = clamp_stress_dist(*dist);
+                    *slot = val;
+                    *dist = val;
                 }
+            }
+            for (j, &val) in dist_accumulator.iter().take(len).enumerate() {
+                let weight = f64::from(val);
+                degree += weight;
+                degrees[i + j + 1] -= weight;
             }
             degrees[i] -= degree;
         }
@@ -454,7 +529,7 @@ pub fn stress_majorization_kd_mkernel(
             }
         }
         for k in 0..dim {
-            right_mult_with_vector_ff(&lap1, n, &coords[k], &mut b[k]);
+            right_mult_with_vector_ff(lap1, n, &coords[k], &mut b[k]);
         }
         let mut new_stress = 0.0f64;
         for k in 0..dim {
@@ -558,4 +633,70 @@ pub fn stress_majorization_kd_mkernel(
         }
     }
     Ok(iterations)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn offdiag_sqrt_is_stable_ignores_diagonals_and_rejects_nan() {
+        // n = 3 packed: d00, a, b, d11, c, d22.
+        let mut packed = [1.0f32, 2.0, 3.0, 4.0, 5.0, 6.0];
+        assert!(offdiag_sqrt_is_stable(&packed, 3));
+        packed[0] = f32::NAN;
+        packed[3] = -4.0;
+        packed[5] = f32::NEG_INFINITY;
+        assert!(offdiag_sqrt_is_stable(&packed, 3));
+        packed[1] = f32::NAN;
+        assert!(!offdiag_sqrt_is_stable(&packed, 3));
+        packed[1] = -0.5;
+        assert!(!offdiag_sqrt_is_stable(&packed, 3));
+        packed[1] = -0.0;
+        assert!(offdiag_sqrt_is_stable(&packed, 3));
+        assert!(offdiag_sqrt_is_stable(&[], 0));
+        assert!(offdiag_sqrt_is_stable(&[f32::NAN], 1));
+    }
+
+    #[test]
+    fn cached_sqrt_matches_sqrt_then_multiply() {
+        let sources = [
+            0.0f32,
+            -0.0,
+            1.0,
+            2.0,
+            1.0e-20,
+            1.0e20,
+            f32::MIN_POSITIVE,
+            3.5,
+            f32::MAX,
+            f32::INFINITY,
+        ];
+        let dists = [
+            0.0f32,
+            -0.0,
+            1.0,
+            0.5,
+            2.0,
+            f32::MAX,
+            f32::MIN_POSITIVE,
+            -1.0,
+            f32::INFINITY,
+            f32::NAN,
+        ];
+        for &source in &sources {
+            let mut once = [0.0f32];
+            sqrt_vecf(&[source], &mut once);
+            for &dist in &dists {
+                let mut each = [0.0f32];
+                sqrt_vecf(&[source], &mut each);
+                each[0] *= dist;
+                assert_eq!(
+                    (once[0] * dist).to_bits(),
+                    each[0].to_bits(),
+                    "source {source} dist {dist}"
+                );
+            }
+        }
+    }
 }

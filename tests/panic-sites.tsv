@@ -82,7 +82,7 @@ layout/neatogen/routing.rs	0	0	30	7
 layout/neatogen/scadjust.rs	0	0	29	8
 layout/neatogen/sgd.rs	0	0	53	25
 layout/neatogen/smart_ini.rs	8	0	201	36
-layout/neatogen/stress.rs	3	0	92	26
+layout/neatogen/stress.rs	3	0	87	22
 layout/neatogen/stuff.rs	1	0	180	13
 layout/neatogen/voronoi.rs	22	0	250	41
 layout/ortho/maze.rs	0	0	27	9
