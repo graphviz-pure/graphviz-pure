@@ -57,13 +57,15 @@ patch releases of the latest 1.x minor only; earlier minors are unsupported. Aft
 
 ## Releases
 
-A real release starts from a workflow dispatch on `master`. The workflow prepares the version
-and changelog commit locally, then builds from it on GitHub-hosted runners without build
+A real release starts from the owner's workflow dispatch on `master`. `prepare` rejects an unset
+`JSR_PUBLISH_ACTOR`, a mismatched actor or a bot before any publishing approval. The workflow
+prepares the version and changelog commit locally, then builds from it on GitHub-hosted runners without build
 caches, using a pinned Rust toolchain and locked Rust dependencies. Readiness checks, smoke
 tests, the `attest` job and the fuzzing gate must pass before the seven publishing jobs wait
 together for one approval of the `release` environment. A dry run builds and runs `attest`
 without requesting that environment or publishing. Publishing jobs run independently after
-approval; a registry can publish even if the GitHub release job fails.
+approval; a registry can publish even if the GitHub release job fails. npm stages the tarball
+and then requires the owner's passkey approval on npmjs.com before it becomes live.
 
 Before approval, the `attest` job creates signed Sigstore build-provenance attestations for
 `dist/*` (release archives, the npm tarball and `SHA256SUMS`) and the PyPI wheels. The container
@@ -81,9 +83,11 @@ The release tag is annotated and unsigned. The workflow performs no macOS Develo
 signing or notarisation and no Windows Authenticode signing; Sigstore attestations are
 separate from platform code signing.
 
-crates.io, npm, PyPI and JSR use OIDC publishing without stored registry tokens. npm publishes
-with provenance, and JSR adds provenance through `deno publish`. Wasmer uses a stored API
-token from the `release` environment. While a channel is not yet configured and its package
+crates.io, npm, PyPI and JSR use OIDC publishing without stored registry tokens. npm stages
+with automatically generated provenance (confirmed by staged 0.2.3's `dist.attestations.provenance`);
+its trusted publisher permits `npm stage publish`, not direct `npm publish`. Passkey approval
+on npmjs.com is the final npm gate. JSR adds provenance through CI's OIDC `deno publish`.
+Wasmer uses a stored API token from the `release` environment. While a channel is not yet configured and its package
 does not exist, the Wasmer job skips publishing with a notice if its token is missing, and
 the PyPI job does likewise if its trusted publisher is not configured. For a new version of
 an existing package, a missing Wasmer token or invalid PyPI publisher fails the job.

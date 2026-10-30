@@ -44,7 +44,7 @@ esac
                                 "FIXTURE": directory, "SCORE_RETRY": str(int(retry))}
             return subprocess.run(
                 [str(ROOT / "scripts/release-verify.sh"), "1.1.0", "--ci",
-                 "--channels", "jsr", "--wait", "1" if retry else "0"],
+                 "--channels", "jsr", "--wait", "30" if retry else "0"],
                 env=env, capture_output=True, text=True)
 
     def test_full_score(self):

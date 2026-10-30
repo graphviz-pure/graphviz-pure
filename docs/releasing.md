@@ -4,6 +4,8 @@ To release: dispatch Release from the owner's GitHub account, which must be a JS
 (`gh workflow run release.yml [-f version=X.Y.Z]`); approve the `release` deployment when GitHub
 notifies you, then review and approve the staged npm package on npmjs.com with your passkey.
 An agent using the release App must not dispatch a real release: JSR refuses its actor.
+Before dispatch, set `JSR_PUBLISH_ACTOR`, declare JSR runtime compatibility, and ensure npm's
+trusted publisher allows `npm stage publish` while keeping `npm publish` and `npm dist-tag` disabled.
 
 `version` is optional. Empty means the next version: while the version is `0.x`, a pull request labelled `breaking` bumps the minor version and anything else the patch version; from 1.0, `breaking` bumps the major version ([versioning policy](versioning.md)). After a pre-release tag the next version is the version it pre-released. `intro` is optional changelog text; empty means a line counted from the entries (`3 changes: 1 added, 2 fixed.`). `dry_run` (default false) builds, fuzzes, smoke-tests and attests, and does not publish:
 
@@ -268,10 +270,18 @@ fixed on `master` and ships with the next dispatch. A re-run asks for the approv
   goes up, and a file that differs from PyPI's fails the job.
 - `npm`: a re-run is safe only if staging did not succeed. A staged version reserves its version
   number, so do not re-run a successful staging job: review and approve the existing stage on
-  npmjs.com with your passkey. After approval, re-run **verify**, not **npm**.
+  npmjs.com with your passkey. After approval, re-run **verify**, not **npm**. GitHub allows
+  [re-runs within 30 days of the original run](https://docs.github.com/en/actions/how-tos/manage-workflow-runs/re-run-workflows-and-jobs);
+  the release-commit bundle is retained for 90 days.
+  After the 30-day re-run window, use `scripts/release-verify.sh X.Y.Z` locally.
 - `jsr`: a re-run is safe if the job failed before publishing. A published version is immutable.
-  A re-run keeps the original actor; `actorNotScopeMember` needs a new owner-dispatched run,
-  not an App re-run or a relaxed scope restriction.
+  A re-run keeps the original actor. For `actorNotScopeMember`, if no release tag exists, start
+  a new owner-dispatched run. If the tag already exists, `prepare` refuses another release of
+  that version: recover by publishing the attested npm tarball's JSR files by hand, as for 1.0.0.
+  Download the release's tarball, verify its Sigstore attestation and `SHA256SUMS`, unpack it,
+  then run `deno publish` from the unpacked `package/` directory and approve with a passkey.
+  That version has no JSR provenance and fails the provenance score gate while latest; document
+  this exception rather than claiming a full score. Keep the scope-member restriction.
 - `wasmer`: safe to re-run. A version already in the registry is left as it is (versions there
   cannot be replaced), and `release-verify.sh` checks that it holds the attested module.
 - `ghcr`: safe to re-run. Pushing the same image again changes nothing, and `X.Y`/`latest`
@@ -400,9 +410,11 @@ description is `packaging/pypi/README.md`.
    The release App is not a scope member and JSR refuses it with `actorNotScopeMember`; approving
    an environment or re-running its job does not change that actor. Do not relax the restriction.
 4. Set the repository Actions variable `JSR_PUBLISH_ACTOR` to the owner's scope-member GitHub
-   login. The JSR job fails before downloading or publishing if the variable is absent, the
-   dispatch actor differs, or it is a bot. Keep OIDC `deno publish` for provenance; no manual
-   token publish. Require publishing from CI in JSR's package settings.
+   login. On a real run, `prepare` fails before builds or approval if the variable is absent,
+   the dispatch actor differs (case-insensitively), or it is a bot. App dry runs are allowed.
+   Keep OIDC `deno publish` for normal releases so they have provenance. Leave the scope setting
+   **Require publishing from CI** off: it would block passkey recovery after a tag exists
+   ([recovery](#if-a-publishing-job-fails)).
 5. In JSR's package settings, declare the tested runtime compatibility (Node.js, Deno, Bun,
    browsers and Workers). CI exercises these runtimes; JSR's score needs the declarations too.
    Keep a description and README examples. The post-publish verifier requires all nine scored

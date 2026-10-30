@@ -25,9 +25,10 @@
 #
 # --ci checks every channel but the tap and bucket: release.yml's verify job runs it once the
 # publishing jobs finish, and the tap and bucket updates are dispatched rather than waited on.
-# --channels LIST checks only those channels
+# --npm-staged reports npm as awaiting approval (CI only, after successful staging).
+# --channels LIST checks only those channels; an explicit empty list checks none
 # (comma-separated); --failed LIST reports those as failing at once, without checking (the verify
-# job passes the channels whose publishing job did not succeed). --wait SECONDS retries failing
+# job passes channels whose publishing job or registry lookup did not succeed). --wait SECONDS retries failing
 # registry checks (crates.io, JSR, ghcr, Wasmer, PyPI) until they pass or SECONDS have passed in all. Reads only.
 #
 # Usage: scripts/release-verify.sh VERSION [--ci] [--channels LIST] [--failed LIST] [--wait SECONDS]
@@ -35,11 +36,12 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 . scripts/release-lib.sh
 
-version="" ci=0 wait=0 only="" failed=""
+version="" ci=0 wait=0 only="" only_set=0 failed="" npm_staged=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --ci) ci=1 ;;
-    --channels) only=${2?--channels needs a list}; shift ;;
+    --npm-staged) npm_staged=1 ;;
+    --channels) only=${2?--channels needs a list}; only_set=1; shift ;;
     --failed) failed=${2?--failed needs a list}; shift ;;
     --wait) wait=${2:?--wait needs seconds}; shift ;;
     -*) die "unknown option $1" ;;
@@ -376,8 +378,12 @@ taps() {
 }
 
 want() { # want CHANNEL: is it to be checked?
-  case ",$failed," in *",$1,"*) result "$1" 0 "its publishing job did not succeed"; return 1 ;; esac
-  [ -z "$only" ] || case ",$only," in *",$1,"*) ;; *) return 1 ;; esac
+  case ",$failed," in *",$1,"*) result "$1" 0 "publishing or registry lookup did not succeed"; return 1 ;; esac
+  if [ "$1" = npm ] && [ "$npm_staged" = 1 ]; then
+    echo "- [ ] npm: staged, awaiting owner's passkey approval on npmjs.com; live bytes and signatures have not been verified."
+    return 1
+  fi
+  [ "$only_set" = 0 ] || case ",$only," in *",$1,"*) ;; *) return 1 ;; esac
 }
 want github && github
 want crates && crates_io
@@ -391,5 +397,11 @@ if [ "$ci" = 0 ]; then
   want taps && taps
 fi
 echo
-if [ "$fails" = 0 ]; then echo "**All channels pass.**"; else echo "**$fails channel(s) fail.**"; fi
+if [ "$fails" != 0 ]; then
+  echo "**$fails channel(s) fail.**"
+elif [ "$npm_staged" = 1 ]; then
+  echo "**Checked channels pass; npm is staged and awaiting approval.**"
+else
+  echo "**All checked channels pass.**"
+fi
 [ "$fails" = 0 ]
