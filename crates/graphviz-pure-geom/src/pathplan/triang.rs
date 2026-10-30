@@ -30,18 +30,14 @@ fn between(pa: Ppoint, pb: Ppoint, pc: Ppoint) -> bool {
 }
 
 fn intersects(pa: Ppoint, pb: Ppoint, pc: Ppoint, pd: Ppoint) -> bool {
-    if ccw(pa, pb, pc) == ISON
-        || ccw(pa, pb, pd) == ISON
-        || ccw(pc, pd, pa) == ISON
-        || ccw(pc, pd, pb) == ISON
-    {
+    let c1 = ccw(pa, pb, pc);
+    let c2 = ccw(pa, pb, pd);
+    let c3 = ccw(pc, pd, pa);
+    let c4 = ccw(pc, pd, pb);
+    if c1 == ISON || c2 == ISON || c3 == ISON || c4 == ISON {
         between(pa, pb, pc) || between(pa, pb, pd) || between(pc, pd, pa) || between(pc, pd, pb)
     } else {
-        let c1 = ccw(pa, pb, pc) == ISCCW;
-        let c2 = ccw(pa, pb, pd) == ISCCW;
-        let c3 = ccw(pc, pd, pa) == ISCCW;
-        let c4 = ccw(pc, pd, pb) == ISCCW;
-        (c1 ^ c2) && (c3 ^ c4)
+        ((c1 == ISCCW) ^ (c2 == ISCCW)) && ((c3 == ISCCW) ^ (c4 == ISCCW))
     }
 }
 

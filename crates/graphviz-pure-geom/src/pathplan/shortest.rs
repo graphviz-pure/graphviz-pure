@@ -172,10 +172,12 @@ pub fn pshortestpath(
     // Triangulate.
     let mut tris: Vec<Triangle> = Vec::new();
     let mut pts: Vec<usize> = (0..pnll).collect();
+    let mut coords = Vec::with_capacity(pnll);
     loop {
         let n = pts.len();
         if n > 3 {
-            let coords: Vec<Ppoint> = pts.iter().map(|&k| pnl.pp[k]).collect();
+            coords.clear();
+            coords.extend(pts.iter().map(|&k| pnl.pp[k]));
             let mut found = false;
             for i in 0..n {
                 let ip1 = (i + 1) % n;
