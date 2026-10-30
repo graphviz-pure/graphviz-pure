@@ -68,7 +68,7 @@
    "heap_blocks": 26433,
    "heap_bytes": 3163027,
    "heap_peak_bytes": 798578,
-   "instructions": 2532915376
+   "instructions": 2274674211
   },
   "tests/osage/wild_gv16_graphs_b51_33bcb0.gv -Tsvg": {
    "heap_blocks": 42661,

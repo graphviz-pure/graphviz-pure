@@ -64,14 +64,14 @@ layout/neatogen/adjust.rs	0	0	34	0
 layout/neatogen/bfs.rs	5	0	78	14
 layout/neatogen/call_tri.rs	0	0	2	2
 layout/neatogen/cola.rs	1	0	50	27
-layout/neatogen/conjgrad.rs	0	0	37	6
+layout/neatogen/conjgrad.rs	0	0	32	6
 layout/neatogen/constraint.rs	1	0	50	4
 layout/neatogen/delaunay.rs	0	1	61	8
 layout/neatogen/digcola.rs	3	0	265	65
 layout/neatogen/graphdata.rs	10	0	26	2
 layout/neatogen/legal.rs	0	0	41	6
 layout/neatogen/linalg.rs	0	0	83	24
-layout/neatogen/matrix_ops.rs	0	1	35	4
+layout/neatogen/matrix_ops.rs	0	1	32	1
 layout/neatogen/multispline.rs	4	0	174	78
 layout/neatogen/neatoinit.rs	0	1	24	1
 layout/neatogen/neatosplines.rs	1	0	38	3
@@ -82,7 +82,7 @@ layout/neatogen/routing.rs	0	0	30	7
 layout/neatogen/scadjust.rs	0	0	29	8
 layout/neatogen/sgd.rs	0	0	53	25
 layout/neatogen/smart_ini.rs	8	0	201	36
-layout/neatogen/stress.rs	3	0	95	27
+layout/neatogen/stress.rs	3	0	92	26
 layout/neatogen/stuff.rs	1	0	180	13
 layout/neatogen/voronoi.rs	22	0	250	41
 layout/ortho/maze.rs	0	0	27	9

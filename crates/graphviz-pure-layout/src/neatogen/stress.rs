@@ -398,11 +398,15 @@ pub fn stress_majorization_kd_mkernel(
             for v in dist_accumulator.iter_mut().take(len) {
                 *v = 0.0;
             }
+            // Each accumulator receives dimension 0's two FMAs before dimension
+            // 1's. Within one dimension the lanes are independent, so the inner
+            // loop may vectorize without reordering any sum.
             for c in coords.iter().take(dim) {
-                let ci = c[i];
-                for x in 0..len {
-                    let tmp = (-1.0f32).mul_add(c[i + 1 + x], ci);
-                    dist_accumulator[x] = tmp.mul_add(tmp, dist_accumulator[x]);
+                let (left, right) = c.split_at(i.wrapping_add(1));
+                let ci = left.last().copied().unwrap_or(0.0);
+                for (acc, &cx) in dist_accumulator.iter_mut().zip(&right[..len]) {
+                    let tmp = (-1.0f32).mul_add(cx, ci);
+                    *acc = tmp.mul_add(tmp, *acc);
                 }
             }
             invert_sqrt_vec(&mut dist_accumulator[..len]);
