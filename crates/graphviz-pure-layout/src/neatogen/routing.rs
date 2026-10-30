@@ -49,7 +49,7 @@ fn circumscribed_corner(a: f64, b: f64, i: usize, nsides: usize) -> Point {
 
 /// makeSpline's and makePolyline's `Verbose > 1` line: `<kind> <tail> <head>`.
 pub(crate) fn verbose_edge(g: &LGraph<'_>, kind: &str, e: usize) {
-    if graphviz_pure_core::diag::verbose_byte() > 1
+    if graphviz_pure_core::diag::verbose_gt1()
         && let Some(ed) = g.edges.get(e)
     {
         let [t, h] = graphviz_pure_core::agnameof_buffer([

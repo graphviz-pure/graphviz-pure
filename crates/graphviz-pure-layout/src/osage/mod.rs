@@ -67,7 +67,7 @@ impl Osage<'_, '_> {
 
     /// `layout(g, depth)`.
     fn layout(&mut self, c: Option<usize>, depth: i32) {
-        self.trace(depth, &format!("layout {}", self.gname(c)));
+        self.trace(depth, || format!("layout {}", self.gname(c)));
         let kids = self.tree.kids(c).to_vec();
         let mut nvs = 0usize;
         for &sc in &kids {
@@ -161,7 +161,7 @@ impl Osage<'_, '_> {
             match children[i] {
                 Child::Clust(sc) => {
                     self.g.clusters[sc].bb = bb;
-                    self.trace_bb(depth, &self.gname(Some(sc)), bb);
+                    self.trace_bb(depth, || self.gname(Some(sc)), bb);
                 }
                 Child::Node(n) => {
                     self.g.nodes[n].coord =
@@ -196,7 +196,7 @@ impl Osage<'_, '_> {
         rootbb.ur.x += margin;
         rootbb.ll.y -= margin + border[0].y;
         rootbb.ur.y += margin + border[2].y;
-        self.trace_bb(depth, &self.gname(c), rootbb);
+        self.trace_bb(depth, || self.gname(c), rootbb);
 
         // Translate so that rootbb.LL is the origin.
         for ch in &children {
@@ -206,7 +206,7 @@ impl Osage<'_, '_> {
                     bb.ll = Point::new(bb.ll.x - rootbb.ll.x, bb.ll.y - rootbb.ll.y);
                     bb.ur = Point::new(bb.ur.x - rootbb.ll.x, bb.ur.y - rootbb.ll.y);
                     let bb = *bb;
-                    self.trace_bb(depth, &self.gname(Some(sc)), bb);
+                    self.trace_bb(depth, || self.gname(Some(sc)), bb);
                 }
                 Child::Node(n) => {
                     let p = &mut self.g.nodes[n].coord;
@@ -217,7 +217,7 @@ impl Osage<'_, '_> {
         }
         let ur = Point::new(rootbb.ur.x - rootbb.ll.x, rootbb.ur.y - rootbb.ll.y);
         let bb = BoundingBox::new(0.0, 0.0, ur.x, ur.y);
-        self.trace_bb(depth, &self.gname(c), bb);
+        self.trace_bb(depth, || self.gname(c), bb);
         self.set_bb(c, bb);
     }
 
@@ -230,40 +230,42 @@ impl Osage<'_, '_> {
     }
 
     /// osage's `Verbose > 1` trace: `indent(depth)` and a line.
-    fn trace(&self, depth: i32, line: &str) {
-        if graphviz_pure_core::diag::verbose_byte() > 1 {
+    ///
+    /// C formats the line under `if (Verbose > 1)` (`lib/osage/osageinit.c`), so the
+    /// line is built by `line` only when the trace is on.
+    fn trace(&self, depth: i32, line: impl FnOnce() -> String) {
+        if graphviz_pure_core::diag::verbose_gt1() {
             let indent = "  ".repeat(depth.max(0) as usize);
-            graphviz_pure_core::diag::fprintf_stderr(&format!("{indent}{line}\n"));
+            graphviz_pure_core::diag::fprintf_stderr(&format!("{indent}{}\n", line()));
         }
     }
 
-    fn trace_bb(&self, depth: i32, name: &str, bb: BoundingBox) {
-        let f = |v: f64| graphviz_pure_core::diag::fmt_f(v, 6);
-        self.trace(
-            depth,
-            &format!(
+    fn trace_bb(&self, depth: i32, name: impl FnOnce() -> String, bb: BoundingBox) {
+        self.trace(depth, || {
+            let name = name();
+            let f = |v: f64| graphviz_pure_core::diag::fmt_f(v, 6);
+            format!(
                 "{name} : {} {} {} {}",
                 f(bb.ll.x),
                 f(bb.ll.y),
                 f(bb.ur.x),
                 f(bb.ur.y)
-            ),
-        );
+            )
+        });
     }
 
     fn trace_node(&self, depth: i32, n: usize) {
-        let f = |v: f64| graphviz_pure_core::diag::fmt_f(v, 6);
-        let p = self.g.nodes.get(n).map(|nd| nd.coord).unwrap_or_default();
-        self.trace(
-            depth,
-            &format!("{} : {} {}", self.g.node_agnameof(n).name, f(p.x), f(p.y)),
-        );
+        self.trace(depth, || {
+            let f = |v: f64| graphviz_pure_core::diag::fmt_f(v, 6);
+            let p = self.g.nodes.get(n).map(|nd| nd.coord).unwrap_or_default();
+            format!("{} : {} {}", self.g.node_agnameof(n).name, f(p.x), f(p.y))
+        });
     }
 
     /// `reposition(g, depth)`.
     fn reposition(&mut self, c: Option<usize>, depth: i32) {
         let bb = self.bb(c);
-        self.trace(depth, &format!("reposition {}", self.gname(c)));
+        self.trace(depth, || format!("reposition {}", self.gname(c)));
         if depth > 0 {
             for n in self.members(c) {
                 if self.parent[n] != Some(c) {
@@ -282,7 +284,7 @@ impl Osage<'_, '_> {
                 s.ur.x += bb.ll.x;
                 s.ur.y += bb.ll.y;
                 let s = *s;
-                self.trace_bb(depth, &self.gname(Some(sc)), s);
+                self.trace_bb(depth, || self.gname(Some(sc)), s);
             }
             self.reposition(Some(sc), depth + 1);
         }
