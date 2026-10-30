@@ -83,10 +83,10 @@
    "instructions": 31170883
   },
   "tests/sfdp/gen_grid20x20.gv -Tsvg": {
-   "heap_blocks": 97132,
-   "heap_bytes": 9567460,
+   "heap_blocks": 97178,
+   "heap_bytes": 9553668,
    "heap_peak_bytes": 3066463,
-   "instructions": 975163328
+   "instructions": 976169647
   },
   "tests/twopi/fx_arrows.gv -Tsvg": {
    "heap_blocks": 22546,
