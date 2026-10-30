@@ -3580,6 +3580,55 @@ a -> b [label=\"lbl\"];
     assert_eq!(out.matches("class=\"edge\"").count(), 1, "{out}");
 }
 
+// Issue #661, minimised from fuzz seed 49553. The pack component places the label before its
+// spline route fails. C's root has EDGETYPE_NONE, but `emit_edge` still draws the label whose
+// `set` survived; the port discarded it while translating the component's output.
+#[test]
+fn dot_pack_lost_edge_still_draws_placed_label() {
+    let src = r#"strict digraph "G" {
+packmode="node";
+edge [label="π"];
+"n7" [];
+subgraph "cluster_0" {
+"n3";
+subgraph "cluster_6" {
+"n1";
+}
+}
+"n79";
+"n0" -> "n2";
+"n0" -> "n3";
+"n1" -> "n2";
+"n1" -> "n4" [style="dotted", ltail="cluster_2"];
+"n1" -> "n5" [labelangle="-146", lhead="cluster_3"];
+"n1" -> "n7" [lhead="cluster4"];
+"n1" -> "n11";
+"n2" -> "n3";
+"n2" -> "n5" [dir="none"];
+"n2" -> "n13" [penwidth="3.32"];
+"n3" -> "n1";
+"n3" -> "n9";
+"n3" -> "n11" [lhead="cluster_6"];
+"n5" -> "n13";
+"n6" -> "n0";
+"n6" -> "n1";
+"n6" -> "n7" [penwidth="1.5"];
+"n6" -> "n13";
+"n7" -> "n1" [penwidth="4.1"];
+"n7" -> "n11";
+}
+"#;
+    let (out, err, ok) = run(&["-Kdot", "-Tsvg"], src);
+    assert!(!ok, "the routing error must remain fatal: {err}");
+    assert!(err.contains("Error: lost n1 n2 edge\n"), "{err}");
+    assert!(
+        out.contains(
+            "<text xml:space=\"preserve\" text-anchor=\"middle\" x=\"49\" y=\"-31.8\" font-family=\"Times,serif\" font-size=\"14.00\">π</text>"
+        ),
+        "{out}"
+    );
+}
+
 // Issues #84 and #113 (cause:aux-graph). The flat adjacent edges with a port are laid out in
 // make_flat_adj_edges' aux graph, which declares the main attributes in name order while
 // E_penwidth, E_arrowsz and N_penwidth keep the main graph's symbol ids. #84: E_penwidth's id
