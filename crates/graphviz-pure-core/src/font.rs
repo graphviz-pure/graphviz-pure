@@ -554,7 +554,13 @@ fn get_metrics_for_font_family(font_name: &str) -> &'static FontFamilyMetrics {
         .iter()
         .find(|m| font_in_list_permissive(font_name, m.font_names))
     {
-        FAMILY.with(|cache| *cache.borrow_mut() = Some((font_name.to_string(), metrics)));
+        FAMILY.with(|cache| {
+            let mut cache = cache.borrow_mut();
+            let (name, cached_metrics) = cache.get_or_insert_with(|| (String::new(), metrics));
+            name.clear();
+            name.push_str(font_name);
+            *cached_metrics = metrics;
+        });
         return metrics;
     }
     let warning = format!(
