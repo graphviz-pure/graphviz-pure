@@ -107,6 +107,8 @@ pub struct SplineInfo {
 pub trait SplineGraph {
     fn tail(&self, e: usize) -> usize;
     fn head(&self, e: usize) -> usize;
+    /// `agnameof(agtail(e))` and `agnameof(aghead(e))`.
+    fn edge_names(&self, e: usize) -> [String; 2];
     /// `ND_coord(n)`.
     fn coord(&self, n: usize) -> Point;
     fn lw(&self, n: usize) -> f64;
@@ -476,6 +478,10 @@ pub fn getsplinepoints<S: SplineGraph + ?Sized>(g: &S, e: usize) -> Option<&Vec<
             return Some(sp);
         }
         if g.is_normal_edge(le) {
+            let [t, h] = g.edge_names(e);
+            graphviz_pure_core::diag::agerrorf(&format!(
+                "getsplinepoints: no spline points available for edge ({t},{h})\n"
+            ));
             return None;
         }
         le = g.to_orig(le)?;
@@ -1369,6 +1375,13 @@ impl SplineGraph for LGraph<'_> {
     }
     fn head(&self, e: usize) -> usize {
         self.edges[e].head
+    }
+    fn edge_names(&self, e: usize) -> [String; 2] {
+        graphviz_pure_core::agnameof_buffer([
+            self.node_agnameof(self.tail(e)),
+            self.node_agnameof(self.head(e)),
+        ])
+        .map(|s| s.into_owned())
     }
     fn coord(&self, n: usize) -> Point {
         self.nodes[n].coord

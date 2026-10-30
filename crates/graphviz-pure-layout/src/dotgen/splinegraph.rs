@@ -42,6 +42,13 @@ impl SplineGraph for Dot<'_> {
     fn head(&self, e: usize) -> usize {
         self.edges[e].head
     }
+    fn edge_names(&self, e: usize) -> [String; 2] {
+        graphviz_pure_core::agnameof_buffer([
+            self.node_agnameof(self.tail(e)),
+            self.node_agnameof(self.head(e)),
+        ])
+        .map(|s| s.into_owned())
+    }
     fn coord(&self, n: usize) -> Point {
         self.nodes[n].coord
     }

@@ -3629,6 +3629,99 @@ subgraph "cluster_6" {
     );
 }
 
+// Issue #676, minimised from seed 49553. C's `getsplinepoints` reports the original edge when
+// `place_portlabel` needs points for `labelangle` but routing failed; the port returned None
+// silently (`lib/common/splines.c:1361-1371`).
+#[test]
+fn dot_lost_edge_with_labelangle_reports_missing_spline() {
+    let src = r#"strict digraph "G" {
+rankdir="RL";
+packmode="node";
+edge [label="π", headlabel="then"];
+"n16";
+subgraph "cluster_0" {
+subgraph "cluster1" {
+"n2";
+"n8";
+}
+"n1";
+"n20" [];
+"n32";
+}
+subgraph "cluster_3" {
+"n4";
+"n13";
+}
+"n0" -> "n4";
+"n0" -> "n7";
+"n1" -> "n2";
+"n1" -> "n5" [labelangle="-146", lhead="cluster_3"];
+"n1" -> "n11";
+"n1" -> "n13" [ltail="cluster_3"];
+"n3" -> "n1";
+"n3" -> "n9";
+"n3" -> "n12" [fontcolor="gold"];
+"n4" -> "n7";
+"n4":"nw" -> "n9";
+"n4" -> "n12";
+"n5" -> "n8" [minlen="2"];
+"n5" -> "n11";
+"n5" -> "n13";
+"n6" -> "n0";
+"n13" -> "n6":"sw" [arrowhead="rtee"];
+}
+"#;
+    let (_, err, ok) = run(&["-Kdot", "-Tsvg"], src);
+    assert!(!ok, "the routing error must remain fatal: {err}");
+    assert!(
+        err.contains("Error: getsplinepoints: no spline points available for edge (n1,n5)\n"),
+        "{err}"
+    );
+}
+
+// Issue #676's other symptom: this lost edge has no spline and an unset label, so C's
+// `edge_in_box` rejects it and writes no group (`lib/common/emit.c:2686-2702`). The 1.0.0
+// port emitted an empty edge group; #668's output-state correction must keep it out.
+#[test]
+fn dot_lost_edge_does_not_emit_empty_group() {
+    let src = r#"strict digraph "G" {
+packmode="node";
+edge [label="π", headlabel="then", arrowsize="1.54"];
+"n141";
+subgraph "cluster_0" {
+subgraph "cluster1" {
+subgraph "cluster_2" {
+"n104";
+"n105";
+}
+}
+subgraph "cluster4" {
+"n1";
+"n20";
+}
+}
+subgraph "cluster_3" {
+"n4";
+"n12";
+}
+{
+rank=sink;
+"n105";
+}
+"n0" -> "n2";
+"n1" -> "n7";
+"n2" -> "n3";
+"n3" -> "n11";
+"n3" -> "n12";
+"n4" -> "n7";
+"n4" -> "n12";
+}
+"#;
+    let (out, err, ok) = run(&["-Kdot", "-Tsvg"], src);
+    assert!(!ok, "the routing error must remain fatal: {err}");
+    assert!(!out.contains("<!-- n1&#45;&gt;n7 -->"), "{out}");
+}
+
 // Issues #84 and #113 (cause:aux-graph). The flat adjacent edges with a port are laid out in
 // make_flat_adj_edges' aux graph, which declares the main attributes in name order while
 // E_penwidth, E_arrowsz and N_penwidth keep the main graph's symbol ids. #84: E_penwidth's id
