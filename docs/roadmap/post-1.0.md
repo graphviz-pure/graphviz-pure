@@ -17,6 +17,9 @@ release-profile evaluation and CLI stripping (#540, #546). Their original measur
 remain historical; they are not pending work. The declared MSRV is now Rust 1.88 and CI tests it
 (#504, #565).
 
+The first 1.x goal, 10× faster than 1.0, has its own metric, baseline and budget:
+[`docs/perf/1.x-10x.md`](../perf/1.x-10x.md) (milestone `1.x: 10× faster`).
+
 ## Contents
 
 1. [Working assumption](#working-assumption-the-bytes-dont-move)
