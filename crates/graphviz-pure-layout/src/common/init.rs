@@ -130,6 +130,46 @@ pub fn do_graph_label(g: &mut LGraph<'_>, c: usize) {
     cl.label_pos = label_pos;
 }
 
+/// Consumes a measurement, retaining only the fields used during layout.
+/// C: lib/common/utils.c:common_init_node
+pub(crate) fn node_from_geometry(
+    nd: &NodeData,
+    mut geom: graphviz_pure_geom::node_size::NodeGeometry,
+    ndim: usize,
+) -> Result<LNode> {
+    let shape = NodeShape::from_geometry(nd, &mut geom)?;
+    let (lw, rw, ht) = geom.nodesize(false);
+    let xlabel = geom.xlabel.as_ref().map(|l| TextLabel {
+        // lp->text: what addXLabels' `-v2` trace prints
+        text: graphviz_pure_geom::label_text(l, nd.attrs.get("xlabel").map_or("", String::as_str)),
+        dimen: l.dimen,
+        pos: Point::default(),
+        set: false,
+        fontsize: l.font_size,
+        fontname: l.font_name.clone(),
+    });
+    let node = LNode {
+        pos: vec![0.0; ndim],
+        coord: Point::default(),
+        width: geom.width,
+        height: geom.height,
+        lw,
+        rw,
+        ht,
+        pinned: 0,
+        id: 0,
+        heapindex: -1,
+        hops: 0,
+        dist: 0.0,
+        mark: false,
+        shape,
+        xlabel,
+        clust: None,
+        lim: -1,
+    };
+    Ok(node)
+}
+
 impl<'a> LGraph<'a> {
     /// `graph_init` + `common_init_node` + `common_init_edge` for `graph`,
     /// with `ndim` layout dimensions and `default_edge_type` for `setEdgeType`.
@@ -146,7 +186,7 @@ impl<'a> LGraph<'a> {
         default_edge_type: EdgeType,
         node_init: impl FnMut(&NodeData, &mut LNode),
     ) -> Result<Self> {
-        let mut lg = Self::new_unported_with(graph, ndim, default_edge_type, node_init)?;
+        let mut lg = Self::new_unported_with(graph, ndim, default_edge_type, node_init, None)?;
         lg.common_init_edges()?;
         Ok(lg)
     }
@@ -200,7 +240,19 @@ impl<'a> LGraph<'a> {
         ndim: usize,
         default_edge_type: EdgeType,
     ) -> Result<Self> {
-        Self::new_unported_with(graph, ndim, default_edge_type, |_, _| {})
+        Self::new_unported_with(graph, ndim, default_edge_type, |_, _| {}, None)
+    }
+
+    /// Reuse `finishNode`'s measurements without repeating `common_init_node` sizing.
+    /// Slots follow node insertion order; nodes not visited by `walkTree` are sized normally.
+    /// C: lib/patchwork/patchwork.c:finishNode; lib/common/utils.c:common_init_node
+    pub(crate) fn new_unported_from_nodes(
+        graph: &'a Graph,
+        ndim: usize,
+        default_edge_type: EdgeType,
+        initialized: Vec<Option<LNode>>,
+    ) -> Result<Self> {
+        Self::new_unported_with(graph, ndim, default_edge_type, |_, _| {}, Some(initialized))
     }
 
     fn new_unported_with(
@@ -208,6 +260,7 @@ impl<'a> LGraph<'a> {
         ndim: usize,
         default_edge_type: EdgeType,
         mut node_init: impl FnMut(&NodeData, &mut LNode),
+        initialized: Option<Vec<Option<LNode>>>,
     ) -> Result<Self> {
         let gattrs = &graph.graph_attrs;
         // `GD_nodesep = POINTS(…)`, an `int`: 1e300 inches saturates at INT_MAX points.
@@ -251,45 +304,36 @@ impl<'a> LGraph<'a> {
         };
 
         let env = graphviz_pure_geom::NodeSizeEnv::from_graph_attrs(graph, gattrs);
-        let mut nodes = Vec::with_capacity(graph.nodes.len());
-        for nd in &graph.nodes {
-            let mut geom = graphviz_pure_geom::node_geometry(nd, &env)?;
-            let shape = NodeShape::from_geometry(nd, &mut geom)?;
-            let (lw, rw, ht) = geom.nodesize(false);
-            let xlabel = geom.xlabel.as_ref().map(|l| TextLabel {
-                // lp->text: what addXLabels' `-v2` trace prints
-                text: graphviz_pure_geom::label_text(
-                    l,
-                    nd.attrs.get("xlabel").map_or("", String::as_str),
-                ),
-                dimen: l.dimen,
-                pos: Point::default(),
-                set: false,
-                fontsize: l.font_size,
-                fontname: l.font_name.clone(),
-            });
-            let mut node = LNode {
-                pos: vec![0.0; ndim],
-                coord: Point::default(),
-                width: geom.width,
-                height: geom.height,
-                lw,
-                rw,
-                ht,
-                pinned: 0,
-                id: 0,
-                heapindex: -1,
-                hops: 0,
-                dist: 0.0,
-                mark: false,
-                shape,
-                xlabel,
-                clust: None,
-                lim: -1,
-            };
-            node_init(nd, &mut node);
-            nodes.push(node);
-        }
+        let nodes = if let Some(mut initialized) = initialized {
+            for (nd, slot) in graph.nodes.iter().zip(&mut initialized) {
+                let node = match slot {
+                    Some(node) => node,
+                    None => slot.insert(node_from_geometry(
+                        nd,
+                        graphviz_pure_geom::node_geometry(nd, &env)?,
+                        ndim,
+                    )?),
+                };
+                node_init(nd, node);
+            }
+            // FilterMap supports Vec's in-place collection; Flatten currently
+            // allocates and grows a second array for these Option<LNode> slots.
+            #[allow(clippy::filter_map_identity)]
+            let nodes = initialized
+                .into_iter()
+                .filter_map(std::convert::identity)
+                .collect();
+            nodes
+        } else {
+            let mut nodes = Vec::with_capacity(graph.nodes.len());
+            for nd in &graph.nodes {
+                let mut node =
+                    node_from_geometry(nd, graphviz_pure_geom::node_geometry(nd, &env)?, ndim)?;
+                node_init(nd, &mut node);
+                nodes.push(node);
+            }
+            nodes
+        };
 
         let mut out = vec![Vec::new(); graph.nodes.len()];
         let mut inn = vec![Vec::new(); graph.nodes.len()];
@@ -560,6 +604,69 @@ pub fn edge_type_of(s: &str, dflt: EdgeType) -> EdgeType {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn retained_geometry_matches_remeasurement_including_unvisited_nodes() {
+        let mut graph = Graph::new("G", GraphKind::Directed, false);
+        for (name, label, fontsize, peripheries) in [
+            ("one", "first\\nsecond", "14", "2"),
+            ("two", "\\N", "8.5", "0"),
+            ("three", "plain", "21", "1"),
+            ("unvisited", "fallback", "11", "3"),
+        ] {
+            let id = graph.ensure_node(name);
+            let attrs = &mut graph.nodes[id.0 as usize].attrs;
+            for (key, value) in [
+                ("shape", "box"),
+                ("label", label),
+                ("xlabel", "external\\N"),
+                ("fontsize", fontsize),
+                ("peripheries", peripheries),
+            ] {
+                attrs.set(key, value.to_owned(), false);
+            }
+        }
+        let env = graphviz_pure_geom::NodeSizeEnv::from_graph(&graph);
+        let mut initialized = vec![None; graph.nodes.len()];
+        // A walk differing from insertion order, with a node outside the walk.
+        for i in [2, 0, 1] {
+            initialized[i] = Some(
+                node_from_geometry(
+                    &graph.nodes[i],
+                    graphviz_pure_geom::node_geometry(&graph.nodes[i], &env).unwrap(),
+                    2,
+                )
+                .unwrap(),
+            );
+        }
+        let expected = LGraph::new_unported(&graph, 2, EdgeType::Line).unwrap();
+        let actual =
+            LGraph::new_unported_from_nodes(&graph, 2, EdgeType::Line, initialized).unwrap();
+        for (actual, expected) in actual.nodes.iter().zip(&expected.nodes) {
+            assert_eq!(actual.shape, expected.shape);
+            match (&actual.xlabel, &expected.xlabel) {
+                (Some(actual), Some(expected)) => {
+                    assert_eq!(actual.text, expected.text);
+                    assert_eq!(actual.fontname, expected.fontname);
+                    assert_eq!(actual.dimen.x.to_bits(), expected.dimen.x.to_bits());
+                    assert_eq!(actual.dimen.y.to_bits(), expected.dimen.y.to_bits());
+                    assert_eq!(actual.fontsize.to_bits(), expected.fontsize.to_bits());
+                    assert_eq!(actual.set, expected.set);
+                }
+                (None, None) => {}
+                _ => panic!("external label presence changed"),
+            }
+            for (actual, expected) in [
+                (actual.width, expected.width),
+                (actual.height, expected.height),
+                (actual.lw, expected.lw),
+                (actual.rw, expected.rw),
+                (actual.ht, expected.ht),
+            ] {
+                assert_eq!(actual.to_bits(), expected.to_bits());
+            }
+        }
+    }
 
     #[test]
     fn detached_result_outlives_source_and_matches_borrowed_write_back() {
