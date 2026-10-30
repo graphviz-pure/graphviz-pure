@@ -1,0 +1,15 @@
+{
+  "source_commit": "04792fc34166784d942610370b17d2f35d664de4",
+  "target": "x86_64-unknown-linux-musl",
+  "rustc": "rustc 1.99.1 (58cf8f9c3 2026-10-13)\nbinary: rustc\ncommit-hash: 58cf8f9c35b355199727627d07ae34a4e2846d67\ncommit-date: 2026-10-13\nhost: x86_64-unknown-linux-gnu\nrelease: 1.99.1\nLLVM version: 23.1.1\n",
+  "llvm_profdata": "LLVM (http://llvm.org/):\n  LLVM version 23.1.1-rust-1.99.1-stable\n  Optimized build.\n",
+  "base_rustflags": [
+    "-C",
+    "target-cpu=x86-64-v3"
+  ],
+  "linker": "target default",
+  "training_commands": 276,
+  "training_sha256": "9c845a7d9a84997aea7be43ae62f3ca4d473b8dea47917ba9957dfae4aeed493",
+  "profile_sha256": "cc8267a184ce24d926469300204dc358c515ad32813b874826bef10464b0135f",
+  "binary_sha256": "e67660093f166ec0ae8dec4d681c535a8ba169b2edb7011125fa17f63ec8b588"
+}
