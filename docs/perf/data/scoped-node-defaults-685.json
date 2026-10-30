@@ -1,0 +1,283 @@
+{
+ "master": "a0eb3a1a",
+ "after_code": "8ad52a44",
+ "build": "release musl x86-64-v3, no PGO",
+ "cases": {
+  "patchwork5000-svg": {
+   "C": {
+    "wall_ms": [
+     80.84015297936276,
+     69.39446600154042,
+     71.36611803434789
+    ],
+    "uptime": "17:26:15 up 5 days, 14:08,  2 users,  load average: 9.67, 12.84, 24.50"
+   },
+   "1.0": {
+    "instructions": 698504488,
+    "heap_blocks": 871641,
+    "heap_bytes": 77128599,
+    "heap_peak_bytes": 22403011,
+    "wall_ms": [
+     142.3980740364641,
+     142.16319198021665,
+     140.85644303122535
+    ],
+    "uptime": "17:30:28 up 5 days, 14:12,  2 users,  load average: 7.58, 10.49, 20.75"
+   },
+   "master": {
+    "instructions": 355848424,
+    "heap_blocks": 323365,
+    "heap_bytes": 40030439,
+    "heap_peak_bytes": 17149045,
+    "wall_ms": [
+     73.01988097606227,
+     74.44070902420208,
+     76.20382495224476
+    ],
+    "uptime": "22:44:29 up 5 days, 19:26,  2 users,  load average: 9.09, 7.28, 6.44"
+   },
+   "after": {
+    "instructions": 343578076,
+    "heap_blocks": 308365,
+    "heap_bytes": 37275439,
+    "heap_peak_bytes": 17149045,
+    "wall_ms": [
+     75.16149699222296,
+     71.67699100682512,
+     74.03527898713946
+    ],
+    "uptime": "22:44:41 up 5 days, 19:26,  2 users,  load average: 8.84, 7.29, 6.45"
+   }
+  },
+  "patchwork20000-svg": {
+   "1.0": {
+    "instructions": 2993906072,
+    "heap_blocks": 3521804,
+    "heap_bytes": 309831866,
+    "heap_peak_bytes": 89862694,
+    "wall_ms": [
+     633.4629299817607,
+     629.2038380051963,
+     635.0128430058248
+    ],
+    "uptime": "17:33:02 up 5 days, 14:14,  2 users,  load average: 11.67, 10.94, 19.32"
+   },
+   "C": {
+    "wall_ms": [
+     292.86485404009,
+     301.2696439982392,
+     300.54138699779287
+    ],
+    "uptime": "17:33:04 up 5 days, 14:14,  2 users,  load average: 11.67, 10.94, 19.32"
+   },
+   "master": {
+    "instructions": 1590072828,
+    "heap_blocks": 1320969,
+    "heap_bytes": 161107879,
+    "heap_peak_bytes": 68833728,
+    "wall_ms": [
+     291.58199700759724,
+     287.11290401406586,
+     286.5105390083045
+    ],
+    "uptime": "22:45:35 up 5 days, 19:27,  2 users,  load average: 10.02, 7.81, 6.67"
+   },
+   "after": {
+    "instructions": 1537036434,
+    "heap_blocks": 1260969,
+    "heap_bytes": 150087879,
+    "heap_peak_bytes": 68833728,
+    "wall_ms": [
+     306.1622059904039,
+     297.70023096352816,
+     306.6349950386211
+    ],
+    "uptime": "22:46:25 up 5 days, 19:28,  2 users,  load average: 8.44, 7.74, 6.71"
+   }
+  },
+  "patchwork20000-plain": {
+   "1.0": {
+    "instructions": 2950025203,
+    "heap_blocks": 3332957,
+    "heap_bytes": 280297593,
+    "heap_peak_bytes": 75862376,
+    "wall_ms": [
+     550.7782870554365,
+     560.0634739967063,
+     558.4505019942299
+    ],
+    "uptime": "17:57:11 up 5 days, 14:39,  2 users,  load average: 5.99, 9.80, 12.98"
+   },
+   "C": {
+    "wall_ms": [
+     217.71345799788833,
+     210.21083503728732,
+     208.75451096799225
+    ],
+    "uptime": "17:57:13 up 5 days, 14:39,  2 users,  load average: 5.99, 9.80, 12.98"
+   },
+   "master": {
+    "instructions": 1496454648,
+    "heap_blocks": 1294275,
+    "heap_bytes": 132268108,
+    "heap_peak_bytes": 55296355,
+    "wall_ms": [
+     276.4978249906562,
+     279.5958769856952,
+     275.8970559807494
+    ],
+    "uptime": "22:47:20 up 5 days, 19:29,  2 users,  load average: 7.28, 7.55, 6.71"
+   },
+   "after": {
+    "instructions": 1443434855,
+    "heap_blocks": 1234275,
+    "heap_bytes": 121248108,
+    "heap_peak_bytes": 55296355,
+    "wall_ms": [
+     291.8767619994469,
+     275.0496549997479,
+     274.17050598887727
+    ],
+    "uptime": "22:48:10 up 5 days, 19:30,  2 users,  load average: 7.75, 7.67, 6.80"
+   }
+  },
+  "osage20000-svg": {
+   "1.0": {
+    "instructions": 3085264297,
+    "heap_blocks": 3603171,
+    "heap_bytes": 295483646,
+    "heap_peak_bytes": 87382259,
+    "wall_ms": [
+     589.7923960001208,
+     572.4251709762029,
+     588.0543760140426
+    ],
+    "uptime": "18:00:29 up 5 days, 14:42,  2 users,  load average: 4.55, 7.29, 11.37"
+   },
+   "C": {
+    "wall_ms": [
+     242.41422401973978,
+     232.64221101999283,
+     232.26897098356858
+    ],
+    "uptime": "18:00:30 up 5 days, 14:42,  2 users,  load average: 4.55, 7.29, 11.37"
+   },
+   "master": {
+    "instructions": 1451483993,
+    "heap_blocks": 1308586,
+    "heap_bytes": 151915980,
+    "heap_peak_bytes": 66353262,
+    "wall_ms": [
+     285.51171597791836,
+     272.12694397894666,
+     289.1908000456169
+    ],
+    "uptime": "22:49:02 up 5 days, 19:30,  2 users,  load average: 7.15, 7.49, 6.78"
+   },
+   "after": {
+    "instructions": 1398465261,
+    "heap_blocks": 1248586,
+    "heap_bytes": 140895980,
+    "heap_peak_bytes": 66353262,
+    "wall_ms": [
+     270.0681450078264,
+     276.0946979979053,
+     273.11434800503775
+    ],
+    "uptime": "22:49:50 up 5 days, 19:31,  2 users,  load average: 9.04, 7.92, 6.96"
+   }
+  },
+  "twopi20000-svg": {
+   "1.0": {
+    "instructions": 4457113382,
+    "heap_blocks": 5639400,
+    "heap_bytes": 383353093,
+    "heap_peak_bytes": 117871270,
+    "wall_ms": [
+     888.456718006637,
+     890.756684995722,
+     894.4666690076701
+    ],
+    "uptime": "18:04:25 up 5 days, 14:46,  2 users,  load average: 4.37, 6.07, 9.98"
+   },
+   "C": {
+    "wall_ms": [
+     703.4208960249089,
+     687.3703189776279,
+     704.3400219990872
+    ],
+    "uptime": "18:04:27 up 5 days, 14:46,  2 users,  load average: 4.37, 6.07, 9.98"
+   },
+   "master": {
+    "instructions": 2027351013,
+    "heap_blocks": 1885628,
+    "heap_bytes": 213768609,
+    "heap_peak_bytes": 95402345,
+    "wall_ms": [
+     428.06484003085643,
+     431.67305999668315,
+     434.0492719784379
+    ],
+    "uptime": "22:50:42 up 5 days, 19:32,  2 users,  load average: 7.60, 7.75, 6.96"
+   },
+   "after": {
+    "instructions": 1929438983,
+    "heap_blocks": 1785628,
+    "heap_bytes": 202548609,
+    "heap_peak_bytes": 95402345,
+    "wall_ms": [
+     438.372528005857,
+     430.7297170162201,
+     444.025459990371
+    ],
+    "uptime": "22:51:38 up 5 days, 19:33,  2 users,  load average: 7.93, 7.80, 7.02"
+   }
+  },
+  "b29-svg": {
+   "1.0": {
+    "instructions": 7807775588,
+    "heap_blocks": 349194,
+    "heap_bytes": 149507031,
+    "heap_peak_bytes": 15660817,
+    "wall_ms": [
+     1351.8722010194324,
+     1321.262871962972,
+     1421.400037012063
+    ],
+    "uptime": "18:06:08 up 5 days, 14:48,  2 users,  load average: 3.75, 5.53, 9.39"
+   },
+   "C": {
+    "wall_ms": [
+     1663.1855550222099,
+     1638.0137449596077,
+     1653.0590459587984
+    ],
+    "uptime": "18:06:13 up 5 days, 14:48,  2 users,  load average: 3.69, 5.48, 9.36"
+   },
+   "master": {
+    "instructions": 3746423417,
+    "heap_blocks": 152708,
+    "heap_bytes": 52607067,
+    "heap_peak_bytes": 16703435,
+    "wall_ms": [
+     655.2202100283466,
+     644.2645919742063,
+     612.742887053173
+    ],
+    "uptime": "22:52:03 up 5 days, 19:33,  2 users,  load average: 7.20, 7.64, 6.99"
+   },
+   "after": {
+    "instructions": 3745455533,
+    "heap_blocks": 152378,
+    "heap_bytes": 52546457,
+    "heap_peak_bytes": 16703435,
+    "wall_ms": [
+     658.205847023055,
+     640.0842139846645,
+     647.4628319847398
+    ],
+    "uptime": "22:52:28 up 5 days, 19:34,  2 users,  load average: 6.93, 7.54, 6.97"
+   }
+  }
+ }
+}
