@@ -188,12 +188,6 @@ pub fn fmt_g_into(out: &mut String, v: f64, prec: usize) {
 /// The `%g` the port printed before the fast path existed, kept as the generic formatter:
 /// the fallback for the values the fast path does not cover, and the oracle the
 /// differential test compares with.
-///
-/// The exponent after rounding to `p` significant digits. Rust's `LowerExp` writes it as
-/// `d.dddde<exp>`; C writes the exponent with a sign and two digits. The exponent is read
-/// as the code before this one read it: the text after the last `e`, and 0 when there is
-/// no `e` or it does not parse. Rust's `LowerExp` always writes one, so the fallback is
-/// the fixed form, as it was.
 fn fmt_g_generic_into(out: &mut String, v: f64, p: usize) {
     if v.is_nan() {
         // macOS libc prints `nan` for either sign.
@@ -208,6 +202,11 @@ fn fmt_g_generic_into(out: &mut String, v: f64, p: usize) {
         out.push_str(if v.is_sign_negative() { "-0" } else { "0" });
         return;
     }
+    // The exponent after rounding to `p` significant digits. Rust's `LowerExp` writes it as
+    // `d.dddde<exp>`; C writes the exponent with a sign and two digits. The exponent is read
+    // as the code before this one read it: the text after the last `e`, and 0 when there is
+    // no `e` or it does not parse. Rust's `LowerExp` always writes one, so the fallback is
+    // the fixed form, as it was.
     let start = out.len();
     let _ = write!(out, "{:.*e}", p - 1, v);
     let epos = out[start..].rfind('e').map(|p| start + p);
@@ -233,10 +232,9 @@ fn fmt_g_generic_into(out: &mut String, v: f64, p: usize) {
 /// The digits are a `u64`, so `10^p` has to fit in one: it does up to `p = 17`.
 const G_MAX_PREC: usize = 17;
 
-/// The buffer the `%g` fast path writes into: a sign, the digits (at most
-/// [`G_MAX_PREC`]), a point, the zeros before the fraction (at most three) and the
-/// exponent with its sign and its digits (at most three).
-const G_BUF: usize = 48;
+/// The buffer the `%g` fast path writes the exponent's digits into: a `u32`'s magnitude has
+/// ten digits at most.
+const G_EXP_DIGITS: usize = 10;
 
 /// The powers of ten the `%g` fast path scales by: `10^p` for `p` up to [`G_MAX_PREC`].
 const G_POW10: [u64; G_MAX_PREC + 1] = [
@@ -340,85 +338,83 @@ fn fmt_g_fast_into(out: &mut String, v: f64, p: usize) -> bool {
         (x0, rounded)
     };
     // The digits, most significant first.
-    let mut digits = [0u8; G_MAX_PREC];
+    let mut digits = [' '; G_MAX_PREC];
     let mut q = value;
     let mut i = p;
     while i > 0 {
         i -= 1;
-        digits[i] = b'0' + (q % 10) as u8;
+        digits[i] = char::from(b'0' + (q % 10) as u8);
         q /= 10;
     }
-    let mut buf = [0u8; G_BUF];
-    let mut len = 0;
     if v.is_sign_negative() {
-        buf[len] = b'-';
-        len += 1;
+        out.push('-');
     }
     if x < -4 || x >= p as i32 {
         // The scientific form: the first digit, the rest of the digits without their
-        // trailing zeros, and the exponent with a sign and two digits.
-        buf[len] = digits[0];
-        len += 1;
+        // trailing zeros, and the exponent with a sign and at least two digits.
+        out.push(digits[0]);
         let mut end = p;
-        while end > 1 && digits[end - 1] == b'0' {
+        while end > 1 && digits[end - 1] == '0' {
             end -= 1;
         }
         if end > 1 {
-            buf[len] = b'.';
-            len += 1;
-            buf[len..len + end - 1].copy_from_slice(&digits[1..end]);
-            len += end - 1;
+            out.push('.');
+            out.extend(digits[1..end].iter().copied());
         }
-        buf[len] = b'e';
-        len += 1;
-        buf[len] = if x < 0 { b'-' } else { b'+' };
-        len += 1;
-        let exp = x.unsigned_abs();
-        if exp >= 100 {
-            buf[len] = b'0' + (exp / 100) as u8;
-            len += 1;
-        } else {
-            buf[len] = b'0' + (exp / 10) as u8;
-            len += 1;
-        }
-        buf[len] = b'0' + (exp % 10) as u8;
-        len += 1;
+        out.push('e');
+        out.push(if x < 0 { '-' } else { '+' });
+        let mut exp_digits = [' '; G_EXP_DIGITS];
+        let n = exponent_digits(x.unsigned_abs(), &mut exp_digits);
+        out.extend(exp_digits[..n].iter().copied());
     } else if x >= 0 {
         // The fixed form: the integer part and the fraction without its trailing zeros.
         let int_len = x as usize + 1;
-        buf[len..len + int_len].copy_from_slice(&digits[..int_len]);
-        len += int_len;
+        out.extend(digits[..int_len].iter().copied());
         let mut end = p;
-        while end > int_len && digits[end - 1] == b'0' {
+        while end > int_len && digits[end - 1] == '0' {
             end -= 1;
         }
         if end > int_len {
-            buf[len] = b'.';
-            len += 1;
-            buf[len..len + end - int_len].copy_from_slice(&digits[int_len..end]);
-            len += end - int_len;
+            out.push('.');
+            out.extend(digits[int_len..end].iter().copied());
         }
     } else {
         // The fixed form below one: a zero, a point, the zeros before the first digit and
         // the digits without their trailing zeros.
-        buf[len] = b'0';
-        len += 1;
-        buf[len] = b'.';
-        len += 1;
+        out.push('0');
+        out.push('.');
         for _ in 0..(-x - 1) {
-            buf[len] = b'0';
-            len += 1;
+            out.push('0');
         }
         let mut end = p;
-        while end > 0 && digits[end - 1] == b'0' {
+        while end > 0 && digits[end - 1] == '0' {
             end -= 1;
         }
-        buf[len..len + end].copy_from_slice(&digits[..end]);
-        len += end;
+        out.extend(digits[..end].iter().copied());
     }
-    // The buffer holds ASCII: a sign, digits, a point, an `e` and an exponent.
-    out.push_str(&String::from_utf8_lossy(&buf[..len]));
     true
+}
+
+/// C's `%g` exponent: the digits of the magnitude, most significant first, at least two
+/// of them (`e+07`, `e+123`). The digits go into `digits`, which holds ten of them.
+fn exponent_digits(exp: u32, digits: &mut [char; G_EXP_DIGITS]) -> usize {
+    let mut n = 0;
+    let mut m = exp;
+    loop {
+        digits[n] = char::from(b'0' + (m % 10) as u8);
+        n += 1;
+        m /= 10;
+        if m == 0 {
+            break;
+        }
+    }
+    // C writes the exponent with two digits at least.
+    if n == 1 {
+        digits[1] = '0';
+        n = 2;
+    }
+    digits[..n].reverse();
+    n
 }
 
 /// The decimal exponent of `m·2^e`: `floor(log10(m·2^e))`, to within one.
@@ -1205,6 +1201,27 @@ mod tests {
                 fmt_g_into(&mut got, v, prec);
                 assert_eq!(got, want, "bits {:#x} ({v:?}) at {prec}", v.to_bits());
             }
+        }
+    }
+
+    /// The exponent of the scientific form: at least two digits, and all the digits of a
+    /// three-digit exponent.
+    #[test]
+    fn the_exponent_keeps_all_its_digits() {
+        let mut digits = [' '; G_EXP_DIGITS];
+        for (exp, want) in [
+            (0u32, "00"),
+            (5, "05"),
+            (7, "07"),
+            (42, "42"),
+            (99, "99"),
+            (100, "100"),
+            (123, "123"),
+            (308, "308"),
+        ] {
+            let n = exponent_digits(exp, &mut digits);
+            let got: String = digits[..n].iter().collect();
+            assert_eq!(got, want, "exponent {exp}");
         }
     }
 
