@@ -292,7 +292,10 @@ impl QuadTree {
         &self.children[first..][..self.nq]
     }
 
-    fn get_supernodes_internal(
+    /// C: lib/sparse/QuadTree.c:QuadTree_get_supernodes_internal
+    /// DIM is 2 for the fixed 2D walk, or 0 for the runtime-dimensional walk.
+    /// Both visit the same cells and retain point_distance's serial FMA chain.
+    fn get_supernodes_internal<const DIM: usize>(
         &self,
         qt: Option<usize>,
         bh: f64,
@@ -303,7 +306,7 @@ impl QuadTree {
     ) {
         *counts += 1.0;
         let Some(q) = qt else { return };
-        let dim = self.dim;
+        let dim = if DIM == 0 { self.dim } else { DIM };
         let c = &self.cells[q];
         let mut l = c.l;
         while let Some(p) = l {
@@ -325,7 +328,7 @@ impl QuadTree {
                 out.distances.push(point_distance(average, pt, dim));
             } else {
                 for &child in self.children(first) {
-                    self.get_supernodes_internal(child, bh, pt, nodeid, out, counts);
+                    self.get_supernodes_internal::<DIM>(child, bh, pt, nodeid, out, counts);
                 }
             }
         }
@@ -344,7 +347,13 @@ impl QuadTree {
         out.center.reserve(self.coords.len());
         out.wgts.reserve(self.points.len());
         out.distances.reserve(self.points.len());
-        self.get_supernodes_internal(Some(0), bh, pt, nodeid, out, &mut counts);
+        // Keep one recursive monomorph on wasm, where module size matters.
+        #[cfg(not(target_family = "wasm"))]
+        if self.dim == 2 {
+            self.get_supernodes_internal::<2>(Some(0), bh, pt, nodeid, out, &mut counts);
+            return counts;
+        }
+        self.get_supernodes_internal::<0>(Some(0), bh, pt, nodeid, out, &mut counts);
         counts
     }
 
@@ -600,6 +609,56 @@ mod supernode_tests {
                         ),
                         capacity
                     );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn fixed_2d_query_matches_original_walk_on_weighted_and_degenerate_trees() {
+        let mut seed = 0x1234_5678_9abc_def0u64;
+        for dim in [1, 2, 3] {
+            for depth in [0, 1, 3, 10] {
+                for duplicate in [false, true] {
+                    let mut tree = QuadTree::new(dim, &vec![0.0; dim], 2.0, depth);
+                    let mut points = Vec::new();
+                    for id in 0..37 {
+                        let coordinates: Vec<_> = (0..dim)
+                            .map(|_| {
+                                seed = seed.wrapping_mul(6364136223846793005).wrapping_add(1);
+                                if duplicate {
+                                    -0.0
+                                } else {
+                                    ((seed >> 32) % 1024) as f64 / 512.0 - 1.0
+                                }
+                            })
+                            .collect();
+                        tree.add(&coordinates, (id % 5 + 1) as f64 * 0.25, id);
+                        points.push(coordinates);
+                    }
+                    points.push(vec![1.5; dim]);
+                    let mut actual = Supernodes::default();
+                    for (nodeid, pt) in points.iter().enumerate() {
+                        for bh in [0.0, 0.6, 100.0, f64::INFINITY] {
+                            let mut expected = Supernodes::default();
+                            let mut counts = 0.0;
+                            reference(&tree, Some(0), bh, pt, nodeid, &mut expected, &mut counts);
+                            assert_eq!(
+                                tree.get_supernodes(bh, pt, nodeid, &mut actual).to_bits(),
+                                counts.to_bits()
+                            );
+                            for (a, b) in [
+                                (&actual.center, &expected.center),
+                                (&actual.wgts, &expected.wgts),
+                                (&actual.distances, &expected.distances),
+                            ] {
+                                assert_eq!(
+                                    a.iter().map(|v| v.to_bits()).collect::<Vec<_>>(),
+                                    b.iter().map(|v| v.to_bits()).collect::<Vec<_>>()
+                                );
+                            }
+                        }
+                    }
                 }
             }
         }
