@@ -35,7 +35,7 @@ use super::{Ctx, NsGraph, dfs_range_impl, exchange_tree_edges, seq, slack, tree_
 
 /// Selector: graphs with fewer nodes than this keep C's search. Their subtree walks are short,
 /// and the cut sets' storage would not pay for itself.
-const CUT_SETS_MIN_NODES: usize = 1500;
+const CUT_SETS_MIN_NODES: usize = 2500;
 
 /// Selector: the largest estimated cost ratio, (mean tree-cycle length × mean cut-set size) /
 /// node count, for which the cut sets are faster than C's walks. Tuned on the corpus

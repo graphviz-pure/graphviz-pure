@@ -199,7 +199,7 @@ fn the_selector_prefers_c_on_small_graphs() {
 #[test]
 fn the_selector_prefers_cut_sets_on_large_layered_graphs() {
     // dot's position graphs: long rank chains joined by short edges, so tree cycles are short
-    let (layers, width) = (40, 60);
+    let (layers, width) = (50, 60);
     let mut g = NsData {
         nodes: vec![NsNode::default(); layers * width],
         nlist: (0..layers * width).collect(),

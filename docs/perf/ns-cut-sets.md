@@ -208,9 +208,41 @@ non-tree edges and `n` nodes, the cut sets then hold about `l·m` entries and a 
 `l·(l·m/n)`. It takes the cut-set path when `n ≥ CUT_SETS_MIN_NODES` and `l·(l·m/n)/n ≤
 CUT_SETS_MAX_COST`. Graphs it routes to C's functions pay only the sample walks.
 
-The constants were tuned on the corpus (`tests/wild`, every network simplex run of every graph
-that dot lays out, and the synthetic DAGs), timing each run on both paths:
-SELECTOR-TUNING
+The constants were tuned by timing every network simplex run of the corpus on both paths: three
+runs each, the fastest kept. The corpus is `tests/wild`, `tests/fixtures`, the 43 neato graphs
+with an `ortho` overlap mode (whose constraint graphs `constraint.c` ranks), and
+`dot_dag_1000`/`dot_dag_5000`. That is 1,885 runs from 594 graphs:
+
+| selector | total time | runs on cut sets |
+| :-- | --: | :-- |
+| C's functions everywhere | 2,530 ms | none |
+| cut sets everywhere | 622 ms | all |
+| the faster of the two, run by run | 512 ms | |
+| **`CUT_SETS_MIN_NODES` = 2500, `CUT_SETS_MAX_COST` = 1.0** | **529 ms** | dot_dag_1000 (position), dot_dag_5000 (rank, position), b29 (position) |
+| 1000 nodes, cost 2.0 | 517 ms | the above, plus b143, b106, b124, cairo, ngk10_4 ×2, badvoro and dot_dag_1000 (rank) |
+
+The difference between these selectors is about 12 ms of the 2.5 s, so the constants are chosen
+so that no run gets slower. Below 2,500 nodes, C's walks are short, and the runs there are
+slower on cut sets (rechecked with the final code):
+
+| run | nodes | cost | C's functions | cut sets |
+| :-- | --: | --: | --: | --: |
+| b106, position | 2,231 | 0.95 | 27.2 ms | 31.4 ms |
+| b124, position | 1,950 | 0.51 | 12.0 ms | 11.4 ms |
+| ngk10_4, position | 1,209 | 0.71 | 3.5 ms | 4.4 ms |
+| dot_dag_1000, rank | 1,000 | 0.45 | 2.7 ms | 3.5 ms |
+| b29, position | 7,029 | 0.92 | 347 ms | 228 ms |
+
+The node floor alone keeps b143 (3,041 nodes, cost 1.70) out; the cost limit does too. b143 is
+1.3–1.45× faster on cut sets, but they add 11% to its peak heap and 3% to its instructions in the
+perf ratchet (limits 5% and 2%).
+
+Of the 592 corpus graphs that run network simplex (1,881 runs), b29 takes the cut sets for its
+position pass and 591 keep C's functions everywhere. Among the large inputs, the gain is on graphs
+like dot's synthetic DAGs (`dot_dag_5000` and larger). neato's constraint graphs have at most 118
+nodes in the corpus and are dense (estimated cost 10–60): cut sets would be 8× slower on them,
+and the selector keeps them on C's functions. Check mode runs them on cut sets anyway, so their
+exactness is tested.
 
 ## 8. How it is checked
 
