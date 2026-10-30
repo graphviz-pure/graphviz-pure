@@ -46,9 +46,10 @@ fails if the layout or geom crates gain an `unwrap`, `expect`, index or integer-
   operation order is the output, or because upstream changes them often: `core::math`, `cdt.rs`
   (the splay-tree order), the network-simplex and mincross tie-breaking cores, and `pathplan`.
   The list is revised when an upstream Graphviz release shows where porting hurts. Network
-  simplex keeps its C-mirror functions as the reference; an exact alternative path beside them
-  is allowed when it has a written equivalence proof and a test-mode cross-check against them
-  ([docs/perf/ns-cut-sets.md](docs/perf/ns-cut-sets.md)).
+  simplex and dot's mincross keep their C-mirror functions as the reference; an exact alternative
+  path beside them is allowed when it has a written equivalence proof and a test-mode cross-check
+  against them ([docs/perf/ns-cut-sets.md](docs/perf/ns-cut-sets.md),
+  [docs/perf/mincross-scans.md](docs/perf/mincross-scans.md)).
 - **Prove it.** A fix for a difference from C comes with the input that showed it, ideally added
   to a corpus under `tests/`, and the ratchet baselines refreshed if more files now match
   (`scripts/update-baselines.sh`). A change must not

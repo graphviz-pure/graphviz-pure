@@ -16,6 +16,8 @@
 //! at the scan boundary; mixed/stale ranks retain immediate arena writes.
 //! Compact-storage failures propagate through mincross/build_ranks as layout errors;
 //! fallible storage checks sit outside the unchanged counting loops.
+//! `reorder` and `transpose` stay the reference for the exact shortcuts in `scan.rs`, which run
+//! in their place when their conditions hold (docs/perf/mincross-scans.md).
 
 use super::Dot;
 use super::qsort::qsort;
@@ -24,6 +26,8 @@ use super::utils::*;
 use graphviz_pure_core::math;
 use graphviz_pure_core::strtod::atof;
 use std::collections::VecDeque;
+
+mod scan;
 
 const C_EE: i32 = 1;
 const C_VS: i32 = 2;
@@ -56,6 +60,7 @@ pub(super) struct MinCrossStore {
     uncached_crossings: FlatCrossings,
     median: Vec<i32>,
     count: Vec<i64>,
+    scan: scan::ScanStore,
 }
 
 #[derive(Clone, Copy)]
@@ -445,10 +450,20 @@ impl Dot<'_> {
         store.nodes.sort_unstable();
         store.nodes.dedup();
         store.nodes.retain(|&v| self.nodes.get(v).is_some());
+        let rows = maxrank.wrapping_sub(minrank).wrapping_add(1).max(0) as usize;
+        let (positions, widest) = (minrank..=maxrank).fold((0usize, 0usize), |(sum, widest), r| {
+            let n = self.rank_n(g, r).max(0) as usize;
+            (sum.saturating_add(n), widest.max(n))
+        });
+        store.scan.reserve(rows, positions, widest);
         store.order.clear();
+        store.order.reserve_exact(store.nodes.len());
         store.mval.clear();
+        store.mval.reserve_exact(store.nodes.len());
         store.meta.clear();
+        store.meta.reserve_exact(store.nodes.len());
         store.adjacency.clear();
+        store.adjacency.reserve_exact(store.nodes.len());
         store.edges.clear();
         store.edges.reserve(arc_capacity);
         store.crossings.clear();
@@ -1349,6 +1364,11 @@ impl Dot<'_> {
                 c0 += a;
                 c1 += b;
             }
+            #[cfg(any(test, feature = "mincross-check"))]
+            self.mincross_store
+                .scan
+                .reads
+                .record(scan::check::Read { r, i, c0, c1 })?;
             if c1 < c0 || (c0 > 0 && reverse && c1 == c0) {
                 if let Some(root) = direct {
                     self.exchange::<true>(v, w, root)?;
@@ -1389,6 +1409,22 @@ impl Dot<'_> {
         for r in minr..=maxr {
             self.rk_mut(g, r).candidate = true;
         }
+        let before = scan::check::before_transpose(self, g, reverse);
+        if self.transpose_scans(g, reverse)? {
+            scan::check::after_transpose(self, before, g);
+            return Ok(());
+        }
+        self.transpose_loop(g, reverse, minr, maxr)
+    }
+
+    /// C: lib/dotgen/mincross.c:transpose, after the candidates are set.
+    fn transpose_loop(
+        &mut self,
+        g: G,
+        reverse: bool,
+        minr: i32,
+        maxr: i32,
+    ) -> Result<(), &'static str> {
         loop {
             let mut delta: i64 = 0;
             for r in minr..=maxr {
@@ -2336,10 +2372,15 @@ impl Dot<'_> {
             let hasfixed = self.medians(g, r, other);
             if self.mincross_store.graph.is_none() || self.mincross_store.constrained {
                 self.reorder::<true, true>(g, r, reverse, hasfixed)?;
-            } else if self.mincross_store.nonnegative_medians {
-                self.reorder::<false, false>(g, r, reverse, hasfixed)?;
             } else {
-                self.reorder::<false, true>(g, r, reverse, hasfixed)?;
+                let before = scan::check::before_reorder(self, g);
+                if self.reorder_settled(g, r, reverse)? {
+                    scan::check::after_reorder(self, before, g, r, reverse, hasfixed)?;
+                } else if self.mincross_store.nonnegative_medians {
+                    self.reorder::<false, false>(g, r, reverse, hasfixed)?;
+                } else {
+                    self.reorder::<false, true>(g, r, reverse, hasfixed)?;
+                }
             }
             r += dir;
         }
