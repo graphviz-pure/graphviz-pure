@@ -49,27 +49,41 @@ fn xml_isentity(s: &[u8]) -> bool {
 }
 
 /// `gv_xml_escape` (without the `utf8` flag).
-pub(crate) fn xml_escape(s: &str, f: XmlFlags) -> String {
+/// C: lib/util/xml.c:gv_xml_escape
+pub(crate) fn xml_escape(s: &str, f: XmlFlags) -> std::borrow::Cow<'_, str> {
     let b = s.as_bytes();
-    let mut out: Vec<u8> = Vec::with_capacity(b.len() + 8);
+    let mut out: Option<Vec<u8>> = None;
     let mut prev = 0u8;
     for i in 0..b.len() {
         let c = b[i];
-        match c {
-            b'&' if f.raw || !xml_isentity(&b[i..]) => out.extend_from_slice(b"&amp;"),
-            b'<' => out.extend_from_slice(b"&lt;"),
-            b'>' => out.extend_from_slice(b"&gt;"),
-            b'-' if f.dash => out.extend_from_slice(b"&#45;"),
-            b' ' if prev == b' ' && f.nbsp => out.extend_from_slice(b"&#160;"),
-            b'"' => out.extend_from_slice(b"&quot;"),
-            b'\'' => out.extend_from_slice(b"&#39;"),
-            b'\n' if f.raw => out.extend_from_slice(b"&#10;"),
-            b'\r' if f.raw => out.extend_from_slice(b"&#13;"),
-            _ => out.push(c),
+        let replacement: Option<&[u8]> = match c {
+            b'&' if f.raw || !xml_isentity(&b[i..]) => Some(b"&amp;"),
+            b'<' => Some(b"&lt;"),
+            b'>' => Some(b"&gt;"),
+            b'-' if f.dash => Some(b"&#45;"),
+            b' ' if prev == b' ' && f.nbsp => Some(b"&#160;"),
+            b'"' => Some(b"&quot;"),
+            b'\'' => Some(b"&#39;"),
+            b'\n' if f.raw => Some(b"&#10;"),
+            b'\r' if f.raw => Some(b"&#13;"),
+            _ => None,
+        };
+        if let Some(replacement) = replacement {
+            let out = out.get_or_insert_with(|| {
+                let mut out = Vec::with_capacity(b.len() + 8);
+                out.extend_from_slice(&b[..i]);
+                out
+            });
+            out.extend_from_slice(replacement);
+        } else if let Some(out) = &mut out {
+            out.push(c);
         }
         prev = c;
     }
-    String::from_utf8(out).unwrap_or_default()
+    match out {
+        Some(out) => std::borrow::Cow::Owned(String::from_utf8(out).unwrap_or_default()),
+        None => std::borrow::Cow::Borrowed(s),
+    }
 }
 
 fn xml_raw_id(s: &str) -> String {
@@ -77,7 +91,7 @@ fn xml_raw_id(s: &str) -> String {
 }
 
 /// `gvputs_xml`.
-pub(crate) fn xml(s: &str) -> String {
+pub(crate) fn xml(s: &str) -> std::borrow::Cow<'_, str> {
     xml_escape(
         s,
         XmlFlags {
@@ -1037,6 +1051,86 @@ impl Engine for SvgEngine {
 
 #[cfg(test)]
 mod tests {
+    use super::{XmlFlags, xml_escape, xml_isentity};
+
+    // The pre-optimization scanner; xml_isentity is shared because it is unchanged.
+    fn reference_xml_escape(s: &str, f: XmlFlags) -> String {
+        let b = s.as_bytes();
+        let mut out: Vec<u8> = Vec::with_capacity(b.len() + 8);
+        let mut prev = 0u8;
+        for i in 0..b.len() {
+            let c = b[i];
+            match c {
+                b'&' if f.raw || !xml_isentity(&b[i..]) => out.extend_from_slice(b"&amp;"),
+                b'<' => out.extend_from_slice(b"&lt;"),
+                b'>' => out.extend_from_slice(b"&gt;"),
+                b'-' if f.dash => out.extend_from_slice(b"&#45;"),
+                b' ' if prev == b' ' && f.nbsp => out.extend_from_slice(b"&#160;"),
+                b'"' => out.extend_from_slice(b"&quot;"),
+                b'\'' => out.extend_from_slice(b"&#39;"),
+                b'\n' if f.raw => out.extend_from_slice(b"&#10;"),
+                b'\r' if f.raw => out.extend_from_slice(b"&#13;"),
+                _ => out.push(c),
+            }
+            prev = c;
+        }
+        String::from_utf8(out).unwrap_or_default()
+    }
+
+    #[test]
+    fn borrowed_xml_matches_original_scanner_for_all_flags() {
+        let mut cases: Vec<String> = [
+            "",
+            "plain text",
+            "é字体",
+            "a  b",
+            "--",
+            "<&>'\"",
+            "&amp; &#123; &#x41; &#XAF; &; &#; &#x;",
+            "&unterminated",
+            "\r\n\0",
+        ]
+        .into_iter()
+        .map(str::to_owned)
+        .collect();
+        for c in 0..=127u8 {
+            cases.push(format!("prefix {} suffix", char::from(c)));
+        }
+        let alphabet = [
+            'a', '&', ';', '#', 'x', '0', '<', '>', '-', ' ', '\'', '"', '\n', '\r', 'é', '字',
+        ];
+        let mut state = 0x8217_39ab_1426_53cdu64;
+        for _ in 0..10_000 {
+            let mut text = String::new();
+            for _ in 0..24 {
+                state ^= state << 13;
+                state ^= state >> 7;
+                state ^= state << 17;
+                text.push(alphabet[state as usize % alphabet.len()]);
+            }
+            cases.push(text);
+        }
+        for bits in 0..8 {
+            let flags = XmlFlags {
+                raw: bits & 1 != 0,
+                dash: bits & 2 != 0,
+                nbsp: bits & 4 != 0,
+            };
+            for text in &cases {
+                assert_eq!(
+                    xml_escape(text, flags),
+                    reference_xml_escape(text, flags),
+                    "flags={bits}, text={text:?}"
+                );
+            }
+        }
+        for text in ["", "plain text", "é字体", "&amp;"] {
+            assert!(matches!(
+                xml_escape(text, XmlFlags::default()),
+                std::borrow::Cow::Borrowed(_)
+            ));
+        }
+    }
     use crate::{OutputFormat, render_graph};
     use graphviz_pure_core::{BoundingBox, Graph, GraphKind};
 
