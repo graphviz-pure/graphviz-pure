@@ -17,94 +17,94 @@
  },
  "cases": {
   "laid/tests/wild/gv16_graphs_b29_d1e4db.gv -Tcanon -Knop2": {
-   "heap_blocks": 227582,
-   "heap_bytes": 18118688,
+   "heap_blocks": 225358,
+   "heap_bytes": 17943842,
    "heap_peak_bytes": 5232342,
-   "instructions": 158705292
+   "instructions": 157414579
   },
   "laid/tests/wild/gv16_graphs_b29_d1e4db.gv -Tsvg -Knop2": {
-   "heap_blocks": 210281,
-   "heap_bytes": 16555140,
+   "heap_blocks": 208057,
+   "heap_bytes": 16380294,
    "heap_peak_bytes": 5232338,
-   "instructions": 162347309
+   "instructions": 161146743
   },
   "synth/dot_dag_1000.gv -Tsvg": {
-   "heap_blocks": 418625,
-   "heap_bytes": 78051866,
-   "heap_peak_bytes": 13947910,
-   "instructions": 1593933658
+   "heap_blocks": 410078,
+   "heap_bytes": 77422999,
+   "heap_peak_bytes": 13947942,
+   "instructions": 1578551245
   },
   "synth/twopi_tree_5000.gv -Tsvg": {
-   "heap_blocks": 1024852,
-   "heap_bytes": 83144755,
-   "heap_peak_bytes": 29377255,
-   "instructions": 846884248
+   "heap_blocks": 994872,
+   "heap_bytes": 81044915,
+   "heap_peak_bytes": 28401145,
+   "instructions": 832112057
   },
   "tests/circo/wild_gv16_directed_sdh_29b016.gv -Tsvg": {
    "heap_blocks": 678425,
    "heap_bytes": 37859280,
    "heap_peak_bytes": 991839,
-   "instructions": 1543976720
+   "instructions": 1544013081
   },
   "tests/fdp/wild_gv16_graphs_b69_4b5b48.gv -Tsvg": {
-   "heap_blocks": 320901,
-   "heap_bytes": 14759263,
+   "heap_blocks": 320601,
+   "heap_bytes": 14724423,
    "heap_peak_bytes": 1407934,
-   "instructions": 5226698670
+   "instructions": 5226020274
   },
   "tests/fixtures/unix.gv -Tpng": {
-   "heap_blocks": 26276,
-   "heap_bytes": 14148184,
+   "heap_blocks": 25847,
+   "heap_bytes": 14121303,
    "heap_peak_bytes": 7460222,
-   "instructions": 147695639
+   "instructions": 147519593
   },
   "tests/fixtures/unix.gv -Tsvg": {
-   "heap_blocks": 14253,
-   "heap_bytes": 2123315,
-   "heap_peak_bytes": 569038,
-   "instructions": 28272066
+   "heap_blocks": 13824,
+   "heap_bytes": 2096434,
+   "heap_peak_bytes": 569070,
+   "instructions": 28068425
   },
   "tests/neato/hw2_random_120.gv -Tsvg": {
-   "heap_blocks": 26433,
-   "heap_bytes": 3163027,
-   "heap_peak_bytes": 798578,
-   "instructions": 2532915376
+   "heap_blocks": 25733,
+   "heap_bytes": 3112787,
+   "heap_peak_bytes": 774948,
+   "instructions": 2532512296
   },
   "tests/osage/wild_gv16_graphs_b51_33bcb0.gv -Tsvg": {
-   "heap_blocks": 42661,
-   "heap_bytes": 3457483,
+   "heap_blocks": 42243,
+   "heap_bytes": 3381797,
    "heap_peak_bytes": 983838,
-   "instructions": 41832786
+   "instructions": 41726896
   },
   "tests/patchwork/wild_gv16_graphs_b51_33bcb0.gv -Tsvg": {
-   "heap_blocks": 36848,
-   "heap_bytes": 3344893,
+   "heap_blocks": 36488,
+   "heap_bytes": 3256111,
    "heap_peak_bytes": 908219,
-   "instructions": 31170883
+   "instructions": 31159881
   },
   "tests/sfdp/gen_grid20x20.gv -Tsvg": {
-   "heap_blocks": 97178,
-   "heap_bytes": 9553668,
-   "heap_peak_bytes": 3066463,
-   "instructions": 976169647
+   "heap_blocks": 94778,
+   "heap_bytes": 9385668,
+   "heap_peak_bytes": 2988463,
+   "instructions": 976756291
   },
   "tests/twopi/fx_arrows.gv -Tsvg": {
-   "heap_blocks": 22546,
-   "heap_bytes": 6864987,
+   "heap_blocks": 22474,
+   "heap_bytes": 6850587,
    "heap_peak_bytes": 909590,
-   "instructions": 4304036181
+   "instructions": 4303981484
   },
   "tests/wild/gv16_graphs_b143_5416de.gv -Tplain": {
-   "heap_blocks": 245032,
-   "heap_bytes": 46698077,
-   "heap_peak_bytes": 8293645,
-   "instructions": 2040102444
+   "heap_blocks": 242199,
+   "heap_bytes": 46484795,
+   "heap_peak_bytes": 8293677,
+   "instructions": 2038419598
   },
   "tests/wild/gv16_graphs_b143_5416de.gv -Tsvg": {
-   "heap_blocks": 250586,
-   "heap_bytes": 47523318,
-   "heap_peak_bytes": 8293641,
-   "instructions": 2022832090
+   "heap_blocks": 247753,
+   "heap_bytes": 47310036,
+   "heap_peak_bytes": 8293673,
+   "instructions": 2021143288
   }
  },
  "reference": {
@@ -128,5 +128,5 @@
   "name": "0.2.2"
  },
  "target": "x86_64-unknown-linux-musl",
- "wasm_bytes": 3983017
+ "wasm_bytes": 4033674
 }

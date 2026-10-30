@@ -6,7 +6,7 @@ The PR effect compares v3 musl release builds, without PGO. The separate vs 1.0 
 
 ## Profile and change
 
-Fresh Callgrind profiles of integration `3b5a6e85` (including #624/#627) showed `make_text_label` at 200.2M instructions on osage clustered 20k SVG and 291.0M on patchwork 20k plain. `make_simple_label_cs` accounts for 155.8M/223.0M; the main-label text clone is another 9.2M/14.6M. These are inclusive costs, not additive buckets. The font-metadata costs are handled independently by #651.
+Fresh Callgrind profiles of integration `3b5a6e85` (including #624/#627) showed `make_text_label` at 200.2M instructions on osage clustered 20k SVG and 291.0M on patchwork 20k plain. `make_simple_label_cs` accounts for 155.8M/223.0M; the main-label text clone is another 9.2M/14.6M. These are inclusive costs, not additive buckets. The font-metadata costs are handled independently by #651. In the patchwork plain profile, polygon construction calls `sin` for 32.04M instructions, `cos` for 26.40M and `atan2` for 16.02M; its point-vector allocation costs 19.86M. Numeric `strtod` scanning/conversion totals 22.50M. After the two label fixes, exact polygon-template caching remains a separate candidate; no algebraic polygon shortcut or AttrMap change is included here.
 
 - Default `\N` labels reuse the resolved node-name buffer (or make one exact-size copy), after the same agnameof name snapshots.
 - Entity-free, raw-byte-free UTF-8/Big5 text moves its substituted string into the label source. `htmlEntityUTF8` entry bookkeeping still runs at the same point. Latin-1, entities and raw bytes keep the old conversion.
@@ -68,3 +68,14 @@ after start: `00:36:46 up 4 days, 21:18,  2 users,  load average: 4.82, 6.69, 9.
 1.0 start: `00:18:33 up 4 days, 21:00,  2 users,  load average: 9.18, 6.61, 12.97`; end: `00:21:38 up 4 days, 21:03,  2 users,  load average: 5.76, 6.61, 11.85`.
 
 C start: `00:18:09 up 4 days, 21:00,  2 users,  load average: 8.24, 6.23, 13.02`; end: `00:18:19 up 4 days, 21:00,  2 users,  load average: 8.66, 6.39, 13.00`.
+
+## Both fixes on the wave-1 integration build
+
+Local, unpushed integration head `32622618` combines #651 and #652 with the previous wave-1 integration (`3b5a6e85`). Only the ratchet baseline needed conflict resolution; code merged cleanly. The release-version commit is also included. Both binaries are shipped-style musl v3 releases, without frame pointers or PGO. This is an actual combined comparison, not a sum of the independent percentages above.
+
+| 20k case | wave 1 Ir | wave 1 + both fixes Ir | Δ |
+|---|---:|---:|---:|
+| osage20000-svg | 1,575,885,921 | 1,441,076,937 | -8.55% |
+| patchwork20000-plain | 2,132,757,750 | 1,930,808,419 | -9.47% |
+
+All nine requested stdout/stderr pairs match the prior wave-1 integration build.
