@@ -42,8 +42,20 @@ const CUT_SETS_MIN_NODES: usize = 2500;
 /// (`docs/perf/ns-cut-sets.md`, "The selector").
 const CUT_SETS_MAX_COST: f64 = 1.0;
 
+/// Selector: the most cut-set entries per node and non-tree edge, estimated as l·m / (n + m).
+/// Each entry is four bytes on top of a graph that takes a few hundred bytes per node and
+/// edge, so this bounds the extra memory to a few percent. It also turns away graphs whose
+/// tree cycles are long compared with their size, where a pivot's cut-set edit can cost more
+/// than C's walk even when the time estimate says otherwise (`docs/perf/ns-cut-sets.md`).
+const CUT_SETS_MAX_ENTRIES: f64 = 16.0;
+
 /// Selector: how many non-tree edges are sampled to estimate the mean tree-cycle length.
 const CUT_SETS_SAMPLE: usize = 64;
+
+/// Storage kept between runs, in four-byte words: a store that grew past this is released
+/// when its run ends, so a large graph's cut sets do not stay allocated for the rest of the
+/// layout. Smaller ones are kept and reused by the next run.
+const CUT_SETS_KEEP_WORDS: usize = 1 << 18;
 
 /// Cut-set entry flag: the edge crosses from head(t)'s side of the cut to tail(t)'s side.
 const AGAINST: u32 = 0x8000_0000;
@@ -162,10 +174,12 @@ fn all_edges<G: NsGraph + ?Sized>(g: &G) -> impl Iterator<Item = usize> + '_ {
         .flat_map(move |&u| g.out_edges(u).iter().copied())
 }
 
-/// Whether the cut sets are expected to be faster than C's walks on this graph. The mean
-/// tree-cycle length `l` is estimated from up to [`CUT_SETS_SAMPLE`] evenly spaced non-tree
-/// edges; for `m` non-tree edges and `n` nodes the cut sets then hold about `l × m` entries,
-/// and a pivot costs about `l × (l × m / n)` against C's walks of a fraction of `n`.
+/// Whether the cut sets are expected to be faster than C's walks on this graph, within a
+/// small memory budget. The mean tree-cycle length `l` is estimated from up to
+/// [`CUT_SETS_SAMPLE`] evenly spaced non-tree edges; for `m` non-tree edges and `n` nodes the
+/// cut sets then hold about `l × m` entries, at most [`CUT_SETS_MAX_ENTRIES`] per node and
+/// non-tree edge, and a pivot costs about `l × (l × m / n)` against C's walks of a fraction of
+/// `n`.
 fn worth_it<G: NsGraph + ?Sized>(g: &G) -> bool {
     let n = g.nlist().len();
     if n < CUT_SETS_MIN_NODES {
@@ -186,8 +200,9 @@ fn worth_it<G: NsGraph + ?Sized>(g: &G) -> bool {
         sampled = sampled.wrapping_add(1);
     }
     let l = length as f64 / sampled.max(1) as f64;
-    let cost = l * (l * m as f64 / n as f64) / n as f64;
-    cost <= CUT_SETS_MAX_COST
+    let entries = l * m as f64;
+    let cost = l * (entries / n as f64) / n as f64;
+    entries <= CUT_SETS_MAX_ENTRIES * (n as f64 + m as f64) && cost <= CUT_SETS_MAX_COST
 }
 
 /// Starts the cut-set pivots after `feasible_tree` (`lim`/`low` valid), when [`worth_it`]
@@ -248,16 +263,33 @@ impl CutStore {
             .find(|&k| self.edge(k).edge as usize == f)
     }
 
-    /// The slack C would compute for `f`, a member of e's cut set.
-    pub(super) fn entering_slack<G: NsGraph + ?Sized>(&self, g: &G, e: usize, f: usize) -> i32 {
+    /// The slack C would compute for `f`, a member of e's cut set; `None` if it is not one.
+    fn entering_slack<G: NsGraph + ?Sized>(&self, g: &G, e: usize, f: usize) -> Option<i32> {
         tree_slot(g, e)
             .and_then(|s| self.member(s, f))
-            .map_or_else(|| slack(g, f), |k| self.edge(k).slack)
+            .map(|k| self.edge(k).slack)
+    }
+
+    /// Releases the storage once it is larger than [`CUT_SETS_KEEP_WORDS`].
+    fn trim(&mut self) {
+        let words = self
+            .pool
+            .capacity()
+            .saturating_add(self.work.capacity())
+            .saturating_add(self.edges.capacity().saturating_mul(4))
+            .saturating_add(self.tree.capacity().saturating_mul(5));
+        if words > CUT_SETS_KEEP_WORDS {
+            *self = CutStore::default();
+        }
     }
 
     /// The slack of tree edge `t`.
     fn tree_slack<G: NsGraph + ?Sized>(&self, g: &G, t: usize) -> i32 {
-        tree_slot(g, t).map_or_else(|| slack(g, t), |s| self.edge(self.tree(s).edge).slack)
+        let Some(s) = tree_slot(g, t) else {
+            debug_assert!(false, "a tree edge has a tree slot");
+            return slack(g, t);
+        };
+        self.edge(self.tree(s).edge).slack
     }
 
     /// The cut sets, slacks and local indices of the current tree. `false` (C's functions
@@ -725,14 +757,40 @@ impl CutStore {
     /// the same `exchange_tree_edges`. Instead of `dfs_range`, only the parent pointers on the
     /// path from f's end in the moved subtree up to e's child are reversed, which is what
     /// `dfs_range` assigns them.
-    fn update<G: NsGraph + ?Sized>(&mut self, g: &mut G, ctx: &mut Ctx, e: usize, f: usize) -> i32 {
+    fn update<G: NsGraph + ?Sized>(
+        &mut self,
+        g: &mut G,
+        ctx: &mut Ctx,
+        e: usize,
+        f: usize,
+    ) -> Result<i32, Fallback> {
+        // first, without changing anything: e's slot, f in e's cut set, the LCA and f's tree
+        // cycle with every edge's slot; if the tree is not what the cut sets describe, C's
+        // `update` takes the pivot instead
         let (Some(se), Some(kf)) = (
             tree_slot(g, e),
             tree_slot(g, e).and_then(|s| self.member(s, f)),
         ) else {
-            debug_assert!(false, "e is a tree edge and f in its cut set");
-            return 2;
+            return Err(Fallback);
         };
+        let (ft, fh) = (g.tail(f), g.head(f));
+        let Some(lca) = self.lca(g, ft, fh) else {
+            return Err(Fallback);
+        };
+        // f's tree cycle, oriented along f: from head(f) up to the LCA, then down to tail(f)
+        self.work.clear();
+        for (start, down) in [(ft, true), (fh, false)] {
+            let mut u = start;
+            while u != lca {
+                let (Some(t), Some(s)) = (g.par(u), g.par(u).and_then(|t| tree_slot(g, t)))
+                else {
+                    return Err(Fallback);
+                };
+                let forward = if down { g.head(t) == u } else { g.tail(t) == u };
+                self.work.push(s as u32 | if forward { FORWARD } else { 0 });
+                u = other(g, t, u);
+            }
+        }
         let ke = self.tree(se).edge;
         let delta = self.edge(kf).slack;
         let (et, eh) = (g.tail(e), g.head(e));
@@ -758,25 +816,6 @@ impl CutStore {
                 self.shift(se, tail_is_child, d.wrapping_neg());
             }
             check::rerank(g, ctx, node, d);
-        }
-        let (ft, fh) = (g.tail(f), g.head(f));
-        let Some(lca) = self.lca(g, ft, fh) else {
-            graphviz_pure_core::diag::agerrorf("update: mismatched lca in treeupdates\n");
-            return 2;
-        };
-        // f's tree cycle, oriented along f: from head(f) up to the LCA, then down to tail(f)
-        self.work.clear();
-        for (start, down) in [(ft, true), (fh, false)] {
-            let mut u = start;
-            while u != lca {
-                let Some(t) = g.par(u) else {
-                    break;
-                };
-                let forward = if down { g.head(t) == u } else { g.tail(t) == u };
-                let s = tree_slot(g, t).unwrap_or_default() as u32;
-                self.work.push(s | if forward { FORWARD } else { 0 });
-                u = other(g, t, u);
-            }
         }
         let lca_low = check::path(g, self, e, f, lca);
         // treeupdate: each edge of the cycle gains cutvalue(e) when the cycle runs it
@@ -821,7 +860,7 @@ impl CutStore {
         if self.garbage > self.pool.len().wrapping_div(2) {
             self.compact();
         }
-        0
+        Ok(0)
     }
 
     /// Writes every rank: the root's, plus `minlen + slack` down each tree edge.
@@ -916,7 +955,9 @@ pub(super) fn enter_edge<G: NsGraph + ?Sized>(
     }
 }
 
-/// `update(e, f)`: on the cut sets while they run, else C's.
+/// `update(e, f)`: on the cut sets while they run, else C's. A [`Fallback`] (the tree is not
+/// what the cut sets describe, which no test has produced) gives this pivot and the rest of the
+/// run to C's functions.
 pub(super) fn update<G: NsGraph + ?Sized>(
     g: &mut G,
     ctx: &mut Ctx,
@@ -924,9 +965,15 @@ pub(super) fn update<G: NsGraph + ?Sized>(
     e: usize,
     f: usize,
 ) -> i32 {
-    match cut.as_mut() {
-        Some(store) => store.update(g, ctx, e, f),
-        None => super::update(g, ctx, e, f),
+    let Some(store) = cut.as_mut() else {
+        return super::update(g, ctx, e, f);
+    };
+    match store.update(g, ctx, e, f) {
+        Ok(r) => r,
+        Err(Fallback) => {
+            fall_back(g, ctx, cut);
+            super::update(g, ctx, e, f)
+        }
     }
 }
 
@@ -951,25 +998,29 @@ pub(super) fn lr_balance<G: NsGraph + ?Sized>(
             let Some(f) = enter_edge(g, ctx, cut, e) else {
                 continue;
             };
-            let delta = match cut.as_ref() {
-                Some(store) => store.entering_slack(g, e, f),
-                None => slack(g, f),
-            };
+            // f's slack from the cut sets; if f is not in e's (no test has produced that),
+            // C's functions finish the run
+            let known = cut
+                .as_ref()
+                .and_then(|store| store.entering_slack(g, e, f).zip(tree_slot(g, e)));
+            if cut.is_some() && known.is_none() {
+                fall_back(g, ctx, cut);
+            }
+            let delta = known.map_or_else(|| slack(g, f), |(d, _)| d);
             if delta <= 1 {
                 continue;
             }
             let (t, h) = (g.tail(e), g.head(e));
-            let tail_is_child = match cut {
-                Some(_) => g.par(t) == Some(e),
-                None => g.lim(t) < g.lim(h),
-            };
+            // `par` is right on either path; `lim`/`low` only on C's
+            let tail_is_child = g.par(t) == Some(e);
+            debug_assert!(cut.is_some() || tail_is_child == (g.lim(t) < g.lim(h)));
             let (node, d) = if tail_is_child {
                 (t, delta.wrapping_div(2))
             } else {
                 (h, delta.wrapping_neg().wrapping_div(2))
             };
-            match (cut.as_mut(), tree_slot(g, e)) {
-                (Some(store), Some(s)) => {
+            match (cut.as_mut(), known) {
+                (Some(store), Some((_, s))) => {
                     store.shift(s, tail_is_child, d.wrapping_neg());
                     check::rerank(g, ctx, node, d);
                 }
@@ -985,6 +1036,7 @@ pub(super) fn lr_balance<G: NsGraph + ?Sized>(
 pub(super) fn end<G: NsGraph + ?Sized>(g: &mut G, cut: &mut Option<CutStore>) {
     if let Some(mut store) = cut.take() {
         store.write_ranks(g);
+        store.trim();
         g.keep_cut_store(store);
     }
 }

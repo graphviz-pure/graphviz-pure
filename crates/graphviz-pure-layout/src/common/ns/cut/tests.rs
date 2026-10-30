@@ -233,3 +233,40 @@ fn the_selector_prefers_cut_sets_on_large_layered_graphs() {
     assert_eq!(feasible_tree(&mut g, &mut ctx()), Ok(0));
     assert!(super::worth_it(&g));
 }
+
+#[test]
+fn the_selector_keeps_c_when_the_cut_sets_would_be_large() {
+    // a 10,000-node chain with a chord over 100 links every 4 nodes: the tight tree is the
+    // chain, so every chord's tree cycle has 100 edges. The time estimate passes
+    // (100 × (100 × 2,475 / 10,000) / 10,000 ≈ 0.25) but the cut sets would hold about
+    // 20 entries per node and non-tree edge
+    let n = 10_000;
+    let mut g = NsData {
+        nodes: vec![NsNode::default(); n],
+        nlist: (0..n).collect(),
+        ..NsData::default()
+    };
+    let add = |g: &mut NsData, t: usize, h: usize, minlen: i32| {
+        let e = g.edges.len();
+        g.edges.push(NsEdge {
+            tail: t,
+            head: h,
+            minlen,
+            weight: 1,
+            ..NsEdge::default()
+        });
+        g.nodes[t].out.push(e);
+        g.nodes[h].in_.push(e);
+    };
+    for i in 1..n {
+        add(&mut g, i - 1, i, 1);
+    }
+    for i in (0..n - 100).step_by(4) {
+        add(&mut g, i, i + 100, 1);
+    }
+    if !init_graph(&mut g) {
+        init_rank(&mut g);
+    }
+    assert_eq!(feasible_tree(&mut g, &mut ctx()), Ok(0));
+    assert!(!super::worth_it(&g));
+}
