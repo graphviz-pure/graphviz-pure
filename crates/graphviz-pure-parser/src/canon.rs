@@ -492,10 +492,14 @@ pub fn canon_str(s: &str) -> String {
 /// [`canon_str`] with an explicit maximum output line length (`linelength`; 0 disables
 /// line breaking).
 pub fn canon_str_with(arg: &str, max_line: usize) -> String {
-    let mut out = String::new();
-    let mut scratch = Vec::new();
-    canon_str_with_into(&mut out, &mut scratch, arg, max_line);
-    out
+    let mut bytes = Vec::new();
+    if canon_bytes(&mut bytes, arg, max_line) {
+        // The quoted form: the bytes are C's, and the port's text form of them.
+        graphviz_pure_core::charset::decode(bytes)
+    } else {
+        // The plain form: the text itself.
+        arg.to_string()
+    }
 }
 
 /// The scratch the canonicalizer works on: the bytes of the text it canonicalizes.
@@ -511,15 +515,22 @@ pub struct CanonScratch {
 impl CanonScratch {
     /// [`canon_str`], written into `out`.
     pub fn canon_str_into(&mut self, out: &mut String, s: &str) {
-        canon_str_with_into(out, &mut self.bytes, s, 128);
+        if canon_bytes(&mut self.bytes, s, 128) {
+            out.push_str(&graphviz_pure_core::charset::decode_slice(&self.bytes));
+        } else {
+            out.push_str(s);
+        }
     }
 }
 
-/// [`canon_str_with`], written into `out`, with the bytes it works on in `scratch`.
-fn canon_str_with_into(out: &mut String, scratch: &mut Vec<u8>, arg: &str, max_line: usize) {
+/// The canonical form of `arg`: the quoted bytes go into `scratch`, and the function
+/// returns whether they are the canonical form. C quotes the text when it has to, and
+/// prints it as it is otherwise.
+fn canon_bytes(scratch: &mut Vec<u8>, arg: &str, max_line: usize) -> bool {
     if arg.is_empty() {
-        out.push_str("\"\"");
-        return;
+        scratch.clear();
+        scratch.extend_from_slice(b"\"\"");
+        return true;
     }
     // `_agstrcanon` works on C's bytes (`graphviz_pure_core::charset`).
     let bytes = graphviz_pure_core::charset::encode(arg);
@@ -593,18 +604,11 @@ fn canon_str_with_into(out: &mut String, scratch: &mut Vec<u8>, arg: &str, max_l
         }
     }
     scratch.push(b'"');
-    if needs_quotes
+    needs_quotes
         || (cnt == 1 && (b[0] == b'.' || b[0] == b'-'))
         || ["node", "edge", "strict", "graph", "digraph", "subgraph"]
             .iter()
             .any(|t| t.eq_ignore_ascii_case(arg))
-    {
-        // The quoted form: the bytes are C's, and the port's text form of them.
-        out.push_str(&graphviz_pure_core::charset::decode_slice(scratch));
-        return;
-    }
-    // The plain form: the text itself.
-    out.push_str(arg);
 }
 
 fn is_graphviz_escape_char(b: u8) -> bool {
