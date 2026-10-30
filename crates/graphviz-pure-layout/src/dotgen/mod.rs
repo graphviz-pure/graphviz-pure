@@ -120,6 +120,7 @@ pub struct Dot<'a> {
     pub global_min_rank: i32,
     pub global_max_rank: i32,
     pub remincross: bool,
+    mincross_store: mincross::MinCrossStore,
     /// `EDGE_TYPE(g)` (`setEdgeType(g, EDGETYPE_SPLINE)`).
     pub et: crate::common::types::EdgeType,
     /// `State == GVSPLINES`: splines exist and are mapped by postprocessing.
@@ -175,6 +176,7 @@ impl<'a> Dot<'a> {
             global_min_rank: 0,
             global_max_rank: 0,
             remincross: false,
+            mincross_store: Default::default(),
             et: crate::common::types::EdgeType::Spline,
             splines_done: false,
             aborted: false,
