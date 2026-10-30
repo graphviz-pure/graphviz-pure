@@ -16,7 +16,8 @@ not be confirmed from the channel's documentation.
   repository entirely. Ecosystem bots (nixpkgs' r-ryantm, conda-forge's autotick, Homebrew's
   autobump) are the cheapest pull of all.
 - **One approval.** Every publishing job in `release.yml` has the same `needs`, so the `release`
-  environment's single approval starts them all.
+  environment's single approval starts them all. npm stages the package and then waits for
+  the owner's passkey approval on npmjs.com.
 - **Same bytes.** Channels that repackage the release archives keep the attested binaries as they
   are; channels that build from source (nixpkgs, conda-forge, homebrew-core, AUR `graphviz-pure`)
   compute with the same portable math library, so they write the same output.
@@ -27,7 +28,7 @@ not be confirmed from the channel's documentation.
 | :--- | :--- | :--- |
 | GitHub releases | `release.yml`, attested archives and `SHA256SUMS` | job token |
 | crates.io | `release.yml` | OIDC |
-| npm `@graphviz-pure/wasm` | `release.yml`, `npm publish --provenance` | OIDC |
+| npm `@graphviz-pure/wasm` | `release.yml`, `npm stage publish`, then passkey approval on npmjs.com | OIDC |
 | JSR `@graphviz-pure/wasm` | `release.yml` | OIDC |
 | ghcr.io image | `release.yml` | job token |
 | Homebrew tap, Scoop bucket | pull repositories | none here |

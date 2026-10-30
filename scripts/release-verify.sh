@@ -8,7 +8,8 @@
 #           names every release archive and the binary in it (scripts/check-binstall.py), and,
 #           where cargo-binstall is on PATH, `cargo-binstall --dry-run` fetches and unpacks the
 #           archive for every release target from the published crate
-#   jsr     @graphviz-pure/wasm VERSION in JSR's meta.json, not yanked
+#   jsr     @graphviz-pure/wasm VERSION in JSR's meta.json, not yanked; if latest, every
+#           scored item must be full (including OIDC provenance and declared runtimes)
 #   ghcr    VERSION's attestation verifies, and X.Y and latest point at VERSION's digest where
 #           VERSION should hold them: X.Y if it is the newest stable X.Y.*, latest if it is the
 #           newest stable version among the image's tags (as the ghcr job moves them; a
@@ -24,9 +25,10 @@
 #
 # --ci checks every channel but the tap and bucket: release.yml's verify job runs it once the
 # publishing jobs finish, and the tap and bucket updates are dispatched rather than waited on.
-# --channels LIST checks only those channels
+# --npm-staged reports npm as awaiting approval (CI only, after successful staging).
+# --channels LIST checks only those channels; an explicit empty list checks none
 # (comma-separated); --failed LIST reports those as failing at once, without checking (the verify
-# job passes the channels whose publishing job did not succeed). --wait SECONDS retries failing
+# job passes channels whose publishing job or registry lookup did not succeed). --wait SECONDS retries failing
 # registry checks (crates.io, JSR, ghcr, Wasmer, PyPI) until they pass or SECONDS have passed in all. Reads only.
 #
 # Usage: scripts/release-verify.sh VERSION [--ci] [--channels LIST] [--failed LIST] [--wait SECONDS]
@@ -34,11 +36,12 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 . scripts/release-lib.sh
 
-version="" ci=0 wait=0 only="" failed=""
+version="" ci=0 wait=0 only="" only_set=0 failed="" npm_staged=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --ci) ci=1 ;;
-    --channels) only=${2?--channels needs a list}; shift ;;
+    --npm-staged) npm_staged=1 ;;
+    --channels) only=${2?--channels needs a list}; only_set=1; shift ;;
     --failed) failed=${2?--failed needs a list}; shift ;;
     --wait) wait=${2:?--wait needs seconds}; shift ;;
     -*) die "unknown option $1" ;;
@@ -191,9 +194,32 @@ jsr_ok() {
   curl -fsS "https://jsr.io/@graphviz-pure/wasm/meta.json" -o "$work/jsr.json" 2> /dev/null &&
     jq -e --arg v "$version" '.versions[$v] != null and (.versions[$v].yanked // false) == false' "$work/jsr.json" > /dev/null
 }
+jsr_score_ok() {
+  # The score describes latest, not arbitrary historical versions. Refresh metadata on each
+  # retry so a newer release appearing while we wait cannot be attributed to this version.
+  jsr_ok || return 1
+  [ "$(jq -r .latest "$work/jsr.json")" = "$version" ] || return 0
+  echo "score unavailable" > "$work/jsr-score-short.txt"
+  curl -fsS "https://api.jsr.io/scopes/graphviz-pure/packages/wasm/score" -o "$work/jsr-score.json" 2> /dev/null || return 1
+  jq -r '[
+    "hasReadme", "hasReadmeExamples", "allEntrypointsDocs", "allFastCheck",
+    "hasProvenance", "hasDescription", "atLeastOneRuntimeCompatible",
+    "multipleRuntimesCompatible"
+  ] as $flags | . as $score |
+    ([$flags[] | select($score[.] != true)] +
+      [if .percentageDocumentedSymbols == 1 then empty else "percentageDocumentedSymbols" end]) |
+    join(", ")' "$work/jsr-score.json" > "$work/jsr-score-short.txt" ||
+    { echo "invalid score response" > "$work/jsr-score-short.txt"; return 1; }
+  [ -z "$(cat "$work/jsr-score-short.txt")" ]
+}
 jsr() {
-  if retry jsr_ok; then result jsr 1 "@graphviz-pure/wasm $version (latest: $(jq -r .latest "$work/jsr.json"))"
-  else result jsr 0 "@graphviz-pure/wasm $version is not in meta.json"; fi
+  if ! retry jsr_ok; then
+    result jsr 0 "@graphviz-pure/wasm $version is not in meta.json (or is yanked)"
+  elif retry jsr_score_ok; then
+    result jsr 1 "@graphviz-pure/wasm $version (latest: $(jq -r .latest "$work/jsr.json")); score full when latest"
+  else
+    result jsr 0 "JSR latest $version must have a full score; short items: $(cat "$work/jsr-score-short.txt" 2>/dev/null || echo 'score unavailable'); see docs/releasing.md"
+  fi
 }
 
 ghcr_token() { curl -fsS "https://ghcr.io/token?scope=repository:$REPO:pull" | jq -r .token; }
@@ -352,8 +378,12 @@ taps() {
 }
 
 want() { # want CHANNEL: is it to be checked?
-  case ",$failed," in *",$1,"*) result "$1" 0 "its publishing job did not succeed"; return 1 ;; esac
-  [ -z "$only" ] || case ",$only," in *",$1,"*) ;; *) return 1 ;; esac
+  case ",$failed," in *",$1,"*) result "$1" 0 "publishing or registry lookup did not succeed"; return 1 ;; esac
+  if [ "$1" = npm ] && [ "$npm_staged" = 1 ]; then
+    echo "- [ ] npm: staged, awaiting owner's passkey approval on npmjs.com; live bytes and signatures have not been verified."
+    return 1
+  fi
+  [ "$only_set" = 0 ] || case ",$only," in *",$1,"*) ;; *) return 1 ;; esac
 }
 want github && github
 want crates && crates_io
@@ -367,5 +397,11 @@ if [ "$ci" = 0 ]; then
   want taps && taps
 fi
 echo
-if [ "$fails" = 0 ]; then echo "**All channels pass.**"; else echo "**$fails channel(s) fail.**"; fi
+if [ "$fails" != 0 ]; then
+  echo "**$fails channel(s) fail.**"
+elif [ "$npm_staged" = 1 ]; then
+  echo "**Checked channels pass; npm is staged and awaiting approval.**"
+else
+  echo "**All checked channels pass.**"
+fi
 [ "$fails" = 0 ]

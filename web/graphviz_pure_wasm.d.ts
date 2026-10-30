@@ -6,32 +6,55 @@
 // file. `scripts/wasm-runtimes/types.ts` is typechecked against it. Edit this file;
 // do not treat a regenerated one as the source.
 
+/** A URL, response, bytes or compiled module accepted by asynchronous initialisation. */
 export type InitInput = RequestInfo | URL | Response | BufferSource | WebAssembly.Module;
 
+/** Bytes or a compiled module accepted by synchronous initialisation. */
 export type SyncInitInput = BufferSource | WebAssembly.Module;
 
 // wasm-bindgen's view of the instance exports. The drift check compares this
-// interface with the generated file, whitespace aside.
+// interface with the generated file, comments and whitespace aside.
+/** The WebAssembly instance exports returned by initialisation. */
 export interface InitOutput {
+  /** The instance's linear memory. */
   readonly memory: WebAssembly.Memory;
+  /** The raw ABI entry point for graph statistics. */
   readonly inspectGraph: (a: number, b: number, c: number, d: number) => [number, number, number];
+  /** The raw ABI entry point for {@link render}. */
   readonly render: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number, number, number];
+  /** The raw ABI entry point for {@link renderAll}. */
   readonly renderAll: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number, number, number];
+  /** The raw ABI entry point for {@link renderAllBytes}. */
   readonly renderAllBytes: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number, number, number];
+  /** The raw ABI entry point for {@link renderAllBytesWithDiagnostics}. */
   readonly renderAllBytesWithDiagnostics: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number, number];
+  /** The raw ABI entry point for {@link renderAllWithDiagnostics}. */
   readonly renderAllWithDiagnostics: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number, number];
+  /** The raw ABI entry point for {@link renderJson}. */
   readonly renderJson: (a: number, b: number, c: number, d: number) => [number, number, number, number];
+  /** The raw ABI entry point for {@link renderSvg}. */
   readonly renderSvg: (a: number, b: number, c: number, d: number) => [number, number, number, number];
+  /** The raw ABI entry point for {@link renderWithDiagnostics}. */
   readonly renderWithDiagnostics: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number, number];
+  /** The raw ABI entry point for {@link supportedEngines}. */
   readonly supportedEngines: () => [number, number];
+  /** The raw ABI entry point for {@link supportedFormats}. */
   readonly supportedFormats: () => [number, number];
+  /** The raw ABI entry point for {@link version}. */
   readonly version: () => [number, number];
+  /** Frees an allocation in linear memory. */
   readonly __wbindgen_free: (a: number, b: number, c: number) => void;
+  /** The table holding JavaScript object references. */
   readonly __wbindgen_externrefs: WebAssembly.Table;
+  /** Drops a slice of JavaScript object references. */
   readonly __externref_drop_slice: (a: number, b: number) => void;
+  /** Allocates bytes in linear memory. */
   readonly __wbindgen_malloc: (a: number, b: number) => number;
+  /** Resizes an allocation in linear memory. */
   readonly __wbindgen_realloc: (a: number, b: number, c: number, d: number) => number;
+  /** Releases a JavaScript object reference table slot. */
   readonly __externref_table_dealloc: (a: number) => void;
+  /** Runs the instance initialisation routine. */
   readonly __wbindgen_start: () => void;
 }
 
@@ -52,7 +75,9 @@ export type DiagnosticLevel = "Error" | "Warning" | "CountedAsError";
 
 /** One `agerr` write. `message` includes the `Error: ` or `Warning: ` prefix and the trailing newline. */
 export interface Diagnostic {
+  /** The severity of this diagnostic. */
   level: DiagnosticLevel;
+  /** The complete diagnostic text, including its prefix and trailing newline. */
   message: string;
 }
 
@@ -80,10 +105,15 @@ export type GraphvizErrorKind =
  * 1); that diagnostic is on `*WithDiagnostics`.
  */
 export class GraphvizError extends Error {
+  /** The error class name. */
   readonly name: "GraphvizError";
+  /** The command line exit status for this failure. */
   readonly status: number;
+  /** The category of failure. */
   readonly kind: GraphvizErrorKind;
+  /** Diagnostics collected before the call failed. */
   readonly diagnostics: Diagnostic[];
+  /** Creates an error with its exit status, category and collected diagnostics. */
   constructor(message: string, status: number, kind: GraphvizErrorKind, diagnostics: Diagnostic[]);
 }
 
@@ -92,28 +122,45 @@ export class GraphvizError extends Error {
  * Function names are camelCase.
  */
 export interface GraphStats {
+  /** The graph name. */
   name: string;
+  /** Whether the graph is directed. */
   directed: boolean;
+  /** Whether parallel edges are forbidden. */
   strict: boolean;
+  /** The number of nodes. */
   nodes: number;
+  /** The number of edges. */
   edges: number;
+  /** The number of subgraphs. */
   subgraphs: number;
+  /** The laid-out graph width in points. */
   width_pt: number;
+  /** The laid-out graph height in points. */
   height_pt: number;
 }
 
+/** The first graph's rendered text and the diagnostics collected by its call. */
 export interface RenderedText {
+  /** The first graph's rendered text. */
   output: string;
+  /** Diagnostics collected by the call. */
   diagnostics: Diagnostic[];
 }
 
+/** Rendered text for every graph and the diagnostics of the whole call. */
 export interface RenderedTexts {
+  /** One rendered text string per graph. */
   output: string[];
+  /** Diagnostics collected across all graphs. */
   diagnostics: Diagnostic[];
 }
 
+/** Concatenated rendered bytes and the diagnostics of the whole call. */
 export interface RenderedBytes {
+  /** The rendered bytes of all graphs concatenated. */
   output: Uint8Array;
+  /** Diagnostics collected across all graphs. */
   diagnostics: Diagnostic[];
 }
 

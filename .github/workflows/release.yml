@@ -1,9 +1,9 @@
 name: Release
 
 # Builds a release from master's head and, unless dry_run is set, publishes it after one
-# approval of the `release` environment. Anyone who can dispatch a workflow can start it.
+# approval of the `release` environment. The owner (a JSR scope member) must dispatch it.
 # Only the environment's reviewer can approve it, and that one approval starts every
-# publishing job.
+# publishing job; npm then waits for passkey approval on npmjs.com.
 #
 #     gh workflow run release.yml [-f version=X.Y.Z] [-f intro=...] [-f dry_run=true]
 #
@@ -44,9 +44,9 @@ name: Release
 #   the environment together and one approval starts them all (see the crates-io job). The
 #   trusted publishers of crates.io, npm and PyPI are bound to this environment. crates.io,
 #   npm, PyPI and JSR are published with tokenless OIDC (trusted publishing; JSR's GitHub
-#   Actions publishing): no registry token exists for them. npm is published with
-#   `npm publish --provenance`, not staged. The container image goes to ghcr.io with the
-#   job's own GITHUB_TOKEN (packages: write in that job only). Every token these jobs hold
+#   Actions publishing): no registry token exists for them. npm is staged with
+#   `npm stage publish` and waits for passkey approval on npmjs.com. The container goes to
+#   ghcr.io with the job's own GITHUB_TOKEN (packages: write in that job only). Every token held
 #   lives for one job, except one: Wasmer has no trusted publishing, so the wasmer job
 #   publishes with a Wasmer API token, a secret of the `release` environment that only that
 #   job reads.
@@ -59,7 +59,8 @@ name: Release
 # - The verify job, with no environment, checks what the publishing jobs published
 #   (scripts/release-verify.sh --ci: every channel but the tap and bucket, which were
 #   dispatched rather than waited on) and closes a milestone titled X.Y.Z if one is open
-#   and every publishing job that ran succeeded. It opens no issue and writes no comment.
+#   and every publishing job that ran succeeded and npm is live. Pending npm approval is
+#   reported in the summary. It opens no issue and writes no comment.
 
 on:
   workflow_dispatch:
@@ -146,6 +147,16 @@ jobs:
             echo "::error::A real release is dispatched from master (this run is $REF). Pass dry_run to build without publishing."
             exit 1
           fi
+      - name: Require the owner's dispatch for JSR
+        if: inputs.dry_run != true
+        env:
+          ACTOR: ${{ github.actor }}
+          EXPECTED_ACTOR: ${{ vars.JSR_PUBLISH_ACTOR }}
+        run: |
+          if [ -z "$EXPECTED_ACTOR" ] || [ "${ACTOR,,}" != "${EXPECTED_ACTOR,,}" ] || [[ "${ACTOR,,}" == *'[bot]' ]]; then
+            echo "::error::JSR requires a dispatch by the owner's scope-member account. Set JSR_PUBLISH_ACTOR to that account and dispatch as it; the release App cannot publish (actorNotScopeMember)."
+            exit 1
+          fi
       - name: Install Rust ${{ env.RUST_VERSION }}
         run: rustup toolchain install "$RUST_VERSION" --profile minimal && rustup default "$RUST_VERSION"
       - name: Install the pinned API checker for release readiness
@@ -170,7 +181,8 @@ jobs:
           name: release-commit
           path: release-commit/release.bundle
           if-no-files-found: error
-          retention-days: 5
+          # Keep late npm approvals verifiable for the full Actions re-run window.
+          retention-days: 90
 
   # Skipped on a dry run. Every publishing job needs this one and checks
   # `needs.publish.result == 'success'`, so a dry run never requests the release environment.
@@ -433,12 +445,14 @@ jobs:
         run: |
           mkdir "$RUNNER_TEMP/jsr"
           tar -xzf dist/*.tgz -C "$RUNNER_TEMP/jsr"
+          node scripts/check-jsr-license.mjs "$RUNNER_TEMP/jsr/package/jsr.json"
           cd "$RUNNER_TEMP/jsr/package"
+          "$RUNNER_TEMP/deno" doc --lint pkg/graphviz_pure_wasm.d.ts
           "$RUNNER_TEMP/deno" publish --dry-run
       # The npm job's command, as a dry run (no token, so no provenance here). The ./ matters:
       # npm reads a bare dist/NAME.tgz as a GitHub repository shorthand, not a file.
-      - name: npm publish dry run
-        run: npm publish --dry-run --access public ./dist/*.tgz
+      - name: npm stage publish dry run
+        run: npm stage publish --dry-run --access public ./dist/*.tgz
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: npm-package
@@ -882,10 +896,10 @@ jobs:
         with:
           name: npm-package
           path: dist
-      # The tarball the attest job signed is the one published. Provenance is signed from this
-      # job's OIDC token. The trusted publisher has to allow `npm publish` (docs/releasing.md).
-      - name: npm publish
-        run: npm publish --provenance --access public ./dist/*.tgz
+      # Stage the attested tarball. OIDC adds provenance automatically, as in v0.2.3.
+      # The trusted publisher allows staging only; approval on npmjs.com makes it live.
+      - name: npm stage publish
+        run: npm stage publish --access public ./dist/*.tgz
 
   # The attested npm tarball, published to JSR as it is (it carries jsr.json, README.md, LICENSE,
   # NOTICE and THIRD-PARTY-LICENSES.md) by a pinned, checksum-verified Deno: nothing in this job
@@ -1197,7 +1211,8 @@ jobs:
           echo "$RUNNER_TEMP/binstall" >> "$GITHUB_PATH"
       # The registry checks share one 10-minute deadline, well inside the job's timeout, and the
       # script writes each channel's line as it goes, so the summary always shows what was found.
-      - name: Verify every channel but the tap and bucket
+      - name: Verify live channels (npm may await approval)
+        id: verify
         shell: bash # -eo pipefail: a failed check must fail the step
         env:
           GH_TOKEN: ${{ github.token }}
@@ -1209,25 +1224,12 @@ jobs:
             npm=${{ needs.npm.result }} jsr=${{ needs.jsr.result }} ghcr=${{ needs.ghcr.result }}
             wasmer=${{ needs.wasmer.result == 'success' && needs.wasmer.outputs.published != 'true' && 'skipped' || needs.wasmer.result }}
             pypi=${{ needs.pypi.result == 'success' && needs.pypi.outputs.published != 'true' && 'skipped' || needs.pypi.result }}
-        run: |
-          ok="" failed=""
-          # binstall needs both the crate (its metadata) and the GitHub release (its archives);
-          # when either failed, that job's failure is reported and binstall is left out.
-          if [ "$CRATES" = success ] && [ "$GITHUB" = success ]; then RESULTS="$RESULTS binstall=success"; else RESULTS="$RESULTS binstall=skipped"; fi
-          # A channel that is not set up yet (its job succeeded without publishing) is left out.
-          for kv in $RESULTS; do
-            case "${kv#*=}" in
-              success) ok="$ok,${kv%%=*}" ;;
-              skipped) ;;
-              *) failed="$failed,${kv%%=*}" ;;
-            esac
-          done
-          scripts/release-verify.sh "$VERSION" --ci --wait 600 --channels "${ok#,}" --failed "${failed#,}" |
-            tee -a "$GITHUB_STEP_SUMMARY"
+        run: scripts/release-verify-ci.sh
       - name: Close the milestone
         # A skipped publishing job did not run (a dry run, or a channel that was not part of
         # this approval). A failure leaves the milestone open.
         if: >-
+          steps.verify.outputs.npm_pending != 'true' &&
           (needs.github-release.result == 'success' || needs.github-release.result == 'skipped') &&
           (needs.crates-io.result == 'success' || needs.crates-io.result == 'skipped') &&
           (needs.npm.result == 'success' || needs.npm.result == 'skipped') &&

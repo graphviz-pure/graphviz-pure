@@ -75,6 +75,8 @@ ignored=(
 read_by_jobs=(site/public/samples site/src/data/samples.json)
 # Unlike distribution recipes, the launcher is compiled by CPU fidelity and Windows cross-platform checks.
 read_by_jobs+=(packaging/launcher)
+# JSR validates the packed README and licence files as well as the code.
+read_by_jobs+=(web THIRD-PARTY-LICENSES.md)
 
 # The index, which matches HEAD in a fresh checkout. glob magic: `*` does not cross a `/`.
 key=$({
