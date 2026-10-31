@@ -6,9 +6,9 @@
 //! to a `double` accumulator is rounded to `float` first (no contraction
 //! across the conversion).
 //!
-//! `right_mult_with_vector_ff` blocks four rows and splits each row's scatter
-//! from its running dot. Each output float keeps the operation sequence
-//! documented on that function.
+//! `right_mult_with_vector_ff` blocks eight rows, then four, and splits each
+//! row's scatter from its running dot. Each output float keeps the operation
+//! sequence documented on that function.
 
 use super::graphdata::VtxData;
 use graphviz_pure_core::math;
@@ -44,11 +44,12 @@ pub fn orthog1f(vec: &mut [f32]) {
 /// `result = A * vector` for a packed symmetric matrix (upper triangle,
 /// row-major).
 ///
-/// Four rows run together, so their dot-product chains are independent, and
-/// each row's scatter is its own loop. For every `result[j]` the operations
-/// stay, in order: `fma(A[i, j], vector[i], result[j])` for `i = 0 .. j-1`,
-/// then one plain add of row `j`'s left-to-right dot product. That dot product
-/// is `fma(A[j, k], vector[k], …)` from the diagonal through column `n - 1`,
+/// Eight rows run together when at least eight remain, then four. Their
+/// dot-product chains are independent, and each row's scatter is its own
+/// loop. For every `result[j]` the operations stay, in order:
+/// `fma(A[i, j], vector[i], result[j])` for `i = 0 .. j-1`, then one plain
+/// add of row `j`'s left-to-right dot product. That dot product is
+/// `fma(A[j, k], vector[k], …)` from the diagonal through column `n - 1`,
 /// starting from `+0`.
 pub fn right_mult_with_vector_ff(packed: &[f32], n: usize, vector: &[f32], result: &mut [f32]) {
     // One-shot callers stay here. The parallel gather needs a lower-triangle
@@ -58,6 +59,12 @@ pub fn right_mult_with_vector_ff(packed: &[f32], n: usize, vector: &[f32], resul
     let mut result = &mut result[..n];
     result.fill(0.0);
     let mut packed = packed;
+    while vector.len() >= 8 {
+        let (packed_rest, result_tail) = right_mult_ff_block8(packed, vector, result);
+        packed = packed_rest;
+        result = result_tail;
+        vector = vector.split_at(8).1;
+    }
     while vector.len() >= 4 {
         let (packed_rest, result_tail) = right_mult_ff_block4(packed, vector, result);
         packed = packed_rest;
@@ -70,6 +77,180 @@ pub fn right_mult_with_vector_ff(packed: &[f32], n: usize, vector: &[f32], resul
         result = result_tail;
         vector = vector.split_at(1).1;
     }
+}
+
+/// One left-to-right dot, starting at `+0`. The first step is `fma(a, v, +0)`,
+/// not a multiply.
+#[inline(always)]
+fn dot_from_zero(coeff: &[f32], vector: &[f32]) -> f32 {
+    let mut acc = 0.0f32;
+    for (&a, &v) in coeff.iter().zip(vector) {
+        acc = a.mul_add(v, acc);
+    }
+    acc
+}
+
+/// Prefix coefficient. The split that built `row` already checked the index.
+#[inline(always)]
+fn lane_at(row: &[f32], index: usize) -> f32 {
+    row.get(index).copied().unwrap_or(0.0)
+}
+
+/// Eight packed rows starting at `vector[0]`. `vector` and `result` have the
+/// same length, at least 8. Each accumulator is that row's left-to-right dot.
+/// Scatters into one `result[j]` stay in increasing row order, and `+=` of the
+/// dot happens after those scatters.
+///
+/// The 8×8 triangle is stored into `result` before the long tail. Those stores
+/// do not touch the eight accumulators or `result[8..]`, so each float's FMA
+/// sequence is unchanged, and the triangle coefficients are dead before the
+/// tail loop (eight live accumulators, not the triangle as well).
+fn right_mult_ff_block8<'p, 'r>(
+    packed: &'p [f32],
+    vector: &[f32],
+    result: &'r mut [f32],
+) -> (&'p [f32], &'r mut [f32]) {
+    let n = vector.len();
+    debug_assert!(n >= 8);
+    debug_assert_eq!(result.len(), n);
+
+    let (row0, packed) = packed.split_at(n);
+    let (row1, packed) = packed.split_at(n.wrapping_sub(1));
+    let (row2, packed) = packed.split_at(n.wrapping_sub(2));
+    let (row3, packed) = packed.split_at(n.wrapping_sub(3));
+    let (row4, packed) = packed.split_at(n.wrapping_sub(4));
+    let (row5, packed) = packed.split_at(n.wrapping_sub(5));
+    let (row6, packed) = packed.split_at(n.wrapping_sub(6));
+    let (row7, packed_rest) = packed.split_at(n.wrapping_sub(7));
+
+    let (v_head, v_tail) = vector.split_at(8);
+    let mut lanes = [0.0f32; 8];
+    for (lane, &value) in lanes.iter_mut().zip(v_head) {
+        *lane = value;
+    }
+    let [v0, v1, v2, v3, v4, v5, v6, v7] = lanes;
+
+    let (pre0, a0_tail) = row0.split_at(8);
+    let (pre1, a1_tail) = row1.split_at(7);
+    let (pre2, a2_tail) = row2.split_at(6);
+    let (pre3, a3_tail) = row3.split_at(5);
+    let (pre4, a4_tail) = row4.split_at(4);
+    let (pre5, a5_tail) = row5.split_at(3);
+    let (pre6, a6_tail) = row6.split_at(2);
+    let (pre7, a7_tail) = row7.split_at(1);
+
+    let mut v_prefix = v_head;
+    let mut res0 = dot_from_zero(pre0, v_prefix);
+    v_prefix = v_prefix.split_at(1).1;
+    let mut res1 = dot_from_zero(pre1, v_prefix);
+    v_prefix = v_prefix.split_at(1).1;
+    let mut res2 = dot_from_zero(pre2, v_prefix);
+    v_prefix = v_prefix.split_at(1).1;
+    let mut res3 = dot_from_zero(pre3, v_prefix);
+    v_prefix = v_prefix.split_at(1).1;
+    let mut res4 = dot_from_zero(pre4, v_prefix);
+    v_prefix = v_prefix.split_at(1).1;
+    let mut res5 = dot_from_zero(pre5, v_prefix);
+    v_prefix = v_prefix.split_at(1).1;
+    let mut res6 = dot_from_zero(pre6, v_prefix);
+    v_prefix = v_prefix.split_at(1).1;
+    let mut res7 = dot_from_zero(pre7, v_prefix);
+
+    let (head, result_tail) = result.split_at_mut(8);
+    let (slot0, head) = head.split_at_mut(1);
+    let (slot1, head) = head.split_at_mut(1);
+    let (slot2, head) = head.split_at_mut(1);
+    let (slot3, head) = head.split_at_mut(1);
+    let (slot4, head) = head.split_at_mut(1);
+    let (slot5, head) = head.split_at_mut(1);
+    let (slot6, slot7) = head.split_at_mut(1);
+
+    // Increasing destination, and increasing source row inside each destination.
+    fma_slot(slot1, lane_at(pre0, 1), v0);
+    fma_slot(slot2, lane_at(pre0, 2), v0);
+    fma_slot(slot2, lane_at(pre1, 1), v1);
+    fma_slot(slot3, lane_at(pre0, 3), v0);
+    fma_slot(slot3, lane_at(pre1, 2), v1);
+    fma_slot(slot3, lane_at(pre2, 1), v2);
+    fma_slot(slot4, lane_at(pre0, 4), v0);
+    fma_slot(slot4, lane_at(pre1, 3), v1);
+    fma_slot(slot4, lane_at(pre2, 2), v2);
+    fma_slot(slot4, lane_at(pre3, 1), v3);
+    fma_slot(slot5, lane_at(pre0, 5), v0);
+    fma_slot(slot5, lane_at(pre1, 4), v1);
+    fma_slot(slot5, lane_at(pre2, 3), v2);
+    fma_slot(slot5, lane_at(pre3, 2), v3);
+    fma_slot(slot5, lane_at(pre4, 1), v4);
+    fma_slot(slot6, lane_at(pre0, 6), v0);
+    fma_slot(slot6, lane_at(pre1, 5), v1);
+    fma_slot(slot6, lane_at(pre2, 4), v2);
+    fma_slot(slot6, lane_at(pre3, 3), v3);
+    fma_slot(slot6, lane_at(pre4, 2), v4);
+    fma_slot(slot6, lane_at(pre5, 1), v5);
+    fma_slot(slot7, lane_at(pre0, 7), v0);
+    fma_slot(slot7, lane_at(pre1, 6), v1);
+    fma_slot(slot7, lane_at(pre2, 5), v2);
+    fma_slot(slot7, lane_at(pre3, 4), v3);
+    fma_slot(slot7, lane_at(pre4, 3), v4);
+    fma_slot(slot7, lane_at(pre5, 2), v5);
+    fma_slot(slot7, lane_at(pre6, 1), v6);
+
+    debug_assert_eq!(a0_tail.len(), v_tail.len());
+    debug_assert_eq!(a1_tail.len(), v_tail.len());
+    debug_assert_eq!(a2_tail.len(), v_tail.len());
+    debug_assert_eq!(a3_tail.len(), v_tail.len());
+    debug_assert_eq!(a4_tail.len(), v_tail.len());
+    debug_assert_eq!(a5_tail.len(), v_tail.len());
+    debug_assert_eq!(a6_tail.len(), v_tail.len());
+    debug_assert_eq!(a7_tail.len(), v_tail.len());
+    let ntail = a0_tail.len();
+    let a1_tail = &a1_tail[..ntail];
+    let a2_tail = &a2_tail[..ntail];
+    let a3_tail = &a3_tail[..ntail];
+    let a4_tail = &a4_tail[..ntail];
+    let a5_tail = &a5_tail[..ntail];
+    let a6_tail = &a6_tail[..ntail];
+    let a7_tail = &a7_tail[..ntail];
+    let v_tail = &v_tail[..ntail];
+    for ((((((((&p0, &p1), &p2), &p3), &p4), &p5), &p6), &p7), &vj) in a0_tail
+        .iter()
+        .zip(a1_tail)
+        .zip(a2_tail)
+        .zip(a3_tail)
+        .zip(a4_tail)
+        .zip(a5_tail)
+        .zip(a6_tail)
+        .zip(a7_tail)
+        .zip(v_tail)
+    {
+        res0 = p0.mul_add(vj, res0);
+        res1 = p1.mul_add(vj, res1);
+        res2 = p2.mul_add(vj, res2);
+        res3 = p3.mul_add(vj, res3);
+        res4 = p4.mul_add(vj, res4);
+        res5 = p5.mul_add(vj, res5);
+        res6 = p6.mul_add(vj, res6);
+        res7 = p7.mul_add(vj, res7);
+    }
+
+    scatter_fma(result_tail, a0_tail, v0);
+    scatter_fma(result_tail, a1_tail, v1);
+    scatter_fma(result_tail, a2_tail, v2);
+    scatter_fma(result_tail, a3_tail, v3);
+    scatter_fma(result_tail, a4_tail, v4);
+    scatter_fma(result_tail, a5_tail, v5);
+    scatter_fma(result_tail, a6_tail, v6);
+    scatter_fma(result_tail, a7_tail, v7);
+    add_slot(slot0, res0);
+    add_slot(slot1, res1);
+    add_slot(slot2, res2);
+    add_slot(slot3, res3);
+    add_slot(slot4, res4);
+    add_slot(slot5, res5);
+    add_slot(slot6, res6);
+    add_slot(slot7, res7);
+
+    (packed_rest, result_tail)
 }
 
 /// Four packed rows starting at `vector[0]`. `vector` and `result` have the
@@ -537,8 +718,8 @@ mod tests {
 
     #[test]
     fn right_mult_matches_scalar_chain_on_every_width() {
-        // Widths that are not a multiple of the 4-row block, including the
-        // empty and single-row edges.
+        // Widths that are not a multiple of the 8-row or 4-row block, including
+        // the empty and single-row edges.
         let widths = [
             0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 15, 16, 17, 31, 32, 33, 37, 63, 64, 65, 127, 128,
         ];
