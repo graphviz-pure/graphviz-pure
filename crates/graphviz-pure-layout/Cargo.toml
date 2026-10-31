@@ -15,6 +15,10 @@ description = "The Graphviz layout engines in pure Rust: dot, neato, fdp, sfdp, 
 # `ns.c` and asserts that both agree (common/ns/cut/check.rs). For tests and CI only: it
 # costs C's full network simplex on top of the cut sets'.
 ns-check = []
+# Check mode for dot's mincross: every shortcut in dotgen/mincross/scan.rs also runs the functions
+# that mirror `mincross.c` and asserts that both agree (dotgen/mincross/scan/check.rs). For tests
+# and CI only: it costs C's full reorder and transpose on top of the shortcuts'.
+mincross-check = []
 # Native only. Off unless a crate above asks for it. The wasm build refuses
 # this feature (see src/lib.rs). Thread count: `GRAPHVIZ_PURE_THREADS`.
 parallel = []

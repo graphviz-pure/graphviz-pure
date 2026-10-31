@@ -21,11 +21,11 @@ set -euo pipefail
 cmd=${1:?usage: ci-result-cache.sh lookup|name|changed KIND [BASE]}
 kind=${2:?usage: ci-result-cache.sh lookup|name|changed KIND [BASE]}
 
-# Paths that no job this script skips reads (ci.yml: verify, ns-check, msrv, wasm-e2e,
-# wasm-runtimes, parallel-neato; cross-platform.yml: the platform renders and compare). The site
-# job, the supply-chain job and the PR risk report always run, so the files only they read are
-# listed too. A path not listed here is part of the KEY, so a new file is tested until someone
-# adds it.
+# Paths that no job this script skips reads (ci.yml: verify, ns-check, mincross-check, msrv,
+# wasm-e2e, wasm-runtimes, parallel-neato; cross-platform.yml: the platform renders and compare).
+# The site job, the supply-chain job and the PR risk report always run, so the files only they
+# read are listed too. A path not listed here is part of the KEY, so a new file is tested until
+# someone adds it.
 #
 # site/ is listed except for the samples, which the renders and wasm-runtimes read
 # (scripts/cross-platform-render.sh, scripts/cross-platform-wasm.mjs, scripts/wasm-runtimes).
