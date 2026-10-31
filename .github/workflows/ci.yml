@@ -97,6 +97,7 @@ jobs:
 
   mincross-check:
     name: Mincross check mode
+    timeout-minutes: 20
     needs: lookup
     if: needs.lookup.outputs.hit != 'true'
     runs-on: ubuntu-24.04

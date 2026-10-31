@@ -297,7 +297,9 @@ struct Crossings {
 }
 
 impl Crossings {
-    fn new(c: &Circ, subg: &CGraph) -> Self {
+    // LEAFONE/LEAFTWO paths may overlap: opening orders index list
+    // occurrences, so the tree must cover list_len, not distinct nodes.
+    fn new(c: &Circ, subg: &CGraph, list_len: usize) -> Self {
         let nodes = subg.nodes();
         let mut offsets = vec![0..0; c.nd.len()];
         let mut edges = Vec::new();
@@ -318,7 +320,7 @@ impl Crossings {
                 0;
                 (c.arena.order.len() << 1)
                     .div_ceil(64)
-                    .saturating_add(subg.nnodes())
+                    .saturating_add(list_len)
                     .saturating_add(1)
             ],
         }
@@ -357,7 +359,10 @@ fn count_checked<const MUTATION: u8>(
     let (open, tree) = scratch.split_at_mut(c.arena.order.len().wrapping_shl(1).div_ceil(64));
     // Index keys must be positive opening orders. Preserve even the reference's
     // order-counter overflow behavior by using its scan beyond that range.
-    if list.len() > i32::MAX as usize {
+    if list.len() > i32::MAX as usize
+        || list.len() >= tree.len()
+        || (!cfg!(any(test, feature = "circo-check")) && list.len() <= 16)
+    {
         return count_all_crossings_reference(c, list, offsets, adjacency, open);
     }
     let Some(result) = count_indexed::<MUTATION>(c, list, offsets, adjacency, open, tree) else {
@@ -369,8 +374,8 @@ fn count_checked<const MUTATION: u8>(
         let halves = open.to_vec();
         let expected = count_all_crossings_reference(c, list, offsets, adjacency, open);
         assert_eq!(result, expected, "circo indexed crossing count");
-        assert_eq!(c.arena.order, orders, "circo edge orders");
-        assert_eq!(open, halves, "circo half membership");
+        assert!(c.arena.order == orders, "circo edge orders differ");
+        assert!(open == halves, "circo half membership differs");
     }
     result
 }
@@ -396,15 +401,15 @@ fn count_indexed<const MUTATION: u8>(
         for &e in edges {
             for half in e.wrapping_shl(1)..e.wrapping_shl(1).wrapping_add(2) {
                 if MUTATION != 1 && open.get(half / 64)? & (1 << (half % 64)) != 0 {
-                    index_update(tree, *c.arena.order.get(e)? as usize, false);
+                    index_update(tree, *c.arena.order.get(e)? as usize, false)?;
                 }
             }
         }
-        let total = index_prefix(tree, list.len());
+        let total = index_prefix(tree, list.len())?;
         for &e in edges {
             let edge_order = *c.arena.order.get(e)?;
             if edge_order > 0 {
-                let count = total.wrapping_sub(index_prefix(tree, edge_order as usize));
+                let count = total.checked_sub(index_prefix(tree, edge_order as usize)?)?;
                 #[cfg(any(test, feature = "circo-check"))]
                 {
                     let expected = reference_query(c, open, edge_order, n);
@@ -416,7 +421,7 @@ fn count_indexed<const MUTATION: u8>(
         for &e in edges {
             for half in e.wrapping_shl(1)..e.wrapping_shl(1).wrapping_add(2) {
                 if MUTATION != 1 && open.get(half / 64)? & (1 << (half % 64)) != 0 {
-                    index_update(tree, *c.arena.order.get(e)? as usize, true);
+                    index_update(tree, *c.arena.order.get(e)? as usize, true)?;
                 }
             }
             if *c.arena.order.get(e)? > 0 {
@@ -424,8 +429,12 @@ fn count_indexed<const MUTATION: u8>(
                     e.wrapping_shl(1) | usize::from((*c.arena.tail.get(e)? != n) ^ (MUTATION == 2));
                 let mask = 1 << (half % 64);
                 if open.get(half / 64)? & mask != 0 {
-                    *open.get_mut(half / 64)? &= !mask;
-                    index_update(tree, *c.arena.order.get(e)? as usize, false);
+                    if MUTATION != 3 {
+                        *open.get_mut(half / 64)? &= !mask;
+                    }
+                    if MUTATION != 4 {
+                        index_update(tree, *c.arena.order.get(e)? as usize, false)?;
+                    }
                 }
             }
         }
@@ -434,9 +443,15 @@ fn count_indexed<const MUTATION: u8>(
                 *c.arena.order.get_mut(e)? = order;
                 let half = e.wrapping_shl(1) | usize::from(*c.arena.tail.get(e)? != n);
                 *open.get_mut(half / 64)? |= 1 << (half % 64);
-                index_update(tree, order as usize, true);
+                index_update(tree, order as usize, true)?;
             }
         }
+        #[cfg(any(test, feature = "circo-check"))]
+        assert_eq!(
+            index_prefix(tree, list.len()),
+            Some(open.iter().map(|word| u64::from(word.count_ones())).sum()),
+            "circo indexed crossing count (half membership weight)"
+        );
     }
     Some(crossings)
 }
@@ -462,26 +477,34 @@ fn reference_query(c: &Circ, open: &[u64], edge_order: i32, n: usize) -> u64 {
         .sum()
 }
 
-fn index_update(tree: &mut [u64], mut i: usize, insert: bool) {
-    while let Some(value) = tree.get_mut(i) {
-        if insert {
-            *value = value.wrapping_add(1);
+// Invalid keys must hand the entire recount back to the reference. In
+// particular zero has no Fenwick successor and must never enter the loop.
+fn index_update(tree: &mut [u64], mut i: usize, insert: bool) -> Option<()> {
+    if i == 0 || i >= tree.len() {
+        return None;
+    }
+    while i < tree.len() {
+        let value = tree.get_mut(i)?;
+        *value = if insert {
+            value.wrapping_add(1)
         } else {
-            *value = value.wrapping_sub(1);
-        }
+            value.wrapping_sub(1)
+        };
         i = i.wrapping_add(i & i.wrapping_neg());
     }
+    Some(())
 }
 
-fn index_prefix(tree: &[u64], mut i: usize) -> u64 {
+fn index_prefix(tree: &[u64], mut i: usize) -> Option<u64> {
+    if i >= tree.len() {
+        return None;
+    }
     let mut sum = 0u64;
     while i > 0 {
-        if let Some(value) = tree.get(i) {
-            sum = sum.wrapping_add(*value);
-        }
+        sum = sum.wrapping_add(*tree.get(i)?);
         i &= i.wrapping_sub(1);
     }
-    sum
+    Some(sum)
 }
 
 fn add_crossings(value: i32, count: u64) -> i32 {
@@ -590,7 +613,7 @@ fn reduce(
 
 /// `reduce_edge_crossings(list, subg)`.
 fn reduce_edge_crossings(c: &mut Circ, mut list: Vec<usize>, subg: &CGraph) -> Vec<usize> {
-    let mut scratch = Crossings::new(c, subg);
+    let mut scratch = Crossings::new(c, subg, list.len());
     let mut crossings = count_all_crossings(
         c,
         &list,
@@ -794,7 +817,7 @@ mod tests {
             g.edge(&mut c.arena, t, h);
         }
         g.add_node(6);
-        let mut scratch = Crossings::new(&c, &g);
+        let mut scratch = Crossings::new(&c, &g, 5);
         fn permutations(c: &mut Circ, g: &CGraph, s: &mut Crossings, list: &mut [usize], i: usize) {
             if i == list.len() {
                 let expected = reference(c, list, g);
@@ -841,18 +864,19 @@ mod tests {
                     start..edges.len()
                 })
                 .collect();
-            let mut list: Vec<_> = (0..7).collect();
-            let mut scratch = vec![0; (c.arena.order.len() * 2).div_ceil(64) + 8];
+            let mut list: Vec<_> = (0..7).chain([1, 3, 1]).collect();
+            let mut scratch = vec![0; (c.arena.order.len() * 2).div_ceil(64) + list.len() + 1];
             for _ in 0..20 {
                 seed = seed.wrapping_mul(6364136223846793005).wrapping_add(1);
-                list.swap((seed >> 32) as usize % 7, seed as usize % 7);
+                let len = list.len();
+                list.swap((seed >> 32) as usize % len, seed as usize % len);
                 count_checked::<MUTATION>(&mut c, &list, &offsets, &edges, &mut scratch);
             }
         }
     }
 
     #[test]
-    fn indexed_counts_match_on_multigraph_permutations() {
+    fn indexed_counts_match_on_multigraph_lists_with_repeats() {
         generated::<0>();
     }
 
@@ -877,5 +901,60 @@ mod tests {
             assert_eq!(add_crossings(i32::MAX, 1), i32::MIN);
             assert_eq!(add_crossings(0, (1u64 << 32) + 3), 3);
         }
+    }
+    fn repeated_node<const MUTATION: u8>() {
+        let mut c = circ();
+        let mut g = CGraph::default();
+        g.edge(&mut c.arena, 0, 4);
+        g.edge(&mut c.arena, 1, 3);
+        g.edge(&mut c.arena, 1, 1);
+        g.add_node(2);
+        let list = [0, 1, 1, 2, 3, 4];
+        let mut s = Crossings::new(&c, &g, list.len());
+        assert_eq!(
+            count_checked::<MUTATION>(&mut c, &list, &s.offsets, &s.edges, &mut s.open),
+            0
+        );
+    }
+
+    #[test]
+    fn repeated_nodes_erase_open_halves_and_loops() {
+        repeated_node::<0>();
+    }
+
+    #[test]
+    #[should_panic(expected = "circo indexed crossing count")]
+    fn check_catches_erasing_only_the_bit() {
+        repeated_node::<4>();
+    }
+
+    #[test]
+    #[should_panic(expected = "circo indexed crossing count")]
+    fn check_catches_erasing_only_the_tree() {
+        repeated_node::<3>();
+    }
+
+    #[test]
+    fn invalid_fenwick_keys_decline_without_hanging_or_truncating() {
+        let mut tree = [0; 24];
+        assert_eq!(index_update(&mut tree, 0, true), None);
+        assert_eq!(index_update(&mut tree, 24, true), None);
+        assert_eq!(index_prefix(&tree, 24), None);
+        assert_eq!(index_update(&mut tree, 23, true), Some(()));
+        assert_eq!(index_prefix(&tree, 23), Some(1));
+        let mut c = circ();
+        let mut g = CGraph::default();
+        g.edge(&mut c.arena, 0, 4);
+        g.edge(&mut c.arena, 1, 3);
+        let list = [0, 1, 1, 2, 3, 4];
+        g.add_node(2);
+        let mut s = Crossings::new(&c, &g, list.len());
+        let expected = reference(&mut c, &list, &g);
+        // Truncate exactly the top slot, reproducing the reviewed capacity bug.
+        s.open.pop();
+        assert_eq!(
+            count_checked::<0>(&mut c, &list, &s.offsets, &s.edges, &mut s.open),
+            expected
+        );
     }
 }
