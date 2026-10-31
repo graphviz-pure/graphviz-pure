@@ -149,7 +149,7 @@ pub(crate) fn node_from_geometry(
         fontname: l.font_name.clone(),
     });
     let node = LNode {
-        pos: vec![0.0; ndim],
+        pos: NodePosition::zeroed(ndim),
         coord: Point::default(),
         width: geom.width,
         height: geom.height,
