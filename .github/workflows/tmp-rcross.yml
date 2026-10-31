@@ -19,7 +19,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p "$RUNNER_TEMP/src" "$RUNNER_TEMP/gv/lutplugins"
-          curl -fL https://gitlab.com/graphviz/graphviz/-/archive/16.1.0/graphviz-16.1.0.tar.xz -o "$RUNNER_TEMP/graphviz.tar.xz"
+          curl -fL https://gitlab.com/api/v4/projects/4207231/packages/generic/graphviz-releases/16.1.0/graphviz-16.1.0.tar.xz -o "$RUNNER_TEMP/graphviz.tar.xz"
           tar -xJf "$RUNNER_TEMP/graphviz.tar.xz" -C "$RUNNER_TEMP/src"
           cd "$RUNNER_TEMP/src/graphviz-16.1.0"
           CC=clang CXX="clang++ -stdlib=libc++" CFLAGS="-Os -g" CXXFLAGS="-Os -g" \
