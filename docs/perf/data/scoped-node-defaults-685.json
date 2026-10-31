@@ -279,5 +279,10 @@
     "uptime": "22:52:28 up 5 days, 19:34,  2 users,  load average: 6.93, 7.54, 6.97"
    }
   }
+ },
+ "method": {
+  "port": "Release x86_64-unknown-linux-musl, x86-64-v3, no PGO; Callgrind full CLI instructions, dhat heap_counts; serial nice 15, four CPUs.",
+  "baseline_1_0": "Shipped 1.0 musl x86-64-v1 f89e21d9; target differs from v3 before/after.",
+  "wall": "Three native runs; shared-machine noise only. Uptime accompanies raw measurements."
  }
 }
