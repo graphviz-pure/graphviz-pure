@@ -335,20 +335,23 @@ overflow here is undefined behaviour, not a result the port can or should reprod
 in 64 bits. Other builds make another choice, so C has no single answer for this family.
 
 The port performs the product in 64 bits. On the grouped repro below, that leaves a drawing with
-no splines; the `-mfma` build draws the whole graph. Negative totals also come from C's defined
-conversion of `xpenalty` to `short`: 12 of 18 negative cases have no `rcross` overflow at all, so
-those cases must not be filed under this class. Overflow is necessary for membership, not
-sufficient: only 4 of the 12 graphs that overflowed differed. Master's match with `-mfma` is not
-a general rule. The membership test is to change the C product to
+no splines; the `-mfma` build draws the whole graph. A negative total alone does not establish
+membership in this class: C's defined conversion of `xpenalty` to `short` can produce one without
+any `rcross` overflow. Conversely, overflow is necessary but not sufficient: an overflowing graph
+can still have the same visible output as the 64-bit calculation. Master's match with `-mfma` is
+not a general rule. The membership test is to change the C product to
 `(int64_t)Count[k] * ED_xpenalty(e)` in a `-mfma` build and require that build to match the port.
 
 The repro has `group` on every node and, for each of `t0..t3`, edges to all of `b0..b31`, with
 bundle sizes 36, 33, 36 and 32 respectively. Its first `cur_cross` is `1031503028224` with
 `-mfma`, against `-68008599552` for the port and for the non-`-mfma` `/opt` build. Master matched
 the `-mfma` drawing on this input; the negative-mincross handling in #688 matches `/opt`.
-The macOS arm64 reference build also reports `-68008599552`, exits 0 with no `edge` lines, and
-writes 59,204 bytes with SHA-256 `04d7a0e19b62931dae51c7f313a86544aed34f2fb90fb1c8e5b19045d3cf1b04`,
-the same bytes as this PR and `/opt`. It does not reproduce `-mfma`'s full drawing either.
+The [macOS build](https://github.com/graphviz-pure/graphviz-pure/actions/runs/41177277353) used a
+`macos-15-arm64` runner and built the Graphviz 16.1.0 tarball from source with `-Os -g`; Apple
+clang is inferred from the runner's `Xcode_16.4` selection. CI logs expire, so its results are
+recorded here: first `cur_cross = -68008599552`, exit 0, no `edge` lines, 59,204 bytes, and
+SHA-256 `04d7a0e19b62931dae51c7f313a86544aed34f2fb90fb1c8e5b19045d3cf1b04`. Those are the same
+bytes as this PR and `/opt`; the macOS build does not reproduce `-mfma`'s full drawing either.
 
 ### After all fixes
 

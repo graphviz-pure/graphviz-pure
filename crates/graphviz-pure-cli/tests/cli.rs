@@ -4433,6 +4433,7 @@ fn negative_mincross_total_abandons_position_like_c() {
     );
     let (out, err, ok) = run(&["-Tplain"], &src);
     assert!(ok, "{err}");
+    assert!(err.is_empty(), "{err}");
     assert_eq!(out, expected);
 }
 
@@ -4481,12 +4482,58 @@ fn nested_cluster_child_negative_check_matches_c_bytes() {
     assert!(!out.contains("<path"), "{out}");
 }
 
+// A cluster's own negative pass returns before any child cluster is visited
+// (`lib/dotgen/mincross.c:547-550`). These bytes are C 16.1.0's.
+#[test]
+fn nested_cluster_own_negative_check_matches_c_bytes() {
+    let src = format!(
+        "digraph G {{ node [group=\"g\"]; subgraph cluster_p {{ {} {} {} {} {} {} \
+         subgraph cluster_c {{ q6 -> q5; {} q0 -> q2; {} {} }} }} \
+         {} p2 -> x0; {} }}",
+        "p1 -> p2;".repeat(40),
+        "p3 -> p0;".repeat(40),
+        "p0 -> p3;".repeat(20),
+        "p4 -> p1;".repeat(16),
+        "p3 -> p4;".repeat(33),
+        "p1 -> p4;".repeat(66),
+        "q1 -> q7;".repeat(40),
+        "q4 -> q3;".repeat(40),
+        "q6 -> q5;".repeat(33),
+        "p4 -> u0;".repeat(8),
+        "p1 -> u0;".repeat(16)
+    );
+    let expected = format!(
+        "graph 1 0 0\n\
+         node p1 0.013889 0 0.75 0.5 p1 solid ellipse black lightgrey\n\
+         node p2 0 0 0.75 0.5 p2 solid ellipse black lightgrey\n\
+         node p3 0.027778 0 0.75 0.5 p3 solid ellipse black lightgrey\n\
+         node p0 0.013889 0 0.75 0.5 p0 solid ellipse black lightgrey\n\
+         node p4 0.027778 0 0.75 0.5 p4 solid ellipse black lightgrey\n\
+         node q6 0 0 0.75 0.5 q6 solid ellipse black lightgrey\n\
+         node q5 0 0 0.75 0.5 q5 solid ellipse black lightgrey\n\
+         node q1 0 0 0.75 0.5 q1 solid ellipse black lightgrey\n\
+         node q7 0 0 0.75 0.5 q7 solid ellipse black lightgrey\n\
+         node q0 0 0 0.75 0.5 q0 solid ellipse black lightgrey\n\
+         node q2 0 0 0.75 0.5 q2 solid ellipse black lightgrey\n\
+         node q4 0 0 0.75 0.5 q4 solid ellipse black lightgrey\n\
+         node q3 0 0 0.75 0.5 q3 solid ellipse black lightgrey\n\
+         node u0 0.013889 0 0.75 0.5 u0 solid ellipse black lightgrey\n\
+         node x0 0 0 0.75 0.5 x0 solid ellipse black lightgrey\n\
+         {}stop\n",
+        " solid black\n".repeat(355)
+    );
+    let (out, err, ok) = run(&["-Tplain"], &src);
+    assert!(ok, "{err}");
+    assert!(err.is_empty(), "{err}");
+    assert_eq!(out, expected);
+}
+
 // The top-level `remincross` pass has the same negative failure semantics: cleanup2, no position,
 // and empty stderr (`lib/dotgen/mincross.c:390-402`).
 #[test]
-fn reminiscross_negative_total_matches_c_bytes() {
+fn remincross_negative_total_matches_c_bytes() {
     let src = format!(
-        "digraph G {{ node [group=\"g\"]; reminiscross=true; {{ {} }} \
+        "digraph G {{ node [group=\"g\"]; remincross=true; {{ {} }} \
          subgraph cluster_n16 {{ {} {} {} subgraph cluster_n15 {{ n12 -> n13; }} }} \
          {} {} }}",
         "n1 -> n3;".repeat(66),
