@@ -255,6 +255,9 @@ pub struct NodeLayout {
     /// `ND_pos(n)[2..GD_odim(g)]` in points: the coordinates after `x` and `y` that
     /// `attach_attrs_and_arrows` writes in `pos` when `GD_odim(g) >= 3` (`dimen`).
     pub higher_dims: Vec<f64>,
+    /// `N_style` is NULL after an aborted dot aux layout (`setState` without
+    /// `cleanupCloneGraph`). Renderers ignore the input `style`, but DOT writers still print it.
+    pub no_style: bool,
 }
 
 /// Where an edge's final port names come from ([`EdgeLayout::port_names`]).

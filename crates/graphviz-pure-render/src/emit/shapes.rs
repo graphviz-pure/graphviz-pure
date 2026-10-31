@@ -174,7 +174,12 @@ impl<E: Engine> Emitter<'_, E> {
                 && is_exactly_zero(p.skew)
         });
         let is_ellipse = desc.is_some_and(|p| p.sides <= 2);
-        let list = nd.attrs.nonempty("style").map(|s| {
+        let style = if self.job.m.g.nodes[n].layout.no_style {
+            None
+        } else {
+            nd.attrs.nonempty("style")
+        };
+        let list = style.map(|s| {
             let mut kept = Vec::new();
             for it in parse_style(s) {
                 match it.name.as_str() {

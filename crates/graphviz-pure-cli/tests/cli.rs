@@ -4588,6 +4588,103 @@ fn aborted_aux_graph_matches_c_exit_and_bytes() {
     }
 }
 
+// Issue #694: an aux abort returns before `cleanupCloneGraph`, so `setState` has left every
+// `N_style` NULL (`dotsplines.c:755,1212`). Renderers ignore `style`, but `agwrite` still prints
+// the input attribute. These plain and DOT bytes are C 16.1.0's.
+#[test]
+fn aborted_aux_graph_ignores_node_style_but_dot_keeps_it() {
+    let src = format!(
+        "digraph G {{ node [style=filled]; {{ rank=same; a; b; }} {} \
+         a -> b [tailport=w]; a -> b [tailport=n,label=\"x\"]; }}",
+        "a -> b [tailport=e];".repeat(32767)
+    );
+    let expected_plain = format!(
+        "graph 1 1.625 0.5\n\
+         node a 0 0.25 0.75 0.5 a solid ellipse black lightgrey\n\
+         node b 1.25 0.25 0.75 0.5 b solid ellipse black lightgrey\n\
+         {} x 0 0 solid black\n\
+         stop\n",
+        " solid black\n".repeat(32768)
+    );
+    let (out, err, ok) = run(&["-Tplain"], &src);
+    assert!(ok, "{err}");
+    assert!(err.is_empty(), "{err}");
+    assert_eq!(out, expected_plain);
+
+    let expected_dot = format!(
+        "digraph G {{\n\
+         \tgraph [bb=\"-27,0,117,36\"];\n\
+         \tnode [label=\"\\N\",\n\
+         \t\tstyle=filled\n\
+         \t];\n\
+         \t{{\n\
+         \t\tgraph [rank=same];\n\
+         \t\ta\t[height=0.5,\n\
+         \t\t\tpos=\"0,18\",\n\
+         \t\t\twidth=0.75];\n\
+         \t\tb\t[height=0.5,\n\
+         \t\t\tpos=\"90,18\",\n\
+         \t\t\twidth=0.75];\n\
+         \t}}\n\
+         {}",
+        "\ta:e -> b;\n".repeat(32767)
+    ) + "\ta:w -> b;\n\ta:n -> b\t[label=x];\n}\n";
+    let (out, err, ok) = run(&["-Tdot"], &src);
+    assert!(ok, "{err}");
+    assert!(err.is_empty(), "{err}");
+    assert_eq!(out, expected_dot);
+}
+
+// Issue #694: `attach_attrs` writes edge layout attributes only at `State >= GVSPLINES`
+// (`output.c:348`). This aux abort happens after the self-loop was routed, but before dot reaches
+// that state (`dotsplines.c:477`). These bytes are C 16.1.0's.
+#[test]
+fn aborted_aux_graph_omits_edge_layout_attrs_from_dot() {
+    let src = format!(
+        "digraph G {{ {{ rank=same; a; b; }} p -> q; q -> r [label=\"lbl\"]; p -> p; x -> a; \
+         {} a -> b [tailport=w]; a -> b [tailport=n,label=\"x\"]; }}",
+        "a -> b [tailport=e];".repeat(33000)
+    );
+    let expected = format!(
+        "digraph G {{\n\
+         \tgraph [bb=\"-26,0,208,197.8\"];\n\
+         \tnode [label=\"\\N\"];\n\
+         \t{{\n\
+         \t\tgraph [rank=same];\n\
+         \t\ta\t[height=0.5,\n\
+         \t\t\tpos=\"1,106.8\",\n\
+         \t\t\twidth=0.75];\n\
+         \t\tb\t[height=0.5,\n\
+         \t\t\tpos=\"91,106.8\",\n\
+         \t\t\twidth=0.75];\n\
+         \t}}\n\
+         {}",
+        "\ta:e -> b;\n".repeat(33000)
+    ) + "\ta:w -> b;\n\
+         \ta:n -> b\t[label=x];\n\
+         \tp\t[height=0.5,\n\
+         \t\tpos=\"163,179.8\",\n\
+         \t\twidth=0.75];\n\
+         \tp -> p;\n\
+         \tq\t[height=0.5,\n\
+         \t\tpos=\"163,106.8\",\n\
+         \t\twidth=0.75];\n\
+         \tp -> q;\n\
+         \tr\t[height=0.5,\n\
+         \t\tpos=\"163,18\",\n\
+         \t\twidth=0.75];\n\
+         \tq -> r\t[label=lbl];\n\
+         \tx\t[height=0.5,\n\
+         \t\tpos=\"1,179.8\",\n\
+         \t\twidth=0.75];\n\
+         \tx -> a;\n\
+         }\n";
+    let (out, err, ok) = run(&["-Tdot"], &src);
+    assert!(ok, "{err}");
+    assert!(err.is_empty(), "{err}");
+    assert_eq!(out, expected);
+}
+
 // Weights that wrap negative where C has no check leave a tree edge with a negative cut value
 // and no edge to replace it. C passes the NULL edge to `update` and crashes (ns.c:710); the
 // port fails the layout there. Before, it went on and panicked in mincross (with a cluster)
