@@ -4436,6 +4436,61 @@ fn negative_mincross_total_abandons_position_like_c() {
     assert_eq!(out, expected);
 }
 
+// Issue #681 review: `mincross_clust` must also propagate the negative total out of nested
+// clusters without running their children (`lib/dotgen/mincross.c:547-557`).
+#[test]
+fn nested_cluster_negative_mincross_matches_c_in_plain_and_svg() {
+    let src = format!(
+        "digraph G {{ node [group=\"g\"]; subgraph cluster_a {{ {} a0 -> a3; a1 -> a2; a1 -> a3; \
+         subgraph cluster_b {{ b0; b1; }} a2 -> b0; a2 -> b1; }} }}",
+        "a0 -> a2;".repeat(33)
+    );
+    let expected = format!(
+        "graph 1 0 0\n\
+         node a0 0 0 0.75 0.5 a0 solid ellipse black lightgrey\n\
+         node a2 0.013889 0 0.75 0.5 a2 solid ellipse black lightgrey\n\
+         node a3 0 0 0.75 0.5 a3 solid ellipse black lightgrey\n\
+         node a1 0.013889 0 0.75 0.5 a1 solid ellipse black lightgrey\n\
+         node b0 0 0 0.75 0.5 b0 solid ellipse black lightgrey\n\
+         node b1 0 0 0.75 0.5 b1 solid ellipse black lightgrey\n\
+         {}stop\n",
+        " solid black\n".repeat(38)
+    );
+    let (out, err, ok) = run(&["-Tplain"], &src);
+    assert!(ok, "{err}");
+    assert!(err.is_empty(), "{err}");
+    assert_eq!(out, expected);
+    let (out, err, ok) = run(&["-Tsvg"], &src);
+    assert!(ok, "{err}");
+    assert!(err.is_empty(), "{err}");
+    assert!(out.contains("<title>b1</title>\n<ellipse fill=\"none\" stroke=\"black\" cx=\"0\" cy=\"0\" rx=\"27\" ry=\"18\"/>"), "{out}");
+    assert!(!out.contains("<path"), "{out}");
+}
+
+// The top-level `remincross` pass has the same negative failure semantics: cleanup2, no position,
+// and empty stderr (`lib/dotgen/mincross.c:390-402`).
+#[test]
+fn reminiscross_negative_total_matches_c_bytes() {
+    let src = format!(
+        "digraph G {{ node [group=\"g\"]; reminiscross=true; subgraph cluster_a {{ {} a0 -> a3; \
+         a1 -> a2; a1 -> a3; }} }}",
+        "a0 -> a2;".repeat(33)
+    );
+    let expected = format!(
+        "graph 1 0 0\n\
+         node a0 0 0 0.75 0.5 a0 solid ellipse black lightgrey\n\
+         node a2 0.013889 0 0.75 0.5 a2 solid ellipse black lightgrey\n\
+         node a3 0 0 0.75 0.5 a3 solid ellipse black lightgrey\n\
+         node a1 0.013889 0 0.75 0.5 a1 solid ellipse black lightgrey\n\
+         {}stop\n",
+        " solid black\n".repeat(36)
+    );
+    let (out, err, ok) = run(&["-Tplain"], &src);
+    assert!(ok, "{err}");
+    assert!(err.is_empty(), "{err}");
+    assert_eq!(out, expected);
+}
+
 // Weights that wrap negative where C has no check leave a tree edge with a negative cut value
 // and no edge to replace it. C passes the NULL edge to `update` and crashes (ns.c:710); the
 // port fails the layout there. Before, it went on and panicked in mincross (with a cluster)

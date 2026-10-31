@@ -327,6 +327,20 @@ splines). These are the shapes for which `common/ns/cut.rs` selects cut sets abo
 minimum. With a 120-second C timeout, **all 32 / 32 were byte-identical**, with no port timeouts,
 crashes or overflow-check differences.
 
+### Build-dependent C overflow in `rcross`
+
+C's `rcross` computes `cross += Count[k] * ED_xpenalty(e)` (`lib/dotgen/mincross.c:1520`). Signed
+overflow here is undefined behaviour, not a result the port can or should reproduce. The x86-64
+`-O2 -mfma` build evaluates chunks of 16 columns with 32-bit `vpmulld`, but evaluates the remainder
+in 64 bits. Other builds make another choice, so C has no single answer for this family.
+
+The repro has `group` on every node and, for each of `t0..t3`, edges to all of `b0..b31`, with
+bundle sizes 36, 33, 36 and 32 respectively. Its first `cur_cross` is `1031503028224` with
+`-mfma`, against `-68008599552` for the port and for the non-`-mfma` `/opt` build. Master matched
+the `-mfma` drawing on this input; the negative-mincross handling in #688 matches `/opt`.
+The macOS arm64 reference build is unchecked for this generated input: no committed golden covers
+it, and it was not run here.
+
 ### After all fixes
 
 All 382 actionable cases from rounds 1–4 (from `OUT/diff/`, not minimised) were

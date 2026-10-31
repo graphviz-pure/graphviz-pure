@@ -817,8 +817,7 @@ impl Dot<'_> {
         }
         self.init_mincross(g)?;
         let mut nc: i64 = 0;
-        // C's `goto done` on a failed pass runs cleanup2, which reports the crossings so far;
-        // the port abandons the layout, so it reports them alone
+        // C's `goto done` on a negative pass runs cleanup2 and abandons position/splines.
         macro_rules! pass {
             ($e:expr, $has_vlists:expr) => {
                 match $e {
@@ -990,8 +989,15 @@ impl Dot<'_> {
         self.flat_breakcycles(g);
         self.flat_reorder(g)?;
         let mut nc = self.mincross(g, 2)?;
+        if nc < 0 {
+            return Ok(nc);
+        }
         for c in self.graphs[g].clust.clone() {
-            nc += self.mincross_clust(c)?;
+            let mc = self.mincross_clust(c)?;
+            if mc < 0 {
+                return Ok(mc);
+            }
+            nc += mc;
         }
         self.save_vlist(g);
         Ok(nc)
