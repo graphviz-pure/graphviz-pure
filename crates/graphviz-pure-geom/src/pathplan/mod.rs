@@ -10,6 +10,7 @@
 //! - [`cvt`] — `cvt.c` (`Pobsopen`, `Pobspath`)
 //! - [`visibility`] — `visibility.c` and `shortestpth.c`
 //! - [`inpoly`] — `inpoly.c` (`in_poly`)
+//! - `clip` — `shortest.c`'s `triangulate` and `connecttris`, without their repeated work
 //! - [`triang`] — `triang.c` (`ccw`, `isdiagonal`, `Ptriangulate`)
 //!
 //! Floating-point expressions follow the C source as compiled by clang with
@@ -19,6 +20,7 @@
 // Faithful ports of numeric C loops index several arrays in lockstep.
 #![allow(clippy::needless_range_loop, clippy::too_many_arguments)]
 
+mod clip;
 pub mod cvt;
 pub mod inpoly;
 pub mod route;

@@ -66,22 +66,54 @@ fn dist(a: Ppoint, b: Ppoint) -> f64 {
     dist2(a, b).sqrt()
 }
 
+/// With coordinates at most this large, `area2` is within 0.0001 of the true area, the
+/// tolerance of [`wind`] (`docs/perf/pathplan-shortcuts.md`). [`apart`] needs that.
+const APART_MAX_COORD: f64 = 1e5;
+
+fn within(p: Ppoint) -> bool {
+    p.x.abs() <= APART_MAX_COORD && p.y.abs() <= APART_MAX_COORD
+}
+
+/// Whether `intersect(a, b, c, d)` is certainly false, for points [`within`] the limit: the
+/// segments are apart along the axis `in_between` reads, or by enough along the other axis that
+/// `wind` cannot call an end of `cd` collinear with `ab`. Four comparisons, against up to four
+/// `wind`s (`docs/perf/pathplan-shortcuts.md`).
+#[inline(always)]
+fn apart(a: Ppoint, b: Ppoint, c: Ppoint, d: Ppoint) -> bool {
+    let (ax0, ax1) = if a.x < b.x { (a.x, b.x) } else { (b.x, a.x) };
+    let (ay0, ay1) = if a.y < b.y { (a.y, b.y) } else { (b.y, a.y) };
+    let (cx0, cx1) = if c.x < d.x { (c.x, d.x) } else { (d.x, c.x) };
+    let (cy0, cy1) = if c.y < d.y { (c.y, d.y) } else { (d.y, c.y) };
+    let gap_x = (cx0 - ax1).max(ax0 - cx1);
+    let gap_y = (cy0 - ay1).max(ay0 - cy1);
+    if a.x != b.x {
+        gap_x > 0.0 || (gap_y > 0.0 && gap_y * (ax1 - ax0) > 0.0002)
+    } else {
+        gap_y > 0.0 || (gap_x > 0.0 && gap_x * (ay1 - ay0) > 0.0002)
+    }
+}
+
+/// C: lib/pathplan/visibility.c:clear. `bounded`: every point is [`within`] the limit.
 fn clear(
     pti: Ppoint,
     ptj: Ppoint,
-    start: usize,
-    end: usize,
+    (start, end): (usize, usize),
     v: usize,
     pts: &[Ppoint],
     next: &[usize],
+    bounded: bool,
 ) -> bool {
-    for k in 0..start {
-        if intersect(pti, ptj, pts[k], pts[next[k]]) {
-            return false;
+    for k in (0..start).chain(end..v) {
+        let (c, d) = (pts[k], pts[next[k]]);
+        if bounded && apart(pti, ptj, c, d) {
+            #[cfg(any(test, feature = "pathplan-check"))]
+            assert!(
+                !intersect(pti, ptj, c, d),
+                "apart: {pti:?} {ptj:?} {c:?} {d:?}"
+            );
+            continue;
         }
-    }
-    for k in end..v {
-        if intersect(pti, ptj, pts[k], pts[next[k]]) {
+        if intersect(pti, ptj, c, d) {
             return false;
         }
     }
@@ -93,6 +125,7 @@ fn clear(
 pub fn visibility(conf: &mut Vconfig) {
     let v = conf.n;
     conf.vis = vec![vec![0.0; v]; v];
+    let bounded = conf.p.iter().all(|&p| within(p));
     for i in 0..v {
         let previ = conf.prev[i];
         let d = dist(conf.p[i], conf.p[previ]);
@@ -108,7 +141,7 @@ pub fn visibility(conf: &mut Vconfig) {
             let (pts, next, prev) = (&conf.p, &conf.next, &conf.prev);
             if in_cone(pts[prev[i]], pts[i], pts[next[i]], pts[ju])
                 && in_cone(pts[prev[ju]], pts[ju], pts[next[ju]], pts[i])
-                && clear(pts[i], pts[ju], v, v, v, pts, next)
+                && clear(pts[i], pts[ju], (v, v), v, pts, next, bounded)
             {
                 let d = dist(pts[i], pts[ju]);
                 conf.vis[i][ju] = d;
@@ -143,10 +176,11 @@ pub fn pt_vis(conf: &Vconfig, mut pp: i32, p: Ppoint) -> Vec<f64> {
         (v, v)
     };
     let pts = &conf.p;
+    let bounded = within(p) && pts.iter().all(|&q| within(q));
     for k in (0..start).chain(end..v) {
         let pk = pts[k];
         vadj[k] = if in_cone(pts[conf.prev[k]], pk, pts[conf.next[k]], p)
-            && clear(p, pk, start, end, v, pts, &conf.next)
+            && clear(p, pk, (start, end), v, pts, &conf.next, bounded)
         {
             dist(p, pk)
         } else {
@@ -251,4 +285,144 @@ pub fn make_path(
         }
     };
     shortest_path(v + 1, v, v + 2, &wadj)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// xorshift64*: a fixed sequence, so a failure names its case.
+    struct Rng(u64);
+
+    impl Rng {
+        fn next(&mut self) -> u64 {
+            self.0 ^= self.0 >> 12;
+            self.0 ^= self.0 << 25;
+            self.0 ^= self.0 >> 27;
+            self.0.wrapping_mul(0x2545_f491_4f6c_dd1d)
+        }
+
+        fn below(&mut self, n: u64) -> u64 {
+            self.next() % n
+        }
+    }
+
+    /// Points that make the tolerance matter: on a coarse grid, a hair off it, at every scale.
+    fn point(rng: &mut Rng) -> Ppoint {
+        let scale = [1.0, 72.0, 1e3, 1e5][rng.below(4) as usize];
+        let hair = [0.0, 1e-9, 1e-6, 1e-5, 5e-5, 1e-4, 2e-4, 1e-3][rng.below(8) as usize];
+        let coord = |rng: &mut Rng| {
+            let grid = rng.below(9) as f64 / 8.0 * 2.0 - 1.0;
+            let sign = if rng.below(2) == 0 { 1.0 } else { -1.0 };
+            (grid * scale + sign * hair * rng.below(3) as f64).clamp(-1e5, 1e5)
+        };
+        Ppoint::new(coord(rng), coord(rng))
+    }
+
+    #[test]
+    fn apart_segments_never_intersect() {
+        let mut rng = Rng(0x9e37_79b9_7f4a_7c15);
+        let (mut skipped, mut crossing) = (0u32, 0u32);
+        for case in 0..2_000_000 {
+            let (a, b, c, d) = (
+                point(&mut rng),
+                point(&mut rng),
+                point(&mut rng),
+                point(&mut rng),
+            );
+            let hit = intersect(a, b, c, d);
+            if apart(a, b, c, d) {
+                assert!(!hit, "case {case}: {a:?} {b:?} {c:?} {d:?}");
+                skipped += 1;
+            }
+            crossing += u32::from(hit);
+        }
+        assert!(
+            skipped > 100_000 && crossing > 100_000,
+            "{skipped} {crossing}"
+        );
+    }
+
+    #[test]
+    fn a_small_gap_along_the_other_axis_is_not_apart() {
+        // cd starts a hair above ab, between its ends: wind calls it collinear, so `intersect`
+        // says yes though the boxes do not touch
+        let (a, b) = (Ppoint::new(0.0, 0.0), Ppoint::new(1.0, 0.0));
+        let (c, d) = (Ppoint::new(0.5, 1e-5), Ppoint::new(0.5, 1.0));
+        assert!(intersect(a, b, c, d));
+        assert!(!apart(a, b, c, d));
+        // the same with ab upright
+        let (a, b) = (Ppoint::new(0.0, 0.0), Ppoint::new(0.0, 1.0));
+        let (c, d) = (Ppoint::new(1e-5, 0.5), Ppoint::new(1.0, 0.5));
+        assert!(intersect(a, b, c, d));
+        assert!(!apart(a, b, c, d));
+        // and by enough: the same shapes further off are skipped
+        let (c, d) = (Ppoint::new(0.01, 0.5), Ppoint::new(1.0, 0.5));
+        assert!(!intersect(a, b, c, d));
+        assert!(apart(a, b, c, d));
+    }
+
+    #[test]
+    fn the_limit_keeps_large_and_nan_coordinates_out() {
+        assert!(within(Ppoint::new(1e5, -1e5)));
+        assert!(!within(Ppoint::new(1.0000001e5, 0.0)));
+        assert!(!within(Ppoint::new(0.0, -1.0000001e5)));
+        assert!(!within(Ppoint::new(f64::NAN, 0.0)));
+        assert!(!within(Ppoint::new(0.0, f64::NAN)));
+    }
+
+    /// Random convex obstacles, which is what the routers give.
+    fn obstacles(rng: &mut Rng) -> (Vec<Ppoint>, Vec<usize>, Vec<usize>) {
+        let (mut pts, mut next, mut starts) = (Vec::new(), Vec::new(), Vec::new());
+        for _ in 0..2 + rng.below(8) {
+            let (cx, cy) = (rng.below(400) as f64, rng.below(400) as f64);
+            let sides = 3 + rng.below(6) as usize;
+            let first = pts.len();
+            starts.push(first);
+            for s in 0..sides {
+                let angle = s as f64 / sides as f64 * std::f64::consts::TAU;
+                pts.push(Ppoint::new(
+                    cx + 20.0 * math::cos(angle),
+                    cy + 20.0 * math::sin(angle),
+                ));
+                next.push(if s + 1 == sides { first } else { first + s + 1 });
+            }
+        }
+        starts.push(pts.len());
+        (pts, next, starts)
+    }
+
+    #[test]
+    fn clear_answers_as_it_does_without_the_skip() {
+        let mut rng = Rng(0x2545_f491_4f6c_dd1d);
+        let (mut open, mut blocked) = (0, 0);
+        for case in 0..400 {
+            let (pts, next, starts) = obstacles(&mut rng);
+            let v = pts.len();
+            for i in 0..v {
+                for j in 0..i {
+                    let plain = clear(pts[i], pts[j], (v, v), v, &pts, &next, false);
+                    let skip = clear(pts[i], pts[j], (v, v), v, &pts, &next, true);
+                    assert_eq!(plain, skip, "case {case}: {i} {j}");
+                    if plain {
+                        open += 1;
+                    } else {
+                        blocked += 1;
+                    }
+                }
+            }
+            // and from a point outside the list, ignoring one polygon
+            let p = Ppoint::new(rng.below(400) as f64, rng.below(400) as f64);
+            let (s, e) = (starts[0], starts[1]);
+            for k in e..v {
+                let plain = clear(p, pts[k], (s, e), v, &pts, &next, false);
+                assert_eq!(
+                    plain,
+                    clear(p, pts[k], (s, e), v, &pts, &next, true),
+                    "case {case}"
+                );
+            }
+        }
+        assert!(open > 1000 && blocked > 1000, "{open} {blocked}");
+    }
 }

@@ -3,29 +3,27 @@
 //! funnel algorithm).
 
 use super::Ppoint;
-use super::triang::{ISCCW, ISCW, ccw, isdiagonal};
+use super::triang::{ISCCW, ISCW, ccw};
 
-const NONE: usize = usize::MAX;
+pub(super) const NONE: usize = usize::MAX;
 
-#[derive(Clone, Copy)]
-struct Tedge {
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(super) struct Tedge {
     pnl0: usize,
     pnl1: usize,
-    right_index: usize,
+    pub(super) right_index: usize,
 }
 
-#[derive(Clone, Copy)]
-struct Triangle {
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(super) struct Triangle {
     mark: i32,
-    e: [Tedge; 3],
+    pub(super) e: [Tedge; 3],
 }
 
 /// Point-and-link nodes: indices `0..pn` are polygon points, `pn` and
 /// `pn + 1` the two endpoints.
 struct Pnl {
     pp: Vec<Ppoint>,
-    /// Identity of the underlying polygon point (for shared-edge tests).
-    id: Vec<usize>,
     link: Vec<usize>,
 }
 
@@ -153,74 +151,29 @@ pub fn pshortestpath(
     let pnll = order.len();
     let mut pnl = Pnl {
         pp: Vec::with_capacity(pnll + 2),
-        id: Vec::with_capacity(pnll + 2),
         link: Vec::new(),
     };
     for &pi in &order {
         pnl.pp.push(poly[pi]);
-        pnl.id.push(pi);
     }
     pnl.pp.push(eps[0]);
-    pnl.id.push(NONE - 1);
     pnl.pp.push(eps[1]);
-    pnl.id.push(NONE - 2);
     // pnls[k].link = &pnls[k % pn] initially.
     pnl.link = (0..pnll + 2)
         .map(|k| if k < pnll { k % pn } else { NONE })
         .collect();
 
-    // Triangulate.
+    // Triangulate. C keeps the triangles found so far if it fails.
     let mut tris: Vec<Triangle> = Vec::new();
-    let mut pts: Vec<usize> = (0..pnll).collect();
-    let mut coords = Vec::with_capacity(pnll);
-    loop {
-        let n = pts.len();
-        if n > 3 {
-            coords.clear();
-            coords.extend(pts.iter().map(|&k| pnl.pp[k]));
-            let mut found = false;
-            for i in 0..n {
-                let ip1 = (i + 1) % n;
-                let ip2 = (i + 2) % n;
-                if isdiagonal(i, ip2, &coords) {
-                    tris.push(make_tri(pts[i], pts[ip1], pts[ip2]));
-                    pts.remove(ip1);
-                    found = true;
-                    break;
-                }
-            }
-            if !found {
-                // C keeps the triangles found so far.
-                prerror(333, "triangulation failed");
-                break;
-            }
-        } else {
-            if n == 3 {
-                tris.push(make_tri(pts[0], pts[1], pts[2]));
-            }
-            break;
-        }
+    let whole = super::clip::triangulate(pnl.pp.get(..pnll).unwrap_or(&[]), &mut tris);
+    #[cfg(any(test, feature = "pathplan-check"))]
+    {
+        let (c_tris, c_whole) = triangulate_c(pnl.pp.get(..pnll).unwrap_or(&[]));
+        assert_eq!(whole, c_whole, "triangulation: C's result differs");
+        assert_eq!(tris, c_tris, "triangulation: C's triangles differ");
     }
-    // Connect triangles sharing an edge.
-    for trii in 0..tris.len() {
-        for trij in (trii + 1)..tris.len() {
-            for ei in 0..3 {
-                for ej in 0..3 {
-                    let a = tris[trii].e[ei];
-                    let b = tris[trij].e[ej];
-                    let (a0, a1, b0, b1) = (
-                        pnl.id[a.pnl0],
-                        pnl.id[a.pnl1],
-                        pnl.id[b.pnl0],
-                        pnl.id[b.pnl1],
-                    );
-                    if (a0 == b0 && a1 == b1) || (a0 == b1 && a1 == b0) {
-                        tris[trii].e[ei].right_index = trij;
-                        tris[trij].e[ej].right_index = trii;
-                    }
-                }
-            }
-        }
+    if !whole {
+        prerror(333, "triangulation failed");
     }
     let Some(ftrii) = (0..tris.len()).find(|&t| pointintri(&tris, &pnl, t, eps[0])) else {
         prerror(182, "source point not in any triangle");
@@ -326,7 +279,61 @@ pub fn pshortestpath(
     Ok(out)
 }
 
-fn make_tri(a: usize, b: usize, c: usize) -> Triangle {
+/// C: lib/pathplan/shortest.c:triangulate and connecttris, as they are: the reference for
+/// `clip::triangulate`.
+#[cfg(any(test, feature = "pathplan-check"))]
+pub(super) fn triangulate_c(points: &[Ppoint]) -> (Vec<Triangle>, bool) {
+    use super::triang::isdiagonal;
+    let mut tris: Vec<Triangle> = Vec::new();
+    let mut pts: Vec<usize> = (0..points.len()).collect();
+    let mut coords = Vec::with_capacity(points.len());
+    let mut whole = true;
+    loop {
+        let n = pts.len();
+        if n > 3 {
+            coords.clear();
+            coords.extend(pts.iter().map(|&k| points[k]));
+            let mut found = false;
+            for i in 0..n {
+                let ip1 = (i + 1) % n;
+                let ip2 = (i + 2) % n;
+                if isdiagonal(i, ip2, &coords) {
+                    tris.push(make_tri(pts[i], pts[ip1], pts[ip2]));
+                    pts.remove(ip1);
+                    found = true;
+                    break;
+                }
+            }
+            if !found {
+                whole = false;
+                break;
+            }
+        } else {
+            if n == 3 {
+                tris.push(make_tri(pts[0], pts[1], pts[2]));
+            }
+            break;
+        }
+    }
+    for trii in 0..tris.len() {
+        for trij in (trii + 1)..tris.len() {
+            for ei in 0..3 {
+                for ej in 0..3 {
+                    let (a, b) = (tris[trii].e[ei], tris[trij].e[ej]);
+                    if (a.pnl0 == b.pnl0 && a.pnl1 == b.pnl1)
+                        || (a.pnl0 == b.pnl1 && a.pnl1 == b.pnl0)
+                    {
+                        tris[trii].e[ei].right_index = trij;
+                        tris[trij].e[ej].right_index = trii;
+                    }
+                }
+            }
+        }
+    }
+    (tris, whole)
+}
+
+pub(super) fn make_tri(a: usize, b: usize, c: usize) -> Triangle {
     Triangle {
         mark: 0,
         e: [

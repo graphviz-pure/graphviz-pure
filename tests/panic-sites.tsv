@@ -5,10 +5,10 @@ geom/node_size.rs	0	0	66	46
 geom/pathplan/cvt.rs	0	0	7	6
 geom/pathplan/inpoly.rs	0	0	2	1
 geom/pathplan/route.rs	0	0	37	11
-geom/pathplan/shortest.rs	0	0	83	25
+geom/pathplan/shortest.rs	0	0	64	21
 geom/pathplan/triang.rs	0	0	22	5
 geom/pathplan/util.rs	0	0	9	5
-geom/pathplan/visibility.rs	0	0	66	32
+geom/pathplan/visibility.rs	0	0	63	32
 layout/circogen/blockpath.rs	7	6	51	25
 layout/circogen/blocktree.rs	0	4	44	1
 layout/circogen/circpos.rs	0	1	44	6

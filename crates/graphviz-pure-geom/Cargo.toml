@@ -10,6 +10,11 @@ readme.workspace = true
 homepage.workspace = true
 description = "Node shapes, labels, HTML tables and pathplan for graphviz-pure"
 
+[features]
+# Check mode for pathplan's shortcuts: each also computes C's answer and asserts that both agree
+# (docs/perf/pathplan-shortcuts.md). For tests and CI only.
+pathplan-check = []
+
 [dependencies]
 graphviz-pure-core.workspace = true
 

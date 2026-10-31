@@ -15,6 +15,9 @@ description = "The Graphviz layout engines in pure Rust: dot, neato, fdp, sfdp, 
 # `ns.c` and asserts that both agree (common/ns/cut/check.rs). For tests and CI only: it
 # costs C's full network simplex on top of the cut sets'.
 ns-check = []
+# Check mode for pathplan's shortcuts: each also computes C's answer and asserts that both agree
+# (docs/perf/pathplan-shortcuts.md). For tests and CI only.
+routing-check = ["graphviz-pure-geom/pathplan-check"]
 # Check mode for dot's mincross: every shortcut in dotgen/mincross/scan.rs also runs the functions
 # that mirror `mincross.c` and asserts that both agree (dotgen/mincross/scan/check.rs). For tests
 # and CI only: it costs C's full reorder and transpose on top of the shortcuts'.
