@@ -11,6 +11,8 @@ homepage.workspace = true
 description = "The Graphviz layout engines in pure Rust: dot, neato, fdp, sfdp, twopi, circo, osage, patchwork"
 
 [features]
+# Compare every indexed circo recount with the original half-set scan.
+circo-check = []
 # Check mode for network simplex: every cut-set pivot also runs the functions that mirror
 # `ns.c` and asserts that both agree (common/ns/cut/check.rs). For tests and CI only: it
 # costs C's full network simplex on top of the cut sets'.
