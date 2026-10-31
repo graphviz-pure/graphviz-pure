@@ -1,0 +1,647 @@
+{
+ "master": "e29b50f8 (same Rust/Cargo code as e314f74f)",
+ "after_code": "8cbaced0",
+ "build": "v3 musl release; controlled no PGO, shipped-style fresh PGO; 1.0 v1 f89e21d9",
+ "cases": {
+  "patchwork5000-svg": {
+   "master": {
+    "instructions": 403157803,
+    "heap_blocks": 363365,
+    "heap_bytes": 41198219,
+    "heap_peak_bytes": 17149045,
+    "wall_ms": [
+     84.51850601704791,
+     87.36618503462523,
+     87.21776399761438
+    ],
+    "uptime": "17:25:54 up 5 days, 14:07,  2 users,  load average: 9.81, 13.10, 24.84"
+   },
+   "C": {
+    "wall_ms": [
+     80.84015297936276,
+     69.39446600154042,
+     71.36611803434789
+    ],
+    "uptime": "17:26:15 up 5 days, 14:08,  2 users,  load average: 9.67, 12.84, 24.50"
+   },
+   "1.0": {
+    "instructions": 698504488,
+    "heap_blocks": 871641,
+    "heap_bytes": 77128599,
+    "heap_peak_bytes": 22403011,
+    "wall_ms": [
+     142.3980740364641,
+     142.16319198021665,
+     140.85644303122535
+    ],
+    "uptime": "17:30:28 up 5 days, 14:12,  2 users,  load average: 7.58, 10.49, 20.75"
+   },
+   "after": {
+    "instructions": 391236061,
+    "heap_blocks": 318365,
+    "heap_bytes": 40703219,
+    "heap_peak_bytes": 17039045,
+    "wall_ms": [
+     85.60527302324772,
+     81.46762603428215,
+     81.98215102311224
+    ],
+    "uptime": "18:26:10 up 5 days, 15:08,  2 users,  load average: 6.73, 6.96, 7.88"
+   }
+  },
+  "patchwork20000-svg": {
+   "master": {
+    "instructions": 1788801208,
+    "heap_blocks": 1490969,
+    "heap_bytes": 166005659,
+    "heap_peak_bytes": 68833728,
+    "wall_ms": [
+     368.68526303442195,
+     353.0626899446361,
+     341.18153603048995
+    ],
+    "uptime": "17:27:16 up 5 days, 14:09,  2 users,  load average: 7.75, 11.73, 23.39"
+   },
+   "1.0": {
+    "instructions": 2993906072,
+    "heap_blocks": 3521804,
+    "heap_bytes": 309831866,
+    "heap_peak_bytes": 89862694,
+    "wall_ms": [
+     633.4629299817607,
+     629.2038380051963,
+     635.0128430058248
+    ],
+    "uptime": "17:33:02 up 5 days, 14:14,  2 users,  load average: 11.67, 10.94, 19.32"
+   },
+   "C": {
+    "wall_ms": [
+     292.86485404009,
+     301.2696439982392,
+     300.54138699779287
+    ],
+    "uptime": "17:33:04 up 5 days, 14:14,  2 users,  load average: 11.67, 10.94, 19.32"
+   },
+   "after": {
+    "instructions": 1763972702,
+    "heap_blocks": 1310969,
+    "heap_bytes": 164025659,
+    "heap_peak_bytes": 68393728,
+    "wall_ms": [
+     344.22040899517015,
+     341.2540389690548,
+     335.5174050084315
+    ],
+    "uptime": "18:27:06 up 5 days, 15:09,  2 users,  load average: 7.93, 7.22, 7.92"
+   }
+  },
+  "patchwork20000-plain": {
+   "master": {
+    "instructions": 1694807444,
+    "heap_blocks": 1464275,
+    "heap_bytes": 137165888,
+    "heap_peak_bytes": 55296355,
+    "wall_ms": [
+     320.17139199888334,
+     336.92117501050234,
+     338.41705200029537
+    ],
+    "uptime": "17:34:09 up 5 days, 14:16,  2 users,  load average: 13.08, 11.56, 18.96"
+   },
+   "1.0": {
+    "instructions": 2950025203,
+    "heap_blocks": 3332957,
+    "heap_bytes": 280297593,
+    "heap_peak_bytes": 75862376,
+    "wall_ms": [
+     550.7782870554365,
+     560.0634739967063,
+     558.4505019942299
+    ],
+    "uptime": "17:57:11 up 5 days, 14:39,  2 users,  load average: 5.99, 9.80, 12.98"
+   },
+   "C": {
+    "wall_ms": [
+     217.71345799788833,
+     210.21083503728732,
+     208.75451096799225
+    ],
+    "uptime": "17:57:13 up 5 days, 14:39,  2 users,  load average: 5.99, 9.80, 12.98"
+   },
+   "after": {
+    "instructions": 1654888869,
+    "heap_blocks": 1284275,
+    "heap_bytes": 135185888,
+    "heap_peak_bytes": 54856355,
+    "wall_ms": [
+     312.2923889895901,
+     316.0171339986846,
+     314.9241040227935
+    ],
+    "uptime": "18:28:04 up 5 days, 15:09,  2 users,  load average: 8.36, 7.47, 7.96"
+   }
+  },
+  "osage20000-svg": {
+   "master": {
+    "instructions": 1448878902,
+    "heap_blocks": 1308586,
+    "heap_bytes": 151915980,
+    "heap_peak_bytes": 66353262,
+    "wall_ms": [
+     273.8867030129768,
+     277.1929379669018,
+     280.1148240105249
+    ],
+    "uptime": "17:58:07 up 5 days, 14:40,  2 users,  load average: 5.20, 8.94, 12.50"
+   },
+   "1.0": {
+    "instructions": 3085264297,
+    "heap_blocks": 3603171,
+    "heap_bytes": 295483646,
+    "heap_peak_bytes": 87382259,
+    "wall_ms": [
+     589.7923960001208,
+     572.4251709762029,
+     588.0543760140426
+    ],
+    "uptime": "18:00:29 up 5 days, 14:42,  2 users,  load average: 4.55, 7.29, 11.37"
+   },
+   "C": {
+    "wall_ms": [
+     242.41422401973978,
+     232.64221101999283,
+     232.26897098356858
+    ],
+    "uptime": "18:00:30 up 5 days, 14:42,  2 users,  load average: 4.55, 7.29, 11.37"
+   },
+   "after": {
+    "instructions": 1406335829,
+    "heap_blocks": 1168586,
+    "heap_bytes": 150375980,
+    "heap_peak_bytes": 65913262,
+    "wall_ms": [
+     274.39493004931137,
+     269.4525200058706,
+     275.68068500841036
+    ],
+    "uptime": "18:28:55 up 5 days, 15:10,  2 users,  load average: 7.51, 7.39, 7.90"
+   }
+  },
+  "twopi20000-svg": {
+   "master": {
+    "instructions": 2024667703,
+    "heap_blocks": 1885628,
+    "heap_bytes": 213768609,
+    "heap_peak_bytes": 95402345,
+    "wall_ms": [
+     461.4859069697559,
+     462.00171299278736,
+     463.7096149963327
+    ],
+    "uptime": "18:01:27 up 5 days, 14:43,  2 users,  load average: 6.43, 7.34, 11.14"
+   },
+   "1.0": {
+    "instructions": 4457113382,
+    "heap_blocks": 5639400,
+    "heap_bytes": 383353093,
+    "heap_peak_bytes": 117871270,
+    "wall_ms": [
+     888.456718006637,
+     890.756684995722,
+     894.4666690076701
+    ],
+    "uptime": "18:04:25 up 5 days, 14:46,  2 users,  load average: 4.37, 6.07, 9.98"
+   },
+   "C": {
+    "wall_ms": [
+     703.4208960249089,
+     687.3703189776279,
+     704.3400219990872
+    ],
+    "uptime": "18:04:27 up 5 days, 14:46,  2 users,  load average: 4.37, 6.07, 9.98"
+   },
+   "after": {
+    "instructions": 1993944868,
+    "heap_blocks": 1785628,
+    "heap_bytes": 212668609,
+    "heap_peak_bytes": 94962345,
+    "wall_ms": [
+     451.5093939844519,
+     459.2911379877478,
+     460.17558401217684
+    ],
+    "uptime": "18:29:48 up 5 days, 15:11,  2 users,  load average: 7.23, 7.33, 7.86"
+   }
+  },
+  "b29-svg": {
+   "master": {
+    "instructions": 3746248623,
+    "heap_blocks": 152708,
+    "heap_bytes": 52607067,
+    "heap_peak_bytes": 16703435,
+    "wall_ms": [
+     641.963302041404,
+     630.859350960236,
+     646.1587949888781
+    ],
+    "uptime": "18:04:54 up 5 days, 14:46,  2 users,  load average: 5.63, 6.17, 9.89"
+   },
+   "1.0": {
+    "instructions": 7807775588,
+    "heap_blocks": 349194,
+    "heap_bytes": 149507031,
+    "heap_peak_bytes": 15660817,
+    "wall_ms": [
+     1351.8722010194324,
+     1321.262871962972,
+     1421.400037012063
+    ],
+    "uptime": "18:06:08 up 5 days, 14:48,  2 users,  load average: 3.75, 5.53, 9.39"
+   },
+   "C": {
+    "wall_ms": [
+     1663.1855550222099,
+     1638.0137449596077,
+     1653.0590459587984
+    ],
+    "uptime": "18:06:13 up 5 days, 14:48,  2 users,  load average: 3.69, 5.48, 9.36"
+   },
+   "after": {
+    "instructions": 3746857233,
+    "heap_blocks": 152708,
+    "heap_bytes": 52607067,
+    "heap_peak_bytes": 16703435,
+    "wall_ms": [
+     639.7286939900368,
+     635.8182210242376,
+     635.0597009877674
+    ],
+    "uptime": "18:30:13 up 5 days, 15:12,  2 users,  load average: 6.09, 7.06, 7.75"
+   }
+  }
+ },
+ "callgrind_v3_pgo": {
+  "patchwork_clustered_20000": {
+   "master": 1644756354,
+   "after": 1618690130
+  },
+  "osage_clustered_20000": {
+   "master": 1341116279,
+   "after": 1298261256
+  },
+  "twopi_tree_20000": {
+   "master": 1901909629,
+   "after": 1870563806
+  }
+ },
+ "wall_v3_pgo": {
+  "start": "2026-10-30T18:33:10Z",
+  "uptime_start": "18:33:10 up 5 days, 15:15,  2 users,  load average: 4.85, 6.47, 7.42",
+  "cases": {
+   "patchwork_clustered_5000-svg": {
+    "master v3+PGO": {
+     "wall_ms": [
+      74.0966169978492,
+      74.07096802489832,
+      74.39091603737324,
+      72.8058890090324,
+      69.5014379452914
+     ],
+     "median_ms": 74.07096802489832
+    },
+    "after v3+PGO": {
+     "wall_ms": [
+      70.67069300683215,
+      70.9876969922334,
+      83.7985550169833,
+      75.15899802092463,
+      79.38118500169367
+     ],
+     "median_ms": 75.15899802092463
+    },
+    "1.0": {
+     "wall_ms": [
+      150.4263220122084,
+      148.19598599569872,
+      148.02500000223517,
+      152.59445796255022,
+      146.77112200297415
+     ],
+     "median_ms": 148.19598599569872
+    },
+    "C": {
+     "wall_ms": [
+      74.00505105033517,
+      71.78820000262931,
+      68.90043301973492,
+      76.00168202770874,
+      70.40823204442859
+     ],
+     "median_ms": 71.78820000262931
+    }
+   },
+   "patchwork_clustered_20000-svg": {
+    "master v3+PGO": {
+     "wall_ms": [
+      288.122023048345,
+      284.1070069698617,
+      284.7619740059599,
+      287.7152070286684,
+      299.6484489995055
+     ],
+     "median_ms": 287.7152070286684
+    },
+    "after v3+PGO": {
+     "wall_ms": [
+      302.03470098786056,
+      312.86354502663016,
+      296.5877209790051,
+      293.392745021265,
+      293.30195201328024
+     ],
+     "median_ms": 296.5877209790051
+    },
+    "1.0": {
+     "wall_ms": [
+      585.2374589885585,
+      596.5446199988946,
+      590.7961790217087,
+      585.0993319763802,
+      580.2893179934472
+     ],
+     "median_ms": 585.2374589885585
+    },
+    "C": {
+     "wall_ms": [
+      274.82634998159483,
+      275.72415495524183,
+      296.0681809927337,
+      287.14571602176875,
+      278.9452659781091
+     ],
+     "median_ms": 278.9452659781091
+    }
+   },
+   "patchwork_clustered_20000-plain": {
+    "master v3+PGO": {
+     "wall_ms": [
+      268.2494129985571,
+      285.3426290093921,
+      283.59070501755923,
+      272.5754940183833,
+      288.715164992027
+     ],
+     "median_ms": 283.59070501755923
+    },
+    "after v3+PGO": {
+     "wall_ms": [
+      298.30396600300446,
+      288.81319100037217,
+      288.8585140462965,
+      287.14153601322323,
+      278.42610399238765
+     ],
+     "median_ms": 288.81319100037217
+    },
+    "1.0": {
+     "wall_ms": [
+      552.8597150114365,
+      590.1231330353767,
+      566.9006410171278,
+      577.0507589913905,
+      562.393635045737
+     ],
+     "median_ms": 566.9006410171278
+    },
+    "C": {
+     "wall_ms": [
+      210.67048300756142,
+      212.66175096388906,
+      215.23398597491905,
+      200.2588520408608,
+      209.02670198120177
+     ],
+     "median_ms": 210.67048300756142
+    }
+   },
+   "osage_clustered_20000-svg": {
+    "master v3+PGO": {
+     "wall_ms": [
+      235.9421139699407,
+      229.59982696920633,
+      228.86885702610016,
+      240.4747559921816,
+      231.82087496388704
+     ],
+     "median_ms": 231.82087496388704
+    },
+    "after v3+PGO": {
+     "wall_ms": [
+      235.26742198737338,
+      236.96783900959417,
+      243.02419601008296,
+      235.741643991787,
+      245.88350701378658
+     ],
+     "median_ms": 236.96783900959417
+    },
+    "1.0": {
+     "wall_ms": [
+      583.5821909713559,
+      581.5701769897714,
+      570.6117950030603,
+      575.5317730363458,
+      582.3583349701948
+     ],
+     "median_ms": 581.5701769897714
+    },
+    "C": {
+     "wall_ms": [
+      221.8595480080694,
+      226.8149899900891,
+      224.97452597599477,
+      223.63367502111942,
+      235.05365900928155
+     ],
+     "median_ms": 224.97452597599477
+    }
+   },
+   "twopi_tree_20000-svg": {
+    "master v3+PGO": {
+     "wall_ms": [
+      399.3632050114684,
+      414.0877919853665,
+      403.42363802483305,
+      412.6715600141324,
+      405.6263570091687
+     ],
+     "median_ms": 405.6263570091687
+    },
+    "after v3+PGO": {
+     "wall_ms": [
+      403.1624039635062,
+      407.0878469501622,
+      411.85909102205187,
+      411.45114501705393,
+      409.55367899732664
+     ],
+     "median_ms": 409.55367899732664
+    },
+    "1.0": {
+     "wall_ms": [
+      908.5760669549927,
+      900.8866310468875,
+      892.649088986218,
+      953.1434929813258,
+      880.7326560490765
+     ],
+     "median_ms": 900.8866310468875
+    },
+    "C": {
+     "wall_ms": [
+      696.0845700232312,
+      742.2908049775288,
+      675.399589992594,
+      689.5192039664835,
+      705.6933999992907
+     ],
+     "median_ms": 696.0845700232312
+    }
+   }
+  },
+  "uptime_end": "18:33:45 up 5 days, 15:15,  2 users,  load average: 4.56, 6.23, 7.31"
+ },
+ "local_ratchet": {
+  "cases": {
+   "laid/tests/wild/gv16_graphs_b29_d1e4db.gv -Tcanon -Knop2": {
+    "exit": 0,
+    "heap_blocks": 134250,
+    "heap_bytes": 8517044,
+    "heap_peak_bytes": 2912590,
+    "instructions": 124387655,
+    "rss_kib": 8956
+   },
+   "laid/tests/wild/gv16_graphs_b29_d1e4db.gv -Tsvg -Knop2": {
+    "exit": 0,
+    "heap_blocks": 96302,
+    "heap_bytes": 6757422,
+    "heap_peak_bytes": 2140694,
+    "instructions": 109218062,
+    "rss_kib": 8316
+   },
+   "synth/dot_components_1000.gv -Tsvg": {
+    "exit": 0,
+    "heap_blocks": 232065,
+    "heap_bytes": 38078148,
+    "heap_peak_bytes": 10597470,
+    "instructions": 525699226,
+    "rss_kib": 15276
+   },
+   "synth/dot_dag_1000.gv -Tsvg": {
+    "exit": 0,
+    "heap_blocks": 226707,
+    "heap_bytes": 50803494,
+    "heap_peak_bytes": 14202211,
+    "instructions": 1036334935,
+    "rss_kib": 19504
+   },
+   "synth/twopi_tree_5000.gv -Tsvg": {
+    "exit": 0,
+    "heap_blocks": 436346,
+    "heap_bytes": 52760073,
+    "heap_peak_bytes": 23653582,
+    "instructions": 510489164,
+    "rss_kib": 28076
+   },
+   "tests/circo/wild_gv16_directed_sdh_29b016.gv -Tsvg": {
+    "exit": 0,
+    "heap_blocks": 18514,
+    "heap_bytes": 2195828,
+    "heap_peak_bytes": 993283,
+    "instructions": 523403314,
+    "rss_kib": 7036
+   },
+   "tests/fdp/wild_gv16_graphs_b69_4b5b48.gv -Tsvg": {
+    "exit": 0,
+    "heap_blocks": 184735,
+    "heap_bytes": 8719219,
+    "heap_peak_bytes": 1217924,
+    "instructions": 2640694323,
+    "rss_kib": 7232
+   },
+   "tests/fixtures/unix.gv -Tpng": {
+    "exit": 0,
+    "heap_blocks": 20572,
+    "heap_bytes": 13847440,
+    "heap_peak_bytes": 7458871,
+    "instructions": 138481606,
+    "rss_kib": 20084
+   },
+   "tests/fixtures/unix.gv -Tsvg": {
+    "exit": 0,
+    "heap_blocks": 8136,
+    "heap_bytes": 1823445,
+    "heap_peak_bytes": 563783,
+    "instructions": 18872130,
+    "rss_kib": 6728
+   },
+   "tests/neato/hw2_random_120.gv -Tsvg": {
+    "exit": 0,
+    "heap_blocks": 14745,
+    "heap_bytes": 2609713,
+    "heap_peak_bytes": 662005,
+    "instructions": 2266325454,
+    "rss_kib": 7004
+   },
+   "tests/osage/wild_gv16_graphs_b51_33bcb0.gv -Tsvg": {
+    "exit": 0,
+    "heap_blocks": 17248,
+    "heap_bytes": 2142695,
+    "heap_peak_bytes": 808183,
+    "instructions": 24418676,
+    "rss_kib": 7300
+   },
+   "tests/patchwork/wild_gv16_graphs_b51_33bcb0.gv -Tsvg": {
+    "exit": 0,
+    "heap_blocks": 14993,
+    "heap_bytes": 2077905,
+    "heap_peak_bytes": 751356,
+    "instructions": 19608001,
+    "rss_kib": 6784
+   },
+   "tests/sfdp/gen_grid20x20.gv -Tsvg": {
+    "exit": 0,
+    "heap_blocks": 52478,
+    "heap_bytes": 7516760,
+    "heap_peak_bytes": 2645290,
+    "instructions": 622046321,
+    "rss_kib": 8880
+   },
+   "tests/twopi/fx_arrows.gv -Tsvg": {
+    "exit": 0,
+    "heap_blocks": 16803,
+    "heap_bytes": 6569201,
+    "heap_peak_bytes": 835118,
+    "instructions": 2070837022,
+    "rss_kib": 6772
+   },
+   "tests/wild/gv16_graphs_b143_5416de.gv -Tplain": {
+    "exit": 0,
+    "heap_blocks": 102997,
+    "heap_bytes": 27464705,
+    "heap_peak_bytes": 8642230,
+    "instructions": 1312506020,
+    "rss_kib": 13268
+   },
+   "tests/wild/gv16_graphs_b143_5416de.gv -Tsvg": {
+    "exit": 0,
+    "heap_blocks": 112777,
+    "heap_bytes": 28356102,
+    "heap_peak_bytes": 8642226,
+    "instructions": 1321319844,
+    "rss_kib": 13200
+   }
+  },
+  "target": "x86_64-unknown-linux-musl"
+ }
+}

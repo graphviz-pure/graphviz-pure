@@ -24,19 +24,20 @@ use graphviz_pure_geom::shapes::{RecordField, ShapeKind};
 /// `textfont_t`.
 #[derive(Debug, Clone)]
 pub(crate) struct TextFont {
-    pub name: String,
+    pub name: graphviz_pure_core::font::FontName,
     pub size: f64,
     pub flags: u8,
     pub ps: Option<&'static PostscriptFontAlias>,
 }
 
 impl TextFont {
-    pub fn new(name: &str, size: f64, flags: u8) -> Self {
+    pub fn new(name: graphviz_pure_core::font::FontName, size: f64, flags: u8) -> Self {
+        let ps = translate_postscript_fontname(&name);
         TextFont {
-            name: name.to_string(),
+            name,
             size,
             flags,
-            ps: translate_postscript_fontname(name),
+            ps,
         }
     }
 }
@@ -57,7 +58,7 @@ pub(crate) struct TextSpan {
 #[derive(Debug, Clone)]
 pub(crate) struct TextLabel {
     pub text: String,
-    pub fontname: String,
+    pub fontname: graphviz_pure_core::font::FontName,
     pub fontcolor: String,
     pub fontsize: f64,
     pub dimen: Point,
@@ -98,7 +99,7 @@ impl TextLabel {
                     width: line.width,
                     height: line.height,
                     yoffset_centerline: 0.1 * line.font_size,
-                    font: TextFont::new(&g.font_name, line.font_size, 0),
+                    font: TextFont::new(g.font_name.clone(), line.font_size, 0),
                 });
             }
         }
@@ -134,7 +135,7 @@ impl TextLabel {
                     width: line.width,
                     height: line.height,
                     yoffset_centerline: 0.1 * line.font_size,
-                    font: TextFont::new(&g.font_name, line.font_size, 0),
+                    font: TextFont::new(g.font_name.clone(), line.font_size, 0),
                 });
             }
             std::mem::take(&mut t.source)
@@ -706,6 +707,26 @@ mod ownership_tests {
                 assert_eq!(node.label.pos.y.to_bits(), node.coord.y.to_bits());
             }
         }
+    }
+
+    #[test]
+    fn text_font_keeps_the_existing_name_buffer_and_spelling() {
+        use std::borrow::Cow;
+        for name in ["helvetica", "Arial", "verdana", "unknown font"] {
+            let owned = name.to_owned();
+            let ptr = owned.as_ptr();
+            let font = TextFont::new(Cow::Owned(owned), -0.0, 3);
+            assert_eq!(font.name.as_ptr(), ptr);
+            assert_eq!(font.name, name);
+            assert_eq!(font.size.to_bits(), (-0.0_f64).to_bits());
+            assert_eq!(font.flags, 3);
+            assert_eq!(font.ps, translate_postscript_fontname(name));
+        }
+        let name = graphviz_pure_core::font::shared_font_name("Helvetica");
+        let ptr = name.as_ptr();
+        let font = TextFont::new(name, 12.0, 0);
+        assert_eq!(font.name.as_ptr(), ptr);
+        assert!(matches!(font.name, Cow::Borrowed(_)));
     }
 
     #[test]

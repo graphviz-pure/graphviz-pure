@@ -1,0 +1,622 @@
+{
+ "baseline": "e030b9dd",
+ "reviewed": "9189c7c3",
+ "fixed_code": "db1134b9",
+ "build": "release x86_64-unknown-linux-gnu, no RUSTFLAGS, no PGO",
+ "input_generation": "node and edge font defaults after the opening brace; mixed cases override odd nodes to verdana",
+ "cases": {
+  "patchwork-helvetica": {
+   "master": {
+    "instructions": 1665494258,
+    "uptime": "23:44:29 up 5 days, 20:26,  2 users,  load average: 14.32, 8.69, 7.17",
+    "heap_blocks": 1591051,
+    "heap_bytes": 170441290,
+    "heap_peak_bytes": 73026671,
+    "stdout_sha256": "d79b60045909bf2a5812f152d37843ab9cff234a1ea2732716bb0a43b40e3fd9",
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "wall_ms": [
+     326.1942130047828,
+     314.8463519755751,
+     303.2198279979639
+    ]
+   },
+   "reviewed": {
+    "instructions": 1812636841,
+    "uptime": "23:44:52 up 5 days, 20:26,  2 users,  load average: 13.26, 8.88, 7.27",
+    "heap_blocks": 1591051,
+    "heap_bytes": 170441290,
+    "heap_peak_bytes": 73026671,
+    "stdout_sha256": "d79b60045909bf2a5812f152d37843ab9cff234a1ea2732716bb0a43b40e3fd9",
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "wall_ms": [
+     444.4332820130512,
+     416.6753540048376,
+     451.4115549973212
+    ]
+   },
+   "fixed": {
+    "instructions": 1670775018,
+    "uptime": "00:00:26 up 5 days, 20:42,  2 users,  load average: 12.98, 14.29, 12.29",
+    "heap_blocks": 1591051,
+    "heap_bytes": 170441290,
+    "heap_peak_bytes": 73026671,
+    "stdout_sha256": "d79b60045909bf2a5812f152d37843ab9cff234a1ea2732716bb0a43b40e3fd9",
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "wall_ms": [
+     335.56249999674037,
+     308.70309396414086,
+     317.9684040369466
+    ]
+   }
+  },
+  "patchwork-Arial": {
+   "master": {
+    "instructions": 1646109485,
+    "uptime": "23:45:38 up 5 days, 20:27,  2 users,  load average: 14.69, 9.96, 7.72",
+    "heap_blocks": 1591051,
+    "heap_bytes": 168934457,
+    "heap_peak_bytes": 72459870,
+    "stdout_sha256": "fe874c235f7b8fb246e0c546136462150d21bbc3afff1450f4228439ee1035d3",
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "wall_ms": [
+     313.09423700440675,
+     312.0889800484292,
+     315.1550740003586
+    ]
+   },
+   "reviewed": {
+    "instructions": 1689927597,
+    "uptime": "23:45:58 up 5 days, 20:27,  2 users,  load average: 13.66, 10.03, 7.79",
+    "heap_blocks": 1591051,
+    "heap_bytes": 168934457,
+    "heap_peak_bytes": 72459870,
+    "stdout_sha256": "fe874c235f7b8fb246e0c546136462150d21bbc3afff1450f4228439ee1035d3",
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "wall_ms": [
+     323.9383850013837,
+     388.9192580245435,
+     336.22610196471214
+    ]
+   },
+   "fixed": {
+    "instructions": 1650564454,
+    "uptime": "00:00:47 up 5 days, 20:42,  2 users,  load average: 11.53, 13.88, 12.20",
+    "heap_blocks": 1591051,
+    "heap_bytes": 168934457,
+    "heap_peak_bytes": 72459870,
+    "stdout_sha256": "fe874c235f7b8fb246e0c546136462150d21bbc3afff1450f4228439ee1035d3",
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "wall_ms": [
+     317.03336304053664,
+     308.09742701239884,
+     302.5392419658601
+    ]
+   }
+  },
+  "osage-Arial": {
+   "master": {
+    "instructions": 1291874330,
+    "uptime": "23:46:39 up 5 days, 20:28,  2 users,  load average: 14.57, 10.67, 8.10",
+    "heap_blocks": 1408669,
+    "heap_bytes": 155114870,
+    "heap_peak_bytes": 69994706,
+    "stdout_sha256": "c9d9ec57091ee4c1bc59547a3e0b4a67ce21f946a2a635bdc40462b7ebd04a65",
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "wall_ms": [
+     278.85775099275634,
+     279.2936110054143,
+     270.5704109976068
+    ]
+   },
+   "reviewed": {
+    "instructions": 1322774355,
+    "uptime": "23:46:57 up 5 days, 20:28,  2 users,  load average: 13.57, 10.70, 8.17",
+    "heap_blocks": 1408669,
+    "heap_bytes": 155114870,
+    "heap_peak_bytes": 69994706,
+    "stdout_sha256": "c9d9ec57091ee4c1bc59547a3e0b4a67ce21f946a2a635bdc40462b7ebd04a65",
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "wall_ms": [
+     266.69219898758456,
+     292.1285769552924,
+     266.184362990316
+    ]
+   },
+   "fixed": {
+    "instructions": 1294095261,
+    "uptime": "00:01:05 up 5 days, 20:42,  2 users,  load average: 11.55, 13.77, 12.19",
+    "heap_blocks": 1408669,
+    "heap_bytes": 155114870,
+    "heap_peak_bytes": 69994706,
+    "stdout_sha256": "c9d9ec57091ee4c1bc59547a3e0b4a67ce21f946a2a635bdc40462b7ebd04a65",
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "wall_ms": [
+     275.9333049762063,
+     258.54759698268026,
+     260.03078697249293
+    ]
+   }
+  },
+  "twopi-Arial": {
+   "master": {
+    "instructions": 2017905037,
+    "uptime": "23:47:36 up 5 days, 20:29,  2 users,  load average: 13.01, 10.90, 8.34",
+    "heap_blocks": 2165636,
+    "heap_bytes": 236491123,
+    "heap_peak_bytes": 106562738,
+    "stdout_sha256": "4d5a60597dfbf85abd84b4685e7fea173d1ef1f89c9c5e5fae6a3b348fef1cf2",
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "wall_ms": [
+     522.8646409814246,
+     502.5366820045747,
+     536.7224919609725
+    ]
+   },
+   "reviewed": {
+    "instructions": 2048943948,
+    "uptime": "23:48:04 up 5 days, 20:29,  2 users,  load average: 14.39, 11.41, 8.58",
+    "heap_blocks": 2165636,
+    "heap_bytes": 236491123,
+    "heap_peak_bytes": 106562738,
+    "stdout_sha256": "4d5a60597dfbf85abd84b4685e7fea173d1ef1f89c9c5e5fae6a3b348fef1cf2",
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "wall_ms": [
+     470.40730400476605,
+     469.7003309847787,
+     463.58796005370095
+    ]
+   },
+   "fixed": {
+    "instructions": 2019226481,
+    "uptime": "00:01:27 up 5 days, 20:43,  2 users,  load average: 12.43, 13.81, 12.25",
+    "heap_blocks": 2165636,
+    "heap_bytes": 236491123,
+    "heap_peak_bytes": 106562738,
+    "stdout_sha256": "4d5a60597dfbf85abd84b4685e7fea173d1ef1f89c9c5e5fae6a3b348fef1cf2",
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "wall_ms": [
+     460.0724240299314,
+     478.6187810241245,
+     460.39070503320545
+    ]
+   }
+  },
+  "patchwork-verdana": {
+   "master": {
+    "instructions": 1643727838,
+    "uptime": "23:48:53 up 5 days, 20:30,  2 users,  load average: 11.25, 10.99, 8.58",
+    "heap_blocks": 1591051,
+    "heap_bytes": 169467869,
+    "heap_peak_bytes": 72633266,
+    "stdout_sha256": "0ecbe220a7cc0f228056b2d69e99972e96d6161494e40cefcc3442b0837568fd",
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "wall_ms": [
+     307.2560910368338,
+     316.2643219693564,
+     308.6068030097522
+    ]
+   },
+   "fixed": {
+    "instructions": 1649018717,
+    "uptime": "00:01:50 up 5 days, 20:43,  2 users,  load average: 13.16, 13.88, 12.31",
+    "heap_blocks": 1591051,
+    "heap_bytes": 169467869,
+    "heap_peak_bytes": 72633266,
+    "stdout_sha256": "0ecbe220a7cc0f228056b2d69e99972e96d6161494e40cefcc3442b0837568fd",
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "wall_ms": [
+     345.38061800412834,
+     355.95818399451673,
+     318.2113220100291
+    ]
+   }
+  },
+  "osage-verdana": {
+   "master": {
+    "instructions": 1289695973,
+    "uptime": "23:49:31 up 5 days, 20:31,  2 users,  load average: 12.03, 11.23, 8.77",
+    "heap_blocks": 1408669,
+    "heap_bytes": 155532148,
+    "heap_peak_bytes": 70150035,
+    "stdout_sha256": "44a26847507ed0840a2b17710334ebe1530124c7d0239c2468c033a8ea52670e",
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "wall_ms": [
+     303.36076201638207,
+     304.07911498332396,
+     280.26828402653337
+    ]
+   },
+   "fixed": {
+    "instructions": 1292486231,
+    "uptime": "00:02:09 up 5 days, 20:44,  2 users,  load average: 13.44, 13.91, 12.35",
+    "heap_blocks": 1408669,
+    "heap_bytes": 155532148,
+    "heap_peak_bytes": 70150035,
+    "stdout_sha256": "44a26847507ed0840a2b17710334ebe1530124c7d0239c2468c033a8ea52670e",
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "wall_ms": [
+     261.7512749857269,
+     272.00427500065416,
+     252.8856450226158
+    ]
+   }
+  },
+  "twopi-verdana": {
+   "master": {
+    "instructions": 2015475811,
+    "uptime": "23:50:12 up 5 days, 20:32,  2 users,  load average: 14.02, 11.84, 9.08",
+    "heap_blocks": 2165636,
+    "heap_bytes": 236931151,
+    "heap_peak_bytes": 106722756,
+    "stdout_sha256": "4d5a60597dfbf85abd84b4685e7fea173d1ef1f89c9c5e5fae6a3b348fef1cf2",
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "wall_ms": [
+     486.33117001736537,
+     599.2935390095226,
+     568.7289669876918
+    ]
+   },
+   "fixed": {
+    "instructions": 2017362165,
+    "uptime": "00:02:30 up 5 days, 20:44,  2 users,  load average: 13.51, 13.90, 12.38",
+    "heap_blocks": 2165636,
+    "heap_bytes": 236931151,
+    "heap_peak_bytes": 106722756,
+    "stdout_sha256": "4d5a60597dfbf85abd84b4685e7fea173d1ef1f89c9c5e5fae6a3b348fef1cf2",
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "wall_ms": [
+     483.476911962498,
+     464.44494603201747,
+     470.16283101402223
+    ]
+   }
+  },
+  "patchwork-default": {
+   "master": {
+    "instructions": 1562892899,
+    "uptime": "23:51:07 up 5 days, 20:33,  2 users,  load average: 16.20, 12.80, 9.56",
+    "heap_blocks": 1490961,
+    "heap_bytes": 166005010,
+    "heap_peak_bytes": 68833195,
+    "stdout_sha256": "b281463084ce8117d239cc208801570738584321e195a393f22ccbe1f58c5580",
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "wall_ms": [
+     344.7883499902673,
+     384.10209998255596,
+     380.5726859718561
+    ]
+   },
+   "fixed": {
+    "instructions": 1525919504,
+    "uptime": "00:02:54 up 5 days, 20:44,  2 users,  load average: 15.48, 14.30, 12.55",
+    "heap_blocks": 1310961,
+    "heap_bytes": 164025010,
+    "heap_peak_bytes": 68393195,
+    "stdout_sha256": "b281463084ce8117d239cc208801570738584321e195a393f22ccbe1f58c5580",
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "wall_ms": [
+     298.6263330094516,
+     301.5531790442765,
+     297.8172400034964
+    ]
+   }
+  },
+  "osage-default": {
+   "master": {
+    "instructions": 1224143126,
+    "uptime": "23:51:46 up 5 days, 20:33,  2 users,  load average: 16.46, 13.28, 9.86",
+    "heap_blocks": 1308578,
+    "heap_bytes": 151915363,
+    "heap_peak_bytes": 66352733,
+    "stdout_sha256": "c7a0c36a09656d8d9b56c752afdcbb551cc269d0cc762623a7e6c230eda4dcc9",
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "wall_ms": [
+     281.9094290025532,
+     323.357567016501,
+     298.84188500000164
+    ]
+   },
+   "fixed": {
+    "instructions": 1190859943,
+    "uptime": "00:03:11 up 5 days, 20:45,  2 users,  load average: 15.54, 14.37, 12.60",
+    "heap_blocks": 1168578,
+    "heap_bytes": 150375363,
+    "heap_peak_bytes": 65912733,
+    "stdout_sha256": "c7a0c36a09656d8d9b56c752afdcbb551cc269d0cc762623a7e6c230eda4dcc9",
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "wall_ms": [
+     241.69828195590526,
+     251.19171000551432,
+     229.93756498908624
+    ]
+   }
+  },
+  "twopi-default": {
+   "master": {
+    "instructions": 1823351725,
+    "uptime": "23:52:26 up 5 days, 20:34,  2 users,  load average: 20.22, 14.68, 10.48",
+    "heap_blocks": 1885620,
+    "heap_bytes": 213767992,
+    "heap_peak_bytes": 95401816,
+    "stdout_sha256": "4d5a60597dfbf85abd84b4685e7fea173d1ef1f89c9c5e5fae6a3b348fef1cf2",
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "wall_ms": [
+     438.13017499633133,
+     426.680447999388,
+     447.0400999998674
+    ]
+   },
+   "fixed": {
+    "instructions": 1800339052,
+    "uptime": "00:03:30 up 5 days, 20:45,  2 users,  load average: 15.25, 14.38, 12.64",
+    "heap_blocks": 1785620,
+    "heap_bytes": 212667992,
+    "heap_peak_bytes": 94961816,
+    "stdout_sha256": "4d5a60597dfbf85abd84b4685e7fea173d1ef1f89c9c5e5fae6a3b348fef1cf2",
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "wall_ms": [
+     446.0995069821365,
+     422.9522480163723,
+     413.8909779721871
+    ]
+   }
+  }
+ },
+ "alternating_owned": {
+  "patchwork-mixed": {
+   "master": {
+    "instructions": 1753845696,
+    "uptime": "23:53:30 up 5 days, 20:35,  2 users,  load average: 20.27, 16.04, 11.24",
+    "heap_blocks": 1661062,
+    "heap_bytes": 170211095,
+    "heap_peak_bytes": 72736608,
+    "stdout_sha256": "9292c7a6078684dbd223d597f42ae7186c4fd81343319f102e0252164dfaf66d",
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "wall_ms": [
+     367.5366410170682,
+     378.749331983272,
+     360.9274609480053
+    ]
+   },
+   "fixed": {
+    "instructions": 1757610632,
+    "uptime": "00:03:52 up 5 days, 20:45,  2 users,  load average: 14.41, 14.25, 12.65",
+    "heap_blocks": 1661062,
+    "heap_bytes": 170211095,
+    "heap_peak_bytes": 72736608,
+    "stdout_sha256": "9292c7a6078684dbd223d597f42ae7186c4fd81343319f102e0252164dfaf66d",
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "wall_ms": [
+     341.0041439929046,
+     379.64138301322237,
+     339.54509801696986
+    ]
+   }
+  },
+  "osage-mixed": {
+   "master": {
+    "instructions": 1378743955,
+    "uptime": "23:54:14 up 5 days, 20:36,  2 users,  load average: 18.76, 16.24, 11.53",
+    "heap_blocks": 1478680,
+    "heap_bytes": 156337018,
+    "heap_peak_bytes": 70264199,
+    "stdout_sha256": "f0bac2faf4f46a6925c16f7f0174364ef4c3d650bb536aa0b7a6ca7a39611f3c",
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "wall_ms": [
+     355.4370880010538,
+     308.33157198503613,
+     289.19995098840445
+    ]
+   },
+   "fixed": {
+    "instructions": 1381246203,
+    "uptime": "00:04:12 up 5 days, 20:46,  2 users,  load average: 15.50, 14.51, 12.77",
+    "heap_blocks": 1478680,
+    "heap_bytes": 156337018,
+    "heap_peak_bytes": 70264199,
+    "stdout_sha256": "f0bac2faf4f46a6925c16f7f0174364ef4c3d650bb536aa0b7a6ca7a39611f3c",
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "wall_ms": [
+     280.8758429600857,
+     310.76252000639215,
+     301.9842469948344
+    ]
+   }
+  }
+ },
+ "reference_wall_times": {
+  "uptime_start": "23:54:42 up 5 days, 20:36,  2 users,  load average: 18.53, 16.46, 11.76",
+  "cases": {
+   "patchwork-helvetica": {
+    "1.0": {
+     "wall_ms": [
+      508.8071430218406,
+      513.6765380157158,
+      531.0307029867545
+     ],
+     "median_ms": 513.6765380157158
+    },
+    "C": {
+     "wall_ms": [
+      305.11144699994475,
+      301.44389905035496,
+      289.4683330086991
+     ],
+     "median_ms": 301.44389905035496
+    }
+   },
+   "patchwork-Arial": {
+    "1.0": {
+     "wall_ms": [
+      511.42776699271053,
+      498.4309520223178,
+      490.71966600604355
+     ],
+     "median_ms": 498.4309520223178
+    },
+    "C": {
+     "wall_ms": [
+      292.0041590114124,
+      300.4490669700317,
+      298.0831100139767
+     ],
+     "median_ms": 298.0831100139767
+    }
+   },
+   "osage-Arial": {
+    "1.0": {
+     "wall_ms": [
+      487.6417319756001,
+      477.20777097856626,
+      505.3083699895069
+     ],
+     "median_ms": 487.6417319756001
+    },
+    "C": {
+     "wall_ms": [
+      234.36978901736438,
+      222.11775096366182,
+      249.60926396306604
+     ],
+     "median_ms": 234.36978901736438
+    }
+   },
+   "twopi-Arial": {
+    "1.0": {
+     "wall_ms": [
+      773.6734930076636,
+      832.3961910209619,
+      799.9419099651277
+     ],
+     "median_ms": 799.9419099651277
+    },
+    "C": {
+     "wall_ms": [
+      706.566630047746,
+      723.6998939770274,
+      685.687723045703
+     ],
+     "median_ms": 706.566630047746
+    }
+   },
+   "patchwork-verdana": {
+    "1.0": {
+     "wall_ms": [
+      562.4720270279795,
+      476.90937703009695,
+      493.85337397689
+     ],
+     "median_ms": 493.85337397689
+    },
+    "C": {
+     "wall_ms": [
+      328.4300829982385,
+      308.6064030067064,
+      287.5933169852942
+     ],
+     "median_ms": 308.6064030067064
+    }
+   },
+   "osage-verdana": {
+    "1.0": {
+     "wall_ms": [
+      486.94719100603834,
+      454.0660040220246,
+      468.5906219528988
+     ],
+     "median_ms": 468.5906219528988
+    },
+    "C": {
+     "wall_ms": [
+      246.88542500371113,
+      250.57435198687017,
+      264.65666003059596
+     ],
+     "median_ms": 250.57435198687017
+    }
+   },
+   "twopi-verdana": {
+    "1.0": {
+     "wall_ms": [
+      833.1329579814337,
+      861.5707110147923,
+      858.7982690078206
+     ],
+     "median_ms": 858.7982690078206
+    },
+    "C": {
+     "wall_ms": [
+      880.8028910425492,
+      787.7813859959133,
+      1166.2727610091679
+     ],
+     "median_ms": 880.8028910425492
+    }
+   },
+   "patchwork-default": {
+    "1.0": {
+     "wall_ms": [
+      490.72475597495213,
+      486.27879098057747,
+      537.2686999617144
+     ],
+     "median_ms": 490.72475597495213
+    },
+    "C": {
+     "wall_ms": [
+      321.91873504780233,
+      303.73347498243675,
+      349.63027300545946
+     ],
+     "median_ms": 321.91873504780233
+    }
+   },
+   "osage-default": {
+    "1.0": {
+     "wall_ms": [
+      514.4021959858947,
+      498.52525198366493,
+      533.1952960113995
+     ],
+     "median_ms": 514.4021959858947
+    },
+    "C": {
+     "wall_ms": [
+      238.92365099163726,
+      241.66150303790346,
+      240.50690198782831
+     ],
+     "median_ms": 240.50690198782831
+    }
+   },
+   "twopi-default": {
+    "1.0": {
+     "wall_ms": [
+      719.7411609813571,
+      726.6903769923374,
+      672.0019010244869
+     ],
+     "median_ms": 719.7411609813571
+    },
+    "C": {
+     "wall_ms": [
+      809.1005820315331,
+      821.7316139489412,
+      822.0962409977801
+     ],
+     "median_ms": 821.7316139489412
+    }
+   }
+  }
+ },
+ "validation": {
+  "merge": "cfeaaa28",
+  "master": "a0eb3a1a",
+  "workspace": "passed",
+  "clippy": "passed",
+  "fmt": "passed",
+  "panic_sites": "passed",
+  "ratchet_cases_passed": 16,
+  "crafted_output_comparisons": 126
+ }
+}
