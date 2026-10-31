@@ -1,0 +1,1034 @@
+{
+ "baseline": "e030b9dd",
+ "reviewed": "8b669be5",
+ "fixed_svg_source": "1a0ef878",
+ "isolated_benchmark": "f390aa46",
+ "build": "release x86_64-unknown-linux-musl, -C target-cpu=x86-64-v3, no PGO",
+ "labels": {
+  "lt1024": "<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<",
+  "amp1024": "&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&",
+  "ltx512": "<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x<x",
+  "early4096": "<xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+  "early1024": "<xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+  "short": "a&b",
+  "earlyamp": "&x",
+  "clean1024": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+  "late1024": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx<"
+ },
+ "prior_native_review_percent": {
+  "lt1024": [
+   16.3,
+   12.54
+  ],
+  "amp1024": [
+   7.98,
+   5.66
+  ],
+  "ltx512": [
+   9.66,
+   7.32
+  ],
+  "early4096": [
+   4.9,
+   3.6
+  ],
+  "early1024": [
+   2.52,
+   1.81
+  ]
+ },
+ "whole_program": {
+  "osage-lt1024": {
+   "master": {
+    "instructions": 3282211937,
+    "uptime": "00:34:54 up 5 days, 21:16,  2 users,  load average: 12.06, 12.41, 13.80",
+    "heap_blocks": 1358627,
+    "heap_bytes": 973969876,
+    "heap_peak_bytes": 367162680,
+    "stdout_sha256": "2cadf48363fa08ee66469f8cc173e53ecc6045006ef35e83881cac3e74b445a4",
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "stdout_bytes": 88258635,
+    "wall_ms": [
+     941.8722219998017,
+     940.1301569887437,
+     887.8265730454586
+    ]
+   },
+   "fixed": {
+    "instructions": 3253707138,
+    "uptime": "00:36:02 up 5 days, 21:17,  2 users,  load average: 10.58, 11.89, 13.53",
+    "heap_blocks": 1291936,
+    "heap_bytes": 972969859,
+    "heap_peak_bytes": 367162680,
+    "stdout_sha256": "2cadf48363fa08ee66469f8cc173e53ecc6045006ef35e83881cac3e74b445a4",
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "stdout_bytes": 88258635,
+    "wall_ms": [
+     904.2664880398661,
+     872.5896399701014,
+     830.3317030076869
+    ]
+   }
+  },
+  "patchwork-lt1024": {
+   "master": {
+    "instructions": 4186443746,
+    "uptime": "00:37:14 up 5 days, 21:19,  2 users,  load average: 13.25, 12.44, 13.59",
+    "heap_blocks": 1541009,
+    "heap_bytes": 1028439157,
+    "heap_peak_bytes": 369461581,
+    "stdout_sha256": "1aa735228abee8af959593a68a053eeacca9c2dca0341d59e73a3edb30c080f6",
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "stdout_bytes": 89104108,
+    "wall_ms": [
+     1023.3693940099329,
+     977.0459730061702,
+     978.2259890343994
+    ]
+   },
+   "fixed": {
+    "instructions": 4157827334,
+    "uptime": "00:38:31 up 5 days, 21:20,  2 users,  load average: 8.42, 11.19, 13.07",
+    "heap_blocks": 1474318,
+    "heap_bytes": 1027439140,
+    "heap_peak_bytes": 369461581,
+    "stdout_sha256": "1aa735228abee8af959593a68a053eeacca9c2dca0341d59e73a3edb30c080f6",
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "stdout_bytes": 89104108,
+    "wall_ms": [
+     1005.7852050522342,
+     996.5134199592285,
+     986.3204199937172
+    ]
+   }
+  },
+  "osage-amp1024": {
+   "master": {
+    "instructions": 7557425315,
+    "uptime": "00:40:14 up 5 days, 21:22,  2 users,  load average: 8.45, 10.24, 12.51",
+    "heap_blocks": 1418627,
+    "heap_bytes": 1221024532,
+    "heap_peak_bytes": 387650008,
+    "stdout_sha256": "261416e06c2e82721c8bd5f3740e3360981746477f03dc311297a4f52cd0cc07",
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "stdout_bytes": 108745959,
+    "wall_ms": [
+     892.4083600286394,
+     888.977054040879,
+     895.4586840118282
+    ]
+   },
+   "fixed": {
+    "instructions": 7528537813,
+    "uptime": "00:41:52 up 5 days, 21:23,  2 users,  load average: 8.27, 9.75, 12.11",
+    "heap_blocks": 1351936,
+    "heap_bytes": 1220024515,
+    "heap_peak_bytes": 387650008,
+    "stdout_sha256": "261416e06c2e82721c8bd5f3740e3360981746477f03dc311297a4f52cd0cc07",
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "stdout_bytes": 108745959,
+    "wall_ms": [
+     894.8591650114395,
+     874.1637209895998,
+     897.3779609659687
+    ]
+   }
+  },
+  "patchwork-amp1024": {
+   "master": {
+    "instructions": 10543440203,
+    "uptime": "00:43:50 up 5 days, 21:25,  2 users,  load average: 8.25, 9.06, 11.56",
+    "heap_blocks": 1621009,
+    "heap_bytes": 1295959165,
+    "heap_peak_bytes": 389941585,
+    "stdout_sha256": "a1eac01a03ed3ba712eced54f17f50d1ad4877d53f31cc36e96d4327009a6ac2",
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "stdout_bytes": 109584108,
+    "wall_ms": [
+     1153.2606940018013,
+     1136.3902150187641,
+     1209.2168719973415
+    ]
+   },
+   "fixed": {
+    "instructions": 10514427059,
+    "uptime": "00:45:55 up 5 days, 21:27,  2 users,  load average: 11.15, 9.84, 11.52",
+    "heap_blocks": 1554318,
+    "heap_bytes": 1294959148,
+    "heap_peak_bytes": 389941585,
+    "stdout_sha256": "a1eac01a03ed3ba712eced54f17f50d1ad4877d53f31cc36e96d4327009a6ac2",
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "stdout_bytes": 109584108,
+    "wall_ms": [
+     1217.120525019709,
+     1188.3923780405894,
+     1249.7506199870259
+    ]
+   }
+  },
+  "osage-ltx512": {
+   "master": {
+    "instructions": 3162212878,
+    "uptime": "00:47:09 up 5 days, 21:29,  2 users,  load average: 8.99, 9.39, 11.22",
+    "heap_blocks": 1358626,
+    "heap_bytes": 749996968,
+    "heap_peak_bytes": 255176226,
+    "stdout_sha256": "b2aaad9d69e6b636119ff084953205e29a3cb57c2033c7054eb6dc9f14f5793a",
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "stdout_bytes": 57536821,
+    "wall_ms": [
+     865.3389200335369,
+     855.5766720091924,
+     877.670464979019
+    ]
+   },
+   "fixed": {
+    "instructions": 3133700253,
+    "uptime": "00:48:13 up 5 days, 21:30,  2 users,  load average: 8.22, 9.07, 10.99",
+    "heap_blocks": 1291935,
+    "heap_bytes": 748996951,
+    "heap_peak_bytes": 255176226,
+    "stdout_sha256": "b2aaad9d69e6b636119ff084953205e29a3cb57c2033c7054eb6dc9f14f5793a",
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "stdout_bytes": 57536821,
+    "wall_ms": [
+     819.471525028348,
+     831.690407008864,
+     825.8890889701433
+    ]
+   }
+  },
+  "patchwork-ltx512": {
+   "master": {
+    "instructions": 4066633577,
+    "uptime": "00:49:22 up 5 days, 21:31,  2 users,  load average: 5.96, 8.29, 10.59",
+    "heap_blocks": 1541008,
+    "heap_bytes": 804469877,
+    "heap_peak_bytes": 257476941,
+    "stdout_sha256": "e086e50d0e3f1b18317cf67776d271a69eed4637f69512382ce9a4c1f82074e6",
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "stdout_bytes": 58384108,
+    "wall_ms": [
+     974.9081850168295,
+     963.6813790421002,
+     947.1706559997983
+    ]
+   },
+   "fixed": {
+    "instructions": 4038031171,
+    "uptime": "00:50:36 up 5 days, 21:32,  2 users,  load average: 6.06, 7.79, 10.23",
+    "heap_blocks": 1474317,
+    "heap_bytes": 803469860,
+    "heap_peak_bytes": 257476941,
+    "stdout_sha256": "e086e50d0e3f1b18317cf67776d271a69eed4637f69512382ce9a4c1f82074e6",
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "stdout_bytes": 58384108,
+    "wall_ms": [
+     927.2950110025704,
+     946.8716150149703,
+     946.6406740248203
+    ]
+   }
+  },
+  "osage-early4096": {
+   "master": {
+    "instructions": 7653254445,
+    "uptime": "00:52:08 up 5 days, 21:34,  2 users,  load average: 6.27, 7.36, 9.85",
+    "heap_blocks": 1318627,
+    "heap_bytes": 1536456670,
+    "heap_peak_bytes": 561864001,
+    "stdout_sha256": "516cab82aead79488252b89ca0187e8851d811083e14d8b5f2fd46dc480ad861",
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "stdout_bytes": 88357952,
+    "wall_ms": [
+     1019.5813149912283,
+     1038.4803960332647,
+     994.961648946628
+    ]
+   },
+   "fixed": {
+    "instructions": 7624701882,
+    "uptime": "00:53:37 up 5 days, 21:35,  2 users,  load average: 5.35, 6.83, 9.43",
+    "heap_blocks": 1251936,
+    "heap_bytes": 1535456653,
+    "heap_peak_bytes": 561864001,
+    "stdout_sha256": "516cab82aead79488252b89ca0187e8851d811083e14d8b5f2fd46dc480ad861",
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "stdout_bytes": 88357952,
+    "wall_ms": [
+     1001.1957240058109,
+     1000.8272199775092,
+     992.588869004976
+    ]
+   }
+  },
+  "patchwork-early4096": {
+   "master": {
+    "instructions": 10255011801,
+    "uptime": "00:55:19 up 5 days, 21:37,  2 users,  load average: 5.19, 6.35, 8.98",
+    "heap_blocks": 1501009,
+    "heap_bytes": 1713727309,
+    "heap_peak_bytes": 564123577,
+    "stdout_sha256": "68f6f1e2ffe6d77036628d0ac89b28446ac21a4ddb3049767e1c0f08c0e0c5b8",
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "stdout_bytes": 89164108,
+    "wall_ms": [
+     1219.6374390041456,
+     1227.7622710098512,
+     1221.9640419934876
+    ]
+   },
+   "fixed": {
+    "instructions": 10226403175,
+    "uptime": "00:57:07 up 5 days, 21:39,  2 users,  load average: 5.94, 5.99, 8.54",
+    "heap_blocks": 1434318,
+    "heap_bytes": 1712727292,
+    "heap_peak_bytes": 564123577,
+    "stdout_sha256": "68f6f1e2ffe6d77036628d0ac89b28446ac21a4ddb3049767e1c0f08c0e0c5b8",
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "stdout_bytes": 89164108,
+    "wall_ms": [
+     1650.748222018592,
+     1840.2466130210087,
+     1766.025017015636
+    ]
+   }
+  },
+  "osage-early1024": {
+   "master": {
+    "instructions": 3008444750,
+    "uptime": "00:58:25 up 5 days, 21:40,  2 users,  load average: 17.64, 9.00, 9.35",
+    "heap_blocks": 1318625,
+    "heap_bytes": 483567918,
+    "heap_peak_bytes": 183881705,
+    "stdout_sha256": "fef1833e865169ab3a211089b9be51751f688b53e88f518c4e1769e9d00cf5a0",
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "stdout_bytes": 26874600,
+    "wall_ms": [
+     765.6029529753141,
+     745.4837140394375,
+     751.1225479538552
+    ]
+   },
+   "fixed": {
+    "instructions": 2979943174,
+    "uptime": "00:59:27 up 5 days, 21:41,  2 users,  load average: 29.77, 13.74, 10.94",
+    "heap_blocks": 1251934,
+    "heap_bytes": 482567901,
+    "heap_peak_bytes": 183881705,
+    "stdout_sha256": "fef1833e865169ab3a211089b9be51751f688b53e88f518c4e1769e9d00cf5a0",
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "stdout_bytes": 26874600,
+    "wall_ms": [
+     765.9380150143988,
+     751.4105209847912,
+     753.7025390192866
+    ]
+   }
+  },
+  "patchwork-early1024": {
+   "master": {
+    "instructions": 3911219504,
+    "uptime": "01:00:35 up 5 days, 21:42,  2 users,  load average: 41.07, 20.50, 13.49",
+    "heap_blocks": 1501007,
+    "heap_bytes": 538045261,
+    "heap_peak_bytes": 186184633,
+    "stdout_sha256": "1c11920722cabaf92a0770dccd61df0354f79c70e57c7324384c984064d2200f",
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "stdout_bytes": 27724108,
+    "wall_ms": [
+     873.3888019924052,
+     868.6950100236572,
+     883.8764530373737
+    ]
+   },
+   "fixed": {
+    "instructions": 3882627319,
+    "uptime": "01:01:48 up 5 days, 21:43,  2 users,  load average: 46.98, 26.33, 16.01",
+    "heap_blocks": 1434316,
+    "heap_bytes": 537045244,
+    "heap_peak_bytes": 186184633,
+    "stdout_sha256": "1c11920722cabaf92a0770dccd61df0354f79c70e57c7324384c984064d2200f",
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "stdout_bytes": 27724108,
+    "wall_ms": [
+     855.217685981188,
+     857.5665410025977,
+     869.0713560208678
+    ]
+   }
+  },
+  "osage-short": {
+   "master": {
+    "instructions": 1464321765,
+    "uptime": "01:02:46 up 5 days, 21:44,  2 users,  load average: 46.06, 29.79, 17.85",
+    "heap_blocks": 1358623,
+    "heap_bytes": 153486125,
+    "heap_peak_bytes": 68123182,
+    "stdout_sha256": "82bf28843edea304658890d56e7c9e320f98d46e97f2c22bb12627f1fc101736",
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "stdout_bytes": 6267628,
+    "wall_ms": [
+     272.42074999958277,
+     271.88260201364756,
+     273.7196559901349
+    ]
+   },
+   "fixed": {
+    "instructions": 1435609059,
+    "uptime": "01:03:40 up 5 days, 21:45,  2 users,  load average: 42.14, 31.57, 19.16",
+    "heap_blocks": 1291932,
+    "heap_bytes": 152486108,
+    "heap_peak_bytes": 68123182,
+    "stdout_sha256": "82bf28843edea304658890d56e7c9e320f98d46e97f2c22bb12627f1fc101736",
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "stdout_bytes": 6267628,
+    "wall_ms": [
+     281.61555499536917,
+     268.35939701413736,
+     272.89100096095353
+    ]
+   }
+  },
+  "patchwork-short": {
+   "master": {
+    "instructions": 1814861371,
+    "uptime": "01:04:33 up 5 days, 21:46,  2 users,  load average: 55.78, 36.94, 21.63",
+    "heap_blocks": 1561005,
+    "heap_bytes": 167597420,
+    "heap_peak_bytes": 70633090,
+    "stdout_sha256": "75dc1e62aea7b602c467a30f8059ca6ad4f62f405cb51a6fb5594fe331682ffd",
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "stdout_bytes": 7324108,
+    "wall_ms": [
+     326.85853098519146,
+     328.27539200661704,
+     332.308795012068
+    ]
+   },
+   "fixed": {
+    "instructions": 1786047658,
+    "uptime": "01:05:32 up 5 days, 21:47,  2 users,  load average: 61.46, 42.02, 24.34",
+    "heap_blocks": 1494314,
+    "heap_bytes": 166597403,
+    "heap_peak_bytes": 70633090,
+    "stdout_sha256": "75dc1e62aea7b602c467a30f8059ca6ad4f62f405cb51a6fb5594fe331682ffd",
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "stdout_bytes": 7324108,
+    "wall_ms": [
+     337.89057296235114,
+     329.19593196129426,
+     327.07039901288226
+    ]
+   }
+  },
+  "osage-earlyamp": {
+   "master": {
+    "instructions": 1460104912,
+    "uptime": "01:06:28 up 5 days, 21:48,  2 users,  load average: 63.72, 45.90, 26.69",
+    "heap_blocks": 1358623,
+    "heap_bytes": 153169438,
+    "heap_peak_bytes": 68033166,
+    "stdout_sha256": "c2a5402640f3e7befd06cf828c0f50e69a637129401e1c4156b815777d1e11cc",
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "stdout_bytes": 6240947,
+    "wall_ms": [
+     280.4882440250367,
+     275.6481230026111,
+     266.1735760048032
+    ]
+   },
+   "fixed": {
+    "instructions": 1431244104,
+    "uptime": "01:07:19 up 5 days, 21:49,  2 users,  load average: 64.63, 49.14, 28.90",
+    "heap_blocks": 1291932,
+    "heap_bytes": 152169421,
+    "heap_peak_bytes": 68033166,
+    "stdout_sha256": "c2a5402640f3e7befd06cf828c0f50e69a637129401e1c4156b815777d1e11cc",
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "stdout_bytes": 6240947,
+    "wall_ms": [
+     282.9007440013811,
+     298.2259879936464,
+     301.58851097803563
+    ]
+   }
+  },
+  "patchwork-earlyamp": {
+   "master": {
+    "instructions": 1808910967,
+    "uptime": "01:08:14 up 5 days, 21:50,  2 users,  load average: 40.63, 45.93, 29.02",
+    "heap_blocks": 1561005,
+    "heap_bytes": 167234095,
+    "heap_peak_bytes": 70549755,
+    "stdout_sha256": "73b9d0710dec5787fdc1dd6eb419f30ca4afc225f4bc25ec3b3cd6b4a4e6ca58",
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "stdout_bytes": 7304108,
+    "wall_ms": [
+     330.03090997226536,
+     331.9887949619442,
+     322.76290602749214
+    ]
+   },
+   "fixed": {
+    "instructions": 1779951679,
+    "uptime": "01:09:14 up 5 days, 21:51,  2 users,  load average: 47.79, 46.39, 30.11",
+    "heap_blocks": 1494314,
+    "heap_bytes": 166234078,
+    "heap_peak_bytes": 70549755,
+    "stdout_sha256": "73b9d0710dec5787fdc1dd6eb419f30ca4afc225f4bc25ec3b3cd6b4a4e6ca58",
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "stdout_bytes": 7304108,
+    "wall_ms": [
+     319.6109749842435,
+     326.75210997695103,
+     328.5312990192324
+    ]
+   }
+  },
+  "osage-clean1024": {
+   "master": {
+    "instructions": 3008090964,
+    "uptime": "01:10:19 up 5 days, 21:52,  2 users,  load average: 58.99, 49.94, 32.44",
+    "heap_blocks": 1318625,
+    "heap_bytes": 483447918,
+    "heap_peak_bytes": 183821705,
+    "stdout_sha256": "5ed27c3c8177f446ca00a2c749082162a96f2f4fd46ccd30e50a11a5980d6809",
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "stdout_bytes": 26814600,
+    "wall_ms": [
+     871.1657779640518,
+     891.9208940351382,
+     804.5185569790192
+    ]
+   },
+   "fixed": {
+    "instructions": 2736782410,
+    "uptime": "01:11:22 up 5 days, 21:53,  2 users,  load average: 64.40, 53.30, 34.78",
+    "heap_blocks": 1231934,
+    "heap_bytes": 461807901,
+    "heap_peak_bytes": 183821705,
+    "stdout_sha256": "5ed27c3c8177f446ca00a2c749082162a96f2f4fd46ccd30e50a11a5980d6809",
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "stdout_bytes": 26814600,
+    "wall_ms": [
+     720.7862010109238,
+     712.5795889878646,
+     711.321217007935
+    ]
+   }
+  },
+  "patchwork-clean1024": {
+   "master": {
+    "instructions": 3910736532,
+    "uptime": "01:12:31 up 5 days, 21:54,  2 users,  load average: 65.91, 56.09, 37.10",
+    "heap_blocks": 1501007,
+    "heap_bytes": 537925261,
+    "heap_peak_bytes": 186124633,
+    "stdout_sha256": "f7b0771db5932a972dc3c75e882e4988bda8a58f056ae4a32c72f935ccb2735a",
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "stdout_bytes": 27664108,
+    "wall_ms": [
+     915.1683480013162,
+     880.73712203186,
+     849.3093479773961
+    ]
+   },
+   "fixed": {
+    "instructions": 3639336229,
+    "uptime": "01:13:43 up 5 days, 21:55,  2 users,  load average: 65.45, 58.00, 39.15",
+    "heap_blocks": 1414316,
+    "heap_bytes": 516285244,
+    "heap_peak_bytes": 186124633,
+    "stdout_sha256": "f7b0771db5932a972dc3c75e882e4988bda8a58f056ae4a32c72f935ccb2735a",
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "stdout_bytes": 27664108,
+    "wall_ms": [
+     1020.5072810058482,
+     1240.0401909835637,
+     1233.9317279984243
+    ]
+   }
+  },
+  "osage-late1024": {
+   "master": {
+    "instructions": 3006673924,
+    "uptime": "01:14:52 up 5 days, 21:56,  2 users,  load average: 66.53, 59.77, 41.13",
+    "heap_blocks": 1318625,
+    "heap_bytes": 483567902,
+    "heap_peak_bytes": 183881693,
+    "stdout_sha256": "8f9075af1a4e90ec58f3b34a6735711b4833481cb9aa17c7e4cafccbd5435d07",
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "stdout_bytes": 26874600,
+    "wall_ms": [
+     781.9523270009086,
+     788.1068589631468,
+     819.2371649784036
+    ]
+   },
+   "fixed": {
+    "instructions": 2756443198,
+    "uptime": "01:15:58 up 5 days, 21:57,  2 users,  load average: 38.42, 53.80, 40.38",
+    "heap_blocks": 1251934,
+    "heap_bytes": 482567885,
+    "heap_peak_bytes": 183881693,
+    "stdout_sha256": "8f9075af1a4e90ec58f3b34a6735711b4833481cb9aa17c7e4cafccbd5435d07",
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "stdout_bytes": 26874600,
+    "wall_ms": [
+     733.8200540398248,
+     724.3520690244623,
+     785.8127300278284
+    ]
+   }
+  },
+  "patchwork-late1024": {
+   "master": {
+    "instructions": 3911233068,
+    "uptime": "01:17:06 up 5 days, 21:59,  2 users,  load average: 14.82, 43.46, 37.76",
+    "heap_blocks": 1501007,
+    "heap_bytes": 538045253,
+    "heap_peak_bytes": 186184629,
+    "stdout_sha256": "64d4e576d7dc088c074e47ea2ce938e3b5c0dea99e41b7c15c2d669b0b3e3458",
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "stdout_bytes": 27724108,
+    "wall_ms": [
+     860.5924400035292,
+     918.7641160096973,
+     936.3695700303651
+    ]
+   },
+   "fixed": {
+    "instructions": 3660873679,
+    "uptime": "01:18:19 up 5 days, 22:00,  2 users,  load average: 8.57, 35.54, 35.42",
+    "heap_blocks": 1434316,
+    "heap_bytes": 537045236,
+    "heap_peak_bytes": 186184629,
+    "stdout_sha256": "64d4e576d7dc088c074e47ea2ce938e3b5c0dea99e41b7c15c2d669b0b3e3458",
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "stdout_bytes": 27724108,
+    "wall_ms": [
+     834.9260180257261,
+     833.7140639778227,
+     870.6515590311028
+    ]
+   }
+  }
+ },
+ "micro": {
+  "lt": {
+   "master": 308202977,
+   "fixed": 298322959
+  },
+  "amp": {
+   "master": 570761628,
+   "fixed": 560681610
+  },
+  "ltx": {
+   "master": 270543001,
+   "fixed": 260662983
+  },
+  "early4k": {
+   "master": 842654691,
+   "fixed": 802054672
+  },
+  "early1k": {
+   "master": 214515305,
+   "fixed": 204635286
+  },
+  "clean": {
+   "master": 214303959,
+   "fixed": 102751444
+  },
+  "short": {
+   "master": 5027400,
+   "fixed": 5257382
+  },
+  "earlyamp": {
+   "master": 4777400,
+   "fixed": 4917380
+  },
+  "late": {
+   "master": 214910806,
+   "fixed": 114620781
+  }
+ },
+ "reference_wall_times": {
+  "cases": {
+   "osage-lt1024": {
+    "1.0": {
+     "wall_ms": [
+      1046.3864419725724,
+      1049.8820920474827,
+      1084.3406819622032
+     ],
+     "median_ms": 1049.8820920474827,
+     "rss_kib": 377408
+    },
+    "C": {
+     "wall_ms": [
+      944.0629499731585,
+      953.5756849800237,
+      933.9092419832014
+     ],
+     "median_ms": 944.0629499731585,
+     "rss_kib": 143516
+    }
+   },
+   "patchwork-lt1024": {
+    "1.0": {
+     "wall_ms": [
+      1110.7102280366234,
+      1106.0545509681106,
+      1126.6243130085059
+     ],
+     "median_ms": 1110.7102280366234,
+     "rss_kib": 379888
+    },
+    "C": {
+     "wall_ms": [
+      971.6034770244732,
+      956.4026459702291,
+      968.243376002647
+     ],
+     "median_ms": 968.243376002647,
+     "rss_kib": 146688
+    }
+   },
+   "osage-amp1024": {
+    "1.0": {
+     "wall_ms": [
+      1334.9734300281852,
+      1336.3532249932177,
+      1338.4200219879858
+     ],
+     "median_ms": 1336.3532249932177,
+     "rss_kib": 414904
+    },
+    "C": {
+     "wall_ms": [
+      1036.8701330153272,
+      1036.9193439837545,
+      1038.7569059967063
+     ],
+     "median_ms": 1036.9193439837545,
+     "rss_kib": 143596
+    }
+   },
+   "patchwork-amp1024": {
+    "1.0": {
+     "wall_ms": [
+      1644.1012309514917,
+      1693.7278550467454,
+      1750.1533399918117
+     ],
+     "median_ms": 1693.7278550467454,
+     "rss_kib": 417540
+    },
+    "C": {
+     "wall_ms": [
+      1110.723838035483,
+      1338.762950967066,
+      1333.8603660231456
+     ],
+     "median_ms": 1333.8603660231456,
+     "rss_kib": 146712
+    }
+   },
+   "osage-ltx512": {
+    "1.0": {
+     "wall_ms": [
+      1025.1111880061217,
+      1042.8352619637735,
+      1043.8129149843007
+     ],
+     "median_ms": 1042.8352619637735,
+     "rss_kib": 317780
+    },
+    "C": {
+     "wall_ms": [
+      945.5961599596776,
+      975.9467960102484,
+      1033.5382589837536
+     ],
+     "median_ms": 975.9467960102484,
+     "rss_kib": 143488
+    }
+   },
+   "patchwork-ltx512": {
+    "1.0": {
+     "wall_ms": [
+      1281.5180639736354,
+      1224.9230039888062,
+      1187.6506990520284
+     ],
+     "median_ms": 1224.9230039888062,
+     "rss_kib": 318464
+    },
+    "C": {
+     "wall_ms": [
+      1153.0117520014755,
+      1033.1987679819576,
+      1038.5697419987991
+     ],
+     "median_ms": 1038.5697419987991,
+     "rss_kib": 146700
+    }
+   },
+   "osage-early4096": {
+    "1.0": {
+     "wall_ms": [
+      1982.8196039889008,
+      2014.2980460077524,
+      2150.7359499810264
+     ],
+     "median_ms": 2014.2980460077524,
+     "rss_kib": 730476
+    },
+    "C": {
+     "wall_ms": [
+      3375.2301490167156,
+      3269.530735036824,
+      3163.4522970416583
+     ],
+     "median_ms": 3269.530735036824,
+     "rss_kib": 375992
+    }
+   },
+   "patchwork-early4096": {
+    "1.0": {
+     "wall_ms": [
+      2255.9346340131015,
+      2234.4287640298717,
+      2177.290520980023
+     ],
+     "median_ms": 2234.4287640298717,
+     "rss_kib": 734456
+    },
+    "C": {
+     "wall_ms": [
+      3270.3025339869782,
+      3288.8087689643726,
+      3268.5359939932823
+     ],
+     "median_ms": 3270.3025339869782,
+     "rss_kib": 379360
+    }
+   },
+   "osage-early1024": {
+    "1.0": {
+     "wall_ms": [
+      951.1228069895878,
+      939.5770099945366,
+      953.7259429926053
+     ],
+     "median_ms": 951.1228069895878,
+     "rss_kib": 256200
+    },
+    "C": {
+     "wall_ms": [
+      986.6652979981154,
+      991.0170609946363,
+      963.3013840066269
+     ],
+     "median_ms": 986.6652979981154,
+     "rss_kib": 143604
+    }
+   },
+   "patchwork-early1024": {
+    "1.0": {
+     "wall_ms": [
+      1034.8556860117242,
+      1127.9614300001413,
+      1040.5918519827537
+     ],
+     "median_ms": 1040.5918519827537,
+     "rss_kib": 259856
+    },
+    "C": {
+     "wall_ms": [
+      1022.8561229887418,
+      1020.9496360039338,
+      987.9481339594349
+     ],
+     "median_ms": 1020.9496360039338,
+     "rss_kib": 146752
+    }
+   },
+   "osage-short": {
+    "1.0": {
+     "wall_ms": [
+      586.5869259578176,
+      583.0773509806022,
+      575.2058969810605
+     ],
+     "median_ms": 583.0773509806022,
+     "rss_kib": 99948
+    },
+    "C": {
+     "wall_ms": [
+      226.56119300518185,
+      232.5112259713933,
+      229.7258200123906
+     ],
+     "median_ms": 229.7258200123906,
+     "rss_kib": 66764
+    }
+   },
+   "patchwork-short": {
+    "1.0": {
+     "wall_ms": [
+      554.3235520017333,
+      627.1018050028943,
+      675.4267910146154
+     ],
+     "median_ms": 627.1018050028943,
+     "rss_kib": 102024
+    },
+    "C": {
+     "wall_ms": [
+      309.38062397763133,
+      307.77404096443206,
+      326.6743060084991
+     ],
+     "median_ms": 309.38062397763133,
+     "rss_kib": 69640
+    }
+   },
+   "osage-earlyamp": {
+    "1.0": {
+     "wall_ms": [
+      693.3328249724582,
+      835.2812529774383,
+      1002.8448550147004
+     ],
+     "median_ms": 835.2812529774383,
+     "rss_kib": 96148
+    },
+    "C": {
+     "wall_ms": [
+      261.2925539724529,
+      265.92150900978595,
+      301.03464698186144
+     ],
+     "median_ms": 265.92150900978595,
+     "rss_kib": 66664
+    }
+   },
+   "patchwork-earlyamp": {
+    "1.0": {
+     "wall_ms": [
+      611.0456340247765,
+      633.6256469949149,
+      610.573198995553
+     ],
+     "median_ms": 611.0456340247765,
+     "rss_kib": 102552
+    },
+    "C": {
+     "wall_ms": [
+      300.3284320002422,
+      288.61548501299694,
+      286.23328398680314
+     ],
+     "median_ms": 288.61548501299694,
+     "rss_kib": 69668
+    }
+   },
+   "osage-clean1024": {
+    "1.0": {
+     "wall_ms": [
+      1069.4902969989926,
+      1049.169782025274,
+      1050.802634039428
+     ],
+     "median_ms": 1050.802634039428,
+     "rss_kib": 256576
+    },
+    "C": {
+     "wall_ms": [
+      1048.3144979807548,
+      1015.7580919913016,
+      1005.1646929932758
+     ],
+     "median_ms": 1015.7580919913016,
+     "rss_kib": 143420
+    }
+   },
+   "patchwork-clean1024": {
+    "1.0": {
+     "wall_ms": [
+      1144.6411940269172,
+      1199.056112964172,
+      1361.5691079758108
+     ],
+     "median_ms": 1199.056112964172,
+     "rss_kib": 259048
+    },
+    "C": {
+     "wall_ms": [
+      1721.9770930241793,
+      1369.600062025711,
+      1150.3515429794788
+     ],
+     "median_ms": 1369.600062025711,
+     "rss_kib": 146684
+    }
+   },
+   "osage-late1024": {
+    "1.0": {
+     "wall_ms": [
+      1230.5258230189793,
+      1276.100969989784,
+      1059.4933640095405
+     ],
+     "median_ms": 1230.5258230189793,
+     "rss_kib": 256544
+    },
+    "C": {
+     "wall_ms": [
+      1024.5688669965602,
+      1186.125312000513,
+      1236.9027609820478
+     ],
+     "median_ms": 1186.125312000513,
+     "rss_kib": 143496
+    }
+   },
+   "patchwork-late1024": {
+    "1.0": {
+     "wall_ms": [
+      1345.9834780078381,
+      1412.01693599578,
+      1267.1927740448155
+     ],
+     "median_ms": 1345.9834780078381,
+     "rss_kib": 259228
+    },
+    "C": {
+     "wall_ms": [
+      1088.6480690096505,
+      1103.7315389839932,
+      1155.1097390474752
+     ],
+     "median_ms": 1103.7315389839932,
+     "rss_kib": 146664
+    }
+   }
+  },
+  "uptime_start": "01:20:47 up 5 days, 22:02,  2 users,  load average: 6.66, 23.70, 30.94",
+  "uptime_end": "01:22:53 up 5 days, 22:04,  2 users,  load average: 9.70, 18.85, 28.23"
+ },
+ "validation": {
+  "branch_tree": "05e8a2ce5add0b61d0d4022d5bce2bc74d2e40a7",
+  "master": "5c8294e0",
+  "workspace": "passed",
+  "clippy": "passed",
+  "fmt": "passed",
+  "panic_sites": "passed",
+  "ratchet_cases": 16,
+  "crafted_output_comparisons": 126,
+  "whole_program_hash_pairs": 18
+ },
+ "svg_blob": "4875db4ea0c65a053403fc5d9c0c32a7aee632cd"
+}
