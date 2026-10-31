@@ -79,10 +79,56 @@ pub fn simple_spline_route(
 }
 
 /// `limitBoxes`: widen each box to the x-extent of the spline samples within it.
+/// How the boxes' y edges run along the list.
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum YOrder {
+    /// `ll.y` and `ur.y` both never rise.
+    Falling,
+    /// `ll.y` and `ur.y` both never fall.
+    Rising,
+    Neither,
+}
+
+fn y_order(boxes: &[BoundingBox]) -> YOrder {
+    let pairs = || boxes.iter().zip(boxes.iter().skip(1));
+    if pairs().all(|(a, b)| a.ll.y >= b.ll.y && a.ur.y >= b.ur.y) {
+        YOrder::Falling
+    } else if pairs().all(|(a, b)| a.ll.y <= b.ll.y && a.ur.y <= b.ur.y) {
+        YOrder::Rising
+    } else {
+        YOrder::Neither
+    }
+}
+
+/// `limit_boxes`'s test: FUDGE .0001 (32-bit robustness in C).
+#[inline]
+fn y_in_box(y: f64, b: &BoundingBox) -> bool {
+    y <= b.ur.y + 0.0001 && y >= b.ll.y - 0.0001
+}
+
+/// The range of `boxes` that can pass [`y_in_box`]. If both edges run the same way along the list,
+/// each half of the test holds on one end of it, so what passes is an interval, found by two
+/// binary searches (`docs/perf/pathplan-shortcuts.md`). Otherwise, the whole list.
+fn y_range(boxes: &[BoundingBox], order: YOrder, y: f64) -> (usize, usize) {
+    match order {
+        YOrder::Falling => (
+            boxes.partition_point(|b| y < b.ll.y - 0.0001),
+            boxes.partition_point(|b| y <= b.ur.y + 0.0001),
+        ),
+        YOrder::Rising => (
+            boxes.partition_point(|b| y > b.ur.y + 0.0001),
+            boxes.partition_point(|b| y >= b.ll.y - 0.0001),
+        ),
+        YOrder::Neither => (0, boxes.len()),
+    }
+}
+
 fn limit_boxes(boxes: &mut [BoundingBox], pps: &[Point], delta: f64) {
     let boxn = boxes.len();
     let num_div = delta * boxn as f64;
     let pn = pps.len();
+    // the loop below writes only x
+    let order = y_order(boxes);
     let mut splinepi = 0;
     while splinepi + 3 < pn {
         let mut si = 0.0f64;
@@ -108,9 +154,19 @@ fn limit_boxes(boxes: &mut [BoundingBox], pps: &[Point], delta: f64) {
             sp[1].y = lerp(sp[1].y, sp[2].y);
             sp[0].x = lerp(sp[0].x, sp[1].x);
             sp[0].y = lerp(sp[0].y, sp[1].y);
-            for b in boxes.iter_mut() {
-                // FUDGE .0001 (32-bit robustness in C).
-                if sp[0].y <= b.ur.y + 0.0001 && sp[0].y >= b.ll.y - 0.0001 {
+            let (from, to) = y_range(boxes, order, sp[0].y);
+            #[cfg(any(test, feature = "routing-check"))]
+            for (i, b) in boxes.iter().enumerate() {
+                if y_in_box(sp[0].y, b) {
+                    assert!(
+                        (from..to).contains(&i),
+                        "limit_boxes: box {i} missed at {}",
+                        sp[0].y
+                    );
+                }
+            }
+            for b in boxes.get_mut(from..to).unwrap_or(&mut []) {
+                if y_in_box(sp[0].y, b) {
                     b.ll.x = b.ll.x.min(sp[0].x);
                     b.ur.x = b.ur.x.max(sp[0].x);
                 }
@@ -867,5 +923,153 @@ mod tests {
         assert_eq!(ps.len(), 4);
         assert!(ps.iter().all(|q| (q.x - 10.0).abs() < 1e-9));
         assert!(p.boxes.iter().all(|b| b.ll.x == 10.0 && b.ur.x == 10.0));
+    }
+}
+
+#[cfg(test)]
+mod limit_boxes_tests {
+    use super::*;
+
+    /// xorshift64*: a fixed sequence, so a failure names its case.
+    struct Rng(u64);
+
+    impl Rng {
+        fn next(&mut self) -> u64 {
+            self.0 ^= self.0 >> 12;
+            self.0 ^= self.0 << 25;
+            self.0 ^= self.0 >> 27;
+            self.0.wrapping_mul(0x2545_f491_4f6c_dd1d)
+        }
+
+        fn below(&mut self, n: u64) -> u64 {
+            self.next() % n
+        }
+    }
+
+    fn boxes(rng: &mut Rng, order: u64) -> Vec<BoundingBox> {
+        let n = 1 + rng.below(30) as usize;
+        let mut y = 0.0;
+        let mut list: Vec<BoundingBox> = (0..n)
+            .map(|_| {
+                // touching, overlapping or apart
+                let ll = y + rng.below(5) as f64 - 2.0;
+                let ur = ll + 1.0 + rng.below(30) as f64;
+                y = ur;
+                BoundingBox {
+                    ll: Point::new(rng.below(50) as f64, ll),
+                    ur: Point::new(50.0 + rng.below(50) as f64, ur),
+                }
+            })
+            .collect();
+        match order {
+            0 => list.reverse(),
+            1 => {}
+            _ => {
+                for i in (1..n).rev() {
+                    list.swap(i, rng.below(i as u64 + 1) as usize);
+                }
+            }
+        }
+        list
+    }
+
+    /// C's loop.
+    fn limit_boxes_c(boxes: &mut [BoundingBox], pps: &[Point], delta: f64) {
+        let num_div = delta * boxes.len() as f64;
+        let mut splinepi = 0;
+        while splinepi + 3 < pps.len() {
+            let mut si = 0.0f64;
+            while si <= num_div {
+                let t = si / num_div;
+                let mut sp = [
+                    pps[splinepi],
+                    pps[splinepi + 1],
+                    pps[splinepi + 2],
+                    pps[splinepi + 3],
+                ];
+                let lerp = |a: f64, b: f64| math::fma(t, b - a, a);
+                for (from, to) in [(0, 1), (1, 2), (2, 3), (0, 1), (1, 2), (0, 1)] {
+                    sp[from].x = lerp(sp[from].x, sp[to].x);
+                    sp[from].y = lerp(sp[from].y, sp[to].y);
+                }
+                for b in boxes.iter_mut() {
+                    if sp[0].y <= b.ur.y + 0.0001 && sp[0].y >= b.ll.y - 0.0001 {
+                        b.ll.x = b.ll.x.min(sp[0].x);
+                        b.ur.x = b.ur.x.max(sp[0].x);
+                    }
+                }
+                si += 1.0;
+            }
+            splinepi += 3;
+        }
+    }
+
+    #[test]
+    fn the_range_is_exactly_what_passes_when_the_edges_are_monotonic() {
+        let mut rng = Rng(0x9e37_79b9_7f4a_7c15);
+        let mut seen = [0u32; 3];
+        for case in 0..20_000 {
+            let shape = rng.below(3);
+            let list = boxes(&mut rng, shape);
+            let order = y_order(&list);
+            seen[order as usize] += 1;
+            for y in [
+                rng.below(400) as f64 - 100.0,
+                rng.below(40000) as f64 / 100.0 - 100.0,
+                f64::NAN,
+                list[0].ll.y - 0.0001,
+                list[0].ur.y + 0.0001,
+            ] {
+                let (from, to) = y_range(&list, order, y);
+                for (i, b) in list.iter().enumerate() {
+                    let inside = (from..to).contains(&i);
+                    if order == YOrder::Neither {
+                        assert!(inside, "case {case}: {list:?} at {y}");
+                    } else {
+                        assert_eq!(inside, y_in_box(y, b), "case {case}: {list:?} at {y}");
+                    }
+                }
+            }
+        }
+        assert!(seen.iter().all(|&n| n > 0), "{seen:?}");
+    }
+
+    #[test]
+    fn limit_boxes_widens_as_c_does() {
+        let mut rng = Rng(0x2545_f491_4f6c_dd1d);
+        for case in 0..3000 {
+            let shape = rng.below(3);
+            let original = boxes(&mut rng, shape);
+            let top = original.iter().map(|b| b.ur.y).fold(f64::MIN, f64::max);
+            let pps: Vec<Point> = (0..3 * (1 + rng.below(4)) + 1)
+                .map(|_| {
+                    Point::new(
+                        rng.below(100) as f64,
+                        rng.below(top.max(1.0) as u64 + 1) as f64,
+                    )
+                })
+                .collect();
+            let delta = [0.5, 1.0, 10.0][rng.below(3) as usize];
+            let (mut a, mut b) = (original.clone(), original);
+            limit_boxes(&mut a, &pps, delta);
+            limit_boxes_c(&mut b, &pps, delta);
+            for (x, y) in a.iter().zip(&b) {
+                assert_eq!(
+                    (
+                        x.ll.x.to_bits(),
+                        x.ur.x.to_bits(),
+                        x.ll.y.to_bits(),
+                        x.ur.y.to_bits()
+                    ),
+                    (
+                        y.ll.x.to_bits(),
+                        y.ur.x.to_bits(),
+                        y.ll.y.to_bits(),
+                        y.ur.y.to_bits()
+                    ),
+                    "case {case}"
+                );
+            }
+        }
     }
 }

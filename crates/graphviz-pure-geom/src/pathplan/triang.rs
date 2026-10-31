@@ -41,8 +41,17 @@ fn intersects(pa: Ppoint, pb: Ppoint, pc: Ppoint, pd: Ppoint) -> bool {
     }
 }
 
-/// `isdiagonal(i, ip2, points, n, indexer)`: is `(i, ip2)` a diagonal?
-pub fn isdiagonal(i: usize, ip2: usize, pts: &[Ppoint]) -> bool {
+/// Why `isdiagonal` said no.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(super) enum Refused {
+    /// The test of the corner at `i`, on its four points, failed.
+    Corner,
+    /// The side from point `.0` to point `.1` crosses the diagonal.
+    Side(usize, usize),
+}
+
+/// `isdiagonal(i, ip2, points, n, indexer)`, saying why not. `None`: it is a diagonal.
+pub(super) fn refusal(i: usize, ip2: usize, pts: &[Ppoint]) -> Option<Refused> {
     let n = pts.len();
     let ip1 = (i + 1) % n;
     let im1 = (i + n - 1) % n;
@@ -52,17 +61,22 @@ pub fn isdiagonal(i: usize, ip2: usize, pts: &[Ppoint]) -> bool {
         ccw(pts[i], pts[ip2], pts[ip1]) == ISCW
     };
     if !res {
-        return false;
+        return Some(Refused::Corner);
     }
     for j in 0..n {
         let jp1 = (j + 1) % n;
         if !(j == i || jp1 == i || j == ip2 || jp1 == ip2)
             && intersects(pts[i], pts[ip2], pts[j], pts[jp1])
         {
-            return false;
+            return Some(Refused::Side(j, jp1));
         }
     }
-    true
+    None
+}
+
+/// `isdiagonal(i, ip2, points, n, indexer)`: is `(i, ip2)` a diagonal?
+pub fn isdiagonal(i: usize, ip2: usize, pts: &[Ppoint]) -> bool {
+    refusal(i, ip2, pts).is_none()
 }
 
 /// `Ptriangulate(polygon, fn, vc)`: calls `f` with each triangle; `Err` if
