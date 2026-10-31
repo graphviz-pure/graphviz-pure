@@ -717,8 +717,37 @@
    "target": "x86_64-unknown-linux-musl",
    "wasm_bytes": 4175334
   },
-  "import": "allocation-reducing subset, --update --from --only allocation-reducing; preserve other rows and references",
-  "same_production_source": true
+  "import": "14 prefiltered case rows from run 41163838174 imported; the two laid-b29 nop2 canon/svg controls retained from base 5c8294e0. --only preserved rows absent from the prefiltered file and did not filter --from rows.",
+  "same_production_source": true,
+  "import_reproduction": {
+   "run": 41163838174,
+   "base": "5c8294e0cf977e716481e9d7d2aeaf44ace44f3c",
+   "imported_case_rows": [
+    "synth/dot_components_1000.gv -Tsvg",
+    "synth/dot_dag_1000.gv -Tsvg",
+    "synth/twopi_tree_5000.gv -Tsvg",
+    "tests/circo/wild_gv16_directed_sdh_29b016.gv -Tsvg",
+    "tests/fdp/wild_gv16_graphs_b69_4b5b48.gv -Tsvg",
+    "tests/fixtures/unix.gv -Tpng",
+    "tests/fixtures/unix.gv -Tsvg",
+    "tests/neato/hw2_random_120.gv -Tsvg",
+    "tests/osage/wild_gv16_graphs_b51_33bcb0.gv -Tsvg",
+    "tests/patchwork/wild_gv16_graphs_b51_33bcb0.gv -Tsvg",
+    "tests/sfdp/gen_grid20x20.gv -Tsvg",
+    "tests/twopi/fx_arrows.gv -Tsvg",
+    "tests/wild/gv16_graphs_b143_5416de.gv -Tplain",
+    "tests/wild/gv16_graphs_b143_5416de.gv -Tsvg"
+   ],
+   "case_rows_kept_from_base": [
+    "laid/tests/wild/gv16_graphs_b29_d1e4db.gv -Tcanon -Knop2",
+    "laid/tests/wild/gv16_graphs_b29_d1e4db.gv -Tsvg -Knop2"
+   ],
+   "selection": "A separate JSON file was constructed with exactly the 14 rows whose heap_blocks were lower than the base. --only did not select these rows.",
+   "command": "python3 -I scripts/bench/ratchet.py --baseline \"$base_copy\" --update --from \"$filtered_artifact\" --only allocation-reducing",
+   "variables": "base_copy: copy of 5c8294e0 baseline; filtered_artifact: JSON containing target, wasm_bytes and the 14 selected case rows from run 41163838174",
+   "only_flag_semantics": "Preserves base rows absent from the prefiltered file; does not filter --from rows.",
+   "copy_reproduction_byte_identical": true
+  }
  },
  "native_gnu_record_control": {
   "method": {
@@ -758,5 +787,19 @@
     "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
    }
   }
+ },
+ "rebase_validation": {
+  "base": "8c4f84c55c051d54edbe232a261ad71217fe8bb8",
+  "old_head": "69b21a62812ef42563f052488bea0da01ee48d6f",
+  "crates_patch_added_removed_lines_unchanged": true,
+  "conflict_resolution": "Keep pooled line vectors and explicit initializers from #684, apply FontName conversion to both production and owned-reference initializers, and retain both test groups.",
+  "patch_proof": {
+   "old_base": "5c8294e0cf977e716481e9d7d2aeaf44ace44f3c",
+   "old_head": "69b21a62812ef42563f052488bea0da01ee48d6f",
+   "new_base": "8c4f84c55c051d54edbe232a261ad71217fe8bb8",
+   "new_head": "f3efadb3b87f3ca23bf36a86258816f1b51dcdbb",
+   "crates_and_lock_added_removed_lines_identical": true
+  },
+  "instruction_and_wall_percentages_measured_on": "5c8294e0cf977e716481e9d7d2aeaf44ace44f3c"
  }
 }
