@@ -23,7 +23,8 @@ For every case of [`scripts/bench/sets/quick.tsv`](../../scripts/bench/sets/quic
 The cases: one or two inputs per engine from the quick set (10–500 ms natively), `-Tpng` on
 `unix.gv`, `-Tplain` on a realistic dot graph, and two cases without a layout: b29 laid out by
 the build under test (`-Tdot`) and read back with `-Knop2`, written as `-Tcanon` (mostly parsing
-and the graph model) and as `-Tsvg` (mostly rendering). The large inputs of the baseline
+and the graph model) and as `-Tsvg` (mostly rendering). A 10,000-node named subgraph with fixed positions,
+read with `-Knop2 -Tcanon`, also covers the parser’s growing scope-membership scan. The large inputs of the baseline
 (rnd2000, dag_5000, the 20,000-node graphs) are not in the set: Callgrind runs about 40× slower
 than native and dhat about 15×, so each would add minutes.
 

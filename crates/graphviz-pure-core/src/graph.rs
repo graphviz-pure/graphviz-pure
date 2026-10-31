@@ -708,13 +708,29 @@ impl Graph {
 
     /// [`Graph::ensure_node`] for a node whose name may be an HTML string.
     pub fn ensure_node_html(&mut self, name: &str, html: bool) -> NodeId {
+        self.ensure_node_html_with(name, html, |graph| graph.node_defaults.clone())
+            .0
+    }
+
+    /// Constructs a new node's attributes directly from the caller's scope.
+    /// The factory is not evaluated for an existing node.
+    /// C: lib/cgraph/node.c:agnode; lib/cgraph/attr.c:agmakeattrs
+    // Keep node construction out of Parser::node: inlining this body spills its
+    // node_id in the active-subgraph membership scan on non-PGO builds.
+    #[inline(never)]
+    pub fn ensure_node_html_with(
+        &mut self,
+        name: &str,
+        html: bool,
+        defaults: impl FnOnce(&Self) -> AttrMap,
+    ) -> (NodeId, bool) {
         let key = Self::node_key(name, html);
         if let Some(&id) = self.node_lookup.get(key.as_ref()) {
-            return id;
+            return (id, false);
         }
         let key = key.into_owned();
         let id = NodeId(self.nodes.len() as u32);
-        let mut attrs = self.node_defaults.clone();
+        let mut attrs = defaults(self);
         if !attrs.contains_key("label") {
             attrs.insert("label".to_string(), "\\N".to_string());
         }
@@ -731,7 +747,7 @@ impl Graph {
             layout: NodeLayout::default(),
         });
         self.node_lookup.insert(key, id);
-        id
+        (id, true)
     }
 
     /// `agdelete(root, n)` of every node `delete` marks: the nodes go, with their edges, from
@@ -909,6 +925,56 @@ mod cluster_prefix_tests {
 #[cfg(test)]
 mod protograph_tests {
     use super::*;
+
+    #[test]
+    fn scoped_factory_preserves_names_defaults_and_html_flags() {
+        for explicit_html_label in [false, true] {
+            let mut actual = Graph::new("G", GraphKind::Directed, false);
+            actual.node_defaults.set("color", "red".into(), false);
+            let mut expected = actual.clone();
+            let mut scoped = AttrMap::new();
+            scoped.set("color", "blue".into(), false);
+            if explicit_html_label {
+                scoped.set("label", "<b>scoped</b>".into(), true);
+            }
+            let calls = std::cell::Cell::new(0);
+            for (name, html) in [("same", false), ("same", true), ("same", false)] {
+                let was_new = !expected
+                    .node_lookup
+                    .contains_key(Graph::node_key(name, html).as_ref());
+                // The former parser path: construct from root defaults, replace
+                // with scoped defaults and insert the implicit plain label.
+                let id = expected.ensure_node_html(name, html);
+                if was_new {
+                    let mut attrs = scoped.clone();
+                    if !attrs.contains_key("label") {
+                        attrs.insert("label".into(), "\\N".into());
+                    }
+                    expected.nodes[id.0 as usize].attrs = attrs;
+                }
+                let (actual_id, created) = actual.ensure_node_html_with(name, html, |_| {
+                    calls.set(calls.get() + 1);
+                    scoped.clone()
+                });
+                assert_eq!(actual_id, id);
+                assert_eq!(created, was_new);
+            }
+            assert_eq!(calls.get(), 2);
+            assert_eq!(actual.nodes, expected.nodes);
+            assert_eq!(actual.node_lookup, expected.node_lookup);
+            for node in &actual.nodes {
+                assert_eq!(node.attrs.is_html("label"), explicit_html_label);
+                assert_eq!(
+                    node.attrs["label"],
+                    if explicit_html_label {
+                        "<b>scoped</b>"
+                    } else {
+                        "\\N"
+                    }
+                );
+            }
+        }
+    }
 
     // Issue #398: a root a layout opens keeps only the ProtoGraph's (command-line) symbols.
     #[test]

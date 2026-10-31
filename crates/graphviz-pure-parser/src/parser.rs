@@ -1108,18 +1108,16 @@ impl<'a> Parser<'a> {
     }
 
     fn ensure_scoped_node(&mut self, name: &str, html: bool) -> NodeId {
-        let is_new = !self
-            .graph
-            .node_lookup
-            .contains_key(Graph::node_key(name, html).as_ref());
-        let node_id = self.graph.ensure_node_html(name, html);
-        if is_new {
-            let mut attrs = self.current_node_defaults().clone();
-            if !attrs.contains_key("label") {
-                attrs.insert("label".to_string(), "\\N".to_string());
+        let scope = self.scope_stack.last().copied();
+        let (node_id, is_new) = self.graph.ensure_node_html_with(name, html, |graph| {
+            if let Some(scope) = scope {
+                graph.subgraphs[scope.0 as usize].node_defaults.clone()
+            } else {
+                graph.node_defaults.clone()
             }
+        });
+        if is_new {
             let node = &mut self.graph.nodes[node_id.0 as usize];
-            node.attrs = attrs;
             // A local name (`%…`) maps to an anonymous id, and `endgraph` forgets the name
             // (`aginternalmapclearlocalnames`): `agnameof` then calls the node `%<id>`.
             if name.starts_with('%') {
