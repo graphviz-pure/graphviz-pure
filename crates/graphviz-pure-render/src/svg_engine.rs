@@ -52,38 +52,55 @@ fn xml_isentity(s: &[u8]) -> bool {
 /// C: lib/util/xml.c:gv_xml_escape
 pub(crate) fn xml_escape(s: &str, f: XmlFlags) -> std::borrow::Cow<'_, str> {
     let b = s.as_bytes();
-    let mut out: Option<Vec<u8>> = None;
     let mut prev = 0u8;
-    for i in 0..b.len() {
-        let c = b[i];
-        let replacement: Option<&[u8]> = match c {
-            b'&' if f.raw || !xml_isentity(&b[i..]) => Some(b"&amp;"),
-            b'<' => Some(b"&lt;"),
-            b'>' => Some(b"&gt;"),
-            b'-' if f.dash => Some(b"&#45;"),
-            b' ' if prev == b' ' && f.nbsp => Some(b"&#160;"),
-            b'"' => Some(b"&quot;"),
-            b'\'' => Some(b"&#39;"),
-            b'\n' if f.raw => Some(b"&#10;"),
-            b'\r' if f.raw => Some(b"&#13;"),
-            _ => None,
+    let mut first = 0;
+    // Discover the unchanged prefix without an output allocation.
+    while first < b.len() {
+        let c = b[first];
+        let replace = match c {
+            b'&' => f.raw || !xml_isentity(&b[first..]),
+            b'<' | b'>' | b'"' | b'\'' => true,
+            b'-' => f.dash,
+            b' ' => prev == b' ' && f.nbsp,
+            b'\n' | b'\r' => f.raw,
+            _ => false,
         };
-        if let Some(replacement) = replacement {
-            let out = out.get_or_insert_with(|| {
-                let mut out = Vec::with_capacity(b.len() + 8);
-                out.extend_from_slice(&b[..i]);
-                out
-            });
-            out.extend_from_slice(replacement);
-        } else if let Some(out) = &mut out {
-            out.push(c);
+        if replace {
+            break;
+        }
+        prev = c;
+        first += 1;
+    }
+    if first == b.len() {
+        return std::borrow::Cow::Borrowed(s);
+    }
+    let mut out = Vec::with_capacity(b.len() + 8);
+    out.extend_from_slice(&b[..first]);
+    // The first ampersand was already classified above. Emit it once so even
+    // an early ampersand in a short string never repeats xml_isentity.
+    if b[first] == b'&' {
+        out.extend_from_slice(b"&amp;");
+        prev = b'&';
+        first += 1;
+    }
+    // C's original loop: fixed-size writes, with no optional-output branch.
+    for i in first..b.len() {
+        let c = b[i];
+        match c {
+            b'&' if f.raw || !xml_isentity(&b[i..]) => out.extend_from_slice(b"&amp;"),
+            b'<' => out.extend_from_slice(b"&lt;"),
+            b'>' => out.extend_from_slice(b"&gt;"),
+            b'-' if f.dash => out.extend_from_slice(b"&#45;"),
+            b' ' if prev == b' ' && f.nbsp => out.extend_from_slice(b"&#160;"),
+            b'"' => out.extend_from_slice(b"&quot;"),
+            b'\'' => out.extend_from_slice(b"&#39;"),
+            b'\n' if f.raw => out.extend_from_slice(b"&#10;"),
+            b'\r' if f.raw => out.extend_from_slice(b"&#13;"),
+            _ => out.push(c),
         }
         prev = c;
     }
-    match out {
-        Some(out) => std::borrow::Cow::Owned(String::from_utf8(out).unwrap_or_default()),
-        None => std::borrow::Cow::Borrowed(s),
-    }
+    std::borrow::Cow::Owned(String::from_utf8(out).unwrap_or_default())
 }
 
 fn xml_raw_id(s: &str) -> String {
@@ -1052,6 +1069,8 @@ impl Engine for SvgEngine {
 #[cfg(test)]
 mod tests {
     use super::{XmlFlags, xml_escape, xml_isentity};
+    use crate::{OutputFormat, render_graph};
+    use graphviz_pure_core::{BoundingBox, Graph, GraphKind};
 
     // The pre-optimization scanner; xml_isentity is shared because it is unchanged.
     fn reference_xml_escape(s: &str, f: XmlFlags) -> String {
@@ -1093,6 +1112,18 @@ mod tests {
         .into_iter()
         .map(str::to_owned)
         .collect();
+        cases.extend([
+            "<".repeat(1024),
+            "&".repeat(1024),
+            "<x".repeat(512),
+            format!("<{}", "x".repeat(4095)),
+            format!("<{}", "x".repeat(1023)),
+            "x".repeat(1024),
+            format!("{}<", "x".repeat(1023)),
+            "a&b".to_owned(),
+            "&".to_owned(),
+            "&amp;<&unknown;&;<  ".to_owned(),
+        ]);
         for c in 0..=127u8 {
             cases.push(format!("prefix {} suffix", char::from(c)));
         }
@@ -1131,8 +1162,6 @@ mod tests {
             ));
         }
     }
-    use crate::{OutputFormat, render_graph};
-    use graphviz_pure_core::{BoundingBox, Graph, GraphKind};
 
     // Issue #461: the generator comment is version-free — it names the ported Graphviz and the
     // port, neither of which changes with a release, so the byte-for-byte release smoke checks
