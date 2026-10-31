@@ -281,9 +281,8 @@
   }
  },
  "method": {
-  "port": "Release x86_64-unknown-linux-musl, x86-64-v3, no PGO; Callgrind full CLI instructions, dhat heap_counts; serial nice 15, four CPUs.",
-  "baseline_1_0": "Shipped 1.0 musl x86-64-v1 f89e21d9; target differs from v3 before/after.",
-  "wall": "Three native runs; shared-machine noise only. Uptime accompanies raw measurements.",
-  "arguments": "Explicit -K<engine> -T<format> INPUT for all historical master/after/1.0/C samples."
+  "status": "Historical pre-inline-guard measurements; final merge-base measurements are in pr-689-final.json",
+  "build": "release musl x86-64-v3, no PGO",
+  "reference_1_0": "The 1.0 samples are shipped musl x86-64-v1 f89e21d9, not v3."
  }
 }
