@@ -4,7 +4,7 @@
   "build": "release x86_64-unknown-linux-musl, x86-64-v1, no PGO; Rust 1.99.1",
   "counter": "Callgrind full CLI; dhat full CLI; serial nice 15 affinity four CPUs; equal-length binary paths",
   "wall": "3 native repeats, shared-machine context only",
-  "after_source": "928c95bda9452a067026eb34c8a7617ef9c7c048",
+  "after_source": "8d0c35c11335cb2333662365c6efb6e8d123a3ef",
   "input_recipes": "Default targets are synth.py clustered/tree 20k SVG. Owned controls add node/edge fontname after the opening brace. Mixed uses Arial with odd-node verdana overrides. Record control: 1000 isolated record nodes, 40 pipe-separated fields f0..f39, Arial, osage SVG.",
   "inputs_sha256_at_report": {
    "/jobs/work/gvp-10x/synth/patchwork_clustered_20000.gv": "cabdf618c08e5ffec89321149c1c70d56ff386bf87a393ca5aef6ae922571b05",
@@ -443,6 +443,319 @@
      745.8196269581094
     ],
     "uptime": "02:45:47 up 5 days, 23:27,  2 users,  load average: 8.72, 8.54, 7.20"
+   }
+  }
+ },
+ "ratchet_ci": {
+  "master_run": 41154215418,
+  "pr_source_run": 41163838174,
+  "master": {
+   "cases": {
+    "laid/tests/wild/gv16_graphs_b29_d1e4db.gv -Tcanon -Knop2": {
+     "exit": 0,
+     "heap_blocks": 133590,
+     "heap_bytes": 8500836,
+     "heap_peak_bytes": 2912346,
+     "instructions": 123592509,
+     "rss_kib": 7588
+    },
+    "laid/tests/wild/gv16_graphs_b29_d1e4db.gv -Tsvg -Knop2": {
+     "exit": 0,
+     "heap_blocks": 95642,
+     "heap_bytes": 6741214,
+     "heap_peak_bytes": 2140450,
+     "instructions": 108411855,
+     "rss_kib": 6684
+    },
+    "synth/dot_components_1000.gv -Tsvg": {
+     "exit": 0,
+     "heap_blocks": 238065,
+     "heap_bytes": 37998200,
+     "heap_peak_bytes": 10597226,
+     "instructions": 545177220,
+     "rss_kib": 13396
+    },
+    "synth/dot_dag_1000.gv -Tsvg": {
+     "exit": 0,
+     "heap_blocks": 229675,
+     "heap_bytes": 50552386,
+     "heap_peak_bytes": 14201967,
+     "instructions": 946812029,
+     "rss_kib": 16300
+    },
+    "synth/twopi_tree_5000.gv -Tsvg": {
+     "exit": 0,
+     "heap_blocks": 461346,
+     "heap_bytes": 53034677,
+     "heap_peak_bytes": 23763330,
+     "instructions": 517232618,
+     "rss_kib": 26596
+    },
+    "tests/circo/wild_gv16_directed_sdh_29b016.gv -Tsvg": {
+     "exit": 0,
+     "heap_blocks": 18739,
+     "heap_bytes": 2198685,
+     "heap_peak_bytes": 993215,
+     "instructions": 523302067,
+     "rss_kib": 5488
+    },
+    "tests/fdp/wild_gv16_graphs_b69_4b5b48.gv -Tsvg": {
+     "exit": 0,
+     "heap_blocks": 184838,
+     "heap_bytes": 8710669,
+     "heap_peak_bytes": 1217856,
+     "instructions": 2642701057,
+     "rss_kib": 5864
+    },
+    "tests/fixtures/unix.gv -Tpng": {
+     "exit": 0,
+     "heap_blocks": 20682,
+     "heap_bytes": 12843568,
+     "heap_peak_bytes": 6076871,
+     "instructions": 138658670,
+     "rss_kib": 17016
+    },
+    "tests/fixtures/unix.gv -Tsvg": {
+     "exit": 0,
+     "heap_blocks": 8247,
+     "heap_bytes": 1817205,
+     "heap_peak_bytes": 563715,
+     "instructions": 19179183,
+     "rss_kib": 5156
+    },
+    "tests/neato/hw2_random_120.gv -Tsvg": {
+     "exit": 0,
+     "heap_blocks": 14865,
+     "heap_bytes": 2602425,
+     "heap_peak_bytes": 661937,
+     "instructions": 2266341385,
+     "rss_kib": 5312
+    },
+    "tests/osage/wild_gv16_graphs_b51_33bcb0.gv -Tsvg": {
+     "exit": 0,
+     "heap_blocks": 17458,
+     "heap_bytes": 2054005,
+     "heap_peak_bytes": 816937,
+     "instructions": 24290148,
+     "rss_kib": 5632
+    },
+    "tests/patchwork/wild_gv16_graphs_b51_33bcb0.gv -Tsvg": {
+     "exit": 0,
+     "heap_blocks": 12591,
+     "heap_bytes": 1810872,
+     "heap_peak_bytes": 759560,
+     "instructions": 16334745,
+     "rss_kib": 5120
+    },
+    "tests/sfdp/gen_grid20x20.gv -Tsvg": {
+     "exit": 0,
+     "heap_blocks": 54478,
+     "heap_bytes": 7538692,
+     "heap_peak_bytes": 2645222,
+     "instructions": 622353047,
+     "rss_kib": 7208
+    },
+    "tests/twopi/fx_arrows.gv -Tsvg": {
+     "exit": 0,
+     "heap_blocks": 17124,
+     "heap_bytes": 6572874,
+     "heap_peak_bytes": 835446,
+     "instructions": 2071022329,
+     "rss_kib": 5184
+    },
+    "tests/wild/gv16_graphs_b143_5416de.gv -Tplain": {
+     "exit": 0,
+     "heap_blocks": 105333,
+     "heap_bytes": 27221034,
+     "heap_peak_bytes": 8644916,
+     "instructions": 1075099223,
+     "rss_kib": 11468
+    },
+    "tests/wild/gv16_graphs_b143_5416de.gv -Tsvg": {
+     "exit": 0,
+     "heap_blocks": 115113,
+     "heap_bytes": 28112431,
+     "heap_peak_bytes": 8644912,
+     "instructions": 1083536146,
+     "rss_kib": 11736
+    }
+   },
+   "target": "x86_64-unknown-linux-musl",
+   "wasm_bytes": 4171577
+  },
+  "after": {
+   "cases": {
+    "laid/tests/wild/gv16_graphs_b29_d1e4db.gv -Tcanon -Knop2": {
+     "exit": 0,
+     "heap_blocks": 133590,
+     "heap_bytes": 8500836,
+     "heap_peak_bytes": 2912346,
+     "instructions": 123643235,
+     "rss_kib": 7584
+    },
+    "laid/tests/wild/gv16_graphs_b29_d1e4db.gv -Tsvg -Knop2": {
+     "exit": 0,
+     "heap_blocks": 95642,
+     "heap_bytes": 6741214,
+     "heap_peak_bytes": 2140450,
+     "instructions": 108455264,
+     "rss_kib": 6804
+    },
+    "synth/dot_components_1000.gv -Tsvg": {
+     "exit": 0,
+     "heap_blocks": 224065,
+     "heap_bytes": 37844200,
+     "heap_peak_bytes": 10597226,
+     "instructions": 543576068,
+     "rss_kib": 13396
+    },
+    "synth/dot_dag_1000.gv -Tsvg": {
+     "exit": 0,
+     "heap_blocks": 222675,
+     "heap_bytes": 50475386,
+     "heap_peak_bytes": 14201967,
+     "instructions": 942837451,
+     "rss_kib": 16296
+    },
+    "synth/twopi_tree_5000.gv -Tsvg": {
+     "exit": 0,
+     "heap_blocks": 436346,
+     "heap_bytes": 52759677,
+     "heap_peak_bytes": 23653330,
+     "instructions": 509365045,
+     "rss_kib": 26336
+    },
+    "tests/circo/wild_gv16_directed_sdh_29b016.gv -Tsvg": {
+     "exit": 0,
+     "heap_blocks": 18439,
+     "heap_bytes": 2195385,
+     "heap_peak_bytes": 993215,
+     "instructions": 523380654,
+     "rss_kib": 5484
+    },
+    "tests/fdp/wild_gv16_graphs_b69_4b5b48.gv -Tsvg": {
+     "exit": 0,
+     "heap_blocks": 184323,
+     "heap_bytes": 8705004,
+     "heap_peak_bytes": 1217856,
+     "instructions": 2642234568,
+     "rss_kib": 5864
+    },
+    "tests/fixtures/unix.gv -Tpng": {
+     "exit": 0,
+     "heap_blocks": 20395,
+     "heap_bytes": 12840411,
+     "heap_peak_bytes": 6076871,
+     "instructions": 138582286,
+     "rss_kib": 17212
+    },
+    "tests/fixtures/unix.gv -Tsvg": {
+     "exit": 0,
+     "heap_blocks": 7960,
+     "heap_bytes": 1814048,
+     "heap_peak_bytes": 563715,
+     "instructions": 19094905,
+     "rss_kib": 5160
+    },
+    "tests/neato/hw2_random_120.gv -Tsvg": {
+     "exit": 0,
+     "heap_blocks": 14265,
+     "heap_bytes": 2595825,
+     "heap_peak_bytes": 661937,
+     "instructions": 2266117557,
+     "rss_kib": 5312
+    },
+    "tests/osage/wild_gv16_graphs_b51_33bcb0.gv -Tsvg": {
+     "exit": 0,
+     "heap_blocks": 16376,
+     "heap_bytes": 2042103,
+     "heap_peak_bytes": 808115,
+     "instructions": 23862121,
+     "rss_kib": 5504
+    },
+    "tests/patchwork/wild_gv16_graphs_b51_33bcb0.gv -Tsvg": {
+     "exit": 0,
+     "heap_blocks": 11659,
+     "heap_bytes": 1800620,
+     "heap_peak_bytes": 751288,
+     "instructions": 16002109,
+     "rss_kib": 5120
+    },
+    "tests/sfdp/gen_grid20x20.gv -Tsvg": {
+     "exit": 0,
+     "heap_blocks": 52478,
+     "heap_bytes": 7516692,
+     "heap_peak_bytes": 2645222,
+     "instructions": 621926366,
+     "rss_kib": 7264
+    },
+    "tests/twopi/fx_arrows.gv -Tsvg": {
+     "exit": 0,
+     "heap_blocks": 16768,
+     "heap_bytes": 6568958,
+     "heap_peak_bytes": 835050,
+     "instructions": 2070944153,
+     "rss_kib": 4912
+    },
+    "tests/wild/gv16_graphs_b143_5416de.gv -Tplain": {
+     "exit": 0,
+     "heap_blocks": 102425,
+     "heap_bytes": 27194862,
+     "heap_peak_bytes": 8642162,
+     "instructions": 1073652336,
+     "rss_kib": 11736
+    },
+    "tests/wild/gv16_graphs_b143_5416de.gv -Tsvg": {
+     "exit": 0,
+     "heap_blocks": 112205,
+     "heap_bytes": 28086259,
+     "heap_peak_bytes": 8642158,
+     "instructions": 1082466241,
+     "rss_kib": 11464
+    }
+   },
+   "target": "x86_64-unknown-linux-musl",
+   "wasm_bytes": 4175334
+  },
+  "import": "allocation-reducing subset, --update --from --only allocation-reducing; preserve other rows and references",
+  "same_production_source": true
+ },
+ "native_gnu_record_control": {
+  "method": {
+   "base": "5c8294e0cf977e716481e9d7d2aeaf44ace44f3c",
+   "after_source": "8d0c35c11335cb2333662365c6efb6e8d123a3ef",
+   "build": "native GNU release, x86-64-v1, no RUSTFLAGS, no PGO, same final merge base",
+   "input": "1000 record nodes, 40 fields f0..f39, Arial, osage SVG",
+   "counter": "Full CLI Callgrind/dhat, serial nice15, four CPUs"
+  },
+  "binaries": {
+   "base": {
+    "graphviz-pure": "8a8a2c82d5d980c431b6ed8919ed71987458f26512d5acc81160a0ed28e56474",
+    "heap_counts": "68134dc1c46803ea51fa4d8b8c8f699eca7cc06b0ad89d0cdf7798037de7606f"
+   },
+   "after": {
+    "graphviz-pure": "c0d9c9599c020578606eda23442d5fb4b5f9b2e295619482a6eef298fb329625",
+    "heap_counts": "75f39f9fc8ab5a319840ec61ee8b8d47313b4d5bcfbcdd0ab17edd2474725757"
+   }
+  },
+  "cases": {
+   "base": {
+    "instructions": 1081331370,
+    "uptime": "03:28:05 up 6 days, 9 min,  2 users,  load average: 7.76, 7.88, 8.81",
+    "heap_blocks": 1624344,
+    "heap_bytes": 183962835,
+    "heap_peak_bytes": 37389657,
+    "stdout_sha256": "687073b6feb77710d41daefc7bcd0c27a1889fb4662e8401d3cf6296004ba0b8",
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+   },
+   "after": {
+    "instructions": 1085979122,
+    "uptime": "03:28:20 up 6 days, 10 min,  2 users,  load average: 9.06, 8.16, 8.89",
+    "heap_blocks": 1624344,
+    "heap_bytes": 183962835,
+    "heap_peak_bytes": 37389657,
+    "stdout_sha256": "687073b6feb77710d41daefc7bcd0c27a1889fb4662e8401d3cf6296004ba0b8",
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
    }
   }
  }
