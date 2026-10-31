@@ -1,0 +1,405 @@
+{
+ "method": {
+  "before": "a0eb3a1a, release x86_64-unknown-linux-musl, no PGO",
+  "reviewed": "c70ffbe6 source (8ad52a44 frozen v3 binary); original PR before inline boundary",
+  "after": "d20356dd source (rebased unchanged as 8c8d7914)",
+  "targets": "v3 except explicitly labelled v1 cases; v1 = x86-64 baseline, v3 = -C target-cpu=x86-64-v3",
+  "instructions": "One full CLI Callgrind run per binary and case; identical argument path lengths. Serial nice 15, affinity four CPUs.",
+  "heap": "dhat heap_counts example, entire CLI; unchanged input and argument path lengths.",
+  "fidelity": "Complete CLI stdout and stderr SHA-256 compared on each case, successful exit codes.",
+  "wall": "Three native repeats; shared-machine noise/context only; uptime recorded for every counter row.",
+  "reference_1_0": "Existing scoped-node-defaults-685.json 1.0 samples use shipped musl x86-64-v1 f89e21d9, not v3.",
+  "inputs": {
+   "scope": "digraph G; 1 or 3 nested named subgraphs; n0..nN each [pos=\"0,0\"], -Knop2 -Tcanon",
+   "ratchet": "scripts/bench/synth.py large_subgraph(10000), -Knop2 -Tcanon",
+   "cluster_plain": "digraph G, subgraph cluster_plain { n0; ... n19999; }, -Kosage -Tsvg",
+   "nested200": "digraph G; 200 successively nested named subgraphs, one unpositioned node each, -Tsvg",
+   "flat20000": "digraph G; 20000 positioned nodes, no subgraphs, -Knop2 -Tcanon",
+   "optimized": "Existing /synth osage_clustered_20000, patchwork_clustered_20000, twopi_tree_20000, -Tsvg"
+  },
+  "rust": "Rust 1.99.1"
+ },
+ "cases": {
+  "v3-ratchet10000": {
+   "master": {
+    "instructions": 903099188,
+    "uptime": "01:54:05 up 5 days, 22:35,  2 users,  load average: 2.82, 4.44, 8.35",
+    "heap_blocks": 864922,
+    "heap_bytes": 78073352,
+    "heap_peak_bytes": 31213854,
+    "stdout_sha256": "6431c7e4fd641da61dddf860e3e3110d9c4bb93ef5cfe23d764eef9dec67630c",
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "wall_ms": [
+     147.60657801525667,
+     142.92854204541072,
+     153.53929297998548
+    ]
+   },
+   "reviewed": {
+    "instructions": 927391796,
+    "uptime": "01:54:34 up 5 days, 22:36,  2 users,  load average: 2.55, 4.22, 8.15",
+    "heap_blocks": 834922,
+    "heap_bytes": 72563352,
+    "heap_peak_bytes": 31213854,
+    "stdout_sha256": "6431c7e4fd641da61dddf860e3e3110d9c4bb93ef5cfe23d764eef9dec67630c",
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "wall_ms": [
+     170.78833904815838,
+     159.26239301916212,
+     157.35435800161213
+    ]
+   },
+   "fixed": {
+    "instructions": 877406119,
+    "uptime": "01:55:02 up 5 days, 22:36,  2 users,  load average: 3.97, 4.42, 8.10",
+    "heap_blocks": 834922,
+    "heap_bytes": 72563352,
+    "heap_peak_bytes": 31213854,
+    "stdout_sha256": "6431c7e4fd641da61dddf860e3e3110d9c4bb93ef5cfe23d764eef9dec67630c",
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "wall_ms": [
+     145.16294497298077,
+     151.9427449675277,
+     149.12663801806048
+    ]
+   }
+  },
+  "v3-scoped20000": {
+   "master": {
+    "instructions": 2309734145,
+    "uptime": "01:55:42 up 5 days, 22:37,  2 users,  load average: 3.17, 4.16, 7.85",
+    "heap_blocks": 1759513,
+    "heap_bytes": 156621607,
+    "heap_peak_bytes": 62455028,
+    "stdout_sha256": "2ad1d2439377a90fa90bacd5ea6d4ede2d78c7f592cae40dfa088c20b7ae5d1f",
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "wall_ms": [
+     330.1624540472403,
+     326.3550869887695,
+     325.08248602971435
+    ]
+   },
+   "reviewed": {
+    "instructions": 2457510656,
+    "uptime": "01:56:45 up 5 days, 22:38,  2 users,  load average: 3.25, 4.02, 7.57",
+    "heap_blocks": 1699513,
+    "heap_bytes": 145601607,
+    "heap_peak_bytes": 62455028,
+    "stdout_sha256": "2ad1d2439377a90fa90bacd5ea6d4ede2d78c7f592cae40dfa088c20b7ae5d1f",
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "wall_ms": [
+     349.8131579835899,
+     362.50270099844784,
+     338.2115970016457
+    ]
+   },
+   "fixed": {
+    "instructions": 2257489930,
+    "uptime": "01:57:45 up 5 days, 22:39,  2 users,  load average: 2.87, 3.76, 7.26",
+    "heap_blocks": 1699513,
+    "heap_bytes": 145601607,
+    "heap_peak_bytes": 62455028,
+    "stdout_sha256": "2ad1d2439377a90fa90bacd5ea6d4ede2d78c7f592cae40dfa088c20b7ae5d1f",
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "wall_ms": [
+     350.69944395218045,
+     344.0320959780365,
+     353.25674194609746
+    ]
+   }
+  },
+  "v3-scoped50000": {
+   "master": {
+    "instructions": 9585895463,
+    "uptime": "01:59:43 up 5 days, 22:41,  2 users,  load average: 6.03, 4.31, 7.01",
+    "heap_blocks": 4443409,
+    "heap_bytes": 384913655,
+    "heap_peak_bytes": 152502468,
+    "stdout_sha256": "06a5d53c41b6c006a6f74da0d632421626ab43158936097cb93f93e93d6a71db",
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "wall_ms": [
+     1100.8095490396954,
+     1099.9592170119286,
+     1061.8884289870039
+    ]
+   },
+   "fixed": {
+    "instructions": 9442594387,
+    "uptime": "02:02:57 up 5 days, 22:44,  2 users,  load average: 5.52, 5.57, 7.05",
+    "heap_blocks": 4293409,
+    "heap_bytes": 357363655,
+    "heap_peak_bytes": 152502468,
+    "stdout_sha256": "06a5d53c41b6c006a6f74da0d632421626ab43158936097cb93f93e93d6a71db",
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "wall_ms": [
+     1111.557296011597,
+     1129.1138589731418,
+     1098.5492279869504
+    ]
+   }
+  },
+  "v3-nested3_10000": {
+   "master": {
+    "instructions": 1409004648,
+    "uptime": "02:05:03 up 5 days, 22:46,  2 users,  load average: 4.37, 5.09, 6.69",
+    "heap_blocks": 864936,
+    "heap_bytes": 78720123,
+    "heap_peak_bytes": 31517029,
+    "stdout_sha256": "a6fca674b07720c928d308addd1966a4a1ccefce7d17d3affa218a85e98caf1c",
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "wall_ms": [
+     204.14094300940633,
+     207.28885004064068,
+     206.6896029864438
+    ]
+   },
+   "fixed": {
+    "instructions": 1382051716,
+    "uptime": "02:05:37 up 5 days, 22:47,  2 users,  load average: 6.30, 5.48, 6.76",
+    "heap_blocks": 834936,
+    "heap_bytes": 73210123,
+    "heap_peak_bytes": 31517029,
+    "stdout_sha256": "a6fca674b07720c928d308addd1966a4a1ccefce7d17d3affa218a85e98caf1c",
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "wall_ms": [
+     193.31346900435165,
+     199.99846100108698,
+     197.92503997450694
+    ]
+   }
+  },
+  "v3-cluster_plain_20000": {
+   "master": {
+    "instructions": 1993010840,
+    "uptime": "02:06:15 up 5 days, 22:48,  2 users,  load average: 6.67, 5.66, 6.77",
+    "heap_blocks": 1053342,
+    "heap_bytes": 124027126,
+    "heap_peak_bytes": 59449690,
+    "stdout_sha256": "977bf916236df119598a88a722d0463d593e8c122064e37e7dfe880d8c8cb42b",
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "wall_ms": [
+     248.01911797840148,
+     253.3525470062159,
+     252.1487269550562
+    ]
+   },
+   "fixed": {
+    "instructions": 1938387271,
+    "uptime": "02:07:00 up 5 days, 22:48,  2 users,  load average: 5.67, 5.55, 6.68",
+    "heap_blocks": 993342,
+    "heap_bytes": 113007126,
+    "heap_peak_bytes": 59449690,
+    "stdout_sha256": "977bf916236df119598a88a722d0463d593e8c122064e37e7dfe880d8c8cb42b",
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "wall_ms": [
+     244.00495999725536,
+     245.80348999006674,
+     241.9087869930081
+    ]
+   }
+  },
+  "v1-nested200": {
+   "master": {
+    "instructions": 34456536,
+    "uptime": "02:07:28 up 5 days, 22:49,  2 users,  load average: 5.58, 5.56, 6.65",
+    "heap_blocks": 22498,
+    "heap_bytes": 3891298,
+    "heap_peak_bytes": 1651041,
+    "stdout_sha256": "793516489948ab9068419ccf33d219fc2b9d92f215a8f68260feca5b98a24e98",
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "wall_ms": [
+     10.019284032750875,
+     10.106890986207873,
+     9.461905981879681
+    ]
+   },
+   "fixed": {
+    "instructions": 34062056,
+    "uptime": "02:07:29 up 5 days, 22:49,  2 users,  load average: 5.58, 5.56, 6.65",
+    "heap_blocks": 21898,
+    "heap_bytes": 3781098,
+    "heap_peak_bytes": 1651041,
+    "stdout_sha256": "793516489948ab9068419ccf33d219fc2b9d92f215a8f68260feca5b98a24e98",
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "wall_ms": [
+     11.184342030901462,
+     9.672637039329857,
+     9.051218978129327
+    ]
+   }
+  },
+  "v1-ratchet10000": {
+   "master": {
+    "instructions": 914264233,
+    "uptime": "02:07:36 up 5 days, 22:49,  2 users,  load average: 5.53, 5.55, 6.64",
+    "heap_blocks": 864922,
+    "heap_bytes": 78073352,
+    "heap_peak_bytes": 31213854,
+    "stdout_sha256": "6431c7e4fd641da61dddf860e3e3110d9c4bb93ef5cfe23d764eef9dec67630c",
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "wall_ms": [
+     151.69518702896312,
+     145.1230879756622,
+     144.9533150298521
+    ]
+   },
+   "reviewed": {
+    "instructions": 938657021,
+    "uptime": "02:08:06 up 5 days, 22:50,  2 users,  load average: 4.20, 5.22, 6.49",
+    "heap_blocks": 834922,
+    "heap_bytes": 72563352,
+    "heap_peak_bytes": 31213854,
+    "stdout_sha256": "6431c7e4fd641da61dddf860e3e3110d9c4bb93ef5cfe23d764eef9dec67630c",
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "wall_ms": [
+     157.09135599900037,
+     163.49671001080424,
+     153.8948979577981
+    ]
+   },
+   "fixed": {
+    "instructions": 888633830,
+    "uptime": "02:08:35 up 5 days, 22:50,  2 users,  load average: 4.21, 5.11, 6.41",
+    "heap_blocks": 834922,
+    "heap_bytes": 72563352,
+    "heap_peak_bytes": 31213854,
+    "stdout_sha256": "6431c7e4fd641da61dddf860e3e3110d9c4bb93ef5cfe23d764eef9dec67630c",
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "wall_ms": [
+     153.51782197831199,
+     154.6898150118068,
+     153.48161401925609
+    ]
+   }
+  },
+  "v3-flat20000": {
+   "master": {
+    "instructions": 1311475957,
+    "uptime": "02:09:07 up 5 days, 22:51,  2 users,  load average: 4.07, 4.96, 6.31",
+    "heap_blocks": 1759469,
+    "heap_bytes": 155835363,
+    "heap_peak_bytes": 62080959,
+    "stdout_sha256": "8437dee411b8403f354e48d34eb6a47a314e4b4dc76efc181c42b43f1fea8e2e",
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "wall_ms": [
+     258.8205450447276,
+     257.73448596009985,
+     259.35999798821285
+    ]
+   },
+   "fixed": {
+    "instructions": 1258466777,
+    "uptime": "02:10:03 up 5 days, 22:51,  2 users,  load average: 4.46, 4.93, 6.22",
+    "heap_blocks": 1699469,
+    "heap_bytes": 144815363,
+    "heap_peak_bytes": 62080959,
+    "stdout_sha256": "8437dee411b8403f354e48d34eb6a47a314e4b4dc76efc181c42b43f1fea8e2e",
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "wall_ms": [
+     263.2175739854574,
+     264.2375470022671,
+     268.22571898810565
+    ]
+   }
+  },
+  "v3-osage20000": {
+   "master": {
+    "instructions": 1449192268,
+    "uptime": "02:11:01 up 5 days, 22:52,  2 users,  load average: 5.59, 5.46, 6.35",
+    "heap_blocks": 1308579,
+    "heap_bytes": 151915913,
+    "heap_peak_bytes": 66353283,
+    "stdout_sha256": "c7a0c36a09656d8d9b56c752afdcbb551cc269d0cc762623a7e6c230eda4dcc9",
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "wall_ms": [
+     273.11150199966505,
+     274.37799400649965,
+     273.317423008848
+    ]
+   },
+   "fixed": {
+    "instructions": 1395722021,
+    "uptime": "02:11:54 up 5 days, 22:53,  2 users,  load average: 6.54, 5.83, 6.43",
+    "heap_blocks": 1248579,
+    "heap_bytes": 140895913,
+    "heap_peak_bytes": 66353283,
+    "stdout_sha256": "c7a0c36a09656d8d9b56c752afdcbb551cc269d0cc762623a7e6c230eda4dcc9",
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "wall_ms": [
+     268.18035601172596,
+     271.9903989927843,
+     269.91897099651396
+    ]
+   }
+  },
+  "v3-patchwork20000": {
+   "master": {
+    "instructions": 1589353399,
+    "uptime": "02:12:45 up 5 days, 22:54,  2 users,  load average: 4.77, 5.38, 6.24",
+    "heap_blocks": 1320962,
+    "heap_bytes": 161107780,
+    "heap_peak_bytes": 68833745,
+    "stdout_sha256": "b281463084ce8117d239cc208801570738584321e195a393f22ccbe1f58c5580",
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "wall_ms": [
+     293.69925800710917,
+     290.6878180219792,
+     289.4112869980745
+    ]
+   },
+   "fixed": {
+    "instructions": 1535942202,
+    "uptime": "02:13:40 up 5 days, 22:55,  2 users,  load average: 2.54, 4.66, 5.94",
+    "heap_blocks": 1260962,
+    "heap_bytes": 150087780,
+    "heap_peak_bytes": 68833745,
+    "stdout_sha256": "b281463084ce8117d239cc208801570738584321e195a393f22ccbe1f58c5580",
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "wall_ms": [
+     296.91687802551314,
+     306.3925920287147,
+     293.6124129919335
+    ]
+   }
+  },
+  "v3-twopi20000": {
+   "master": {
+    "instructions": 2020263618,
+    "uptime": "02:14:34 up 5 days, 22:56,  2 users,  load average: 1.73, 4.07, 5.66",
+    "heap_blocks": 1885621,
+    "heap_bytes": 213768542,
+    "heap_peak_bytes": 95402366,
+    "stdout_sha256": "4d5a60597dfbf85abd84b4685e7fea173d1ef1f89c9c5e5fae6a3b348fef1cf2",
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "wall_ms": [
+     431.6797360079363,
+     436.4397790050134,
+     435.7590199797414
+    ]
+   },
+   "fixed": {
+    "instructions": 1923446429,
+    "uptime": "02:15:27 up 5 days, 22:57,  2 users,  load average: 1.61, 3.63, 5.42",
+    "heap_blocks": 1785621,
+    "heap_bytes": 202548542,
+    "heap_peak_bytes": 95402366,
+    "stdout_sha256": "4d5a60597dfbf85abd84b4685e7fea173d1ef1f89c9c5e5fae6a3b348fef1cf2",
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "wall_ms": [
+     419.76172401336953,
+     416.52195097412914,
+     413.05818600812927
+    ]
+   }
+  }
+ },
+ "ratchet_ci": {
+  "run": 41157590149,
+  "head": "8c8d7914",
+  "artifact": "perf-ratchet",
+  "baseline_import": "ratchet.py --update --from newcase-ci.json --only nop2_subgraph_10000; input filtered to the new case, with no wasm_bytes field",
+  "existing_master_rows_and_wasm_preserved": true,
+  "measured_wasm_bytes": 4175874,
+  "stored_master_wasm_bytes": 4142911
+ }
+}
