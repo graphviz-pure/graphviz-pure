@@ -39,6 +39,7 @@ jobs:
         run: cargo build --release -p graphviz-pure-portable-libm --features apple-libc
       - name: Run the rcross repro
         env:
+          PATH: ${{ runner.temp }}/gv/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin
           GVBINDIR: ${{ runner.temp }}/gv/lutplugins
           GV_PORTABLE_LIBM: ${{ github.workspace }}/target/release/libgraphviz_pure_portable_libm.dylib
         run: |
