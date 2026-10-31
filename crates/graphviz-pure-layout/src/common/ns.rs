@@ -1261,13 +1261,15 @@ fn rank2_with<G: NsGraph + ?Sized>(
         free_tree_list(g, &mut ctx);
         return Ok(0);
     }
-    let mut cut = if cut_sets {
-        cut::begin(g, &mut ctx)
-    } else {
-        None
-    };
+    // Started at the first pivot: many runs have none. Nothing changes before it.
+    let mut cut = None;
+    let mut begun = !cut_sets;
     let mut iter = 0;
     while let Some(e) = leave_edge(g, &mut ctx) {
+        if !begun {
+            begun = true;
+            cut = cut::begin(g, &mut ctx);
+        }
         // C passes a NULL entering edge to `update`, which dereferences it (`SLACK(f)`,
         // ns.c:710): C crashes. Weights that wrapped negative get here (#252). The port
         // fails the layout.

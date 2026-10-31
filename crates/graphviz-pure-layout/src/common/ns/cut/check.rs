@@ -4,9 +4,9 @@
 //! C's `rerank` keeps the real ranks alongside the slacks, and C's `invalidate_path` and
 //! `dfs_range` keep `lim`/`low` alongside the parent pointers, so C's own search can run at
 //! every pivot. [`super::begin`] takes the cut-set path on every graph in this mode, whatever
-//! the selector would say.
+//! the selector would say, stored and computed in turn.
 
-use super::{AGAINST, CutStore, FORWARD, ID, NsGraph, tree_slot};
+use super::{AGAINST, CutStore, FORWARD, ID, Kind, NsGraph, tree_slot};
 use crate::common::ns::{Ctx, invalidate_path, seq, slack};
 
 pub(super) const ON: bool = true;
@@ -35,6 +35,25 @@ thread_local! {
     /// The tests' pool budget: this many words above what the build lays out.
     pub(super) static BUDGET_SLACK: std::cell::Cell<Option<usize>> =
         const { std::cell::Cell::new(None) };
+    /// The tests' choice of cut sets; without one, runs take turns.
+    pub(super) static KIND: std::cell::Cell<Option<Kind>> = const { std::cell::Cell::new(None) };
+    static TURN: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+/// Which cut sets this run uses.
+pub(super) fn kind() -> Kind {
+    KIND.with(std::cell::Cell::get).unwrap_or_else(|| {
+        let computed = TURN.with(|t| t.replace(!t.get()));
+        if computed { Kind::Computed } else { Kind::Pool }
+    })
+}
+
+/// The computed path's links are the tree of the parent pointers, with C's subtree sizes.
+pub(super) fn links<G: NsGraph + ?Sized>(g: &G, store: &CutStore) {
+    if store.kind == Kind::Computed {
+        store.computed.assert_links(g);
+        assert_eq!(store.computed.cut_of, None, "a cut set outlived its tree");
+    }
 }
 
 pub(super) fn count(c: &'static Counter) {
@@ -52,6 +71,9 @@ pub(super) enum Corrupt {
     Enter,
     Update,
     Balance,
+    /// The computed path's walk stops short of a node's children: not a fallback, the
+    /// cross-check itself must see it.
+    Links,
 }
 
 /// Takes `f` out of tree slot `s`'s cut set when the armed corruption of this kind is due.
@@ -71,7 +93,11 @@ pub(super) fn corrupt(store: &mut CutStore, kind: Corrupt, s: usize, f: usize) {
         if kind == Corrupt::Update {
             store.prepared = None;
         }
-        store.remove_member(s, f);
+        if kind == Corrupt::Links {
+            store.computed.cut_children(s);
+        } else {
+            store.remove_member(s, f);
+        }
     }
 }
 
@@ -105,8 +131,8 @@ pub(super) fn enter_edge<G: NsGraph + ?Sized>(
         e,
         "tree slot of edge {e}"
     );
-    let mut members: Vec<(usize, bool)> = (0..set.len)
-        .map(|i| store.entry(set.start + i))
+    let mut members: Vec<(usize, bool)> = (0..store.cut_len(s))
+        .map(|i| store.cut_entry(s, i))
         .map(|x| (store.edge(x & ID).edge as usize, x & AGAINST != 0))
         .collect();
     members.sort_unstable();

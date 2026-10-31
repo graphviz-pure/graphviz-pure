@@ -13,6 +13,11 @@
 //!   when the pivots end;
 //! - **parent pointers**, re-hung at each pivot. `lim`/`low` are not maintained.
 //!
+//! The cut sets come in two kinds ([`Kind`]). Stored in a pool, a pivot costs about
+//! |cut set of e| × |tree cycle of f|, and large graphs shaped like dot's DAGs want that.
+//! Computed when asked for (`computed.rs`), nothing is stored and a pivot costs about the
+//! smaller side of e's cut, which is what the rest want: their tree cycles are long.
+//!
 //! C's candidates for `enter_edge(e)` are exactly the members of e's cut set that cross
 //! against `e`. C returns the first of minimum slack in the order its stack-based scan meets
 //! them; that order is recomputed from the parent pointers, only between tied candidates. A
@@ -35,9 +40,26 @@
 
 use super::{Ctx, NsGraph, dfs_range_impl, exchange_tree_edges, seq, slack, tree_edge};
 
-/// Selector: graphs with fewer nodes than this keep C's search. Their subtree walks are short,
-/// and the cut sets' storage would not pay for itself.
-const CUT_SETS_MIN_NODES: usize = 2500;
+mod computed;
+
+/// How a run gets a tree edge's cut set.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub(super) enum Kind {
+    /// Stored in the pool, and edited at each pivot.
+    #[default]
+    Pool,
+    /// Computed when asked for, from the smaller side of the cut (`computed.rs`).
+    Computed,
+}
+
+/// Selector: runs with fewer nodes than this keep C's functions. Their walks are short, and
+/// building even the computed path's links would not pay for itself (`docs/perf/ns-cut-sets.md`,
+/// "The selector").
+const COMPUTED_MIN_NODES: usize = 64;
+
+/// Selector: graphs with fewer nodes than this do not store their cut sets. Computing them
+/// is faster until the smaller side of a cut is larger than the edits a stored set needs.
+const CUT_SETS_MIN_NODES: usize = 10_000;
 
 /// Selector: the largest estimated cost ratio, (mean tree-cycle length × mean cut-set size) /
 /// node count, for which the cut sets are faster than C's walks. Tuned on the corpus
@@ -64,6 +86,10 @@ const CUT_SETS_MAX_WORDS: usize = 24;
 /// when its run ends, so a large graph's cut sets do not stay allocated for the rest of the
 /// layout. Smaller ones are kept and reused by the next run.
 const CUT_SETS_KEEP_WORDS: usize = 1 << 18;
+
+/// The same for the computed path. Its storage is cheap to build and the largest run comes
+/// late, so all but a small store is released: the peak of the layout comes after it.
+const COMPUTED_KEEP_WORDS: usize = 1 << 12;
 
 /// Cut-set entry flag: the edge crosses from head(t)'s side of the cut to tail(t)'s side.
 const AGAINST: u32 = 0x8000_0000;
@@ -147,6 +173,9 @@ pub struct CutStore {
     budget: usize,
     /// The pivot [`CutStore::prepare`] checked, its cycle in `work`, for `update`.
     prepared: Option<Prepared>,
+    kind: Kind,
+    /// The computed path's storage.
+    computed: computed::Computed,
 }
 
 /// A pivot whose cut sets, LCA, tree cycle and pool budget were checked.
@@ -246,19 +275,34 @@ fn worth_it<G: NsGraph + ?Sized>(g: &G) -> bool {
     entries <= CUT_SETS_MAX_ENTRIES * (n as f64 + m as f64) && cost <= CUT_SETS_MAX_COST
 }
 
-/// Starts the cut-set pivots after `feasible_tree` (`lim`/`low` valid), when [`worth_it`]
-/// (always in check mode); `None` keeps C's functions.
-pub(super) fn begin<G: NsGraph + ?Sized>(g: &mut G, ctx: &mut Ctx) -> Option<CutStore> {
-    if !check::ON && !worth_it(g) {
-        return None;
-    }
-    let mut store = g.take_cut_store();
-    if store.build(g, ctx) {
-        Some(store)
-    } else {
-        g.keep_cut_store(store);
+/// Which path a run takes: C's functions on small runs, else stored cut sets when [`worth_it`],
+/// else computed ones.
+fn choose<G: NsGraph + ?Sized>(g: &G) -> Option<Kind> {
+    if g.nlist().len() < COMPUTED_MIN_NODES {
         None
+    } else if worth_it(g) {
+        Some(Kind::Pool)
+    } else {
+        Some(Kind::Computed)
     }
+}
+
+/// Starts the cut-set pivots after `feasible_tree` (`lim`/`low` valid), on the path [`choose`]
+/// picks (check mode picks both, in turn); `None` keeps C's functions. A pool that would not
+/// fit its budget computes its cut sets instead.
+pub(super) fn begin<G: NsGraph + ?Sized>(g: &mut G, ctx: &mut Ctx) -> Option<CutStore> {
+    let kind = if check::ON { check::kind() } else { choose(g)? };
+    let mut store = g.take_cut_store();
+    store.kind = kind;
+    if store.build(g, ctx) {
+        return Some(store);
+    }
+    store.kind = Kind::Computed;
+    if kind == Kind::Pool && store.build(g, ctx) {
+        return Some(store);
+    }
+    g.keep_cut_store(store);
+    None
 }
 
 impl CutStore {
@@ -296,9 +340,34 @@ impl CutStore {
         self.set_entry(start.wrapping_sub(1), cap);
     }
 
+    /// How many edges are in tree slot `s`'s cut set. On the computed path, it must be the
+    /// one last computed.
+    fn cut_len(&self, s: usize) -> u32 {
+        match self.kind {
+            Kind::Pool => self.tree(s).len,
+            Kind::Computed => self.computed.cross.len() as u32,
+        }
+    }
+
+    /// Entry `i` of tree slot `s`'s cut set.
+    fn cut_entry(&self, s: usize, i: u32) -> u32 {
+        match self.kind {
+            Kind::Pool => self.entry(self.tree(s).start.wrapping_add(i)),
+            Kind::Computed => self.computed.cross.get(i as usize).copied().unwrap_or(0),
+        }
+    }
+
     /// Check mode's corruption: takes `f` out of tree slot `s`'s cut set.
     #[cfg(any(test, feature = "ns-check"))]
     fn remove_member(&mut self, s: usize, f: usize) {
+        if self.kind == Kind::Computed {
+            let at = (0..self.cut_len(s))
+                .find(|&i| self.edge(self.cut_entry(s, i) & ID).edge as usize == f);
+            if let Some(i) = at {
+                self.computed.cross.swap_remove(i as usize);
+            }
+            return;
+        }
         let set = self.tree(s);
         let at = (0..set.len)
             .find(|&i| self.edge(self.entry(set.start.wrapping_add(i)) & ID).edge as usize == f);
@@ -309,9 +378,11 @@ impl CutStore {
 
     /// The local index of `f` among the members of tree slot `s`'s cut set.
     fn member(&self, s: usize, f: usize) -> Option<u32> {
-        let set = self.tree(s);
-        (0..set.len)
-            .map(|i| self.entry(set.start.wrapping_add(i)) & ID)
+        if self.kind == Kind::Computed && self.computed.cut_of != Some(s) {
+            return None;
+        }
+        (0..self.cut_len(s))
+            .map(|i| self.cut_entry(s, i) & ID)
             .find(|&k| self.edge(k).edge as usize == f)
     }
 
@@ -329,8 +400,13 @@ impl CutStore {
             .capacity()
             .saturating_add(self.work.capacity())
             .saturating_add(self.edges.capacity().saturating_mul(4))
-            .saturating_add(self.tree.capacity().saturating_mul(5));
-        if words > CUT_SETS_KEEP_WORDS {
+            .saturating_add(self.tree.capacity().saturating_mul(5))
+            .saturating_add(self.computed.words());
+        let keep = match self.kind {
+            Kind::Pool => CUT_SETS_KEEP_WORDS,
+            Kind::Computed => COMPUTED_KEEP_WORDS,
+        };
+        if words > keep {
             *self = CutStore::default();
         }
     }
@@ -379,6 +455,9 @@ impl CutStore {
                 };
                 ts.edge = k;
             }
+        }
+        if self.kind == Kind::Computed {
+            return self.build_computed(g);
         }
         // count, lay the segments out with room to grow, then fill
         for e in all_edges(g).filter(|&e| !tree_edge(g, e)) {
@@ -459,10 +538,13 @@ impl CutStore {
         };
         let tail_is_child = g.par(g.tail(e)) == Some(e);
         let v = if tail_is_child { g.tail(e) } else { g.head(e) };
-        let set = self.tree(s);
+        if self.kind == Kind::Computed {
+            check::corrupt(self, check::Corrupt::Links, v, 0);
+            self.compute_cut(s, v, tail_is_child);
+        }
         let mut best: Option<(u32, i32)> = None;
-        for i in 0..set.len {
-            let x = self.entry(set.start.wrapping_add(i));
+        for i in 0..self.cut_len(s) {
+            let x = self.cut_entry(s, i);
             if x & AGAINST == 0 {
                 continue;
             }
@@ -508,6 +590,7 @@ impl CutStore {
         ) else {
             return Err(Fallback);
         };
+        let pool = self.kind == Kind::Pool;
         let (ft, fh) = (g.tail(f), g.head(f));
         let Some(lca) = self.lca(g, ft, fh) else {
             return Err(Fallback);
@@ -527,14 +610,16 @@ impl CutStore {
                 // t's set gains at most e's members (all but f, plus e itself), so it ends
                 // the pivot with at most `last` entries. It moves only when full, each time
                 // to the end of the pool with capacity 2·cap + 4 and a header: replay that
-                growth = growth.saturating_add(moves(self.tree(s), len_e));
+                if pool {
+                    growth = growth.saturating_add(moves(self.tree(s), len_e));
+                }
                 u = other(g, t, u);
             }
         }
-        if self.pool.len().saturating_add(growth) > self.budget && self.garbage > 0 {
+        if pool && self.pool.len().saturating_add(growth) > self.budget && self.garbage > 0 {
             self.compact();
         }
-        if self.pool.len().saturating_add(growth) > self.budget {
+        if pool && self.pool.len().saturating_add(growth) > self.budget {
             return Err(Fallback);
         }
         self.prepared = Some(Prepared { e, f, se, kf, lca });
@@ -623,16 +708,16 @@ impl CutStore {
                 sl.wrapping_add(shift)
             }
         };
-        let set = self.tree(s);
-        for i in 0..set.len {
-            let x = self.entry(set.start.wrapping_add(i));
+        for i in 0..self.cut_len(s) {
+            let x = self.cut_entry(s, i);
             // AGAINST clear: tail(g) is on tail(e)'s side, which moves when tail(e) is the child
             let tail_inside = (x & AGAINST == 0) == tail_is_child;
             if let Some(es) = self.edge_mut(x & ID) {
                 es.slack = moved(es.slack, tail_inside);
             }
         }
-        if let Some(es) = self.edge_mut(set.edge) {
+        let ke = self.tree(s).edge;
+        if let Some(es) = self.edge_mut(ke) {
             es.slack = moved(es.slack, tail_is_child);
         }
     }
@@ -936,10 +1021,19 @@ impl CutStore {
             };
             g.set_cutvalue(t, next);
         }
-        self.move_cut_sets(se, ke, kf);
         // re-hang the subtree below e from f: f's end in it is the new top
         let v = if tail_is_child { et } else { eh };
         let mut u = if tail_is_child { fh } else { ft };
+        match self.kind {
+            Kind::Pool => self.move_cut_sets(se, ke, kf),
+            Kind::Computed => {
+                self.computed.cut_of = None;
+                if let Some(ts) = self.tree_mut(se) {
+                    ts.edge = kf;
+                }
+                self.move_links(v, u, other(g, f, u), lca);
+            }
+        }
         let mut above = f;
         let mut rehung = check::rehung_start();
         loop {
@@ -962,6 +1056,7 @@ impl CutStore {
         exchange_tree_edges(g, ctx, e, f);
         check::dfs_range(g, ctx, lca, lca_low, &rehung);
         check::slacks(g, self, e, f);
+        check::links(g, self);
         if self.garbage > self.pool.len().wrapping_div(2) {
             self.compact();
         }
@@ -1188,10 +1283,16 @@ mod check;
 /// Check mode is off: these do nothing.
 #[cfg(not(any(test, feature = "ns-check")))]
 mod check {
-    use super::{CutStore, NsGraph};
+    use super::{CutStore, Kind, NsGraph};
     use crate::common::ns::Ctx;
 
     pub(super) const ON: bool = false;
+    #[inline(always)]
+    pub(super) fn kind() -> Kind {
+        Kind::Pool
+    }
+    #[inline(always)]
+    pub(super) fn links<G: NsGraph + ?Sized>(_: &G, _: &CutStore) {}
     pub(super) struct Rehung;
     pub(super) struct Counter;
     pub(super) static WHOLE_TREE: Counter = Counter;
@@ -1205,6 +1306,7 @@ mod check {
         Enter,
         Update,
         Balance,
+        Links,
     }
 
     #[inline(always)]
