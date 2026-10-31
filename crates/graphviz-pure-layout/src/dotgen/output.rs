@@ -5,6 +5,7 @@
 
 use super::Dot;
 use super::types::*;
+use crate::common::types::EdgeType;
 use graphviz_pure_core::{BezierSegment, BoundingBox, Graph, Point, Spline};
 
 /// Final layout results, detached from the [`Dot`] borrow of the input graph.
@@ -224,7 +225,9 @@ impl Output {
                 // the output writer skips edges without splines. `splines_done` is
                 // C's `State == GVSPLINES`: false with `splines=none`, but true after
                 // normal or pack-component spline layout, when the root's edge type is none.
-                let routed = d.splines_done;
+                // The line router places labels before an aux abort (`dotsplines.c:341-345`),
+                // so those labels survive even though the layout never reaches GVSPLINES.
+                let routed = d.splines_done || d.et == EdgeType::Line;
                 match ed
                     .label
                     .filter(|&l| routed && ed.edge_type != IGNORED && d.labels[l].set)

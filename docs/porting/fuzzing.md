@@ -353,6 +353,24 @@ recorded here: first `cur_cross = -68008599552`, exit 0, no `edge` lines, 59,204
 SHA-256 `04d7a0e19b62931dae51c7f313a86544aed34f2fb90fb1c8e5b19045d3cf1b04`. Those are the same
 bytes as this PR and `/opt`; the macOS build does not reproduce `-mfma`'s full drawing either.
 
+### Declaration-order-dependent C `E_dir` after an aux abort
+
+C's `taperfun` reads `E_dir` after a flat-edge aux graph has aborted (`emit.c:2088`). The inferred
+mechanism is the same stale-symbol pattern as `setState`: the main edge's `E_dir` id can select a
+different attribute in the aux declaration order. Do not model this as a port `dir` bug. Membership
+requires `style=tapered`, an explicitly declared `dir`, and at least 32,767 parallel flat edges to
+abort the aux graph.
+
+The repro is `digraph G { edge [style=tapered,penwidth=4,dir=back]; {rank=same; a; b} p->p;
+FLAT(33000) }`, where `FLAT(n)` is `a->b [tailport=e];` repeated `n` times, followed by
+`a->b [tailport=w]; a->b [tailport=n,label="x"];`. With the `/opt` C build, the self-loop's tapered
+polygon starts at `204.22,-24.33`; the port starts at `203.33,-22.54`. Declaring the defaults as
+`edge [dir=back,penwidth=4,style=tapered]` instead makes C and the port agree on `203.33,-22.54`.
+The port's bytes are unchanged by that declaration reordering, while C's polygon changes. Without
+the aux abort, the small `p->p` graph matches C. This confirms the abort and declaration-order
+dependence. It does not confirm which aux attribute C's stale id reads, and other C builds were not
+checked.
+
 ### After all fixes
 
 All 382 actionable cases from rounds 1–4 (from `OUT/diff/`, not minimised) were
