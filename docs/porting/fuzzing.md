@@ -346,8 +346,9 @@ The repro has `group` on every node and, for each of `t0..t3`, edges to all of `
 bundle sizes 36, 33, 36 and 32 respectively. Its first `cur_cross` is `1031503028224` with
 `-mfma`, against `-68008599552` for the port and for the non-`-mfma` `/opt` build. Master matched
 the `-mfma` drawing on this input; the negative-mincross handling in #688 matches `/opt`.
-The macOS arm64 reference build is unchecked for this generated input: no committed golden covers
-it, and it was not run here.
+The macOS arm64 reference build also reports `-68008599552`, exits 0 with no `edge` lines, and
+writes 59,204 bytes with SHA-256 `04d7a0e19b62931dae51c7f313a86544aed34f2fb90fb1c8e5b19045d3cf1b04`,
+the same bytes as this PR and `/opt`. It does not reproduce `-mfma`'s full drawing either.
 
 ### After all fixes
 
