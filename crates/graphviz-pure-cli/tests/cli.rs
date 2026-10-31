@@ -4413,6 +4413,181 @@ fn weight_overflow_fails_the_layout_like_c() {
     }
 }
 
+// Issue #681: 33 parallel edges make the crossing total negative. C's `goto done` on a negative
+// `mc` runs cleanup2 and abandons position/splines without adding a diagnostic; it does not run
+// network simplex with that total (`lib/dotgen/mincross.c:362-365`). The port continued normally.
+#[test]
+fn negative_mincross_total_abandons_position_like_c() {
+    let src = format!(
+        "digraph G {{ node [group=\"g\"]; {} n0 -> n3; n1 -> n2; n1 -> n3; }}",
+        "n0 -> n2;".repeat(33)
+    );
+    let expected = format!(
+        "graph 1 0 0\n\
+         node n0 0.013889 0 0.75 0.5 n0 solid ellipse black lightgrey\n\
+         node n2 0 0 0.75 0.5 n2 solid ellipse black lightgrey\n\
+         node n3 0.013889 0 0.75 0.5 n3 solid ellipse black lightgrey\n\
+         node n1 0 0 0.75 0.5 n1 solid ellipse black lightgrey\n\
+         {}stop\n",
+        " solid black\n".repeat(36)
+    );
+    let (out, err, ok) = run(&["-Tplain"], &src);
+    assert!(ok, "{err}");
+    assert!(err.is_empty(), "{err}");
+    assert_eq!(out, expected);
+}
+
+// Issue #681 review: the negative child pass returns before visiting the child clusters
+// (`lib/dotgen/mincross.c:552-557`). These bytes are C 16.1.0's.
+#[test]
+fn nested_cluster_child_negative_check_matches_c_bytes() {
+    let src = format!(
+        "digraph G {{ node [group=\"g\"]; \
+         subgraph cluster_n4 {{ n1; n2; n3; {} }} \
+         subgraph cluster_n13 {{ n5; n6; n7; n8; n9; \
+         subgraph cluster_n12 {{ n10; n11; {} {} {} {} }} }} \
+         {} n7 -> n8; {} x1 -> n9; }}",
+        "n3 -> n1;".repeat(66),
+        "n11 -> n10;".repeat(33),
+        "n10 -> n11;".repeat(20),
+        "n10 -> n11;".repeat(36),
+        "n11 -> n10;".repeat(40),
+        "n1 -> n6;".repeat(34),
+        "x0 -> n7;".repeat(40)
+    );
+    let expected = format!(
+        "graph 1 0 0\n\
+         node n1 0.027778 0 0.75 0.5 n1 solid ellipse black lightgrey\n\
+         node n2 0 0 0.75 0.5 n2 solid ellipse black lightgrey\n\
+         node n3 0.013889 0 0.75 0.5 n3 solid ellipse black lightgrey\n\
+         node n5 0.013889 0 0.75 0.5 n5 solid ellipse black lightgrey\n\
+         node n6 0.041667 0 0.75 0.5 n6 solid ellipse black lightgrey\n\
+         node n7 0.027778 0 0.75 0.5 n7 solid ellipse black lightgrey\n\
+         node n8 0.013889 0 0.75 0.5 n8 solid ellipse black lightgrey\n\
+         node n9 0.055556 0 0.75 0.5 n9 solid ellipse black lightgrey\n\
+         node n10 0 0 0.75 0.5 n10 solid ellipse black lightgrey\n\
+         node n11 0 0 0.75 0.5 n11 solid ellipse black lightgrey\n\
+         node x0 0 0 0.75 0.5 x0 solid ellipse black lightgrey\n\
+         node x1 0.013889 0 0.75 0.5 x1 solid ellipse black lightgrey\n\
+         {}stop\n",
+        " solid black\n".repeat(271)
+    );
+    let (out, err, ok) = run(&["-Tplain"], &src);
+    assert!(ok, "{err}");
+    assert!(err.is_empty(), "{err}");
+    assert_eq!(out, expected);
+    let (out, err, ok) = run(&["-Tsvg"], &src);
+    assert!(ok, "{err}");
+    assert!(err.is_empty(), "{err}");
+    assert!(!out.contains("<path"), "{out}");
+}
+
+// A cluster's own negative pass returns before any child cluster is visited
+// (`lib/dotgen/mincross.c:547-550`). These bytes are C 16.1.0's.
+#[test]
+fn nested_cluster_own_negative_check_matches_c_bytes() {
+    let src = format!(
+        "digraph G {{ node [group=\"g\"]; subgraph cluster_p {{ {} {} {} {} {} {} \
+         subgraph cluster_c {{ q6 -> q5; {} q0 -> q2; {} {} }} }} \
+         {} p2 -> x0; {} }}",
+        "p1 -> p2;".repeat(40),
+        "p3 -> p0;".repeat(40),
+        "p0 -> p3;".repeat(20),
+        "p4 -> p1;".repeat(16),
+        "p3 -> p4;".repeat(33),
+        "p1 -> p4;".repeat(66),
+        "q1 -> q7;".repeat(40),
+        "q4 -> q3;".repeat(40),
+        "q6 -> q5;".repeat(33),
+        "p4 -> u0;".repeat(8),
+        "p1 -> u0;".repeat(16)
+    );
+    let expected = format!(
+        "graph 1 0 0\n\
+         node p1 0.013889 0 0.75 0.5 p1 solid ellipse black lightgrey\n\
+         node p2 0 0 0.75 0.5 p2 solid ellipse black lightgrey\n\
+         node p3 0.027778 0 0.75 0.5 p3 solid ellipse black lightgrey\n\
+         node p0 0.013889 0 0.75 0.5 p0 solid ellipse black lightgrey\n\
+         node p4 0.027778 0 0.75 0.5 p4 solid ellipse black lightgrey\n\
+         node q6 0 0 0.75 0.5 q6 solid ellipse black lightgrey\n\
+         node q5 0 0 0.75 0.5 q5 solid ellipse black lightgrey\n\
+         node q1 0 0 0.75 0.5 q1 solid ellipse black lightgrey\n\
+         node q7 0 0 0.75 0.5 q7 solid ellipse black lightgrey\n\
+         node q0 0 0 0.75 0.5 q0 solid ellipse black lightgrey\n\
+         node q2 0 0 0.75 0.5 q2 solid ellipse black lightgrey\n\
+         node q4 0 0 0.75 0.5 q4 solid ellipse black lightgrey\n\
+         node q3 0 0 0.75 0.5 q3 solid ellipse black lightgrey\n\
+         node u0 0.013889 0 0.75 0.5 u0 solid ellipse black lightgrey\n\
+         node x0 0 0 0.75 0.5 x0 solid ellipse black lightgrey\n\
+         {}stop\n",
+        " solid black\n".repeat(355)
+    );
+    let (out, err, ok) = run(&["-Tplain"], &src);
+    assert!(ok, "{err}");
+    assert!(err.is_empty(), "{err}");
+    assert_eq!(out, expected);
+}
+
+// The top-level `remincross` pass has the same negative failure semantics: cleanup2, no position,
+// and empty stderr (`lib/dotgen/mincross.c:390-402`).
+#[test]
+fn remincross_negative_total_matches_c_bytes() {
+    let src = format!(
+        "digraph G {{ node [group=\"g\"]; remincross=true; {{ {} }} \
+         subgraph cluster_n16 {{ {} {} {} subgraph cluster_n15 {{ n12 -> n13; }} }} \
+         {} {} }}",
+        "n1 -> n3;".repeat(66),
+        "n10 -> n11;".repeat(10),
+        "n11 -> n10;".repeat(36),
+        "n10 -> n11;".repeat(20),
+        "n7 -> n13;".repeat(66),
+        "n2 -> n7;".repeat(33)
+    );
+    let expected = format!(
+        "graph 1 0 0\n\
+         node n1 0.013889 0 0.75 0.5 n1 solid ellipse black lightgrey\n\
+         node n3 0 0 0.75 0.5 n3 solid ellipse black lightgrey\n\
+         node n10 0.027778 0 0.75 0.5 n10 solid ellipse black lightgrey\n\
+         node n11 0.013889 0 0.75 0.5 n11 solid ellipse black lightgrey\n\
+         node n12 0.013889 0 0.75 0.5 n12 solid ellipse black lightgrey\n\
+         node n13 0 0 0.75 0.5 n13 solid ellipse black lightgrey\n\
+         node n7 0.041667 0 0.75 0.5 n7 solid ellipse black lightgrey\n\
+         node n2 0 0 0.75 0.5 n2 solid ellipse black lightgrey\n\
+         {}stop\n",
+        " solid black\n".repeat(232)
+    );
+    let (out, err, ok) = run(&["-Tplain"], &src);
+    assert!(ok, "{err}");
+    assert!(err.is_empty(), "{err}");
+    assert_eq!(out, expected);
+}
+
+// Issue #681 review: an aborted aux graph is not a CLI error. C returns before rendering the
+// aux splines and exits 0 with no edge lines; `dot_splines` must turn ABORT_LAYOUT into the
+// layout's aborted state at its own boundary, including the pack path.
+#[test]
+fn aborted_aux_graph_matches_c_exit_and_bytes() {
+    for pack in ["", "packmode=\"node\";"] {
+        let src = format!(
+            "digraph G {{ {pack} {{ rank=same; a; b; }} {} a -> b [tailport=w]; \
+             a -> b [tailport=n,label=\"x\"]; }}",
+            "a -> b [tailport=e];".repeat(33000)
+        );
+        let expected = format!(
+            "graph 1 1.625 0.5\n\
+             node a 0 0.25 0.75 0.5 a solid ellipse black lightgrey\n\
+             node b 1.25 0.25 0.75 0.5 b solid ellipse black lightgrey\n\
+             {} x 0 0 solid black\n\
+             stop\n",
+            " solid black\n".repeat(33001)
+        );
+        let (out, err, ok) = run(&["-Tplain"], &src);
+        assert!(ok, "{pack}: {err}");
+        assert!(err.is_empty(), "{pack}: {err}");
+        assert_eq!(out, expected, "{pack}");
+    }
+}
+
 // Weights that wrap negative where C has no check leave a tree edge with a negative cut value
 // and no edge to replace it. C passes the NULL edge to `update` and crashes (ns.c:710); the
 // port fails the layout there. Before, it went on and panicked in mincross (with a cluster)

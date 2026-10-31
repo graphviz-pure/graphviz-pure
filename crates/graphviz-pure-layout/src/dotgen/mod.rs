@@ -326,7 +326,13 @@ impl<'a> Dot<'a> {
             self.remove_fill();
         }
         self.dot_sameports();
-        self.dot_splines()?;
+        if let Err(e) = self.dot_splines() {
+            if e == mincross::ABORT_LAYOUT {
+                self.aborted = true;
+                return Ok(());
+            }
+            return Err(e);
+        }
         if self.aborted {
             return Ok(());
         }

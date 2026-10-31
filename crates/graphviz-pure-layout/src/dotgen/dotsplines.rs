@@ -1265,6 +1265,9 @@ impl Dot<'_> {
         d.dot_rank()?;
         d.dot_mincross()?;
         d.dot_position()?;
+        if d.aborted {
+            return Err(super::mincross::ABORT_LAYOUT.to_string());
+        }
         // reposition
         let (auxt, auxh) = (auxt.0 as usize, auxh.0 as usize);
         let midx = (self.nodes[tn].coord.x - self.nodes[tn].rw

@@ -327,6 +327,32 @@ splines). These are the shapes for which `common/ns/cut.rs` selects cut sets abo
 minimum. With a 120-second C timeout, **all 32 / 32 were byte-identical**, with no port timeouts,
 crashes or overflow-check differences.
 
+### Build-dependent C overflow in `rcross`
+
+C's `rcross` computes `cross += Count[k] * ED_xpenalty(e)` (`lib/dotgen/mincross.c:1520`). Signed
+overflow here is undefined behaviour, not a result the port can or should reproduce. The x86-64
+`-O2 -mfma` build evaluates chunks of 16 columns with 32-bit `vpmulld`, but evaluates the remainder
+in 64 bits. Other builds make another choice, so C has no single answer for this family.
+
+The port performs the product in 64 bits. On the grouped repro below, that leaves a drawing with
+no splines; the `-mfma` build draws the whole graph. A negative total alone does not establish
+membership in this class: C's defined conversion of `xpenalty` to `short` can produce one without
+any `rcross` overflow. Conversely, overflow is necessary but not sufficient: an overflowing graph
+can still have the same visible output as the 64-bit calculation. Master's match with `-mfma` is
+not a general rule. The membership test is to change the C product to
+`(int64_t)Count[k] * ED_xpenalty(e)` in a `-mfma` build and require that build to match the port.
+
+The repro has `group` on every node and, for each of `t0..t3`, edges to all of `b0..b31`, with
+bundle sizes 36, 33, 36 and 32 respectively. Its first `cur_cross` is `1031503028224` with
+`-mfma`, against `-68008599552` for the port and for the non-`-mfma` `/opt` build. Master matched
+the `-mfma` drawing on this input; the negative-mincross handling in #688 matches `/opt`.
+The [macOS build](https://github.com/graphviz-pure/graphviz-pure/actions/runs/41177277353) used a
+`macos-15-arm64` runner and built the Graphviz 16.1.0 tarball from source with `-Os -g`; Apple
+clang is inferred from the runner's `Xcode_16.4` selection. CI logs expire, so its results are
+recorded here: first `cur_cross = -68008599552`, exit 0, no `edge` lines, 59,204 bytes, and
+SHA-256 `04d7a0e19b62931dae51c7f313a86544aed34f2fb90fb1c8e5b19045d3cf1b04`. Those are the same
+bytes as this PR and `/opt`; the macOS build does not reproduce `-mfma`'s full drawing either.
+
 ### After all fixes
 
 All 382 actionable cases from rounds 1–4 (from `OUT/diff/`, not minimised) were
