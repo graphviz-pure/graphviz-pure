@@ -1,5 +1,6 @@
 name: Temporary macOS rcross oracle
 on:
+  pull_request:
   workflow_dispatch:
 
 permissions:
