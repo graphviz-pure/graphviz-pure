@@ -1,0 +1,449 @@
+{
+ "method": {
+  "base": "5c8294e0cf977e716481e9d7d2aeaf44ace44f3c",
+  "build": "release x86_64-unknown-linux-musl, x86-64-v1, no PGO; Rust 1.99.1",
+  "counter": "Callgrind full CLI; dhat full CLI; serial nice 15 affinity four CPUs; equal-length binary paths",
+  "wall": "3 native repeats, shared-machine context only",
+  "after_source": "928c95bda9452a067026eb34c8a7617ef9c7c048",
+  "input_recipes": "Default targets are synth.py clustered/tree 20k SVG. Owned controls add node/edge fontname after the opening brace. Mixed uses Arial with odd-node verdana overrides. Record control: 1000 isolated record nodes, 40 pipe-separated fields f0..f39, Arial, osage SVG.",
+  "inputs_sha256_at_report": {
+   "/jobs/work/gvp-10x/synth/patchwork_clustered_20000.gv": "cabdf618c08e5ffec89321149c1c70d56ff386bf87a393ca5aef6ae922571b05",
+   "/jobs/work/gvp-10x/synth/osage_clustered_20000.gv": "330b2fcc1a636d82b3294f2dfa1af6447e38fc69184760fc9a052b0d5496a3e3",
+   "/jobs/work/gvp-10x/synth/twopi_tree_20000.gv": "d63f5cc0ba704fae4a8573c1f7a90076229323ab3521aabd1d269a2b94875165",
+   "/jobs/work/gvp-10x/t3-8878c705-wave2/review-678/inputs/patchwork-helvetica.gv": "c6af18e55b84a97f0586d22e062d944637b514636ff5db52bf195a971ad613c8",
+   "/jobs/work/gvp-10x/t3-8878c705-wave2/review-678/inputs/patchwork-Arial.gv": "6dd5b868e995c112e30e7c73aedb84d7b88c88726f57a08a33e0141b9b86555d",
+   "/jobs/work/gvp-10x/t3-8878c705-wave2/review-678/inputs/osage-Arial.gv": "ef3bd23760f7d4f89c1e26ecfe01165181d808a6ff25483548374e921c2538c6",
+   "/jobs/work/gvp-10x/t3-8878c705-wave2/review-678/inputs/twopi-Arial.gv": "e58d9bbe0b13bba53a386d2a803173866590fc3a6db49d065618b780aa2ea05f",
+   "/jobs/work/gvp-10x/t3-8878c705-wave2/review-678/inputs/osage-mixed.gv": "724f1fa1dba72e3e6d6f6f7d15cd479418167a5fa7aedb2323e04687d7238114",
+   "/jobs/work/gvp-10x/t3-d0eefec5/inputs/records.gv": "0f741a104d7025160339eaf44e516412454c57c0b3264440a51b38d4e6f883d9"
+  }
+ },
+ "cases": {
+  "patchwork-default": {
+   "base": {
+    "args": [
+     "-Kpatchwork",
+     "-Tsvg",
+     "/jobs/work/gvp-10x/synth/patchwork_clustered_20000.gv"
+    ],
+    "instructions": 1604867821,
+    "uptime": "02:34:07 up 5 days, 23:16,  2 users,  load average: 8.33, 5.47, 5.03",
+    "heap_blocks": 1200969,
+    "heap_bytes": 158270083,
+    "heap_peak_bytes": 68833712,
+    "stdout_sha256": "b281463084ce8117d239cc208801570738584321e195a393f22ccbe1f58c5580",
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "wall_ms": [
+     312.4863489647396,
+     314.12155204452574,
+     310.0425179582089
+    ]
+   },
+   "678": {
+    "args": [
+     "-Kpatchwork",
+     "-Tsvg",
+     "/jobs/work/gvp-10x/synth/patchwork_clustered_20000.gv"
+    ],
+    "instructions": 1575754623,
+    "uptime": "03:08:12 up 5 days, 23:50,  2 users,  load average: 7.78, 9.72, 9.23",
+    "heap_blocks": 1100969,
+    "heap_bytes": 157170083,
+    "heap_peak_bytes": 68393712,
+    "stdout_sha256": "b281463084ce8117d239cc208801570738584321e195a393f22ccbe1f58c5580",
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "wall_ms": [
+     302.8920639771968,
+     312.0536969508976,
+     299.5667229988612
+    ]
+   }
+  },
+  "osage-default": {
+   "base": {
+    "args": [
+     "-Kosage",
+     "-Tsvg",
+     "/jobs/work/gvp-10x/synth/osage_clustered_20000.gv"
+    ],
+    "instructions": 1429083857,
+    "uptime": "02:35:00 up 5 days, 23:16,  2 users,  load average: 8.66, 6.13, 5.29",
+    "heap_blocks": 1188586,
+    "heap_bytes": 149078184,
+    "heap_peak_bytes": 66353246,
+    "stdout_sha256": "c7a0c36a09656d8d9b56c752afdcbb551cc269d0cc762623a7e6c230eda4dcc9",
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "wall_ms": [
+     277.8908059699461,
+     285.5033260420896,
+     296.0010870010592
+    ]
+   },
+   "678": {
+    "args": [
+     "-Kosage",
+     "-Tsvg",
+     "/jobs/work/gvp-10x/synth/osage_clustered_20000.gv"
+    ],
+    "instructions": 1393146895,
+    "uptime": "03:09:04 up 5 days, 23:50,  2 users,  load average: 7.07, 9.22, 9.08",
+    "heap_blocks": 1088586,
+    "heap_bytes": 147978184,
+    "heap_peak_bytes": 65913246,
+    "stdout_sha256": "c7a0c36a09656d8d9b56c752afdcbb551cc269d0cc762623a7e6c230eda4dcc9",
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "wall_ms": [
+     315.31792297028005,
+     354.86653400585055,
+     306.35022901697084
+    ]
+   }
+  },
+  "twopi-default": {
+   "base": {
+    "args": [
+     "-Ktwopi",
+     "-Tsvg",
+     "/jobs/work/gvp-10x/synth/twopi_tree_20000.gv"
+    ],
+    "instructions": 2293189096,
+    "uptime": "02:35:54 up 5 days, 23:17,  2 users,  load average: 6.31, 5.88, 5.25",
+    "heap_blocks": 1885628,
+    "heap_bytes": 213768593,
+    "heap_peak_bytes": 95402329,
+    "stdout_sha256": "4d5a60597dfbf85abd84b4685e7fea173d1ef1f89c9c5e5fae6a3b348fef1cf2",
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "wall_ms": [
+     522.1210129675455,
+     501.08859001193196,
+     486.45630897954106
+    ]
+   },
+   "678": {
+    "args": [
+     "-Ktwopi",
+     "-Tsvg",
+     "/jobs/work/gvp-10x/synth/twopi_tree_20000.gv"
+    ],
+    "instructions": 2254057266,
+    "uptime": "03:09:58 up 5 days, 23:51,  2 users,  load average: 6.06, 8.51, 8.84",
+    "heap_blocks": 1785628,
+    "heap_bytes": 212668593,
+    "heap_peak_bytes": 94962329,
+    "stdout_sha256": "4d5a60597dfbf85abd84b4685e7fea173d1ef1f89c9c5e5fae6a3b348fef1cf2",
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "wall_ms": [
+     494.95804897742346,
+     480.7751729968004,
+     495.71123701753095
+    ]
+   }
+  },
+  "patchwork-helvetica": {
+   "base": {
+    "args": [
+     "-Kpatchwork",
+     "-Tsvg",
+     "/jobs/work/gvp-10x/t3-8878c705-wave2/review-678/inputs/patchwork-helvetica.gv"
+    ],
+    "instructions": 1691884776,
+    "uptime": "02:39:15 up 5 days, 23:21,  2 users,  load average: 12.24, 8.40, 6.33",
+    "heap_blocks": 1301059,
+    "heap_bytes": 162866363,
+    "heap_peak_bytes": 73027188,
+    "stdout_sha256": "d79b60045909bf2a5812f152d37843ab9cff234a1ea2732716bb0a43b40e3fd9",
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "wall_ms": [
+     331.0781050240621,
+     322.7249730261974,
+     322.9732040199451
+    ]
+   },
+   "678": {
+    "args": [
+     "-Kpatchwork",
+     "-Tsvg",
+     "/jobs/work/gvp-10x/t3-8878c705-wave2/review-678/inputs/patchwork-helvetica.gv"
+    ],
+    "instructions": 1693435601,
+    "uptime": "03:10:51 up 5 days, 23:52,  2 users,  load average: 8.41, 8.76, 8.91",
+    "heap_blocks": 1301059,
+    "heap_bytes": 162866363,
+    "heap_peak_bytes": 73027188,
+    "stdout_sha256": "d79b60045909bf2a5812f152d37843ab9cff234a1ea2732716bb0a43b40e3fd9",
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "wall_ms": [
+     374.4075759896077,
+     336.58602397190407,
+     397.7647409774363
+    ]
+   }
+  },
+  "patchwork-Arial": {
+   "base": {
+    "args": [
+     "-Kpatchwork",
+     "-Tsvg",
+     "/jobs/work/gvp-10x/t3-8878c705-wave2/review-678/inputs/patchwork-Arial.gv"
+    ],
+    "instructions": 1672637103,
+    "uptime": "02:40:18 up 5 days, 23:22,  2 users,  load average: 12.81, 9.28, 6.77",
+    "heap_blocks": 1301059,
+    "heap_bytes": 161679530,
+    "heap_peak_bytes": 72460387,
+    "stdout_sha256": "fe874c235f7b8fb246e0c546136462150d21bbc3afff1450f4228439ee1035d3",
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "wall_ms": [
+     324.10986203467473,
+     331.0766210197471,
+     313.39979503536597
+    ]
+   },
+   "678": {
+    "args": [
+     "-Kpatchwork",
+     "-Tsvg",
+     "/jobs/work/gvp-10x/t3-8878c705-wave2/review-678/inputs/patchwork-Arial.gv"
+    ],
+    "instructions": 1673645377,
+    "uptime": "03:11:56 up 5 days, 23:53,  2 users,  load average: 9.83, 9.07, 9.01",
+    "heap_blocks": 1301059,
+    "heap_bytes": 161679530,
+    "heap_peak_bytes": 72460387,
+    "stdout_sha256": "fe874c235f7b8fb246e0c546136462150d21bbc3afff1450f4228439ee1035d3",
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "wall_ms": [
+     401.0958200087771,
+     446.01777399657294,
+     356.66694201063365
+    ]
+   }
+  },
+  "osage-Arial": {
+   "base": {
+    "args": [
+     "-Kosage",
+     "-Tsvg",
+     "/jobs/work/gvp-10x/t3-8878c705-wave2/review-678/inputs/osage-Arial.gv"
+    ],
+    "instructions": 1485982980,
+    "uptime": "02:41:16 up 5 days, 23:23,  2 users,  load average: 10.81, 9.36, 6.96",
+    "heap_blocks": 1288677,
+    "heap_bytes": 152517691,
+    "heap_peak_bytes": 69995219,
+    "stdout_sha256": "c9d9ec57091ee4c1bc59547a3e0b4a67ce21f946a2a635bdc40462b7ebd04a65",
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "wall_ms": [
+     277.19239896396175,
+     282.151909021195,
+     277.32774504693225
+    ]
+   },
+   "678": {
+    "args": [
+     "-Kosage",
+     "-Tsvg",
+     "/jobs/work/gvp-10x/t3-8878c705-wave2/review-678/inputs/osage-Arial.gv"
+    ],
+    "instructions": 1486958410,
+    "uptime": "03:13:00 up 5 days, 23:54,  2 users,  load average: 11.06, 9.51, 9.16",
+    "heap_blocks": 1288677,
+    "heap_bytes": 152517691,
+    "heap_peak_bytes": 69995219,
+    "stdout_sha256": "c9d9ec57091ee4c1bc59547a3e0b4a67ce21f946a2a635bdc40462b7ebd04a65",
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "wall_ms": [
+     292.33567300252616,
+     291.1796619882807,
+     289.7693269769661
+    ]
+   }
+  },
+  "twopi-Arial": {
+   "base": {
+    "args": [
+     "-Ktwopi",
+     "-Tsvg",
+     "/jobs/work/gvp-10x/t3-8878c705-wave2/review-678/inputs/twopi-Arial.gv"
+    ],
+    "instructions": 2501661737,
+    "uptime": "02:42:19 up 5 days, 23:24,  2 users,  load average: 9.21, 9.17, 7.06",
+    "heap_blocks": 2165644,
+    "heap_bytes": 236491724,
+    "heap_peak_bytes": 106563251,
+    "stdout_sha256": "4d5a60597dfbf85abd84b4685e7fea173d1ef1f89c9c5e5fae6a3b348fef1cf2",
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "wall_ms": [
+     570.1318340143189,
+     543.990564008709,
+     553.2703369972296
+    ]
+   },
+   "678": {
+    "args": [
+     "-Ktwopi",
+     "-Tsvg",
+     "/jobs/work/gvp-10x/t3-8878c705-wave2/review-678/inputs/twopi-Arial.gv"
+    ],
+    "instructions": 2502697227,
+    "uptime": "03:14:12 up 5 days, 23:56,  2 users,  load average: 12.81, 10.23, 9.43",
+    "heap_blocks": 2165644,
+    "heap_bytes": 236491724,
+    "heap_peak_bytes": 106563251,
+    "stdout_sha256": "4d5a60597dfbf85abd84b4685e7fea173d1ef1f89c9c5e5fae6a3b348fef1cf2",
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "wall_ms": [
+     610.2905899751931,
+     601.8456149613485,
+     661.5497659659013
+    ]
+   }
+  },
+  "osage-mixed": {
+   "base": {
+    "args": [
+     "-Kosage",
+     "-Tsvg",
+     "/jobs/work/gvp-10x/t3-8878c705-wave2/review-678/inputs/osage-mixed.gv"
+    ],
+    "instructions": 1587593738,
+    "uptime": "02:43:26 up 5 days, 23:25,  2 users,  load average: 7.75, 8.78, 7.07",
+    "heap_blocks": 1358688,
+    "heap_bytes": 153699839,
+    "heap_peak_bytes": 70264712,
+    "stdout_sha256": "f0bac2faf4f46a6925c16f7f0174364ef4c3d650bb536aa0b7a6ca7a39611f3c",
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "wall_ms": [
+     306.95843196008354,
+     292.9920129827224,
+     288.1259280256927
+    ]
+   },
+   "678": {
+    "args": [
+     "-Kosage",
+     "-Tsvg",
+     "/jobs/work/gvp-10x/t3-8878c705-wave2/review-678/inputs/osage-mixed.gv"
+    ],
+    "instructions": 1588845591,
+    "uptime": "03:15:25 up 5 days, 23:57,  2 users,  load average: 11.08, 10.21, 9.48",
+    "heap_blocks": 1358688,
+    "heap_bytes": 153699839,
+    "heap_peak_bytes": 70264712,
+    "stdout_sha256": "f0bac2faf4f46a6925c16f7f0174364ef4c3d650bb536aa0b7a6ca7a39611f3c",
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "wall_ms": [
+     327.4797749472782,
+     325.57181699667126,
+     309.20457100728527
+    ]
+   }
+  },
+  "osage-record40": {
+   "base": {
+    "args": [
+     "-Kosage",
+     "-Tsvg",
+     "/jobs/work/gvp-10x/t3-d0eefec5/inputs/records.gv"
+    ],
+    "instructions": 1072977424,
+    "uptime": "02:44:24 up 5 days, 23:26,  2 users,  load average: 7.48, 8.53, 7.09",
+    "heap_blocks": 1624345,
+    "heap_bytes": 183963379,
+    "heap_peak_bytes": 37390201,
+    "stdout_sha256": "687073b6feb77710d41daefc7bcd0c27a1889fb4662e8401d3cf6296004ba0b8",
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "wall_ms": [
+     173.6987909534946,
+     185.14672998571768,
+     173.64808596903458
+    ]
+   },
+   "678": {
+    "args": [
+     "-Kosage",
+     "-Tsvg",
+     "/jobs/work/gvp-10x/t3-d0eefec5/inputs/records.gv"
+    ],
+    "instructions": 1077779645,
+    "uptime": "03:16:27 up 5 days, 23:58,  2 users,  load average: 15.14, 11.51, 9.97",
+    "heap_blocks": 1624345,
+    "heap_bytes": 183963379,
+    "heap_peak_bytes": 37390201,
+    "stdout_sha256": "687073b6feb77710d41daefc7bcd0c27a1889fb4662e8401d3cf6296004ba0b8",
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "wall_ms": [
+     205.4343160125427,
+     200.42413502233103,
+     189.901691977866
+    ]
+   }
+  }
+ },
+ "binaries": {
+  "base": {
+   "graphviz-pure": "85bb4b88f1118ec028a2791355864dcaa34e6194950a44feaa3033b22b00d6b7",
+   "heap_counts": "90f030473c431467786a89e4751713a26330004f3f56b54f10b5ec45f7cc55d3"
+  },
+  "678": {
+   "graphviz-pure": "351b5a834c2912954b5420465f1a92ab874ceb02bc1fd3a2da9aa4ebcd49c2f4",
+   "heap_counts": "0728b44d271bc8ed36ed54294e46581d9efa4218b60738ce47628ea2d60a7284"
+  }
+ },
+ "reference_wall": {
+  "patchwork-default": {
+   "1.0": {
+    "wall_ms": [
+     611.8943889741786,
+     596.7625110060908,
+     571.7959090252407
+    ],
+    "uptime": "02:45:39 up 5 days, 23:27,  2 users,  load average: 8.09, 8.41, 7.16"
+   },
+   "C": {
+    "wall_ms": [
+     293.9334879629314,
+     295.89980200398713,
+     296.1015539476648
+    ],
+    "uptime": "02:45:40 up 5 days, 23:27,  2 users,  load average: 8.09, 8.41, 7.16"
+   }
+  },
+  "osage-default": {
+   "1.0": {
+    "wall_ms": [
+     609.809032001067,
+     610.6570090050809,
+     604.5021030004136
+    ],
+    "uptime": "02:45:41 up 5 days, 23:27,  2 users,  load average: 8.09, 8.41, 7.16"
+   },
+   "C": {
+    "wall_ms": [
+     252.0606279722415,
+     247.98050103709102,
+     240.2900560409762
+    ],
+    "uptime": "02:45:43 up 5 days, 23:27,  2 users,  load average: 8.09, 8.41, 7.16"
+   }
+  },
+  "twopi-default": {
+   "1.0": {
+    "wall_ms": [
+     979.4904309674166,
+     1040.0627900380641,
+     1058.6754409596324
+    ],
+    "uptime": "02:45:44 up 5 days, 23:27,  2 users,  load average: 8.72, 8.54, 7.20"
+   },
+   "C": {
+    "wall_ms": [
+     771.7968309880234,
+     862.4458020203747,
+     745.8196269581094
+    ],
+    "uptime": "02:45:47 up 5 days, 23:27,  2 users,  load average: 8.72, 8.54, 7.20"
+   }
+  }
+ }
+}
