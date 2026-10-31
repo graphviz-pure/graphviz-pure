@@ -593,7 +593,19 @@
    "target": "x86_64-unknown-linux-musl",
    "wasm_bytes": 4175874
   },
-  "import": "allocation-reducing subset, --update --from --only allocation-reducing; preserve other rows and references",
-  "same_production_source": true
+  "import": "All 17 case rows imported from perf-ratchet/results.json of run 41157590149, including the new large-subgraph case; no case rows retained from the base. Full import without --only; reference columns retained from base.",
+  "same_production_source": true,
+  "import_reproduction": {
+   "base": "5c8294e0cf977e716481e9d7d2aeaf44ace44f3c",
+   "command": "python3 -I scripts/bench/ratchet.py --baseline \"$base_copy\" --update --from \"$artifact\"",
+   "variables": "base_copy: copy of the base baseline; artifact: extracted results.json from run 41157590149",
+   "matches_old_committed_file_byte_for_byte": true
+  }
+ },
+ "rebase_validation": {
+  "base": "ad25655d87496c210ae4610e775f6b7a750f4b30",
+  "old_head": "0d24ec76d90e4acbb9277f0faf1f81e39cfa04c7",
+  "implementation_patch_unchanged": true,
+  "instruction_and_wall_percentages_measured_on": "5c8294e0cf977e716481e9d7d2aeaf44ace44f3c"
  }
 }
