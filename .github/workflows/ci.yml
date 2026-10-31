@@ -97,6 +97,7 @@ jobs:
 
   mincross-check:
     name: Mincross check mode
+    timeout-minutes: 20
     needs: lookup
     if: needs.lookup.outputs.hit != 'true'
     runs-on: ubuntu-24.04
@@ -108,8 +109,8 @@ jobs:
         shell: bash
         run: rustup toolchain install stable --profile minimal && rustup default stable
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
-      - name: Run Workspace Tests in mincross check mode
-        run: cargo test --workspace --features graphviz-pure-layout/mincross-check
+      - name: Run Workspace Tests in mincross and circo check modes
+        run: cargo test --workspace --features graphviz-pure-layout/mincross-check,graphviz-pure-layout/circo-check
 
   cpu-fidelity:
     name: x86-64-v3 fidelity and v1 byte equality (musl)
