@@ -1084,7 +1084,14 @@ impl Dot<'_> {
             }
             return Ok(());
         }
-        self.make_flat_adj_edges_aux(edges, tn, hn, et)
+        let result = self.make_flat_adj_edges_aux(edges, tn, hn, et);
+        if result
+            .as_ref()
+            .is_err_and(|e| e == super::mincross::ABORT_LAYOUT)
+        {
+            self.node_styles_cleared = true;
+        }
+        result
     }
 
     /// `agisdirected(g) ? "->" : "--"`.

@@ -642,6 +642,9 @@ pub fn do_dot(d: &mut Dot<'_>, graph: &Graph) -> Result<(), String> {
             // doDot returns the component's failure before packing, so neither
             // dot_cleanup_graph nor agdelete runs: the `_cc_<i>` subgraphs stay.
             d.aborted = true;
+            d.node_styles_cleared |= c.node_styles_cleared;
+            // An earlier successful component already set State to GVSPLINES.
+            d.splines_done = any_splines;
             d.cc_kept = d.attach_cc_subgraphs(graph, &ccs, &projected);
             return Ok(());
         }

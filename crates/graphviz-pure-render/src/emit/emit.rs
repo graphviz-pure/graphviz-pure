@@ -1217,7 +1217,8 @@ impl<'a, E: Engine> Emitter<'a, E> {
         let c = nd.attrs.get_or_empty("comment");
         self.comment(c);
         self.job.pop_obj();
-        if let Some(st) = nd.attrs.nonempty("style")
+        if !m.g.nodes[n].layout.no_style
+            && let Some(st) = nd.attrs.nonempty("style")
             && parse_style(st).iter().any(|i| i.name == "invis")
         {
             return;
@@ -1232,10 +1233,11 @@ impl<'a, E: Engine> Emitter<'a, E> {
         };
         let flags = self.job.flags;
         if flags & (GVRENDER_DOES_MAPS | GVRENDER_DOES_TOOLTIPS) != 0 && anchored {
-            let filled = nd
-                .attrs
-                .nonempty("style")
-                .is_some_and(|st| parse_style(st).iter().any(|i| i.name == "filled"));
+            let filled = !m.g.nodes[n].layout.no_style
+                && nd
+                    .attrs
+                    .nonempty("style")
+                    .is_some_and(|st| parse_style(st).iter().any(|i| i.name == "filled"));
             let coord = nd.coord;
             let is_rect_node = nd
                 .geom

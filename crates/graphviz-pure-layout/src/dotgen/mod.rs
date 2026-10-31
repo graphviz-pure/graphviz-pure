@@ -129,6 +129,9 @@ pub struct Dot<'a> {
     /// The layout gave up (dot_position or orthoEdges failed): no splines, no
     /// postprocessing.
     pub aborted: bool,
+    /// An aux abort returned before `cleanupCloneGraph`, leaving every main node's `N_style`
+    /// NULL. Other aborts do not clear node styles.
+    pub node_styles_cleared: bool,
     /// The `_cc_<i>` subgraphs a failed layout leaves in the root (doDot returns
     /// before `agdelete`), with the projected subgraphs under them.
     pub cc_kept: Vec<G>,
@@ -182,6 +185,7 @@ impl<'a> Dot<'a> {
             et: crate::common::types::EdgeType::Spline,
             splines_done: false,
             aborted: false,
+            node_styles_cleared: false,
             stale_ends: Default::default(),
         }
     }

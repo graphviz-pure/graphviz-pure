@@ -456,7 +456,11 @@ pub(crate) fn write_plain(
         out.push(' ');
         out.push_str(lbl.as_str());
         out.push(' ');
-        out.push_str(a.late_nnstring("style", "solid"));
+        if g.nodes[i].layout.no_style {
+            out.push_str("solid");
+        } else {
+            out.push_str(a.late_nnstring("style", "solid"));
+        }
         out.push(' ');
         {
             let sh = a.late_nnstring("shape", "ellipse");

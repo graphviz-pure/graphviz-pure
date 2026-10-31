@@ -15,6 +15,8 @@ pub struct Output {
     /// size, when `translate_drawing` did not reset them (`gv_nodesize` runs for
     /// rankdir != TB, unless the layout was abandoned and no postprocessing ran).
     node_size: Vec<Option<(f64, f64, f64)>>,
+    /// `N_style` was left NULL by an aux abort (`setState` without `cleanupCloneGraph`).
+    node_styles_cleared: bool,
     /// `attach_phase_attrs(g, n)`: write `rank` (and `order` from 2) for `phase=n`.
     phase_attrs: Option<i32>,
     /// `attach_phase_attrs` of each node's pack component (`Dot::node_phase`).
@@ -222,7 +224,10 @@ impl Output {
                 // the output writer skips edges without splines. `splines_done` is
                 // C's `State == GVSPLINES`: false with `splines=none`, but true after
                 // normal or pack-component spline layout, when the root's edge type is none.
-                let routed = d.splines_done;
+                // The default flat-edge and line routers place labels before an aux abort
+                // (`dotsplines.c:293-297,341-345`), so those labels survive even though the
+                // layout never reaches GVSPLINES.
+                let routed = d.splines_done || d.aborted;
                 match ed
                     .label
                     .filter(|&l| routed && ed.edge_type != IGNORED && d.labels[l].set)
@@ -241,7 +246,7 @@ impl Output {
                 }
                 continue;
             };
-            el.no_attrs = ed.edge_type == IGNORED;
+            el.no_attrs = ed.edge_type == IGNORED || !d.splines_done;
             edge_layout.push(el);
             let spline = Spline {
                 segments: bzs
@@ -276,6 +281,7 @@ impl Output {
             node_pos,
             node_rank,
             node_size,
+            node_styles_cleared: d.node_styles_cleared,
             phase_attrs,
             node_phase: d.node_phase.clone(),
             bb,
@@ -295,7 +301,9 @@ impl Output {
     pub fn apply(self, graph: &mut Graph) {
         for (i, p) in self.node_pos.into_iter().enumerate() {
             if let Some(p) = p {
-                graph.nodes[i].pos = p;
+                let nd = &mut graph.nodes[i];
+                nd.layout.no_style = self.node_styles_cleared;
+                nd.pos = p;
             }
             if let Some((lw, rw, ht)) = self.node_size[i] {
                 let nd = &mut graph.nodes[i];
