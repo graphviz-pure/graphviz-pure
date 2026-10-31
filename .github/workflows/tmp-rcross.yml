@@ -1,0 +1,52 @@
+name: Temporary macOS rcross oracle
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  oracle:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Install GTS
+        run: brew install gts
+      - name: Build C Graphviz 16.1.0
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/src" "$RUNNER_TEMP/gv/lutplugins"
+          curl -fL https://gitlab.com/graphviz/graphviz/-/archive/16.1.0/graphviz-16.1.0.tar.xz -o "$RUNNER_TEMP/graphviz.tar.xz"
+          tar -xJf "$RUNNER_TEMP/graphviz.tar.xz" -C "$RUNNER_TEMP/src"
+          cd "$RUNNER_TEMP/src/graphviz-16.1.0"
+          CC=clang CXX="clang++ -stdlib=libc++" CFLAGS="-Os -g" CXXFLAGS="-Os -g" \
+            ./configure --prefix="$RUNNER_TEMP/gv" --with-gts --without-pangocairo \
+            --without-gdk --without-gdk-pixbuf --without-gtk --without-x --without-gd \
+            --without-rsvg --without-ghostscript --without-poppler --without-webp \
+            --without-lasi --without-qt --disable-swig --disable-tcl --disable-perl \
+            --disable-python --disable-man-pdfs
+          grep -q '^#define HAVE_GTS 1' config.h
+          make -j4
+          make install
+          cp -P "$RUNNER_TEMP/gv/lib/graphviz/libgvplugin_core.so"* "$RUNNER_TEMP/gv/lutplugins/"
+          cp -P "$RUNNER_TEMP/gv/lib/graphviz/libgvplugin_dot_layout.so"* "$RUNNER_TEMP/gv/lutplugins/"
+          cp -P "$RUNNER_TEMP/gv/lib/graphviz/libgvplugin_neato_layout.so"* "$RUNNER_TEMP/gv/lutplugins/"
+          GVBINDIR="$RUNNER_TEMP/gv/lutplugins" "$RUNNER_TEMP/gv/bin/dot" -c
+      - name: Build portable math with Apple libc
+        run: cargo build --release -p graphviz-pure-portable-libm --features apple-libc
+      - name: Run the rcross repro
+        env:
+          GVBINDIR: ${{ runner.temp }}/gv/lutplugins
+          GV_PORTABLE_LIBM: ${{ github.workspace }}/target/release/libgraphviz_pure_portable_libm.dylib
+        run: |
+          set -u
+          status=0
+          scripts/dot-portable-libm.sh -v -Tplain scripts/tmp-rcross.gv \
+            > "$RUNNER_TEMP/rcross.txt" 2> "$RUNNER_TEMP/rcross.verbose" || status=$?
+          echo "exit=$status"
+          python3 -c 'import pathlib; lines=pathlib.Path("'$RUNNER_TEMP'/rcross.verbose").read_text().splitlines(); print(next(x for x in lines if "cur_cross" in x))'
+          shasum -a 256 "$RUNNER_TEMP/rcross.txt"
+          echo "edge_lines=$(grep -c '^edge ' "$RUNNER_TEMP/rcross.txt" || true)"
+          echo "plain_bytes=$(wc -c < "$RUNNER_TEMP/rcross.txt")"
