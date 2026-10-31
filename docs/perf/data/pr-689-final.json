@@ -606,6 +606,238 @@
   "base": "ad25655d87496c210ae4610e775f6b7a750f4b30",
   "old_head": "0d24ec76d90e4acbb9277f0faf1f81e39cfa04c7",
   "implementation_patch_unchanged": true,
-  "instruction_and_wall_percentages_measured_on": "5c8294e0cf977e716481e9d7d2aeaf44ace44f3c"
+  "instruction_and_wall_percentages_measured_on": "5c8294e0cf977e716481e9d7d2aeaf44ace44f3c",
+  "dhat": {
+   "method": {
+    "base": "ad25655d87496c210ae4610e775f6b7a750f4b30",
+    "after_source": "95def6b37ecfec031141276a01a7eb0e6468a8ce",
+    "build": "release musl x86-64-v1, no PGO; identical-length binary paths",
+    "measurement": "full CLI dhat; serial nice 15, four CPUs"
+   },
+   "binaries": {
+    "base": {
+     "graphviz-pure": "692d93edb3d0e2c390cf6db4358d3b6db558587285dac61d7eff72d6c915bae9",
+     "heap_counts": "d04b6bb9888cdfafa6d7621ee54893cb8df3c3fc19e48dde45d32ce01bf3ba61"
+    },
+    "p689": {
+     "graphviz-pure": "e6453ed2194a1e2c3ca35c614a5e1814a820ec6d2720b29e9f0c581c0d05ce2f",
+     "heap_counts": "3654e380ef2174b6e78c57f37a0d44e1c6f8f181198df0d29f50b2bb71efce6e"
+    }
+   },
+   "cases": {
+    "patchwork": {
+     "base": {
+      "heap_blocks": 1034279,
+      "heap_bytes": 153961260,
+      "heap_peak_bytes": 68353796,
+      "uptime": "06:55:31 up 6 days,  3:37,  2 users,  load average: 2.48, 3.47, 6.47",
+      "stdout_sha256": "b281463084ce8117d239cc208801570738584321e195a393f22ccbe1f58c5580",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+     },
+     "p689": {
+      "heap_blocks": 974279,
+      "heap_bytes": 142941260,
+      "heap_peak_bytes": 68353796,
+      "uptime": "06:56:07 up 6 days,  3:38,  2 users,  load average: 2.19, 3.29, 6.30",
+      "stdout_sha256": "b281463084ce8117d239cc208801570738584321e195a393f22ccbe1f58c5580",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+     }
+    },
+    "osage": {
+     "base": {
+      "heap_blocks": 1021896,
+      "heap_bytes": 144769361,
+      "heap_peak_bytes": 65873330,
+      "uptime": "06:56:43 up 6 days,  3:38,  2 users,  load average: 2.02, 3.13, 6.13",
+      "stdout_sha256": "c7a0c36a09656d8d9b56c752afdcbb551cc269d0cc762623a7e6c230eda4dcc9",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+     },
+     "p689": {
+      "heap_blocks": 961896,
+      "heap_bytes": 133749361,
+      "heap_peak_bytes": 65873330,
+      "uptime": "06:57:17 up 6 days,  3:39,  2 users,  load average: 1.96, 2.98, 5.97",
+      "stdout_sha256": "c7a0c36a09656d8d9b56c752afdcbb551cc269d0cc762623a7e6c230eda4dcc9",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+     }
+    },
+    "twopi": {
+     "base": {
+      "heap_blocks": 1725627,
+      "heap_bytes": 209533076,
+      "heap_peak_bytes": 94922413,
+      "uptime": "06:57:53 up 6 days,  3:39,  2 users,  load average: 2.15, 2.92, 5.84",
+      "stdout_sha256": "4d5a60597dfbf85abd84b4685e7fea173d1ef1f89c9c5e5fae6a3b348fef1cf2",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+     },
+     "p689": {
+      "heap_blocks": 1625627,
+      "heap_bytes": 198313076,
+      "heap_peak_bytes": 94922413,
+      "uptime": "06:58:26 up 6 days,  3:40,  2 users,  load average: 2.19, 2.85, 5.70",
+      "stdout_sha256": "4d5a60597dfbf85abd84b4685e7fea173d1ef1f89c9c5e5fae6a3b348fef1cf2",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+     }
+    }
+   }
+  },
+  "baseline_refresh": {
+   "run": 41178491765,
+   "head": "95def6b37ecfec031141276a01a7eb0e6468a8ce",
+   "base": "ad25655d87496c210ae4610e775f6b7a750f4b30",
+   "command": "python3 -I scripts/bench/ratchet.py --baseline \"$base_copy\" --update --from \"$artifact\"",
+   "variables": "base_copy: copy of ad25655d:scripts/bench/ratchet-baseline.json; artifact: extracted perf-ratchet/results.json from run 41178491765",
+   "all_case_rows_from_artifact": 17,
+   "case_rows_kept_from_base": 0,
+   "reference_columns_retained_from_base": [
+    "reference",
+    "c_instructions"
+   ],
+   "target_and_wasm_from_artifact": true,
+   "copy_reproduction_byte_identical": true,
+   "baseline_sha256": "ff5c83cdc84d390abbf36d86e8d2b6a4871feb2c495c0cd7f0cfc1b472137c2c",
+   "artifact": {
+    "cases": {
+     "laid/tests/wild/gv16_graphs_b29_d1e4db.gv -Tcanon -Knop2": {
+      "exit": 0,
+      "heap_blocks": 131367,
+      "heap_bytes": 8343722,
+      "heap_peak_bytes": 2910154,
+      "instructions": 122102790,
+      "rss_kib": 7584
+     },
+     "laid/tests/wild/gv16_graphs_b29_d1e4db.gv -Tsvg -Knop2": {
+      "exit": 0,
+      "heap_blocks": 91787,
+      "heap_bytes": 6556397,
+      "heap_peak_bytes": 2139645,
+      "instructions": 106068232,
+      "rss_kib": 6944
+     },
+     "synth/dot_components_1000.gv -Tsvg": {
+      "exit": 0,
+      "heap_blocks": 211063,
+      "heap_bytes": 36347070,
+      "heap_peak_bytes": 10597282,
+      "instructions": 533791866,
+      "rss_kib": 13396
+     },
+     "synth/dot_dag_1000.gv -Tsvg": {
+      "exit": 0,
+      "heap_blocks": 213165,
+      "heap_bytes": 49703240,
+      "heap_peak_bytes": 14202023,
+      "instructions": 939831641,
+      "rss_kib": 16420
+     },
+     "synth/nop2_subgraph_10000.gv -Tcanon -Knop2": {
+      "exit": 0,
+      "heap_blocks": 734923,
+      "heap_bytes": 69635348,
+      "heap_peak_bytes": 30973754,
+      "instructions": 846690027,
+      "rss_kib": 36432
+     },
+     "synth/twopi_tree_5000.gv -Tsvg": {
+      "exit": 0,
+      "heap_blocks": 396345,
+      "heap_bytes": 49184135,
+      "heap_peak_bytes": 23643386,
+      "instructions": 484332808,
+      "rss_kib": 26468
+     },
+     "tests/circo/wild_gv16_directed_sdh_29b016.gv -Tsvg": {
+      "exit": 0,
+      "heap_blocks": 18080,
+      "heap_bytes": 2149495,
+      "heap_peak_bytes": 993215,
+      "instructions": 522863779,
+      "rss_kib": 5368
+     },
+     "tests/fdp/wild_gv16_graphs_b69_4b5b48.gv -Tsvg": {
+      "exit": 0,
+      "heap_blocks": 182836,
+      "heap_bytes": 8628068,
+      "heap_peak_bytes": 1217912,
+      "instructions": 2642090754,
+      "rss_kib": 5828
+     },
+     "tests/fixtures/unix.gv -Tpng": {
+      "exit": 0,
+      "heap_blocks": 20198,
+      "heap_bytes": 12810353,
+      "heap_peak_bytes": 6076927,
+      "instructions": 138519879,
+      "rss_kib": 17280
+     },
+     "tests/fixtures/unix.gv -Tsvg": {
+      "exit": 0,
+      "heap_blocks": 7672,
+      "heap_bytes": 1782734,
+      "heap_peak_bytes": 563771,
+      "instructions": 18937108,
+      "rss_kib": 5296
+     },
+     "tests/neato/hw2_random_120.gv -Tsvg": {
+      "exit": 0,
+      "heap_blocks": 13383,
+      "heap_bytes": 2510103,
+      "heap_peak_bytes": 661993,
+      "instructions": 2265600573,
+      "rss_kib": 5356
+     },
+     "tests/osage/wild_gv16_graphs_b51_33bcb0.gv -Tsvg": {
+      "exit": 0,
+      "heap_blocks": 15481,
+      "heap_bytes": 1935890,
+      "heap_peak_bytes": 816393,
+      "instructions": 23124887,
+      "rss_kib": 5332
+     },
+     "tests/patchwork/wild_gv16_graphs_b51_33bcb0.gv -Tsvg": {
+      "exit": 0,
+      "heap_blocks": 10876,
+      "heap_bytes": 1699247,
+      "heap_peak_bytes": 759016,
+      "instructions": 15294110,
+      "rss_kib": 5120
+     },
+     "tests/sfdp/gen_grid20x20.gv -Tsvg": {
+      "exit": 0,
+      "heap_blocks": 48916,
+      "heap_bytes": 7225916,
+      "heap_peak_bytes": 2645278,
+      "instructions": 619235235,
+      "rss_kib": 7108
+     },
+     "tests/twopi/fx_arrows.gv -Tsvg": {
+      "exit": 0,
+      "heap_blocks": 16597,
+      "heap_bytes": 6545738,
+      "heap_peak_bytes": 835502,
+      "instructions": 2070784901,
+      "rss_kib": 5184
+     },
+     "tests/wild/gv16_graphs_b143_5416de.gv -Tplain": {
+      "exit": 0,
+      "heap_blocks": 102866,
+      "heap_bytes": 27045385,
+      "heap_peak_bytes": 8645812,
+      "instructions": 1073324459,
+      "rss_kib": 11736
+     },
+     "tests/wild/gv16_graphs_b143_5416de.gv -Tsvg": {
+      "exit": 0,
+      "heap_blocks": 111118,
+      "heap_bytes": 27910817,
+      "heap_peak_bytes": 8645808,
+      "instructions": 1081033373,
+      "rss_kib": 11736
+     }
+    },
+    "target": "x86_64-unknown-linux-musl",
+    "wasm_bytes": 4177357
+   }
+  }
  }
 }
