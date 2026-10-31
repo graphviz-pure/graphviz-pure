@@ -370,7 +370,7 @@ fn circo_layout_main(g: &mut LGraph<'_>) {
         // first node stands in for it with its ORIGN's size (makeDerivedNode copies `lw`,
         // `rw` and `ht`), and gets its own position and size back after packing.
         let identity: Vec<usize> = (0..nn).collect();
-        let kept: Vec<(usize, Vec<f64>, [f64; 3])> = (0..nn)
+        let kept: Vec<(usize, crate::common::types::NodePosition, [f64; 3])> = (0..nn)
             .filter(|&f| orign[f] != f)
             .map(|f| {
                 let (n, o) = (&g.nodes[f], &g.nodes[orign[f]]);

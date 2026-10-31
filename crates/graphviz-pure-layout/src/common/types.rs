@@ -75,11 +75,60 @@ pub struct Bezier {
     pub ep: Point,
 }
 
+/// Coordinates kept inline for the usual two-dimensional layout. Other dimensions
+/// keep their exact length in a boxed slice; no new dimension limit is imposed.
+/// C: lib/common/types.h:Agnodeinfo_t.pos
+#[derive(Debug, Clone, PartialEq)]
+pub enum NodePosition {
+    Two([f64; 2]),
+    Other(Box<[f64]>),
+}
+
+impl NodePosition {
+    /// C: lib/common/utils.c:common_init_node (ND_pos storage)
+    pub fn zeroed(ndim: usize) -> Self {
+        if ndim == 2 {
+            Self::Two([0.0; 2])
+        } else {
+            Self::Other(vec![0.0; ndim].into_boxed_slice())
+        }
+    }
+}
+
+impl std::ops::Deref for NodePosition {
+    type Target = [f64];
+
+    fn deref(&self) -> &Self::Target {
+        match self {
+            Self::Two(pos) => pos,
+            Self::Other(pos) => pos,
+        }
+    }
+}
+
+impl std::ops::DerefMut for NodePosition {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        match self {
+            Self::Two(pos) => pos,
+            Self::Other(pos) => pos,
+        }
+    }
+}
+
+impl<'a> IntoIterator for &'a NodePosition {
+    type Item = &'a f64;
+    type IntoIter = std::slice::Iter<'a, f64>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.iter()
+    }
+}
+
 /// `Agnodeinfo_t` fields used by neato and friends.
 #[derive(Debug, Clone)]
 pub struct LNode {
     /// `ND_pos`, in inches, `ndim` components.
-    pub pos: Vec<f64>,
+    pub pos: NodePosition,
     /// `ND_coord`, in points.
     pub coord: Point,
     /// `ND_width`/`ND_height` in inches.
@@ -319,5 +368,34 @@ impl<'a> LGraph<'a> {
 
     pub fn is_directed(&self) -> bool {
         self.src.kind == graphviz_pure_core::GraphKind::Directed
+    }
+}
+
+#[cfg(test)]
+mod position_tests {
+    use super::NodePosition;
+
+    #[test]
+    fn positions_preserve_dimension_and_coordinate_bits() {
+        for ndim in [0, 1, 2, 3, 4, 17] {
+            let mut pos = NodePosition::zeroed(ndim);
+            assert_eq!(pos.len(), ndim);
+            assert!(pos.iter().all(|v| v.to_bits() == 0));
+            assert_eq!(matches!(pos, NodePosition::Two(_)), ndim == 2);
+            let values = [-0.0, f64::from_bits(0x7ff8_0000_0000_1234), f64::INFINITY];
+            for (i, dst) in pos.iter_mut().enumerate() {
+                *dst = values[i % values.len()];
+            }
+            let copy = pos.clone();
+            assert_eq!(
+                copy.iter().map(|x| x.to_bits()).collect::<Vec<_>>(),
+                pos.iter().map(|x| x.to_bits()).collect::<Vec<_>>()
+            );
+        }
+        #[cfg(target_pointer_width = "64")]
+        assert_eq!(
+            std::mem::size_of::<NodePosition>(),
+            std::mem::size_of::<Vec<f64>>()
+        );
     }
 }

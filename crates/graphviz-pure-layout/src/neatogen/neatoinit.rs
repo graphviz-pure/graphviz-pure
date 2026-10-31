@@ -1100,7 +1100,7 @@ pub fn neato_layout(graph: &mut Graph) -> Result<()> {
                 .collect();
             // `user_pos` ran on the whole graph, before `scan_graph_mode`: its positions, pins
             // and `drand48` draws (`nG` is the whole graph's count) are kept.
-            let kept_pos: Vec<(Vec<f64>, u8)> = g0
+            let kept_pos: Vec<(crate::common::types::NodePosition, u8)> = g0
                 .nodes
                 .iter()
                 .zip(&deleted)

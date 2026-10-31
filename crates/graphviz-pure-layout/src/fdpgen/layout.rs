@@ -310,8 +310,10 @@ pub fn with_lgraph<R>(
         // stay zero (layout.c:187). They still matter: fdpAdjust hands the
         // full-width array to remove_overlap, where call_tri reads it with
         // a stride of 2.
-        let mut pos = vec![d.pos[0], d.pos[1]];
-        pos.resize(dg.ndim.max(2), 0.0);
+        let mut pos = crate::common::types::NodePosition::zeroed(dg.ndim.max(2));
+        for (dst, value) in pos.iter_mut().zip(d.pos) {
+            *dst = value;
+        }
         let node = LNode {
             pos,
             coord: Point::default(),
@@ -1438,7 +1440,7 @@ mod adapter_tests {
         with_lgraph(&mut dg, &[0, 1], |lg, _, _| {
             assert_shape_eq(&lg.nodes[0].shape, &existing);
             assert_shape_eq(&lg.nodes[1].shape, &fallback);
-            assert_eq!(lg.nodes[0].pos, [1.25, -2.5, 0.0]);
+            assert_eq!(lg.nodes[0].pos[..], [1.25, -2.5, 0.0]);
             lg.nodes[0].pos[1] = 4.5;
         })
         .unwrap();
