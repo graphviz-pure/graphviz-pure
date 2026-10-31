@@ -1,8 +1,9 @@
 //! Both paths of `rank2` on the same graphs: C's functions alone, and the cut-set pivots
 //! (which, under `cfg(test)`, also assert at every pivot that they agree with C's).
 
+use super::Kind;
 use crate::common::ns::{
-    Ctx, NsData, NsEdge, NsNode, feasible_tree, init_graph, init_rank, rank2_with,
+    Ctx, NsData, NsEdge, NsGraph, NsNode, feasible_tree, init_graph, init_rank, rank2_with,
 };
 
 /// xorshift64*: a fixed sequence, so a failure names its case.
@@ -89,13 +90,25 @@ fn run(g: &NsData, balance: i32, maxiter: i32, search: i32, cut_sets: bool) -> O
     }
 }
 
+/// Runs `f` with this kind of cut sets.
+fn with_kind<R>(kind: Kind, f: impl FnOnce() -> R) -> R {
+    super::check::KIND.with(|k| k.set(Some(kind)));
+    let r = f();
+    super::check::KIND.with(|k| k.set(None));
+    r
+}
+
+const KINDS: [Kind; 2] = [Kind::Pool, Kind::Computed];
+
 fn same_both_ways(g: &NsData, balance: i32, maxiter: i32, search: i32, case: &str) {
     let c = run(g, balance, maxiter, search, false);
-    let cut = run(g, balance, maxiter, search, true);
-    assert_eq!(
-        cut, c,
-        "{case}: balance {balance} maxiter {maxiter} search {search}"
-    );
+    for kind in KINDS {
+        let cut = with_kind(kind, || run(g, balance, maxiter, search, true));
+        assert_eq!(
+            cut, c,
+            "{case}: {kind:?}, balance {balance} maxiter {maxiter} search {search}"
+        );
+    }
 }
 
 #[test]
@@ -152,25 +165,27 @@ fn larger_layered_dags_rank_the_same_on_both_paths() {
 fn wrapped_slacks_hand_the_run_back_to_c() {
     // minimum lengths near i32::MAX make some ranks wrap, so some candidates' slacks are
     // negative and C's scan stops being an argmin: the cut sets must fall back to C
-    let mut rng = Rng(0x2545_f491_4f6c_dd1d);
-    let mut fell_back = 0;
-    for case in 0..300 {
-        let n = 3 + rng.below(25) as usize;
-        let extra = rng.below(2 * n as u64 + 1) as usize;
-        let mut g = random_dag(&mut rng, n, extra, 2);
-        for e in &mut g.edges {
-            if rng.below(3) == 0 {
-                e.minlen = i32::MAX / 2 - rng.below(4) as i32;
+    for kind in KINDS {
+        let mut rng = Rng(0x2545_f491_4f6c_dd1d);
+        let mut fell_back = 0;
+        for case in 0..300 {
+            let n = 3 + rng.below(25) as usize;
+            let extra = rng.below(2 * n as u64 + 1) as usize;
+            let mut g = random_dag(&mut rng, n, extra, 2);
+            for e in &mut g.edges {
+                if rng.below(3) == 0 {
+                    e.minlen = i32::MAX / 2 - rng.below(4) as i32;
+                }
+            }
+            let c = run(&g, 0, i32::MAX, 30, false);
+            let cut = with_kind(kind, || run(&g, 0, i32::MAX, 30, true));
+            assert_eq!(cut, c, "{kind:?}, wrapped case {case}");
+            if super::check::FALLBACKS.with(|f| f.replace(0)) > 0 {
+                fell_back += 1;
             }
         }
-        let c = run(&g, 0, i32::MAX, 30, false);
-        let cut = run(&g, 0, i32::MAX, 30, true);
-        assert_eq!(cut, c, "wrapped case {case}");
-        if super::check::FALLBACKS.with(|f| f.replace(0)) > 0 {
-            fell_back += 1;
-        }
+        assert!(fell_back > 0, "{kind:?}: no case reached the fallback");
     }
-    assert!(fell_back > 0, "no case reached the fallback");
 }
 
 fn ctx() -> Ctx {
@@ -198,7 +213,7 @@ fn the_selector_prefers_c_on_small_graphs() {
 
 #[test]
 fn the_selector_prefers_cut_sets_on_dot_dags() {
-    // dot_dag_5000 of scripts/bench/synth.py, as dot ranks it: each node points to one or
+    // dot_dag_20000 of scripts/bench/synth.py, as dot ranks it: each node points to one or
     // two of the next 40, so tree cycles are short (about 27 edges) and the cut sets small
     // (about 9 entries per node and non-tree edge)
     struct Lcg(u32);
@@ -208,7 +223,7 @@ fn the_selector_prefers_cut_sets_on_dot_dags() {
             (self.0 >> 8) as usize % n
         }
     }
-    let n = 5000;
+    let n = 20_000;
     let mut r = Lcg(n as u32);
     let mut g = NsData {
         nodes: vec![NsNode::default(); n],
@@ -240,6 +255,7 @@ fn the_selector_prefers_cut_sets_on_dot_dags() {
     }
     assert_eq!(feasible_tree(&mut g, &mut ctx()), Ok(0));
     assert!(super::worth_it(&g));
+    assert_eq!(super::choose(&g), Some(Kind::Pool));
 }
 
 #[test]
@@ -277,6 +293,7 @@ fn the_selector_keeps_c_when_the_cut_sets_would_be_large() {
     }
     assert_eq!(feasible_tree(&mut g, &mut ctx()), Ok(0));
     assert!(!super::worth_it(&g));
+    assert_eq!(super::choose(&g), Some(Kind::Computed));
 }
 
 /// The cut-set path with a broken cut set or a pool budget, as the tests arm them.
@@ -299,6 +316,15 @@ fn fallbacks() -> u32 {
 }
 
 #[test]
+fn broken_stored_cut_sets_hand_the_pivot_to_c() {
+    with_kind(Kind::Pool, broken_cut_sets_hand_the_pivot_to_c);
+}
+
+#[test]
+fn broken_computed_cut_sets_hand_the_pivot_to_c() {
+    with_kind(Kind::Computed, broken_cut_sets_hand_the_pivot_to_c);
+}
+
 fn broken_cut_sets_hand_the_pivot_to_c() {
     // f taken out of e's cut set: after enter_edge picks f (the pivot's check phase finds
     // it missing), just before update (which has to check the pivot again), or after an
@@ -346,9 +372,117 @@ fn a_full_pool_hands_the_run_to_c() {
         let balance = rng.below(3) as i32;
         let c = run(&g, balance, i32::MAX, 30, false);
         for slack in [0, 64, 256] {
-            let cut = run_armed(&g, balance, None, Some(slack));
+            let cut = with_kind(Kind::Pool, || run_armed(&g, balance, None, Some(slack)));
             assert_eq!(cut, c, "case {case}, budget slack {slack}");
         }
     }
     assert!(fallbacks() > before, "no run outgrew its budget");
+}
+
+#[test]
+fn a_computed_cut_set_answers_only_for_its_own_edge() {
+    let mut rng = Rng(0x1111_2222_3333_4444);
+    let mut g = random_dag(&mut rng, 40, 30, 2);
+    if !init_graph(&mut g) {
+        init_rank(&mut g);
+    }
+    let mut c = ctx();
+    assert_eq!(feasible_tree(&mut g, &mut c), Ok(0));
+    let mut store = super::CutStore {
+        kind: Kind::Computed,
+        ..super::CutStore::default()
+    };
+    assert!(store.build(&g, &c));
+    let (a, b) = (c.tree_edge[0], c.tree_edge[1]);
+    let (sa, sb) = (
+        super::tree_slot(&g, a).unwrap(),
+        super::tree_slot(&g, b).unwrap(),
+    );
+    let va = if g.par(g.tail(a)) == Some(a) {
+        g.tail(a)
+    } else {
+        g.head(a)
+    };
+    store.compute_cut(sa, va, g.par(g.tail(a)) == Some(a));
+    // an edge in a's cut set is not in another slot's answer, even one that holds it
+    let k = store.cut_entry(sa, 0) & super::ID;
+    let member = store.edge(k).edge as usize;
+    assert_eq!(store.member(sa, member), Some(k));
+    assert_eq!(store.member(sb, member), None);
+}
+
+#[test]
+fn a_tree_that_disagrees_with_lim_is_refused() {
+    let mut rng = Rng(0x5555_6666_7777_8888);
+    let mut g = random_dag(&mut rng, 40, 30, 2);
+    if !init_graph(&mut g) {
+        init_rank(&mut g);
+    }
+    let mut c = ctx();
+    assert_eq!(feasible_tree(&mut g, &mut c), Ok(0));
+    let mut store = super::CutStore {
+        kind: Kind::Computed,
+        ..super::CutStore::default()
+    };
+    assert!(store.build(&g, &c));
+    let root = g.nlist[0];
+    g.nodes[root].low += 1;
+    assert!(!store.build(&g, &c));
+}
+
+#[test]
+#[should_panic(expected = "cut set of tree edge")]
+fn the_cross_check_sees_a_computed_cut_that_misses_nodes() {
+    use super::check::Corrupt;
+    let mut rng = Rng(0x1234_5678_9abc_def1);
+    with_kind(Kind::Computed, || {
+        for _ in 0..200 {
+            let n = 8 + rng.below(60) as usize;
+            let extra = rng.below(2 * n as u64 + 1) as usize;
+            let g = random_dag(&mut rng, n, extra, 3);
+            let _ = run_armed(&g, 2, Some((Corrupt::Links, 0)), None);
+        }
+    });
+}
+
+/// The chain with chords of `the_selector_keeps_c_when_the_cut_sets_would_be_large`, smaller.
+fn chords(n: usize, span: usize, every: usize) -> NsData {
+    let mut g = NsData {
+        nodes: vec![NsNode::default(); n],
+        nlist: (0..n).collect(),
+        ..NsData::default()
+    };
+    let add = |g: &mut NsData, t: usize, h: usize| {
+        let e = g.edges.len();
+        g.edges.push(NsEdge {
+            tail: t,
+            head: h,
+            minlen: 1,
+            weight: 1,
+            ..NsEdge::default()
+        });
+        g.nodes[t].out.push(e);
+        g.nodes[h].in_.push(e);
+    };
+    for i in 1..n {
+        add(&mut g, i - 1, i);
+    }
+    for i in (0..n - span).step_by(every) {
+        add(&mut g, i, i + span);
+    }
+    g
+}
+
+#[test]
+fn the_selector_keeps_small_runs_on_c_and_computes_the_rest() {
+    let mut small = chords(super::COMPUTED_MIN_NODES - 1, 4, 3);
+    let mut mid = chords(super::COMPUTED_MIN_NODES, 4, 3);
+    for g in [&mut small, &mut mid] {
+        if !init_graph(g) {
+            init_rank(g);
+        }
+        assert_eq!(feasible_tree(g, &mut ctx()), Ok(0));
+    }
+    assert_eq!(super::choose(&small), None);
+    assert_eq!(super::choose(&mid), Some(Kind::Computed));
 }
