@@ -800,6 +800,259 @@
    "new_head": "f3efadb3b87f3ca23bf36a86258816f1b51dcdbb",
    "crates_and_lock_added_removed_lines_identical": true
   },
-  "instruction_and_wall_percentages_measured_on": "5c8294e0cf977e716481e9d7d2aeaf44ace44f3c"
+  "instruction_and_wall_percentages_measured_on": "5c8294e0cf977e716481e9d7d2aeaf44ace44f3c",
+  "dhat": {
+   "method": {
+    "base": "8c4f84c55c051d54edbe232a261ad71217fe8bb8",
+    "after_source": "635e5d240e82dc0fb985e4caecce57ddcc18e39a",
+    "build": "release musl x86-64-v1, no PGO; identical-length binary paths",
+    "measurement": "full CLI dhat; serial nice 15, four CPUs"
+   },
+   "binaries": {
+    "base": {
+     "graphviz-pure": "e6453ed2194a1e2c3ca35c614a5e1814a820ec6d2720b29e9f0c581c0d05ce2f",
+     "heap_counts": "3654e380ef2174b6e78c57f37a0d44e1c6f8f181198df0d29f50b2bb71efce6e"
+    },
+    "p678": {
+     "graphviz-pure": "c26c95e8c11303f78e10b4e9373f770671aed273877058b2da7fe1f14e08eb22",
+     "heap_counts": "c2f918e0d2fd571907266c7003676bbedfcc8dd0d350534a894f20b52d4d5858"
+    }
+   },
+   "cases": {
+    "patchwork": {
+     "base": {
+      "heap_blocks": 974279,
+      "heap_bytes": 142941260,
+      "heap_peak_bytes": 68353796,
+      "uptime": "09:02:58 up 6 days,  5:44,  2 users,  load average: 0.94, 1.80, 1.46",
+      "stdout_sha256": "b281463084ce8117d239cc208801570738584321e195a393f22ccbe1f58c5580",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+     },
+     "p678": {
+      "heap_blocks": 874279,
+      "heap_bytes": 141841260,
+      "heap_peak_bytes": 67913796,
+      "uptime": "09:03:29 up 6 days,  5:45,  2 users,  load average: 1.42, 1.84, 1.49",
+      "stdout_sha256": "b281463084ce8117d239cc208801570738584321e195a393f22ccbe1f58c5580",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+     }
+    },
+    "osage": {
+     "base": {
+      "heap_blocks": 961896,
+      "heap_bytes": 133749361,
+      "heap_peak_bytes": 65873330,
+      "uptime": "09:04:02 up 6 days,  5:45,  2 users,  load average: 1.42, 1.80, 1.49",
+      "stdout_sha256": "c7a0c36a09656d8d9b56c752afdcbb551cc269d0cc762623a7e6c230eda4dcc9",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+     },
+     "p678": {
+      "heap_blocks": 861896,
+      "heap_bytes": 132649361,
+      "heap_peak_bytes": 65433330,
+      "uptime": "09:04:32 up 6 days,  5:46,  2 users,  load average: 1.31, 1.74, 1.47",
+      "stdout_sha256": "c7a0c36a09656d8d9b56c752afdcbb551cc269d0cc762623a7e6c230eda4dcc9",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+     }
+    },
+    "twopi": {
+     "base": {
+      "heap_blocks": 1625627,
+      "heap_bytes": 198313076,
+      "heap_peak_bytes": 94922413,
+      "uptime": "09:05:05 up 6 days,  5:46,  2 users,  load average: 1.24, 1.68, 1.46",
+      "stdout_sha256": "4d5a60597dfbf85abd84b4685e7fea173d1ef1f89c9c5e5fae6a3b348fef1cf2",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+     },
+     "p678": {
+      "heap_blocks": 1525627,
+      "heap_bytes": 197213076,
+      "heap_peak_bytes": 94482413,
+      "uptime": "09:05:34 up 6 days,  5:47,  2 users,  load average: 1.28, 1.65, 1.46",
+      "stdout_sha256": "4d5a60597dfbf85abd84b4685e7fea173d1ef1f89c9c5e5fae6a3b348fef1cf2",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+     }
+    }
+   }
+  },
+  "owned_record_dhat": {
+   "base": "8c4f84c55c051d54edbe232a261ad71217fe8bb8",
+   "after_source": "635e5d240e82dc0fb985e4caecce57ddcc18e39a",
+   "method": "full CLI dhat, release musl v1 no PGO; 1000 Arial record nodes, 40 fields; serial nice15 four CPUs",
+   "cases": {
+    "base": {
+     "heap_blocks": 1412343,
+     "heap_bytes": 173631758,
+     "heap_peak_bytes": 36086285,
+     "stdout_sha256": "687073b6feb77710d41daefc7bcd0c27a1889fb4662e8401d3cf6296004ba0b8",
+     "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "p678": {
+     "heap_blocks": 1412343,
+     "heap_bytes": 173631758,
+     "heap_peak_bytes": 36086285,
+     "stdout_sha256": "687073b6feb77710d41daefc7bcd0c27a1889fb4662e8401d3cf6296004ba0b8",
+     "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+   }
+  },
+  "baseline_refresh": {
+   "run": 41187013667,
+   "head": "635e5d240e82dc0fb985e4caecce57ddcc18e39a",
+   "base": "8c4f84c55c051d54edbe232a261ad71217fe8bb8",
+   "command": "python3 -I scripts/bench/ratchet.py --baseline \"$base_copy\" --update --from \"$artifact\"",
+   "variables": "base_copy: copy of 8c4f84c5:scripts/bench/ratchet-baseline.json; artifact: extracted perf-ratchet/results.json from run 41187013667",
+   "all_case_rows_from_artifact": 17,
+   "case_rows_kept_from_base": 0,
+   "reference_columns_retained_from_base": [
+    "reference",
+    "c_instructions"
+   ],
+   "target_and_wasm_from_artifact": true,
+   "copy_reproduction_byte_identical": true,
+   "baseline_sha256": "26cd164ced836703eeb1eb6d832a96fc72a99c3a729c7e44b623859e3adb223c",
+   "artifact": {
+    "cases": {
+     "laid/tests/wild/gv16_graphs_b29_d1e4db.gv -Tcanon -Knop2": {
+      "exit": 0,
+      "heap_blocks": 131367,
+      "heap_bytes": 8343722,
+      "heap_peak_bytes": 2910154,
+      "instructions": 122153748,
+      "rss_kib": 7584
+     },
+     "laid/tests/wild/gv16_graphs_b29_d1e4db.gv -Tsvg -Knop2": {
+      "exit": 0,
+      "heap_blocks": 91787,
+      "heap_bytes": 6556397,
+      "heap_peak_bytes": 2139645,
+      "instructions": 106114136,
+      "rss_kib": 6804
+     },
+     "synth/dot_components_1000.gv -Tsvg": {
+      "exit": 0,
+      "heap_blocks": 197063,
+      "heap_bytes": 36193070,
+      "heap_peak_bytes": 10597282,
+      "instructions": 532475920,
+      "rss_kib": 13396
+     },
+     "synth/dot_dag_1000.gv -Tsvg": {
+      "exit": 0,
+      "heap_blocks": 206165,
+      "heap_bytes": 49626240,
+      "heap_peak_bytes": 14202023,
+      "instructions": 935360867,
+      "rss_kib": 16420
+     },
+     "synth/nop2_subgraph_10000.gv -Tcanon -Knop2": {
+      "exit": 0,
+      "heap_blocks": 684923,
+      "heap_bytes": 69085348,
+      "heap_peak_bytes": 30753754,
+      "instructions": 830205029,
+      "rss_kib": 36048
+     },
+     "synth/twopi_tree_5000.gv -Tsvg": {
+      "exit": 0,
+      "heap_blocks": 371345,
+      "heap_bytes": 48909135,
+      "heap_peak_bytes": 23533386,
+      "instructions": 472290072,
+      "rss_kib": 26480
+     },
+     "tests/circo/wild_gv16_directed_sdh_29b016.gv -Tsvg": {
+      "exit": 0,
+      "heap_blocks": 17780,
+      "heap_bytes": 2146195,
+      "heap_peak_bytes": 993215,
+      "instructions": 522945129,
+      "rss_kib": 5232
+     },
+     "tests/fdp/wild_gv16_graphs_b69_4b5b48.gv -Tsvg": {
+      "exit": 0,
+      "heap_blocks": 182321,
+      "heap_bytes": 8622403,
+      "heap_peak_bytes": 1217912,
+      "instructions": 2641658514,
+      "rss_kib": 5920
+     },
+     "tests/fixtures/unix.gv -Tpng": {
+      "exit": 0,
+      "heap_blocks": 19911,
+      "heap_bytes": 12807196,
+      "heap_peak_bytes": 6076927,
+      "instructions": 138430686,
+      "rss_kib": 17076
+     },
+     "tests/fixtures/unix.gv -Tsvg": {
+      "exit": 0,
+      "heap_blocks": 7385,
+      "heap_bytes": 1779577,
+      "heap_peak_bytes": 563771,
+      "instructions": 18845855,
+      "rss_kib": 5296
+     },
+     "tests/neato/hw2_random_120.gv -Tsvg": {
+      "exit": 0,
+      "heap_blocks": 12783,
+      "heap_bytes": 2503503,
+      "heap_peak_bytes": 661993,
+      "instructions": 2265401487,
+      "rss_kib": 5004
+     },
+     "tests/osage/wild_gv16_graphs_b51_33bcb0.gv -Tsvg": {
+      "exit": 0,
+      "heap_blocks": 14399,
+      "heap_bytes": 1923988,
+      "heap_peak_bytes": 807571,
+      "instructions": 22738230,
+      "rss_kib": 5504
+     },
+     "tests/patchwork/wild_gv16_graphs_b51_33bcb0.gv -Tsvg": {
+      "exit": 0,
+      "heap_blocks": 9944,
+      "heap_bytes": 1688995,
+      "heap_peak_bytes": 750744,
+      "instructions": 14985925,
+      "rss_kib": 5120
+     },
+     "tests/sfdp/gen_grid20x20.gv -Tsvg": {
+      "exit": 0,
+      "heap_blocks": 46916,
+      "heap_bytes": 7203916,
+      "heap_peak_bytes": 2645278,
+      "instructions": 618829934,
+      "rss_kib": 6924
+     },
+     "tests/twopi/fx_arrows.gv -Tsvg": {
+      "exit": 0,
+      "heap_blocks": 16241,
+      "heap_bytes": 6541822,
+      "heap_peak_bytes": 835106,
+      "instructions": 2070691238,
+      "rss_kib": 5180
+     },
+     "tests/wild/gv16_graphs_b143_5416de.gv -Tplain": {
+      "exit": 0,
+      "heap_blocks": 99958,
+      "heap_bytes": 27019213,
+      "heap_peak_bytes": 8643058,
+      "instructions": 1071869954,
+      "rss_kib": 11732
+     },
+     "tests/wild/gv16_graphs_b143_5416de.gv -Tsvg": {
+      "exit": 0,
+      "heap_blocks": 108210,
+      "heap_bytes": 27884645,
+      "heap_peak_bytes": 8643054,
+      "instructions": 1079961939,
+      "rss_kib": 11732
+     }
+    },
+    "target": "x86_64-unknown-linux-musl",
+    "wasm_bytes": 4180887
+   }
+  }
  }
 }
