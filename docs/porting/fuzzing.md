@@ -358,8 +358,8 @@ bytes as this PR and `/opt`; the macOS build does not reproduce `-mfma`'s full d
 C's `taperfun` reads `E_dir` after a flat-edge aux graph has aborted (`emit.c:2088`). The inferred
 mechanism is the same stale-symbol pattern as `setState`: the main edge's `E_dir` id can select a
 different attribute in the aux declaration order. Do not model this as a port `dir` bug. Membership
-requires `style=tapered`, an explicitly declared `dir`, and at least 32,767 parallel flat edges to
-abort the aux graph.
+requires `style=tapered`, an explicitly declared `dir`, and at least 32,769 parallel flat edges in
+total, of which 32,767 have `tailport=e`, to abort the aux graph.
 
 The repro is `digraph G { edge [style=tapered,penwidth=4,dir=back]; {rank=same; a; b} p->p;
 FLAT(33000) }`, where `FLAT(n)` is `a->b [tailport=e];` repeated `n` times, followed by
