@@ -74,6 +74,14 @@ def components(n):
     return "\n".join(out) + "\n"
 
 
+def large_subgraph(n):
+    """Pinned nodes in one scope, for the parser's active-subgraph membership scan."""
+    out = [f"digraph scoped_{n} {{", "layout=nop2;", "subgraph s {"]
+    out.extend(f'n{i} [pos="0,0"];' for i in range(n))
+    out.extend(["}", "}"])
+    return "\n".join(out) + "\n"
+
+
 def small_clusters(n):
     out = [f"digraph small_clusters_{n} {{", "layout=dot;"]
     for i in range(n):
@@ -136,7 +144,11 @@ def clustered(n, engine):
     return "\n".join(out) + "\n"
 
 
-GRAPHS = {}
+GRAPHS = {
+    # Ratchet-only: enough nodes to expose a register spill in the quadratic
+    # membership scan, while -Knop2 -Tcanon avoids a layout-dominated case.
+    "nop2_subgraph_10000": lambda: large_subgraph(10000),
+}
 for n in (1000, 5000, 20000):
     GRAPHS[f"dot_dag_{n}"] = lambda n=n: dag(n)
     GRAPHS[f"sfdp_sparse_{n}"] = lambda n=n: sparse(n, "sfdp")
