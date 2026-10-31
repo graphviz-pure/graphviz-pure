@@ -31,9 +31,9 @@ jobs:
           grep -q '^#define HAVE_GTS 1' config.h
           make -j4
           make install
-          cp -P "$RUNNER_TEMP/gv/lib/graphviz/libgvplugin_core.so"* "$RUNNER_TEMP/gv/lutplugins/"
-          cp -P "$RUNNER_TEMP/gv/lib/graphviz/libgvplugin_dot_layout.so"* "$RUNNER_TEMP/gv/lutplugins/"
-          cp -P "$RUNNER_TEMP/gv/lib/graphviz/libgvplugin_neato_layout.so"* "$RUNNER_TEMP/gv/lutplugins/"
+          cp -P "$RUNNER_TEMP/gv/lib/graphviz/libgvplugin_core."*dylib "$RUNNER_TEMP/gv/lutplugins/"
+          cp -P "$RUNNER_TEMP/gv/lib/graphviz/libgvplugin_dot_layout."*dylib "$RUNNER_TEMP/gv/lutplugins/"
+          cp -P "$RUNNER_TEMP/gv/lib/graphviz/libgvplugin_neato_layout."*dylib "$RUNNER_TEMP/gv/lutplugins/"
           GVBINDIR="$RUNNER_TEMP/gv/lutplugins" "$RUNNER_TEMP/gv/bin/dot" -c
       - name: Build portable math with Apple libc
         run: cargo build --release -p graphviz-pure-portable-libm --features apple-libc
