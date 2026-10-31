@@ -334,6 +334,14 @@ overflow here is undefined behaviour, not a result the port can or should reprod
 `-O2 -mfma` build evaluates chunks of 16 columns with 32-bit `vpmulld`, but evaluates the remainder
 in 64 bits. Other builds make another choice, so C has no single answer for this family.
 
+The port performs the product in 64 bits. On the grouped repro below, that leaves a drawing with
+no splines; the `-mfma` build draws the whole graph. Negative totals also come from C's defined
+conversion of `xpenalty` to `short`: 12 of 18 negative cases have no `rcross` overflow at all, so
+those cases must not be filed under this class. Overflow is necessary for membership, not
+sufficient: only 4 of the 12 graphs that overflowed differed. Master's match with `-mfma` is not
+a general rule. The membership test is to change the C product to
+`(int64_t)Count[k] * ED_xpenalty(e)` in a `-mfma` build and require that build to match the port.
+
 The repro has `group` on every node and, for each of `t0..t3`, edges to all of `b0..b31`, with
 bundle sizes 36, 33, 36 and 32 respectively. Its first `cur_cross` is `1031503028224` with
 `-mfma`, against `-68008599552` for the port and for the non-`-mfma` `/opt` build. Master matched
