@@ -40,6 +40,12 @@
    "heap_peak_bytes": 14202023,
    "instructions": 946499467
   },
+  "synth/nop2_subgraph_10000.gv -Tcanon -Knop2": {
+   "heap_blocks": 774922,
+   "heap_bytes": 71155292,
+   "heap_peak_bytes": 31213698,
+   "instructions": 858985133
+  },
   "synth/twopi_tree_5000.gv -Tsvg": {
    "heap_blocks": 441347,
    "heap_bytes": 52274733,
