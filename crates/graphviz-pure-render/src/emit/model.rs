@@ -687,6 +687,28 @@ mod ownership_tests {
     use super::*;
 
     #[test]
+    fn node_main_labels_keep_the_coordinate_bits() {
+        let mut graph = graphviz_pure_parser::parse_dot(
+            r#"digraph { a [label="alpha\nbeta" xlabel="external"]; b [label=<<B>HTML</B>>]; }"#,
+        )
+        .unwrap();
+        for pos in [
+            Point::new(12.5, -3.0),
+            Point::new(-0.0, 0.0),
+            Point::new(f64::from_bits(0x7ff8_0000_0000_0042), f64::INFINITY),
+        ] {
+            for n in &mut graph.nodes {
+                n.pos = pos;
+            }
+            let model = Model::build(&graph).unwrap();
+            for node in &model.nodes {
+                assert_eq!(node.label.pos.x.to_bits(), node.coord.x.to_bits());
+                assert_eq!(node.label.pos.y.to_bits(), node.coord.y.to_bits());
+            }
+        }
+    }
+
+    #[test]
     fn owned_labels_match_borrowed_conversion_and_move_buffers() {
         for src in [
             r#"digraph { n [label="alpha\nbeta"] }"#,

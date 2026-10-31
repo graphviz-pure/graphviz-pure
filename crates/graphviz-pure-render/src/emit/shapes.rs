@@ -290,9 +290,9 @@ impl<E: Engine> Emitter<'_, E> {
         line.push('\n');
         self.write_output_file(&line);
         let nd = &self.job.m.nodes[n];
-        let mut label = nd.label.clone();
-        label.pos = nd.coord;
-        self.emit_label(EmitState::NLabel, &label);
+        // Model::build stores the same n.pos in label.pos and coord; emission
+        // borrows the immutable model, so the label needs no copy or repositioning.
+        self.emit_label(EmitState::NLabel, &nd.label);
         if do_map {
             if self.job.flags & EMIT_CLUSTERS_LAST != 0 {
                 self.begin_obj_anchor();
@@ -400,9 +400,9 @@ impl<E: Engine> Emitter<'_, E> {
             let imagepos = nd.attrs.late_string("imagepos", "mc");
             self.usershape(name, &af, filled != 0, imagescale, imagepos);
         }
-        let mut label = nd.label.clone();
-        label.pos = nd.coord;
-        self.emit_label(EmitState::NLabel, &label);
+        // Model::build stores the same n.pos in label.pos and coord; emission
+        // borrows the immutable model, so the label needs no copy or repositioning.
+        self.emit_label(EmitState::NLabel, &nd.label);
         if do_map {
             if self.job.flags & EMIT_CLUSTERS_LAST != 0 {
                 self.begin_obj_anchor();
