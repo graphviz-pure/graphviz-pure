@@ -71,7 +71,7 @@ layout/neatogen/digcola.rs	3	0	265	65
 layout/neatogen/graphdata.rs	10	0	26	2
 layout/neatogen/legal.rs	0	0	41	6
 layout/neatogen/linalg.rs	0	0	83	24
-layout/neatogen/matrix_ops.rs	0	1	32	1
+layout/neatogen/matrix_ops.rs	0	1	40	1
 layout/neatogen/multispline.rs	4	0	174	78
 layout/neatogen/neatoinit.rs	0	1	24	1
 layout/neatogen/neatosplines.rs	1	0	38	3
