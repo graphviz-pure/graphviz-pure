@@ -356,13 +356,25 @@ fn count_checked<const MUTATION: u8>(
     adjacency: &[usize],
     scratch: &mut [u64],
 ) -> i32 {
+    count_with_policy::<MUTATION, { cfg!(any(test, feature = "circo-check")) }>(
+        c, list, offsets, adjacency, scratch,
+    )
+}
+
+/// C: lib/circogen/blockpath.c:count_all_crossings
+// The explicit policy lets unit tests exercise the production small-list route
+// even though cfg(test) normally asks for every indexed recount to be checked.
+fn count_with_policy<const MUTATION: u8, const CHECK: bool>(
+    c: &mut Circ,
+    list: &[usize],
+    offsets: &[std::ops::Range<usize>],
+    adjacency: &[usize],
+    scratch: &mut [u64],
+) -> i32 {
     let (open, tree) = scratch.split_at_mut(c.arena.order.len().wrapping_shl(1).div_ceil(64));
     // Index keys must be positive opening orders. Preserve even the reference's
     // order-counter overflow behavior by using its scan beyond that range.
-    if list.len() > i32::MAX as usize
-        || list.len() >= tree.len()
-        || (!cfg!(any(test, feature = "circo-check")) && list.len() <= 16)
-    {
+    if list.len() > i32::MAX as usize || list.len() >= tree.len() || (!CHECK && list.len() <= 16) {
         return count_all_crossings_reference(c, list, offsets, adjacency, open);
     }
     let Some(result) = count_indexed::<MUTATION>(c, list, offsets, adjacency, open, tree) else {
@@ -389,6 +401,8 @@ fn count_indexed<const MUTATION: u8>(
     open: &mut [u64],
     tree: &mut [u64],
 ) -> Option<i32> {
+    #[cfg(test)]
+    assert_ne!(MUTATION, 6, "test fault: indexed path was reached");
     open.fill(0);
     tree.fill(0);
     for &e in adjacency {
@@ -396,6 +410,12 @@ fn count_indexed<const MUTATION: u8>(
     }
     let mut crossings = 0i32;
     for (&n, order) in list.iter().zip(1..) {
+        // Fail after the first occurrence has changed orders, bits and tree.
+        // The fallback must reset that partial state, not just return zero.
+        #[cfg(test)]
+        if MUTATION == 5 && order == 2 {
+            return None;
+        }
         let edges = adjacency.get(offsets.get(n)?.clone())?;
         // All incident edges occur once in a CGraph adjacency (loops included).
         for &e in edges {
@@ -516,6 +536,13 @@ fn add_crossings(value: i32, count: u64) -> i32 {
             "crossing count overflow"
         );
     }
+    wrap_crossings(value, count)
+}
+
+// Separate the release arithmetic from the checked-build guard so debug CI can
+// exercise overflow of the very same kernel that release recounts use.
+/// C: lib/circogen/blockpath.c:count_all_crossings
+fn wrap_crossings(value: i32, count: u64) -> i32 {
     value.wrapping_add(count as i32)
 }
 
@@ -956,5 +983,73 @@ mod tests {
             count_checked::<0>(&mut c, &list, &s.offsets, &s.edges, &mut s.open),
             expected
         );
+    }
+    fn crossing_fixture() -> (Circ, Crossings) {
+        let mut c = circ();
+        let mut g = CGraph::default();
+        g.edge(&mut c.arena, 0, 2);
+        g.edge(&mut c.arena, 1, 3);
+        let scratch = Crossings::new(&c, &g, 4);
+        (c, scratch)
+    }
+
+    #[test]
+    fn declined_index_recounts_from_partial_state_instead_of_returning_zero() {
+        let (mut c, mut s) = crossing_fixture();
+        let list = [0, 1, 2, 3];
+        let bit_words = c.arena.order.len().wrapping_shl(1).div_ceil(64);
+        let expected = count_all_crossings_reference(
+            &mut c,
+            &list,
+            &s.offsets,
+            &s.edges,
+            &mut s.open[..bit_words],
+        );
+        assert_eq!(expected, 1);
+        let orders = c.arena.order.clone();
+        let halves = s.open[..bit_words].to_vec();
+        assert_eq!(
+            count_checked::<5>(&mut c, &list, &s.offsets, &s.edges, &mut s.open),
+            expected
+        );
+        assert_eq!(c.arena.order, orders);
+        assert_eq!(s.open[..bit_words], halves);
+    }
+
+    #[test]
+    fn production_small_list_policy_never_enters_the_index() {
+        for list in [vec![0, 1, 2, 3], [0, 1, 2, 3].repeat(4)] {
+            let (mut c, mut s) = crossing_fixture();
+            let words = c.arena.order.len().wrapping_shl(1).div_ceil(64);
+            s.open.resize(words + list.len() + 1, 0);
+            let expected = count_all_crossings_reference(
+                &mut c,
+                &list,
+                &s.offsets,
+                &s.edges,
+                &mut s.open[..words],
+            );
+            assert_ne!(expected, 0);
+            // Fault 6 panics if indexing is reached. Test the actual production
+            // policy at lengths 4 and 16, with sufficient tree capacity.
+            assert_eq!(
+                count_with_policy::<6, false>(&mut c, &list, &s.offsets, &s.edges, &mut s.open),
+                expected
+            );
+        }
+    }
+
+    #[test]
+    #[should_panic(expected = "test fault: indexed path was reached")]
+    fn check_policy_still_indexes_small_lists() {
+        let (mut c, mut s) = crossing_fixture();
+        count_with_policy::<6, true>(&mut c, &[0, 1, 2, 3], &s.offsets, &s.edges, &mut s.open);
+    }
+
+    #[test]
+    fn release_wrapping_kernel_is_tested_even_in_debug_ci() {
+        assert_eq!(wrap_crossings(i32::MAX, 1), i32::MIN);
+        assert_eq!(wrap_crossings(i32::MAX - 1, 3), i32::MIN + 1);
+        assert_eq!(wrap_crossings(0, (1u64 << 32) + 3), 3);
     }
 }

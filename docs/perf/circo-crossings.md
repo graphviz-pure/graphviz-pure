@@ -14,8 +14,9 @@ block edge's order is zero. The list need not be a permutation: `LEAFONE` and
 `LEAFTWO` paths can overlap, so a node can occur repeatedly. Opening orders
 are positions in this list, 1 through L, not distinct-node ranks. Scratch is
 therefore sized from the initial **list length**, not `subg.nnodes()`.
-Each incident edge id occurs once in a node's adjacency, including a self
-edge. Separate parallel edge ids remain separate entries.
+Production circo derived graphs are strict and loop-free: each incident edge
+id occurs once per node, and a neighbour is always a different node. The counter
+also handles self and parallel edges in synthetic tests.
 
 Temporarily remove from the tree every set half of every incident edge. These
 are exactly the halves whose head or tail equals the current node. The bitset
@@ -27,7 +28,9 @@ endpoint equal to the node. This argument also covers repeated occurrences.
 
 Restore the removed units, then apply the reference erasures of exact half
 keys, decrementing the tree **only when that bit was present**. At the other
-endpoint the opposite key usually is absent, so the opened first half stays.
+endpoint the opposite key is always absent: only the first half was ever set,
+and its order stays positive even after an erase, preventing any second opening.
+The opened first half therefore stays until its opening endpoint repeats.
 At a repeated occurrence of the opening endpoint, however, the same key **is
 present**: both its bit and its tree unit must be removed. Repeated self loops
 can erase their opened key too. The order stays positive after an erase, so
@@ -55,10 +58,11 @@ preserving the opening-order counter's overflow behavior too. Indexed lists
 have positive opening orders that fit i32. No float is changed.
 The final edge orders and half bitset are the reference's. The index is private.
 
-The initial list contains every block node at least once. A move removes at
-most one occurrence and reinserts at most one. A node's multiplicity cannot
-exceed its initial multiplicity (or one, if previously removed by a self move),
-so the list cannot outgrow its initial length. Independently of this argument,
+The initial list contains every block node at least once. In production the
+derived graph is strict and loop-free, so `curnode` differs from `neighbor`.
+A move removes one occurrence of `curnode` and reinserts it next to a different
+node that is still present. Every multiplicity, and hence list length, stays
+unchanged. Independently of this argument,
 `list.len() >= tree.len()` declines to the reference rather than querying a
 missing top slot. A production list of length at most 16 also uses the reference:
 that avoids index maintenance on tiny blocks. Check builds still exercise the
@@ -104,3 +108,20 @@ CI enables `circo-check` in the existing mincross check-mode job, with a
 corpus. A dedicated CLI regression pins the reviewed duplicate-list graph's
 entire plain output to C Graphviz 16.1.0's bytes. Unit tests check actual erasure,
 truncated capacity, zero keys, and all four mutations.
+
+The fallback has a fault-injection test that declines after partial writes and
+checks a nonzero reference count and final state. An explicit policy test uses
+the production small-list selection and fails if the index is entered; check
+policy still forces the index on the same input. The release wrapping kernel
+is directly tested for overflow in debug CI too.
+
+## C oracle limits on duplicate lists
+
+Independent review compared 41,600 graphs with zero base/head differences,
+including 200 duplicate-list cases. Of 5,376 C comparisons, 5,362 were
+byte-identical; the other 14 aborted in C. `lib/circogen/circpos.c:315` sizes
+`parents` by child count, but its loop at line 329 writes once per list
+occurrence. Duplicate occurrences can therefore write past C's `parents` heap buffer
+(14 of the 200 duplicate-list cases aborted under the portable libm preload). Those inputs
+have no usable C oracle: their evidence is base equalling head, backed by the
+per-query reference check, not a claim that C produced matching bytes.
