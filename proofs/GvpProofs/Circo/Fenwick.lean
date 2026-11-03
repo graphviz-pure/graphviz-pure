@@ -11,7 +11,9 @@ Subject: `crates/graphviz-pure-layout/src/circogen/blockpath.rs`,
 
 Aeneas extraction was not available when this file was written (no `aeneas` binary on the
 machine), so the theorems are stated over a Lean model that mirrors the Rust control flow, one Lean
-function per Rust function and one branch per `if`/`match`.
+function per Rust function. Branches that only select between the two counters, and the order of
+writes on paths the theorem shows are never taken, are not mirrored; the "Model vs Rust" list below
+names each such difference.
 
 ## Theorems
 
@@ -43,17 +45,28 @@ function per Rust function and one branch per `if`/`match`.
 * The `i32` total uses release (wrapping) arithmetic: `wrap_crossings` is `+ BitVec.ofNat 32 count`
   and the reference adds `+ 1`. The checked-build assertion in `add_crossings` (panic when the
   mathematical total would exceed `i32::MAX`) and the `circo-check` assertions are not modelled.
+* Domain: the theorems are about lists of at most `i32::MAX` nodes. The model's occurrence
+  counter and stored orders are `ℕ`; the Rust reference's are `i32`, and on a longer list its
+  orders wrap negative and fail the `edge_order > 0` test, so the two would differ there. Rust never
+  runs the indexed counter on such a list (`count_with_policy` sends `list.len() > i32::MAX` to the
+  reference), so the claim "indexed = reference" is only made, and only true, below that bound.
+  None of the theorems carries this bound as a hypothesis; it is a precondition of reading them as
+  statements about the Rust.
 * `count_with_policy`: the clauses `list.len() > i32::MAX` and `!CHECK && list.len() <= 16` only
   select the reference, which is trivially equal to itself, and are not modelled. The `MUTATION`
   const generic is fixed at 0.
+* Write order on failure paths: Rust's opening pass stores the order and sets the bit before the
+  tree update, and its closing pass clears the bit before the tree decrement; the model performs
+  the tree step first. On the successful path the theorem covers, the final states agree. The
+  partial state Rust leaves when an update fails (and hands to the reference) is not modelled.
 * Hypotheses (`NodeWf`, plus `E`, `len` bounds) are facts about the caller, not proved here:
   for every list node the adjacency slice has no repeated edge id, is exactly the block edges
   with an endpoint at the node, and lies inside `adjacency`; edge ids are `< E = arena.order.len()`
   with `E, len < 2 ^ 62`; `list.len() < len`. `CGraph::edges` provides the first two (out-edges are
   keyed by head, in-edges by tail and exclude loops, so ids are distinct).
 
-This section holds the definitions first (each Rust function has one Lean function with the same
-branches, in the same order), then the Fenwick lemmas, then the simulation proof.
+This section holds the definitions first (one Lean function per Rust function), then the Fenwick
+lemmas, then the simulation proof.
 -/
 
 namespace GvpProofs.Circo.Fenwick

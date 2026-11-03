@@ -100,10 +100,12 @@ and only a run showed it. Worth a line in the write-up: measure the gate before 
 
 Result: proved, no `sorry`. `proofs/GvpProofs/Circo/Fenwick.lean`, 1,285 lines (about 260
 definitions and docs, about 1,030 proof), builds with `scripts/proofs/lake.sh build`. Main theorem
-`countIndexed_eq_reference`: on a well-formed block graph the indexed counter never takes an early
-return and returns the reference's `i32` total, final `order` array and half set. Also
-`countWithPolicy_eq_reference` (the dispatch), `query_count_eq_hits` (each query's `u64` count
-is the reference's natural-number count), and `countIndexed_wrapped` (the `i32` is the exact count
+`countIndexed_eq_reference`: on a well-formed block graph of at most `i32::MAX` list nodes, the
+indexed counter takes none of the semantic early returns the model keeps (bounds-check `?` returns
+are dropped from the model, see below) and returns the reference's `i32` total, final `order` array
+and half set. Also `countWithPolicy_eq_reference` (the dispatch, without its two
+reference-selecting clauses), `query_count_eq_hits` (each query's `u64` count is the
+reference's natural-number count), and `countIndexed_wrapped` (the `i32` is the exact count
 modulo 2^32).
 
 Time (wall clock of the agent session): about 0.7 h, all Lean. No Rust changed; reading the Rust and
@@ -139,10 +141,19 @@ on two facts it states only for production graphs or not at all, and the proof n
 tree twice), (2) every set half belongs to a block edge whose incident-ness to the current node is
 exactly "head or tail equals the node" (the prose says "exactly the halves whose head or tail
 equals the current node" without saying the set is restricted to block edges). Both hold for
-`CGraph::edges`. They are now hypotheses of the theorem and mentioned in
+`CGraph::edges` for (1); (2) is a consequence of every recount clearing the bitset and only slice
+edges setting bits. They are now hypotheses of the theorem and mentioned in
 `docs/perf/circo-crossings.md`.
+
+Review (a second model, reading the Rust against the Lean statement by statement) confirmed both
+hypotheses hold in production and found no mismatch on the indexed path, and two limits of the
+claim: the theorems do not carry the `list.len() <= i32::MAX` bound under which "indexed =
+reference" is true (beyond it the Rust reference's `i32` orders wrap and Rust never runs the index),
+and the model performs tree updates before, not after, the bit and order writes, which only matters
+on failure paths the theorem excludes. Both are now stated in the file header.
 
 Extraction verdict: not attempted. The shared Lean install has an `aeneas` directory but no `bin/aeneas`
 binary, so the theorem is over a hand-written model; the PR lists every difference ("Model vs
 Rust" in the file header). The risk that remains is that the model and the Rust drift apart, which
-extraction would remove.
+extraction would remove. The review above is the first measurement of that risk: two documentation
+gaps, zero semantic ones, found in about an hour of a second model's time.
