@@ -996,9 +996,11 @@ mode picks the cut sets for every graph, so no padding is needed to reach them, 
 graphs fail the injected bug at the pivot where the numbering first goes stale.
 
 **Dead ends.** The three-node shape of the issue (edges 1→0, 2→1, 0→2, weights 1, 3, 2, zero minlens),
-in all six `nlist` orders and both cut-set kinds, gave no failure with the bug injected. I did not
-chase why (the edges form a cycle, which `init_rank` does not expect); the random search found
-failing graphs at once. A plain "compare before renumbering" (the issue's other option) would hand
+in all six `nlist` orders and both cut-set kinds, gave no failure with the bug injected. The
+review explained why: zero ranks already satisfy every zero-minlen edge, so `init_rank` is skipped,
+and the shape takes at most one pivot (four orders take one, two take none), so no search ever runs
+after the numbering has gone stale. The issue's shape shows stale numbering; it cannot show a search
+reading it. The random search found five-node graphs that do at once. A plain "compare before renumbering" (the issue's other option) would hand
 C stale intervals, so the copy is the design.
 
 **Cost.** About 1.5 h on Rust and tests, 0.3 h on docs. No Lean, so no proof lines. Extraction

@@ -382,15 +382,35 @@ pub(super) fn pivot<G: NsGraph + ?Sized>(
         assert_eq!(g.par(u), Some(p), "parent edge of node {u}");
         assert_eq!(rg.par(u), Some(p), "C's parent edge of node {u}");
     }
+    // Messages are format arguments, so nothing is allocated unless an assertion fails
+    // (dot_dag_5000 runs this loop over about 10^8 node visits).
     for &u in g.nlist() {
-        let at = format!("node {u} after pivot {e} -> {f}");
-        assert_eq!(g.par(u), rg.par(u), "parent edge of {at}");
-        assert_eq!(g.tree_in(u), rg.tree_in(u), "tree in-edges of {at}");
-        assert_eq!(g.tree_out(u), rg.tree_out(u), "tree out-edges of {at}");
+        assert_eq!(
+            g.par(u),
+            rg.par(u),
+            "parent edge of node {u} after pivot {e} -> {f}"
+        );
+        assert_eq!(
+            g.tree_in(u),
+            rg.tree_in(u),
+            "tree in-edges of node {u} after pivot {e} -> {f}"
+        );
+        assert_eq!(
+            g.tree_out(u),
+            rg.tree_out(u),
+            "tree out-edges of node {u} after pivot {e} -> {f}"
+        );
         for &x in g.out_edges(u) {
-            let at = format!("edge {x} after pivot {e} -> {f}");
-            assert_eq!(g.cutvalue(x), rg.cutvalue(x), "cut value of {at}");
-            assert_eq!(g.tree_index(x), rg.tree_index(x), "tree index of {at}");
+            assert_eq!(
+                g.cutvalue(x),
+                rg.cutvalue(x),
+                "cut value of edge {x} after pivot {e} -> {f}"
+            );
+            assert_eq!(
+                g.tree_index(x),
+                rg.tree_index(x),
+                "tree index of edge {x} after pivot {e} -> {f}"
+            );
         }
     }
     assert_eq!(
