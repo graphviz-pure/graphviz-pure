@@ -36,7 +36,10 @@ scratch (`reach::canreach_fresh`), which is C's search. CI runs the feature in t
 
 ## Not covered
 
-The set's memory is capped (`MAX_WORDS`); past the cap a source without a set is searched in one
-scratch set, emptied afterwards. The Lean model has no cap, and no `scanned` counters: it states
+The set's memory is capped (`MAX_WORDS`): a set is charged its full possible size when admitted,
+so growth after admission stays within the charge; past the cap a source without a set is
+searched in one scratch set, emptied afterwards. (Review of the first version found the charge
+was the size at admission, so sets that grew later exceeded the cap; a test now grows 8,192 sets
+after admission and checks the words actually allocated.) The Lean model has no cap, and no `scanned` counters: it states
 the closure the counters compute. The counters, the cap and the early exit are checked by the tests
 above and the feature, not proved.

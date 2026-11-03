@@ -23,6 +23,8 @@ struct Reach {
     seen: Vec<N>,
     /// For `seen[i]`, how many of its `out` edges were followed.
     scanned: Vec<usize>,
+    /// Words of `bits` already counted against `ReachCache::words`.
+    charged: usize,
 }
 
 impl Reach {
@@ -89,7 +91,9 @@ impl Reach {
 }
 
 /// How many 64-bit words of membership bits the cache may hold. Past it, a source that is not
-/// cached already is searched in a scratch set that is emptied afterwards.
+/// cached already is searched in a scratch set that is emptied afterwards. A set is charged its
+/// full possible size when admitted, so later growth of a cached set cannot exceed the cap unless
+/// the node array itself grows while the cache lives (then the growth is charged as it happens).
 const MAX_WORDS: usize = 1 << 22;
 
 /// The reach sets of one `make_lr_constraints`. While it lives, the `out` lists it was asked
@@ -111,17 +115,26 @@ impl ReachCache {
         }
         let have = self.slot.get(u).copied().unwrap_or(0) as usize;
         if have > 0 {
-            return self
-                .sets
-                .get_mut(have.wrapping_sub(1))
-                .is_some_and(|set| set.reaches(nodes, edges, v));
+            let Some(set) = self.sets.get_mut(have.wrapping_sub(1)) else {
+                return false;
+            };
+            let found = set.reaches(nodes, edges, v);
+            // A set only grows past its reservation if `nodes` grew since it was admitted.
+            if set.bits.len() > set.charged {
+                self.words = self.words.saturating_add(set.bits.len() - set.charged);
+                set.charged = set.bits.len();
+            }
+            return found;
         }
-        let size = (nodes.len() / 64).saturating_add(1);
+        // Reserve the most this set can hold (one bit per node index), so growth after admission
+        // stays within what was charged. `insert` sizes the bit vector by the highest index seen.
+        let size = (nodes.len().max(u.saturating_add(1)) / 64).saturating_add(1);
         if self.words.saturating_add(size) <= MAX_WORDS {
             let mut set = Reach::default();
             set.insert(u);
             let found = set.reaches(nodes, edges, v);
-            self.words = self.words.saturating_add(set.bits.len());
+            set.charged = size.max(set.bits.len());
+            self.words = self.words.saturating_add(set.charged);
             self.sets.push(set);
             if let Some(s) = self.slot.get_mut(u) {
                 *s = u32::try_from(self.sets.len()).unwrap_or(0);
@@ -217,6 +230,33 @@ mod tests {
             }
         }
         assert!(yes > 2000 && no > 2000, "{yes} reachable, {no} not");
+    }
+
+    /// Sets grow after admission (a query from an isolated source, then an edge to a far node,
+    /// then the query again). The bits actually allocated must stay within `MAX_WORDS`, and the
+    /// sources past the cap must still answer correctly from the scratch set.
+    #[test]
+    fn membership_storage_stays_under_the_cap_as_sets_grow() {
+        let n = 65_536;
+        let far = n - 1;
+        let sources = 8_192;
+        let mut nodes: Vec<NodeInfo> = (0..n).map(|_| NodeInfo::default()).collect();
+        let mut edges = Vec::new();
+        let mut cache = ReachCache::default();
+        for u in 0..sources {
+            assert!(!cache.canreach(&nodes, &edges, u, far));
+        }
+        for u in 0..sources {
+            add_edge(&mut nodes, &mut edges, u, far);
+        }
+        for u in 0..sources {
+            assert!(cache.canreach(&nodes, &edges, u, far));
+        }
+        let allocated: usize = cache.sets.iter().map(|s| s.bits.len()).sum();
+        assert!(allocated <= MAX_WORDS, "{allocated} words allocated, cap {MAX_WORDS}");
+        assert!(cache.words <= MAX_WORDS && allocated <= cache.words);
+        let per_set = n / 64 + 1;
+        assert_eq!(cache.sets.len(), MAX_WORDS / per_set, "sources admitted up to the cap");
     }
 
     /// Past the size cap, a source with no set of its own is searched in the scratch set.
