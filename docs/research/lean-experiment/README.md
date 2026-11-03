@@ -76,8 +76,10 @@ Set `CHARON_CACHE_DIR` to a directory on a large disk: by default Charon writes 
 ### Re-extracting
 
 ```sh
-scripts/proofs/extract.sh crates/graphviz-pure-layout CircoFenwick \
-  --start-from crate::circogen::blockpath::index_prefix   # one module directory per extraction
+scripts/proofs/extract.sh crates/graphviz-pure-layout CircoCount \
+  --start-from crate::circogen::blockpath::count_indexed \
+  --start-from crate::circogen::blockpath::count_all_crossings_reference
+  # one module directory per extraction; its extract.args records the exact filters
 scripts/proofs/extract.sh --check                          # before a PR: committed files are current
 ```
 
@@ -117,5 +119,13 @@ Lean version policy: pinned to the toolchain Aeneas's Lean backend requires (`v4
 | #734 | neato: skip the stress mat-vec when `orthog1f` is a no-op | measure, then maybe speedup | measured 1.6% hit rate; no change (#741) |
 | #735 | pathplan triangle adjacency, dot `canreach` memo | speedup + trivial proofs | shipped (#743): no speedup possible; the proof caught a wrong design first |
 
-Follow-ups: #745 (refactor `count_indexed` so Aeneas accepts it), #750 (NS theorem for pivots with
-stale numbering).
+Follow-ups from the first wave's reviews:
+
+- #745 (done, PR #767): `count_indexed` and the reference scan refactored so Aeneas extracts them
+  (`Extracted/CircoCount`); the Fenwick and accumulator lemmas restated over the extraction in
+  `Circo/FenwickExtracted.lean`. The full indexed = reference theorem over the extraction is stated in
+  `proofs/wip/` (outside the library glob, may hold a placeholder proof) and not yet proved.
+- #750 (done, PR #764): `Ns/CutSetsStale.lean` covers every production pivot, stale numbering included.
+- #751 (done, PR #762): the mincross port comparison is abstract; NaN ports are inside the theorem.
+- #765: make `ns-check` compare the cut-set search on the stale production state.
+- #766: `extract.sh --check` fails on `TwopiCircle` with an Aeneas internal error.

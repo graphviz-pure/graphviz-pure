@@ -6,6 +6,9 @@ The production counter replaces its enumeration with Fenwick suffix queries.
 This is integer kernel restructuring (T8), with reused scratch (T9).
 
 Proof of record: `proofs/GvpProofs/Circo/Fenwick.lean` (Lean 4, `scripts/proofs/lake.sh build`).
+`proofs/GvpProofs/Circo/FenwickExtracted.lean` restates its Fenwick lemmas over the Lean that Aeneas
+generates from the shipped `index_update`, `index_prefix` and `add_crossings`
+(`proofs/GvpProofs/Extracted/CircoCount/`); the simulation itself is still over the model.
 It proves `count_indexed` returns the reference's count, final orders and half set, on a Lean model
 of the two functions. The prose below is the informal reading of that proof; the proof states two
 hypotheses the prose only implies: each node's adjacency slice lists every incident block edge

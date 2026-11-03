@@ -12,11 +12,13 @@ file. Raw logs stay on the shared machine under `/jobs/work/gvp-lean/logs/`.
 - **Per-function extraction works.** `charon cargo --start-from <path>` translates only the named
   functions and what they call. That is how `scripts/proofs/extract.sh` runs, and it is the route
   for #728–#735.
-- **Integer kernels extract and compile today**: circo's Fenwick update and prefix query, and twopi's
-  `set_n_steps_to_leaf` and `set_subtree_size`. All four are committed under
-  `proofs/GvpProofs/Extracted/` and rest on no axioms beyond Lean's three.
-- **`count_indexed` does not extract**: it has a `?` inside a nested loop. `count_all_crossings`
-  calls it, so that fails as well. The refactor is filed as #745; the theorem of #728 needs it.
+- **Integer kernels extract and compile today**: circo's Fenwick update and prefix query, its
+  indexed crossing count `count_indexed` and the reference scan it equals (`CircoCount`, after the
+  refactor of #745, below), and twopi's `set_n_steps_to_leaf` and `set_subtree_size`. All are
+  committed under `proofs/GvpProofs/Extracted/` and rest on no axioms beyond Lean's three.
+- **`count_indexed` extracts only in single-loop pieces** (#745). Before the refactor it was
+  rejected (a `?` inside a nested loop), and `count_all_crossings_reference` needed `Iterator::zip`.
+  See "The #745 refactor" for what was changed and the rule it follows.
 - **Floats block every float kernel**, in two places: Aeneas rejects float arithmetic and float
   literals, and the Lean library does not define `F64`. Draft PR AeneasVerif/aeneas#1073 is the
   upstream fix. Until then, floats can only pass through untouched; #733 and #734 need a Lean model.
@@ -55,12 +57,45 @@ So a kernel gets through when it is a free function over slices, integers and pl
 
 | Function | Aeneas | Lean | Blocker | Smallest fix |
 |---|---|---|---|---|
-| `index_update` (Fenwick add) | accepted, 0.6 s | compiles, no extra axioms | see "Aeneas bugs" (`?` on `get_mut`) | none: extracted on its own as `CircoFenwickUpdate` |
-| `index_prefix` (Fenwick prefix sum) | accepted, 0.5 s | compiles, no extra axioms | none | none: `CircoFenwickQuery` |
-| `wrap_crossings`, `add_crossings` | accepted | compiles | none | none |
-| `count_indexed` | **rejected** | — | `Early returns inside of loops are not supported yet` (the `?` inside `for &e in edges { for half in … }`), and `zip(1..)` | #745: helpers holding one loop each, an explicit order counter |
-| `count_all_crossings`, `count_checked`, `count_with_policy` | accepted | does not compile: they call `count_indexed`, whose body is `sorry` | `count_indexed` | #745 |
-| `count_all_crossings_reference` | accepted, but 430–850 s (four nested loops) | does not compile: `` `zip` is not a field of structure `core.iter.traits.iterator.Iterator` `` | `list.iter().zip(1..)`: the Lean library's `Iterator` model has no `zip` | #745: the same explicit counter |
+State at the first measurement (#727); the last column says how each was resolved.
+
+| Function | Aeneas | Lean | Blocker | Resolution |
+|---|---|---|---|---|
+| `index_update` (Fenwick add) | accepted, 0.6 s | compiles, no extra axioms | see "Aeneas bugs" (`?` on `get_mut`) | #745 wrote `tree.get_mut(i)` as a `match`; now in `CircoCount` |
+| `index_prefix` (Fenwick prefix sum) | accepted, 0.5 s | compiles, no extra axioms | none | in `CircoCount` |
+| `wrap_crossings`, `add_crossings` | accepted | compiles | none | in `CircoCount` |
+| `count_indexed` | **rejected** | — | `Early returns inside of loops are not supported yet` (the `?` inside `for &e in edges { for half in … }`), and `zip(1..)` | #745: helpers holding one loop each, an explicit order counter; now in `CircoCount` |
+| `count_all_crossings`, `count_checked`, `count_with_policy` | accepted | does not compile: they call `count_indexed`, whose body was `sorry` | `count_indexed` | not extracted by #745 (they take `&mut Circ`, which holds `f64`, `String` and `BTreeMap` fields); the kernels they call are |
+| `count_all_crossings_reference` | accepted, but 430–850 s (four nested loops) | does not compile: `` `zip` is not a field of structure `core.iter.traits.iterator.Iterator` `` | `list.iter().zip(1..)`: the Lean library's `Iterator` model has no `zip` | #745: the same explicit counter, and three helpers; now 10 s in all and in `CircoCount` |
+
+## The #745 refactor: what Aeneas rejected, and the rule that fixed it
+
+Measured 2026-11-03 with the same Aeneas and Charon. `CircoCount` is extracted with
+`--start-from crate::circogen::blockpath::count_indexed --start-from
+crate::circogen::blockpath::count_all_crossings_reference`; Charon plus Aeneas take 30 s cold and
+10 s warm, the reference scan included (it took 430–850 s as four nested loops in one function).
+
+| What the old code did | Aeneas | The fix (same integers, same order, same wrapping) |
+|---|---|---|
+| `?` inside `for &e in edges { for half in … { … ? … } }` | `Early returns inside of loops are not supported yet` | one helper per loop (`tree_step`, `exclude_edges`, `query_edges`, `restore_edges`, `open_edges`), each returning `Option`; the node loop calls them with `?`, so no `?` is more than one loop deep |
+| a first loop with `return None` followed by the node loop with `?`, in one function | the same error, on the whole of `count_indexed`, even after the nested `?` were gone | the first loop is its own function, `reset_orders`. Observed, not bisected further: **keep one loop with an early exit per function** (the two-loop function was rejected until this loop moved out; every helper with a single such loop extracts) |
+| `list.iter().zip(1..)` | accepted, but the Lean does not compile (`zip` missing from `Iterator`) | `for &n in list { occurrence = occurrence.wrapping_add(1); … }` |
+| `c.arena.order[e]` through `c: &mut Circ` | `Circ` holds `f64`, `String`, `BTreeMap`; the signature would pull all of them in | the kernels take `order: &mut [i32]`, `head: &[usize]`, `tail: &[usize]`; `count_with_policy` splits the borrow of `c.arena` |
+| `*c.arena.order.get_mut(e)? = 0`, `*open.get_mut(i)? &= !mask` (`?` on `Option<&mut T>`) | accepted, but Aeneas calls `Try::branch` with a backward function that its own template lacks (bug 1 below) | `match order.get_mut(e) { Some(slot) => *slot = 0, None => return None }`. Clippy's `question_mark` flags that, so each such function carries `#[allow(clippy::question_mark)]` and a comment |
+| `open.iter().enumerate()` inside the reference scan | accepted (the library models `enumerate`) | none; kept as it was |
+
+Standard-library functions this extraction needed a hand model for (`CircoCount/FunsExternal.lean`):
+`u64::trailing_zeros`, `usize::wrapping_neg`, `<&u64 as BitAnd>::bitand`, `Range::clone`, and the
+two halves of `?` on an `Option` (`Try::branch`, `FromResidual::from_residual`, here without a
+backward function, because no `?` is left on a mutable borrow). `Slice::fill`, `Slice::get`,
+`get_mut`, slice and range iterators needed none.
+
+What stays in the extraction that is not the release build: Charon compiles the dev profile, so
+`cfg!(debug_assertions)` is true. `add_crossings` therefore carries its `massert` and *fails* past
+`i32::MAX` where the shipped binary wraps, and the reference's `crossings += 1` is a checked add.
+Theorems over the extraction are about runs without overflow (`FenwickExtracted.lean`). `#[cfg(test)]`
+and `circo-check` blocks are absent from the extraction. The `MUTATION` const generic is a `U8`
+argument (`0#u8` in production).
 
 The extracted Fenwick code evaluates as expected in Lean: on a four-slot tree, inserting keys 1
 and 2 gives `index_prefix 2 = 2` and `index_prefix 1 = 1`. The circo types do appear in the
@@ -120,7 +155,7 @@ errors, but it would still not give IEEE semantics to prove rounding sequences w
   function that calls their methods needs a hand-written model of each method. Neither measured
   kernel touches one.
 - **`Vec` and slice methods**: the library models `len`, `push`, indexing, `get`, `get_mut`,
-  `iter` and `insert`. It lacks `pop`, `clear`, `last_mut`, `fill`, `div_ceil`, `trailing_zeros`
+  `iter`, `insert` and `fill`. It lacks `pop`, `clear`, `last_mut`, `div_ceil`, `trailing_zeros`
   and `wrapping_neg`. Each missing one lands in the extraction's `FunsExternal.lean`, which is
   hand-written and committed.
 - **Iterator adapters**: `zip` is declared in the library but missing from its `Iterator` model, so
@@ -133,7 +168,9 @@ errors, but it would still not give IEEE semantics to prove rounding sequences w
 1. **`?` on `Option<&mut T>`.** In `index_update`, `tree.get_mut(i)?` generates a call that expects
    `Try::branch` to return a backward function. `index_prefix`'s `tree.get(i)?` and Aeneas's own
    template declare `branch` without one. No single model satisfies both, so the two Fenwick
-   functions are extracted as separate modules, each with its own `branch`.
+   functions were first extracted as separate modules, each with its own `branch`. #745 sidesteps
+   the bug in the Rust (`match` instead of `?` on `get_mut`), which lets all of them share one
+   module; the two separate modules (`CircoFenwickQuery`, `CircoFenwickUpdate`) are gone.
 2. **`--monomorphize-mut` panics** in Charon (``used `substitute` on an item coming from a
    trait``) on a file holding just the three Fenwick functions, so that workaround is unavailable.
 3. **`Iterator::zip`** is in the library's function list but not in its `Iterator` structure.
@@ -149,17 +186,18 @@ the owner's call.
 |---|---|
 | Charon on the whole crate (cold, with dependencies) | 73 s |
 | `extract.sh` on 1–2 integer functions (Charon + Aeneas) | 18–25 s |
-| Aeneas on `count_all_crossings_reference` alone | 430–850 s |
+| Aeneas on `count_all_crossings_reference` alone, as one function of four nested loops | 430–850 s |
+| `extract.sh` on `CircoCount` (`count_indexed`, the reference and their eleven helpers, after #745) | 30 s cold, 10 s warm |
 | Lake build of an extracted module (oleans for Mathlib and Aeneas downloaded) | 2–3 s |
-| `extract.sh --check` on the three committed extractions | 64 s |
+| `extract.sh --check` on the three committed extractions (first measurement) | 64 s |
 
 ## What this means for the other tickets
 
 | Ticket | Extraction route |
 |---|---|
-| #728 circo Fenwick = bitset | Fenwick primitives extracted now; the full `count_indexed` theorem waits for #745 |
+| #728 circo Fenwick = bitset | proved over a model (#742); #745 extracted the shipped functions and restated the Fenwick lemmas over them (`FenwickExtracted.lean`); the full simulation over the extraction is the next step (`proofs/wip/FenwickExtractedMain.lean`) |
 | #729 twopi BFS and postorder sizes | both current functions extracted; extract the new BFS the same way |
-| #730 circo incremental delta | write it with one-loop-deep `?` and no `zip`, then extract |
+| #730 circo incremental delta | write it with one-loop-deep `?`, one early-exit loop per function and no `zip`, then extract |
 | #731 dot NS leave-edge index | not measured; `ns.rs` has 57 signature errors at crate level, so try `--start-from` on a free function over slices |
 | #732 prose proofs | model only, by design |
 | #733, #734 float lemmas | model only until #1073 lands, and probably after |
