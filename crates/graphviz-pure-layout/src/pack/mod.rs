@@ -919,96 +919,173 @@ fn place_fixed(info: &GInfo, ps: &mut PointSet, center: Point) -> Point {
     place
 }
 
+/// A candidate in C's square spiral, in the wide orientation.
+/// C: lib/pack/pack.c:placeGraph
+#[derive(Clone, Copy, Default)]
+struct Spiral {
+    x: i64,
+    y: i64,
+    bound: i64,
+}
+
+/// Compare small, duplicate-free cell sets without changing their iteration order
+/// or allocating a second set. Large shapes use C's original search; bounding this
+/// quadratic comparison avoids introducing a new large-component bottleneck.
+/// C: lib/pack/pack.c:placeGraph
+fn same_shape(a: &[(i64, i64)], b: &[(i64, i64)]) -> bool {
+    // compute_step targets 100 cells per component; allow rounding overhead while
+    // keeping the worst-case comparison small even for highly unequal components.
+    const MAX_REUSED_CELLS: usize = 256;
+    a.len() <= MAX_REUSED_CELLS && a.len() == b.len() && a.iter().all(|c| b.contains(c))
+}
+
+/// Reuse the rejected prefix only for an identical cell set and spiral orientation.
+/// Occupied cells are never removed during packing, so every rejected translation
+/// remains rejected. Keep the successful candidate too: it must be rechecked (an
+/// empty shape can fit there again). Borrowing the cells adds no allocation.
+/// C: lib/pack/pack.c:placeGraph
+#[derive(Default)]
+struct Search<'a> {
+    cells: &'a [(i64, i64)],
+    wide: bool,
+    spiral: Spiral,
+}
+
 /// `placeGraph(i, info, ps, place, step, margin, bbs)`.
-fn place_graph(
+/// C: lib/pack/pack.c:placeGraph
+fn place_graph<'a>(
     i: usize,
-    info: &GInfo,
+    info: &'a GInfo,
     ps: &mut PointSet,
     step: i32,
     margin: u32,
     bbs: &[BoundingBox],
+    search: &mut Search<'a>,
 ) -> Point {
     let bb = bbs[info.index];
+    let w = (bb.ur.x - bb.ll.x).ceil();
+    let h = (bb.ur.y - bb.ll.y).ceil();
+    let wide = w >= h;
+    if search.wide != wide || !same_shape(search.cells, &info.cells) || i == 0 {
+        search.spiral = Spiral::default();
+    }
+    search.cells = &info.cells;
+    search.wide = wide;
     if i == 0 {
+        // This special first attempt is not part of the spiral's rejected prefix.
         let w = grid(bb.ur.x - bb.ll.x + 2.0 * f64::from(margin), step);
         let h = grid(bb.ur.y - bb.ll.y + 2.0 * f64::from(margin), step);
         if let Some(p) = fits(i64::from(-w / 2), i64::from(-h / 2), info, ps, step, bbs) {
             return p;
         }
     }
-    if let Some(p) = fits(0, 0, info, ps, step, bbs) {
-        return p;
+    let Spiral {
+        mut x,
+        mut y,
+        mut bound,
+    } = search.spiral;
+    if bound == 0 {
+        if let Some(p) = fits(0, 0, info, ps, step, bbs) {
+            return p;
+        }
+        bound = 1;
+        y = -1;
     }
-    let w = (bb.ur.x - bb.ll.x).ceil();
-    let h = (bb.ur.y - bb.ll.y).ceil();
-    let mut bnd: i64 = 1;
+    if !wide {
+        (x, y) = (y, -x);
+    }
+    let mut try_fit = |x: i64, y: i64, bound| {
+        let p = fits(x, y, info, ps, step, bbs)?;
+        let (x, y) = if wide { (x, y) } else { (-y, x) };
+        search.spiral = Spiral { x, y, bound };
+        Some(p)
+    };
     loop {
-        if w >= h {
-            let (mut x, mut y) = (0i64, -bnd);
-            while x < bnd {
-                if let Some(p) = fits(x, y, info, ps, step, bbs) {
-                    return p;
+        let lo = -bound;
+        // The guards skip sides preceding a resumed candidate. Within each side,
+        // retain C's tight loops and the original cell order in fits().
+        if wide {
+            if y == lo && x >= 0 {
+                while x < bound {
+                    if let Some(p) = try_fit(x, y, bound) {
+                        return p;
+                    }
+                    x += 1;
                 }
-                x += 1;
             }
-            while y < bnd {
-                if let Some(p) = fits(x, y, info, ps, step, bbs) {
-                    return p;
+            if x == bound {
+                while y < bound {
+                    if let Some(p) = try_fit(x, y, bound) {
+                        return p;
+                    }
+                    y += 1;
                 }
-                y += 1;
             }
-            while x > -bnd {
-                if let Some(p) = fits(x, y, info, ps, step, bbs) {
-                    return p;
+            if y == bound {
+                while x > lo {
+                    if let Some(p) = try_fit(x, y, bound) {
+                        return p;
+                    }
+                    x -= 1;
                 }
-                x -= 1;
             }
-            while y > -bnd {
-                if let Some(p) = fits(x, y, info, ps, step, bbs) {
-                    return p;
+            if x == lo {
+                while y > lo {
+                    if let Some(p) = try_fit(x, y, bound) {
+                        return p;
+                    }
+                    y -= 1;
                 }
-                y -= 1;
             }
             while x < 0 {
-                if let Some(p) = fits(x, y, info, ps, step, bbs) {
+                if let Some(p) = try_fit(x, y, bound) {
                     return p;
                 }
                 x += 1;
             }
         } else {
-            let (mut x, mut y) = (-bnd, 0i64);
-            while y > -bnd {
-                if let Some(p) = fits(x, y, info, ps, step, bbs) {
-                    return p;
+            if x == lo && y <= 0 {
+                while y > lo {
+                    if let Some(p) = try_fit(x, y, bound) {
+                        return p;
+                    }
+                    y -= 1;
                 }
-                y -= 1;
             }
-            while x < bnd {
-                if let Some(p) = fits(x, y, info, ps, step, bbs) {
-                    return p;
+            if y == lo {
+                while x < bound {
+                    if let Some(p) = try_fit(x, y, bound) {
+                        return p;
+                    }
+                    x += 1;
                 }
-                x += 1;
             }
-            while y < bnd {
-                if let Some(p) = fits(x, y, info, ps, step, bbs) {
-                    return p;
+            if x == bound {
+                while y < bound {
+                    if let Some(p) = try_fit(x, y, bound) {
+                        return p;
+                    }
+                    y += 1;
                 }
-                y += 1;
             }
-            while x > -bnd {
-                if let Some(p) = fits(x, y, info, ps, step, bbs) {
-                    return p;
+            if y == bound {
+                while x > lo {
+                    if let Some(p) = try_fit(x, y, bound) {
+                        return p;
+                    }
+                    x -= 1;
                 }
-                x -= 1;
             }
             while y > 0 {
-                if let Some(p) = fits(x, y, info, ps, step, bbs) {
+                if let Some(p) = try_fit(x, y, bound) {
                     return p;
                 }
                 y -= 1;
             }
         }
-        bnd += 1;
+        bound += 1;
+        let lo = -bound;
+        (x, y) = if wide { (0, lo) } else { (lo, 0) };
     }
 }
 
@@ -1098,6 +1175,7 @@ fn poly_graphs<P: PackGraph + ?Sized>(g: &mut P, pinfo: &PackInfo) -> Option<Vec
         warn_too_large();
         return None;
     };
+    let mut search = Search::default();
     let mut sinfo: Vec<usize> = (0..ng).collect();
     qsort_by(&mut sinfo, |a, b| cmpf(a, b, &infos));
     let mut ps = PointSet::new();
@@ -1112,13 +1190,14 @@ fn poly_graphs<P: PackGraph + ?Sized>(g: &mut P, pinfo: &PackInfo) -> Option<Vec
         for i in 0..ng {
             if !fixed[i] {
                 let inf = &infos[sinfo[i]];
-                places[inf.index] = place_graph(i, inf, &mut ps, step, pinfo.margin, &bbs);
+                places[inf.index] =
+                    place_graph(i, inf, &mut ps, step, pinfo.margin, &bbs, &mut search);
             }
         }
     } else {
         for (i, &si) in sinfo.iter().enumerate() {
             let inf = &infos[si];
-            places[inf.index] = place_graph(i, inf, &mut ps, step, pinfo.margin, &bbs);
+            places[inf.index] = place_graph(i, inf, &mut ps, step, pinfo.margin, &bbs, &mut search);
         }
     }
     verbose_places(&places);
@@ -1377,13 +1456,14 @@ fn poly_rects(bbs: &[BoundingBox], pinfo: &PackInfo) -> Option<Vec<Point>> {
         warn_too_large();
         return None;
     };
+    let mut search = Search::default();
     let mut sinfo: Vec<usize> = (0..bbs.len()).collect();
     qsort_by(&mut sinfo, |a, b| cmpf(a, b, &infos));
     let mut ps = PointSet::new();
     let mut places = vec![Point::default(); bbs.len()];
     for (i, &si) in sinfo.iter().enumerate() {
         let inf = &infos[si];
-        places[inf.index] = place_graph(i, inf, &mut ps, step, pinfo.margin, bbs);
+        places[inf.index] = place_graph(i, inf, &mut ps, step, pinfo.margin, bbs, &mut search);
     }
     verbose_places(&places);
     Some(places)
@@ -1407,6 +1487,168 @@ pub fn pack_rects(bbs: &mut [BoundingBox], pinfo: &PackInfo) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn shape_equality_is_exact_and_ignores_iteration_order() {
+        assert!(same_shape(&[(1, 2), (-3, 4)], &[(-3, 4), (1, 2)]));
+        assert!(!same_shape(&[(1, 2), (-3, 4)], &[(-3, 4), (2, 1)]));
+        assert!(!same_shape(&[(1, 2)], &[(1, 2), (-3, 4)]));
+        assert!(same_shape(&[], &[]));
+        let large: Vec<_> = (0..300).map(|x| (x, 0)).collect();
+        assert!(
+            !same_shape(&large, &large),
+            "large shapes use the original search"
+        );
+    }
+
+    #[test]
+    fn resumed_packing_matches_restarting_c_search() {
+        // Runs of equal shapes exercise reuse; changes in orientation, shape,
+        // and empty shapes exercise reset and rechecking the successful position.
+        // Different lower-left corners must not enter the shape cache key.
+        let mut infos = Vec::new();
+        let mut bbs = Vec::new();
+        for i in 0..320 {
+            let run = i / 40;
+            let mut cells = match run {
+                0 | 1 | 4 => vec![(-1, 0), (0, 0), (1, 0)],
+                2 | 3 => vec![(-1, 0), (0, 0), (0, 1)],
+                5 => Vec::new(),
+                6 => vec![(i64::MAX, i64::MIN)],
+                _ => vec![(0, 0)],
+            };
+            if i % 2 == 0 {
+                cells.reverse();
+            }
+            infos.push(GInfo {
+                perim: 0,
+                cells,
+                index: i,
+            });
+            let x = i as f64 / 7.0;
+            let y = -(i as f64) / 3.0;
+            let (w, h) = if matches!(run, 0 | 3 | 4 | 6) {
+                (20.0, 10.0)
+            } else {
+                (10.0, 20.0)
+            };
+            bbs.push(BoundingBox::new(x, y, x + w, y + h));
+        }
+        for fixed in [false, true] {
+            let mut actual = PointSet::new();
+            let mut expected = PointSet::new();
+            let mut search = Search::default();
+            if fixed {
+                let inf = &infos[0];
+                place_fixed(inf, &mut actual, Point::default());
+                place_fixed(inf, &mut expected, Point::default());
+            }
+            for (i, inf) in infos.iter().enumerate().skip(usize::from(fixed)) {
+                let a = place_graph(i, inf, &mut actual, 7, 8, &bbs, &mut search);
+                let b = place_graph_reference(i, inf, &mut expected, 7, 8, &bbs);
+                assert_eq!(
+                    (a.x.to_bits(), a.y.to_bits()),
+                    (b.x.to_bits(), b.y.to_bits()),
+                    "component {i}, fixed={fixed}"
+                );
+                assert_eq!(actual, expected, "component {i}, fixed={fixed}");
+            }
+        }
+    }
+
+    // Original restart-at-origin implementation, kept as an independent oracle.
+    /// `placeGraph(i, info, ps, place, step, margin, bbs)`.
+    fn place_graph_reference(
+        i: usize,
+        info: &GInfo,
+        ps: &mut PointSet,
+        step: i32,
+        margin: u32,
+        bbs: &[BoundingBox],
+    ) -> Point {
+        let bb = bbs[info.index];
+        if i == 0 {
+            let w = grid(bb.ur.x - bb.ll.x + 2.0 * f64::from(margin), step);
+            let h = grid(bb.ur.y - bb.ll.y + 2.0 * f64::from(margin), step);
+            if let Some(p) = fits(i64::from(-w / 2), i64::from(-h / 2), info, ps, step, bbs) {
+                return p;
+            }
+        }
+        if let Some(p) = fits(0, 0, info, ps, step, bbs) {
+            return p;
+        }
+        let w = (bb.ur.x - bb.ll.x).ceil();
+        let h = (bb.ur.y - bb.ll.y).ceil();
+        let mut bnd: i64 = 1;
+        loop {
+            if w >= h {
+                let (mut x, mut y) = (0i64, -bnd);
+                while x < bnd {
+                    if let Some(p) = fits(x, y, info, ps, step, bbs) {
+                        return p;
+                    }
+                    x += 1;
+                }
+                while y < bnd {
+                    if let Some(p) = fits(x, y, info, ps, step, bbs) {
+                        return p;
+                    }
+                    y += 1;
+                }
+                while x > -bnd {
+                    if let Some(p) = fits(x, y, info, ps, step, bbs) {
+                        return p;
+                    }
+                    x -= 1;
+                }
+                while y > -bnd {
+                    if let Some(p) = fits(x, y, info, ps, step, bbs) {
+                        return p;
+                    }
+                    y -= 1;
+                }
+                while x < 0 {
+                    if let Some(p) = fits(x, y, info, ps, step, bbs) {
+                        return p;
+                    }
+                    x += 1;
+                }
+            } else {
+                let (mut x, mut y) = (-bnd, 0i64);
+                while y > -bnd {
+                    if let Some(p) = fits(x, y, info, ps, step, bbs) {
+                        return p;
+                    }
+                    y -= 1;
+                }
+                while x < bnd {
+                    if let Some(p) = fits(x, y, info, ps, step, bbs) {
+                        return p;
+                    }
+                    x += 1;
+                }
+                while y < bnd {
+                    if let Some(p) = fits(x, y, info, ps, step, bbs) {
+                        return p;
+                    }
+                    y += 1;
+                }
+                while x > -bnd {
+                    if let Some(p) = fits(x, y, info, ps, step, bbs) {
+                        return p;
+                    }
+                    x -= 1;
+                }
+                while y > 0 {
+                    if let Some(p) = fits(x, y, info, ps, step, bbs) {
+                        return p;
+                    }
+                    y -= 1;
+                }
+            }
+            bnd += 1;
+        }
+    }
 
     /// Issue #174: only a saturated step gets a budget, and a huge box exhausts it.
     #[test]

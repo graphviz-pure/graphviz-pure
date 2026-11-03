@@ -74,6 +74,13 @@ def components(n):
     return "\n".join(out) + "\n"
 
 
+def twopi_pairs(n):
+    """Equal components exercise the default polyomino packing search (#616)."""
+    out = [f'digraph pairs_{n} {{', 'layout=twopi; node [label=""];']
+    out.extend(f"n{i} -> n{i+1};" for i in range(0, 2 * n, 2))
+    return "\n".join([*out, "}"]) + "\n"
+
+
 def large_subgraph(n):
     """Pinned nodes in one scope, for the parser's active-subgraph membership scan."""
     out = [f"digraph scoped_{n} {{", "layout=nop2;", "subgraph s {"]
@@ -145,6 +152,7 @@ def clustered(n, engine):
 
 
 GRAPHS = {
+    "twopi_pairs_1000": lambda: twopi_pairs(1000),
     # Ratchet-only: enough nodes to expose a register spill in the quadratic
     # membership scan, while -Knop2 -Tcanon avoids a layout-dominated case.
     "nop2_subgraph_10000": lambda: large_subgraph(10000),
