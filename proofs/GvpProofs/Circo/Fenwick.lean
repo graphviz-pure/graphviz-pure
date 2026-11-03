@@ -685,4 +685,63 @@ theorem refQuery_eq (g : Graph) (ord : ℕ → ℕ) (X : Finset ℕ) (th n : ℕ
   rw [← this, Multiset.countP_eq_card_filter]
   rfl
 
+theorem hits_erase (g : Graph) (ord : ℕ → ℕ) (X : Finset ℕ) (th n x : ℕ)
+    (hx : g.head (x / 2) = n ∨ g.tail (x / 2) = n) :
+    hits g ord (X.erase x) th n = hits g ord X th n := by
+  unfold hits
+  rw [Finset.filter_erase, Finset.erase_eq_of_notMem]
+  simp only [Finset.mem_filter]
+  rintro ⟨_, _, h1, h2⟩
+  rcases hx with hx | hx
+  · exact h1 hx
+  · exact h2 hx
+
+theorem queryAcc_congr (g : Graph) (n : ℕ) (ord : ℕ → ℕ) (X X' : Finset ℕ) (es : List ℕ)
+    (h : ∀ e ∈ es, hits g ord X' (ord e) n = hits g ord X (ord e) n) (c : BitVec 32) :
+    queryAcc g n ord X' es c = queryAcc g n ord X es c := by
+  induction es generalizing c with
+  | nil => rfl
+  | cons e es ih =>
+    unfold queryAcc at ih ⊢
+    rw [List.foldl_cons, List.foldl_cons, h e (by simp)]
+    exact ih (fun e' he' => h e' (by simp [he'])) _
+
+theorem erased_cons (g : Graph) (n : ℕ) (ord : ℕ → ℕ) (e : ℕ) (es : List ℕ) :
+    erased g n ord (e :: es) = if 0 < ord e then insert (halfOf g n e) (erased g n ord es)
+      else erased g n ord es := by
+  unfold erased
+  by_cases h : 0 < ord e <;> simp [h]
+
+/-- First reference loop in closed form: it counts every query against the original set, because
+it only erases incident halves, which the predicate excludes anyway. -/
+theorem refClose_fold (g : Graph) (n : ℕ) :
+    ∀ (es : List ℕ) (s : RefState), (∀ e ∈ es, g.head e = n ∨ g.tail e = n) →
+      es.foldl (refClose g n) s =
+        { s with crossings := queryAcc g n s.ord s.bits es s.crossings
+                 bits := s.bits \ erased g n s.ord es }
+  | [], s, _ => by simp [queryAcc, erased]
+  | e :: es, s, hes => by
+    rw [List.foldl_cons]
+    have hinc_e := hes e (by simp)
+    have hhalf : (halfOf g n e) / 2 = e := by unfold halfOf; split_ifs <;> omega
+    by_cases h0 : 0 < s.ord e
+    · have h1 : refClose g n s e = { s with crossings := wrapCrossings s.crossings (hits g s.ord s.bits (s.ord e) n), bits := s.bits.erase (halfOf g n e) } := by
+        simp [refClose, h0, refQuery_eq]
+      rw [h1, refClose_fold g n es _ (fun e' he' => hes e' (by simp [he']))]
+      simp only []
+      have hq : queryAcc g n s.ord (s.bits.erase (halfOf g n e)) es (wrapCrossings s.crossings (hits g s.ord s.bits (s.ord e) n))
+          = queryAcc g n s.ord s.bits es (wrapCrossings s.crossings (hits g s.ord s.bits (s.ord e) n)) := by
+        apply queryAcc_congr
+        intro e' _
+        exact hits_erase g s.ord s.bits _ n _ (by rw [hhalf]; exact hinc_e)
+      rw [hq]
+      simp only [queryAcc, List.foldl_cons, h0, erased_cons, ↓reduceIte]
+      congr 1
+      ext h
+      simp only [Finset.mem_sdiff, Finset.mem_erase, Finset.mem_insert]
+      tauto
+    · have h1 : refClose g n s e = s := by simp [refClose, h0]
+      rw [h1, refClose_fold g n es _ (fun e' he' => hes e' (by simp [he']))]
+      simp [queryAcc, erased_cons, h0]
+
 end GvpProofs.Circo.Fenwick
