@@ -824,9 +824,9 @@ from the first read of the issue; a person new to Aeneas would not match it.
 
 **Did any Rust behaviour change?** No, with one debug-build exception. Same integers, same order,
 same wrapping, and `circo-check` stays and passes on the whole workspace test run. The exception:
-`zip(1..)` panicked in a debug build when the list had more than `i32::MAX` elements (`Step::forward`
-checks); `wrapping_add` does not. Release builds wrapped in both, and the indexed path never sees such
-a list. Instructions on `circo_sparse_400`: 120,944,119 before, 120,964,565 after (+0.017%); on
+`zip(1..)` panicked in a debug build once the list reached `i32::MAX` elements (the range steps
+before yielding, so the panic is at exactly `i32::MAX`, which the indexed path's `<=` guard admits);
+`wrapping_add` does not panic there. Release builds wrap identically in both. Instructions on `circo_sparse_400`: 120,944,119 before, 120,964,565 after (+0.017%); on
 `badvoro`, +0.02%; allocations unchanged (ratchet case `wild_gv16_directed_sdh`: 25,864,074 →
 25,864,687 instructions, 16,175 allocations both). Output is byte-identical on those inputs.
 

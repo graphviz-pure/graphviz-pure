@@ -77,7 +77,9 @@ Set `CHARON_CACHE_DIR` to a directory on a large disk: by default Charon writes 
 
 ```sh
 scripts/proofs/extract.sh crates/graphviz-pure-layout CircoCount \
-  --start-from crate::circogen::blockpath::count_indexed   # one module directory per extraction
+  --start-from crate::circogen::blockpath::count_indexed \
+  --start-from crate::circogen::blockpath::count_all_crossings_reference
+  # one module directory per extraction; its extract.args records the exact filters
 scripts/proofs/extract.sh --check                          # before a PR: committed files are current
 ```
 
