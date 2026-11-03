@@ -47,6 +47,12 @@ With `D = 10 * 2^j * boxn` the `num_div` of pass `j` (everything in binary64, ro
   loop writes only `x`.
 * The Rust loops are the lists `fullItems`/`oddItems` (segments in order, `si` ascending). The
   `<` on box limits is any strict order (`htrans`, `hirr`): binary64's `<`, NaNs included, is one.
+  On a tie (neither `<`) the step keeps the current limit; Rust's `f64::min(NaN, x)` returns `x`,
+  so the step matches Rust only when no limit is NaN. That invariant (limits start numeric, a NaN
+  sample never passes the box test, min/max of numbers is a number) is argued in
+  `docs/perf/limit-boxes-reuse.md` §6, not here.
+* The exactness lemmas assume `10 * 2^j * boxn < 2^53`; Rust does not enforce the bound on `boxn`
+  (the perf doc, §7).
 * Nothing here is extracted from the Rust (Aeneas has no floats): the statement is over FloatLib's
   `Model binary64`, the Flocq-style bit-exact model of the format.
 -/

@@ -52,6 +52,16 @@ writes only `x`.
    never to a zero. Every other tie is two equal nonzero floats, which `fmin` and `fmax` return
    the same bits for whichever they pick. This step is argued here and covered by the check
    below; it is not in Lean.
+6. **NaN.** The Lean step keeps a NaN limit on a tie, where Rust's `f64::min(NaN, x)` returns `x`,
+   so the two agree only when no limit is NaN. That holds on every retry: the limits start as
+   numbers (`routesplines_` initialises them from the boxes), a NaN sample fails the `y` box test
+   and is never folded in, and `min`/`max` of a number and a number is a number. The straight-spline
+   path can store a NaN coordinate, but it never reaches the retry loop. Like (5), this invariant
+   is argued here, not in Lean.
+7. **Domain.** Step 1's exactness needs `10 * 2^j * boxn < 2^53`, i.e. `boxn` below about
+   5.5 * 10^10 with `LOOP_TRIES = 15`. Rust does not check this; it is an assumption of the proof.
+   `boxn` counts the rank boxes of one edge, so it is far below the bound on any input that fits
+   in memory, but the bound is the proof's, not the code's.
 
 The order of the samples a box sees changes (the odd ones now come without the even ones between),
 and the order does not matter: each box ends at the least and the greatest of the samples it
@@ -87,8 +97,8 @@ floats), so the check still guards the model-to-Rust step.
 ## Performance
 
 How often it matters: retries are rare. Over the corpus (`tests/{fixtures,wild,render}` with dot,
-and `tests/{twopi,circo,neato,fdp}` with `splines=true`; 9,652 spline routes) 96 passes were
-retries, in three inputs, all dot (`gv16_graphs_b57_957a04`, `gv16_graphs_b51_33bcb0`,
+and `tests/{twopi,circo,neato,fdp}` with `splines=true`; 9,652 spline routes) 94 passes were
+retries (the sum of the table's rows), in three inputs, all dot (`gv16_graphs_b57_957a04`, `gv16_graphs_b51_33bcb0`,
 `gv16_graphs_b106_471493`); none had a zero limit. The twopi/circo/fdp `ngk10_4` rows never retry,
 so this change does not touch them.
 
