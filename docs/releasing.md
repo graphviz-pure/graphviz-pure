@@ -188,7 +188,9 @@ toolchain and `cargo build --locked`:
 On a real run, the seven publishing jobs then wait together for one approval of the `release`
 environment, and each publishes on its own:
 
-- `github-release` creates the GitHub release with all files;
+- `github-release` creates the GitHub release with all files. A version with a pre-release
+  suffix (`-alpha.N`, `-beta.N` or `-rc.N`) is marked as a GitHub pre-release, so it is not
+  the repository's latest release;
 - `crates-io` publishes the eight crates to crates.io (trusted publishing,
   `cargo publish --workspace`, leaving out any crate whose version is already there);
 - `npm` stages `@graphviz-pure/wasm` (`npm stage publish --access public`). The trusted

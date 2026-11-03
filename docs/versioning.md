@@ -55,11 +55,10 @@ All CLI distributions above carry the same CLI and are covered by the command-li
 promises, including the `-V` line's shape. The Homebrew tap and Scoop bucket updates are
 dispatched after the GitHub release is published and also run on a 6-hour schedule. Both select
 GitHub's latest release and verify its archive attestations and checksums before regenerating
-the formula or manifest. Releases marked as pre-releases on GitHub are excluded, but the update
-scripts do not filter version suffixes themselves. `release-ship.sh` does not currently set
-GitHub's pre-release flag, so a version with a pre-release suffix can reach these manifests if
-GitHub selects it as latest
-([#579](https://github.com/graphviz-pure/graphviz-pure/issues/579)).
+the formula or manifest. Releases marked as pre-releases on GitHub are excluded. The update
+scripts do not filter version suffixes themselves. `release-ship.sh` marks a version with a
+pre-release suffix (`-alpha.N`, `-beta.N` or `-rc.N`) as a GitHub pre-release, on the draft and
+again when that draft is published, so GitHub does not select it as latest.
 
 ghcr's moving tags use versions already pushed to the image registry and only move forward;
 `latest` can cross a major-version boundary. Pin a full version to select a particular release.
