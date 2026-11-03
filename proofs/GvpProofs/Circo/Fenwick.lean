@@ -887,7 +887,9 @@ theorem restoreClose_fold {len : ℕ} (hN : len < 2 ^ 62) (g : Graph) (n : ℕ) 
     · rw [List.foldlM_cons, h1]; exact h2
     · rw [b2, o1, b1, erased_cons]
       ext h
-      by_cases h0 : 0 < s.ord e <;> simp [h0, Finset.mem_sdiff, Finset.mem_erase, Finset.mem_insert] <;> tauto
+      by_cases h0 : 0 < s.ord e
+      · simp [h0, Finset.mem_sdiff, Finset.mem_erase, Finset.mem_insert]; tauto
+      · simp [h0, Finset.mem_sdiff]
     · rw [o1] at v2
       have : ∀ h, (h / 2 ∉ (rest.erase e) \ es.toFinset) ↔ (h / 2 ∉ rest \ (e :: es).toFinset) := by
         intro h
@@ -1159,7 +1161,8 @@ theorem countWithPolicy_eq_reference {adjacency : List ℕ} {E : ℕ} (g : Graph
   unfold countWithPolicy
   by_cases h : len ≤ list.length
   · simp [h]
-  · rw [if_neg h, countIndexed_eq_reference g ord0 list len hN (by omega) hE62 hE hwf]
+  · simp only [h, ↓reduceIte]
+    rw [countIndexed_eq_reference g ord0 list len hN (by omega) hE62 hE hwf]
 
 /-! ## Natural-number count and the wrapped `i32` total -/
 
@@ -1184,9 +1187,11 @@ theorem queryAcc_eq (g : Graph) (n : ℕ) (ord : ℕ → ℕ) (X : Finset ℕ) :
     unfold queryAcc at ih ⊢
     rw [List.foldl_cons]
     by_cases h0 : 0 < ord e
-    · rw [if_pos h0, ih, List.filter_cons_of_pos (by simpa using h0), List.map_cons,
+    · simp only [h0, ↓reduceIte]
+      rw [ih, List.filter_cons_of_pos (by simpa using h0), List.map_cons,
         List.sum_cons, BitVec.ofNat_add, wrapCrossings, add_assoc]
-    · rw [if_neg h0, ih, List.filter_cons_of_neg (by simpa using h0)]
+    · simp only [h0, ↓reduceIte]
+      rw [ih, List.filter_cons_of_neg (by simpa using h0)]
 
 theorem foldl_refOpen_crossings (g : Graph) (n order : ℕ) :
     ∀ (es : List ℕ) (s : RefState), (es.foldl (refOpen g n order) s).crossings = s.crossings
