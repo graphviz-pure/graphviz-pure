@@ -28,6 +28,7 @@
 use graphviz_pure_core::diag::{elapsed_sec, fmt_f, fprintf_stderr, start_timer, verbose_on};
 
 mod cut;
+mod leave;
 pub use cut::CutStore;
 
 pub const SEARCHSIZE: i32 = 30;
@@ -265,6 +266,8 @@ struct Ctx {
     tree_edge: Vec<usize>,
     s_i: usize,
     search_size: i32,
+    /// The tree slots with a negative cut value, for `leave_edge` ([`leave`]).
+    neg: leave::NegSlots,
     subtrees: Vec<Subtree>,
     enter_stack: Vec<usize>,
     rerank_stack: Vec<usize>,
@@ -342,6 +345,8 @@ fn exchange_tree_edges<G: NsGraph + ?Sized>(g: &mut G, ctx: &mut Ctx, e: usize, 
     let ti = g.tree_index(e);
     g.set_tree_index(f, ti);
     ctx.tree_edge[ti as usize] = f;
+    // the slot now holds f, whose cut value the caller has set
+    ctx.neg.set(ti as usize, g.cutvalue(f) < 0);
     g.set_tree_index(e, -1);
     let t = g.tail(e);
     g.tree_out_remove(t, e);
@@ -908,6 +913,7 @@ fn feasible_tree<G: NsGraph + ?Sized>(g: &mut G, ctx: &mut Ctx) -> Result<i32, S
 
 fn treeupdate<G: NsGraph + ?Sized>(
     g: &mut G,
+    neg: &mut leave::NegSlots,
     mut v: usize,
     w: usize,
     cutvalue: i32,
@@ -920,10 +926,14 @@ fn treeupdate<G: NsGraph + ?Sized>(
         let e = g.par(v).unwrap();
         let d = if v == g.tail(e) { dir } else { !dir };
         let cv = g.cutvalue(e);
-        if d {
-            g.set_cutvalue(e, cv.wrapping_add(cutvalue));
+        let next = if d {
+            cv.wrapping_add(cutvalue)
         } else {
-            g.set_cutvalue(e, cv.wrapping_sub(cutvalue));
+            cv.wrapping_sub(cutvalue)
+        };
+        g.set_cutvalue(e, next);
+        if let Ok(slot) = usize::try_from(g.tree_index(e)) {
+            neg.set(slot, next < 0);
         }
         let (t, h) = (g.tail(e), g.head(e));
         v = if g.lim(t) > g.lim(h) { t } else { h };
@@ -974,8 +984,8 @@ fn update<G: NsGraph + ?Sized>(g: &mut G, ctx: &mut Ctx, e: usize, f: usize) -> 
     }
     let cutvalue = g.cutvalue(e);
     let (ft, fh) = (g.tail(f), g.head(f));
-    let lca = treeupdate(g, ft, fh, cutvalue, true);
-    if treeupdate(g, fh, ft, cutvalue, false) != lca {
+    let lca = treeupdate(g, &mut ctx.neg, ft, fh, cutvalue, true);
+    if treeupdate(g, &mut ctx.neg, fh, ft, cutvalue, false) != lca {
         graphviz_pure_core::diag::agerrorf("update: mismatched lca in treeupdates\n");
         return 2;
     }
@@ -1210,9 +1220,11 @@ fn rank2_with<G: NsGraph + ?Sized>(
     cut_sets: bool,
 ) -> Result<i32, String> {
     let mut ctx = Ctx {
-        tree_edge: Vec::new(),
+        // the feasible tree has one edge less than the graph has nodes: no regrowth on the way
+        tree_edge: Vec::with_capacity(g.nlist().len().saturating_sub(1)),
         s_i: 0,
         search_size: SEARCHSIZE,
+        neg: leave::NegSlots::default(),
         subtrees: Vec::new(),
         enter_stack: Vec::new(),
         rerank_stack: Vec::new(),
@@ -1261,11 +1273,12 @@ fn rank2_with<G: NsGraph + ?Sized>(
         free_tree_list(g, &mut ctx);
         return Ok(0);
     }
+    ctx.neg = leave::NegSlots::build(&ctx.tree_edge, |e| g.cutvalue(e) < 0);
     // Started at the first pivot: many runs have none. Nothing changes before it.
     let mut cut = None;
     let mut begun = !cut_sets;
     let mut iter = 0;
-    while let Some(e) = leave_edge(g, &mut ctx) {
+    while let Some(e) = leave::leave_edge(g, &mut ctx) {
         if !begun {
             begun = true;
             cut = cut::begin(g, &mut ctx);

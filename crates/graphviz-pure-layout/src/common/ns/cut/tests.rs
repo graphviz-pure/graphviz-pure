@@ -193,6 +193,7 @@ fn ctx() -> Ctx {
         tree_edge: Vec::new(),
         s_i: 0,
         search_size: 30,
+        neg: Default::default(),
         subtrees: Vec::new(),
         enter_stack: Vec::new(),
         rerank_stack: Vec::new(),
