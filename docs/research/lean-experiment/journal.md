@@ -308,3 +308,58 @@ started. Both theorems are stated over models that follow the Rust functions' sh
 header has a "Model vs Rust" section. The `ns-check` and `mincross-check` features stay. This
 proof retires neither of them: they also check the parts not formalised here, and they check the
 shipped code, not the models.
+## 2026-11-03 #727: Aeneas and Charon installed, extract.sh, CI job
+
+Time: about one hour of wall clock from the first download to the committed extractions. No Rust
+changed. Lean written by hand: 168 lines (three `FunsExternal.lean` files and `Floats.lean`).
+Lean generated: 564 lines across three extractions.
+
+Install, each step timed on the shared machine at nice 15 and 4 jobs:
+
+| Step | Time |
+|---|---|
+| opam 2.6.1 static binary (checksum checked) | 1 s |
+| GMP 6.3.0 from source, static, into the install dir (no system headers, no root install) | 35 s |
+| `opam init` | 23 s |
+| OCaml 5.3.0 switch | 173 s |
+| Aeneas's OCaml dependencies | 79 s |
+| `nightly-2026-09-17`, minimal profile + rustc-dev, llvm-tools, rust-src, rustfmt (1.6 GB) | 21 s |
+| Charon, Rust half | 249 s |
+| Charon, OCaml half | 1 s |
+| Aeneas | 113 s |
+| Aeneas's Lean library through Lake (a prebuilt release archive was downloaded) | 15 s |
+
+Aeneas at `ab34bd28` still pins `leanprover/lean4:v4.35.0`, so no older commit was needed.
+
+Dead ends and surprises, in order:
+- `opam init --no-setup -n` fails because `-n` is the short form of `--no-setup`.
+- The first Charon build failed three ways at once: `cargo fmt` missing from the minimal
+  nightly, two dune processes started by `make -j4` fighting over dune's lock, and
+  `dllzarith.so: No such file or directory` because `CAML_LD_LIBRARY_PATH` from `opam env` was
+  not set. `make setup-charon` would also have run Charon's full test suite, which needs every
+  target in Charon's `rust-toolchain`. Built with `make build-charon-rust` and `dune build`.
+- For about 40 minutes the shared build slots refused to start anything: `/cache` was below its
+  20 GB floor because of an unrelated cache. Single-file `charon rustc` probes need no slot, so
+  per-function answers came from verbatim copies of the kernels first, then were confirmed on
+  the real crate once space came back.
+- Aeneas starts one OCaml domain per CPU; `extract.sh` passes `-sequential`.
+- Aeneas needed 430–850 s for one function, `count_all_crossings_reference`, with four nested
+  loops. Everything else took seconds.
+- Editing `extract.sh` while a queued run was executing it broke that run (bash reads scripts
+  as it goes).
+
+What Lean caught: the generated Lean for structures with an `f64` field did not compile, because
+Aeneas names `F64` without defining it. A function signature with `f64` would have compiled with
+`F64` bound as an implicit variable, and every theorem over it would have been about the wrong
+thing. The same bug had been filed upstream earlier the same day (AeneasVerif/aeneas#828). Fixed
+here with `autoImplicit = false` for the whole library and an explicit `F64 := Float`. This is the
+experiment's first finding: a silent mistranslation that only the type checker caught.
+
+Extraction verdict: per-function, yes; whole crate, no (fatal internal error after 1,853 rejected
+signatures). Committed: circo's Fenwick update and prefix query, twopi's `set_n_steps_to_leaf` and
+`set_subtree_size`, each depending on no axioms beyond Lean's three. Not extractable without a
+refactor: `count_indexed` (`?` inside a nested loop) and the reference scan (`zip`); filed as #745.
+Floats: rejected in bodies (`Invalid inputs for binop`, `Improperly typed constant value`) until
+draft PR AeneasVerif/aeneas#1073 or later. Two more upstream bugs: `?` on `Option<&mut T>` emits a
+`Try::branch` shape that contradicts its own template, so the Fenwick update and query are
+extracted separately; and Charon's `--monomorphize-mut` panics. Details in `extraction.md`.

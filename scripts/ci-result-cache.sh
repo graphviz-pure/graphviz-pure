@@ -49,6 +49,9 @@ ignored=(
   deny.toml
   packaging
   web/README.md
+  # The Lean proofs: ci.yml's proofs job, which always runs, builds them.
+  proofs
+  scripts/proofs
   # Run by hand, by the release, or by a job that always runs.
   scripts/bump-version.sh
   scripts/c-oracle-linux
