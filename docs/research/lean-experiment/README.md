@@ -119,12 +119,13 @@ Lean version policy: pinned to the toolchain Aeneas's Lean backend requires (`v4
 | #734 | neato: skip the stress mat-vec when `orthog1f` is a no-op | measure, then maybe speedup | measured 1.6% hit rate; no change (#741) |
 | #735 | pathplan triangle adjacency, dot `canreach` memo | speedup + trivial proofs | shipped (#743): no speedup possible; the proof caught a wrong design first |
 
-Follow-ups: #745 (refactor `count_indexed` so Aeneas accepts it), #750 (NS theorem for pivots with
-stale numbering).
-#745 (follow-up of #728): `count_indexed` and the reference scan refactored so Aeneas extracts them
-(`Extracted/CircoCount`); the Fenwick lemmas restated over the extraction in `Circo/FenwickExtracted.lean`;
-the full simulation over the extraction is stated in `proofs/wip/` (outside the library glob, may hold
-a placeholder proof) and not yet proved.
+Follow-ups from the first wave's reviews:
 
-Follow-ups: #750 (NS theorem for pivots with
-stale numbering), #751 (mincross no-NaN port invariant).
+- #745 (done, PR #767): `count_indexed` and the reference scan refactored so Aeneas extracts them
+  (`Extracted/CircoCount`); the Fenwick and accumulator lemmas restated over the extraction in
+  `Circo/FenwickExtracted.lean`. The full indexed = reference theorem over the extraction is stated in
+  `proofs/wip/` (outside the library glob, may hold a placeholder proof) and not yet proved.
+- #750 (done, PR #764): `Ns/CutSetsStale.lean` covers every production pivot, stale numbering included.
+- #751 (done, PR #762): the mincross port comparison is abstract; NaN ports are inside the theorem.
+- #765: make `ns-check` compare the cut-set search on the stale production state.
+- #766: `extract.sh --check` fails on `TwopiCircle` with an Aeneas internal error.
