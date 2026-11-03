@@ -1,9 +1,11 @@
 #!/usr/bin/env bash
 # Pushes the release commit to master, tags it, publishes the GitHub release, and dispatches
-# the Homebrew tap and Scoop bucket updates. A merge conflict stops the script before it
-# pushes, tags, creates a release or dispatches anything. Re-running after a partial success
-# continues: a commit already on master is not pushed again, a tag already at the release
-# commit is left, and a published release is left published. See docs/releasing.md.
+# the Homebrew tap and Scoop bucket updates. A pre-release version is published with GitHub's
+# pre-release flag, so those updates, which follow the latest release, stay on a stable
+# version. A merge conflict stops the script before it pushes, tags, creates a release or
+# dispatches anything. Re-running after a partial success continues: a commit already on
+# master is not pushed again, a tag already at the release commit is left, and a published
+# release is left published. See docs/releasing.md.
 #
 # Usage: scripts/release-ship.sh DIST_DIR
 #   VERSION, BASE_SHA, RELEASE_SHA   the prepare job's outputs
@@ -85,22 +87,7 @@ git show "$release:CHANGELOG.md" | awk -v v="## [$version]" \
 [ -s "$notes" ] || die "CHANGELOG.md at $release has no $version section"
 
 export GH_TOKEN=$token
-if gh release view "$tag" --repo "$REPO" --json isDraft -q .isDraft > /dev/null 2>&1; then
-  draft=$(gh release view "$tag" --repo "$REPO" --json isDraft -q .isDraft)
-  if [ "$draft" = true ]; then
-    gh release upload "$tag" --repo "$REPO" --clobber "$dist"/*
-    gh release edit "$tag" --repo "$REPO" --draft=false --notes-file "$notes"
-    echo "published the draft $tag"
-  else
-    echo "$tag is already published"
-  fi
-else
-  # Immutable once published: attach every file to a draft, then publish.
-  gh release create "$tag" --repo "$REPO" --verify-tag --draft --title "graphviz-pure $version" \
-    --notes-file "$notes" "$dist"/*
-  gh release edit "$tag" --repo "$REPO" --draft=false
-  echo "published $tag"
-fi
+publish_github_release "$version" "$tag" "$dist" "$notes"
 
 # The tap and bucket workflows are workflow_dispatch on their default branch. Dispatching
 # again is safe: their update exits 0 when the formula or manifest is already current.
