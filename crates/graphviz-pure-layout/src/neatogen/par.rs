@@ -10,7 +10,7 @@ use std::ops::Range;
 ///
 /// A thread count of 0 or 1, an empty `n`, and every wasm target run `f` on
 /// the caller. Extra threads beyond `n` are dropped so no range is empty.
-/// The mat-vec uses [`for_each_chunk_mut`]. This one is the range check.
+/// Sfdp repulsion uses [`for_each_chunk_mut`]. This one is the range check.
 #[cfg(test)]
 pub(super) fn for_each_chunk(n: usize, threads: usize, f: impl Fn(Range<usize>) + Sync) {
     if n == 0 {

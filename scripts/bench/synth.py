@@ -167,8 +167,9 @@ for n in (250, 500, 1000):
 for n in (250, 500, 1000, 2000):
     GRAPHS[f"neato_sparse_{n}"] = lambda n=n: sparse(n, "neato")
 
-# Not part of the bench set. The parallel-neato job writes this one graph so the
-# 1-vs-4 byte check reaches the parallel kernel (tests/neato stays under that size).
+# Not part of the bench set. The parallel-neato job writes this one graph as a
+# large sequential identity check (neato mat-vec does not split by thread
+# count). tests/neato stays well below 1400 nodes.
 EXTRAS = {
     "pinned_neato_1400": lambda: pinned_neato(1400),
     # Same shape as the bench graph `sfdp_sparse_5000`, written on its own so

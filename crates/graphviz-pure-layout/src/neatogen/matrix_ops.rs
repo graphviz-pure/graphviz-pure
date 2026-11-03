@@ -52,45 +52,34 @@ pub fn orthog1f(vec: &mut [f32]) {
 /// `fma(A[j, k], vector[k], …)` from the diagonal through column `n - 1`,
 /// starting from `+0`.
 pub fn right_mult_with_vector_ff(packed: &[f32], n: usize, vector: &[f32], result: &mut [f32]) {
-    // Under `parallel`, this is the same `owned_rows` workers run, so PGO of
-    // the sequential path covers the full-width kernel. Prefix scatter and
-    // clipped blocks still need a graph above MIN_N. Default-feature codegen
-    // is unchanged.
-    #[cfg(all(feature = "parallel", not(target_family = "wasm")))]
-    {
-        super::matvec_parallel::owned_rows(packed, n, &vector[..n], &mut result[..n], 0);
+    let mut vector = &vector[..n];
+    let mut result = &mut result[..n];
+    result.fill(0.0);
+    let mut packed = packed;
+    while vector.len() >= 8 {
+        let (packed_rest, result_tail) = right_mult_ff_block8(packed, vector, result);
+        packed = packed_rest;
+        result = result_tail;
+        vector = vector.split_at(8).1;
     }
-    #[cfg(not(all(feature = "parallel", not(target_family = "wasm"))))]
-    {
-        let mut vector = &vector[..n];
-        let mut result = &mut result[..n];
-        result.fill(0.0);
-        let mut packed = packed;
-        while vector.len() >= 8 {
-            let (packed_rest, result_tail) = right_mult_ff_block8(packed, vector, result);
-            packed = packed_rest;
-            result = result_tail;
-            vector = vector.split_at(8).1;
-        }
-        while vector.len() >= 4 {
-            let (packed_rest, result_tail) = right_mult_ff_block4(packed, vector, result);
-            packed = packed_rest;
-            result = result_tail;
-            vector = vector.split_at(4).1;
-        }
-        while !vector.is_empty() {
-            let (packed_rest, result_tail) = right_mult_ff_row(packed, vector, result);
-            packed = packed_rest;
-            result = result_tail;
-            vector = vector.split_at(1).1;
-        }
+    while vector.len() >= 4 {
+        let (packed_rest, result_tail) = right_mult_ff_block4(packed, vector, result);
+        packed = packed_rest;
+        result = result_tail;
+        vector = vector.split_at(4).1;
+    }
+    while !vector.is_empty() {
+        let (packed_rest, result_tail) = right_mult_ff_row(packed, vector, result);
+        packed = packed_rest;
+        result = result_tail;
+        vector = vector.split_at(1).1;
     }
 }
 
 /// One left-to-right dot, starting at `+0`. The first step is `fma(a, v, +0)`,
 /// not a multiply.
 #[inline(always)]
-pub(super) fn dot_from_zero(coeff: &[f32], vector: &[f32]) -> f32 {
+fn dot_from_zero(coeff: &[f32], vector: &[f32]) -> f32 {
     let mut acc = 0.0f32;
     for (&a, &v) in coeff.iter().zip(vector) {
         acc = a.mul_add(v, acc);
@@ -100,7 +89,7 @@ pub(super) fn dot_from_zero(coeff: &[f32], vector: &[f32]) -> f32 {
 
 /// Prefix coefficient. The split that built `row` already checked the index.
 #[inline(always)]
-pub(super) fn lane_at(row: &[f32], index: usize) -> f32 {
+fn lane_at(row: &[f32], index: usize) -> f32 {
     row.get(index).copied().unwrap_or(0.0)
 }
 
@@ -113,7 +102,6 @@ pub(super) fn lane_at(row: &[f32], index: usize) -> f32 {
 /// do not touch the eight accumulators or `result[8..]`, so each float's FMA
 /// sequence is unchanged, and the triangle coefficients are dead before the
 /// tail loop (eight live accumulators, not the triangle as well).
-#[cfg(not(all(feature = "parallel", not(target_family = "wasm"))))]
 fn right_mult_ff_block8<'p, 'r>(
     packed: &'p [f32],
     vector: &[f32],
@@ -265,7 +253,6 @@ fn right_mult_ff_block8<'p, 'r>(
 /// Four packed rows starting at `vector[0]`. `vector` and `result` have the
 /// same length, at least 4. The four `res` values are independent left-to-right
 /// chains; scatters into a single `result[j]` stay in increasing row order.
-#[cfg(not(all(feature = "parallel", not(target_family = "wasm"))))]
 fn right_mult_ff_block4<'p, 'r>(
     packed: &'p [f32],
     vector: &[f32],
@@ -373,7 +360,6 @@ fn right_mult_ff_block4<'p, 'r>(
 
 /// One packed row. The running dot stays a single left-to-right chain, and the
 /// scatter of `factor * row` into later `result` entries is a separate loop.
-#[cfg(not(all(feature = "parallel", not(target_family = "wasm"))))]
 fn right_mult_ff_row<'p, 'r>(
     packed: &'p [f32],
     vector: &[f32],
@@ -397,14 +383,14 @@ fn right_mult_ff_row<'p, 'r>(
 }
 
 /// First element. Callers pass a non-empty slice (`split_at` already checked).
-pub(super) fn lane_f32(values: &[f32]) -> f32 {
+fn lane_f32(values: &[f32]) -> f32 {
     // Unreachable: every caller splits a diagonal or vector head of length >= 1.
     debug_assert!(!values.is_empty());
     values.first().copied().unwrap_or(0.0)
 }
 
 /// `slot[0] = fma(factor, scale, slot[0])`.
-pub(super) fn fma_slot(slot: &mut [f32], factor: f32, scale: f32) {
+fn fma_slot(slot: &mut [f32], factor: f32, scale: f32) {
     // Unreachable: the slot is one element of a head `split_at_mut` just checked.
     debug_assert!(!slot.is_empty());
     if let Some(slot) = slot.first_mut() {
@@ -413,7 +399,7 @@ pub(super) fn fma_slot(slot: &mut [f32], factor: f32, scale: f32) {
 }
 
 /// `slot[0] += term`, a plain add, not an FMA.
-pub(super) fn add_slot(slot: &mut [f32], term: f32) {
+fn add_slot(slot: &mut [f32], term: f32) {
     // Unreachable: the slot is one element of a head `split_at_mut` just checked.
     debug_assert!(!slot.is_empty());
     if let Some(slot) = slot.first_mut() {
@@ -424,7 +410,7 @@ pub(super) fn add_slot(slot: &mut [f32], term: f32) {
 /// `dst[j] = fma(row[j], factor, dst[j])`. Each `j` is its own chain, so this
 /// loop may vectorize without reordering any sum.
 #[inline(always)]
-pub(super) fn scatter_fma(dst: &mut [f32], row: &[f32], factor: f32) {
+fn scatter_fma(dst: &mut [f32], row: &[f32], factor: f32) {
     debug_assert_eq!(dst.len(), row.len());
     for (dst, &coefficient) in dst.iter_mut().zip(row) {
         *dst = coefficient.mul_add(factor, *dst);
@@ -815,92 +801,6 @@ mod tests {
             vectors_mult_additionf(n, &mut got, alpha, &v2);
             scalar_mult_additionf(n, &mut expect, alpha, &v2);
             assert_f32_bits(&got, &expect, &format!("axpy n={n}"));
-        }
-    }
-
-    #[cfg(feature = "parallel")]
-    #[test]
-    fn parallel_right_mult_matches_scalar_chain_for_every_thread_count() {
-        // Odd widths, and widths that are not a multiple of the thread count
-        // or of the 8-wide block. `threads == 1` still runs the owned kernel,
-        // not `right_mult_with_vector_ff`.
-        let widths = [0, 1, 2, 3, 5, 7, 8, 9, 17, 37, 63, 64, 65, 127, 128];
-        let threads = [1usize, 2, 3, 8];
-        for &n in &widths {
-            for &thread_count in &threads {
-                for seed in [1u32, 0x1234_5678, 0xa5a5_5a5a] {
-                    let mut state = seed
-                        .wrapping_add(n as u32)
-                        .wrapping_add(thread_count as u32);
-                    let packed_len = n * (n + 1) / 2;
-                    let packed: Vec<f32> = (0..packed_len).map(|_| next_f32(&mut state)).collect();
-                    let vector: Vec<f32> = (0..n).map(|_| next_f32(&mut state)).collect();
-                    let mut got = vec![1.0f32; n + 2];
-                    let mut expect = got.clone();
-                    let mut packed_ext = packed.clone();
-                    packed_ext.push(123.0);
-                    let mut vector_ext = vector.clone();
-                    vector_ext.extend([7.0, 9.0]);
-                    super::super::matvec_parallel::right_mult_ff_with_threads(
-                        &packed_ext,
-                        n,
-                        &vector_ext,
-                        &mut got,
-                        thread_count,
-                    );
-                    scalar_right_mult_with_vector_ff(&packed_ext, n, &vector_ext, &mut expect);
-                    assert_f32_bits(
-                        &got,
-                        &expect,
-                        &format!("n={n} threads={thread_count} seed={seed}"),
-                    );
-                }
-            }
-        }
-    }
-
-    #[cfg(feature = "parallel")]
-    #[test]
-    fn parallel_right_mult_matches_scalar_chain_on_large_odd_n() {
-        let specials = edge_values();
-        for &n in &[37usize, 65] {
-            for &thread_count in &[1usize, 2, 3, 8] {
-                let mut state = 0x0a11_u32.wrapping_add(n as u32);
-                let packed_len = n * (n + 1) / 2;
-                let packed: Vec<f32> = (0..packed_len)
-                    .map(|i| {
-                        if i % 11 == 0 {
-                            specials[i % specials.len()]
-                        } else {
-                            next_f32(&mut state)
-                        }
-                    })
-                    .collect();
-                let vector: Vec<f32> = (0..n)
-                    .map(|i| {
-                        if i % 5 == 0 {
-                            specials[(i * 3) % specials.len()]
-                        } else {
-                            next_f32(&mut state)
-                        }
-                    })
-                    .collect();
-                let mut got = vec![1.0f32; n + 2];
-                let mut expect = got.clone();
-                super::super::matvec_parallel::right_mult_ff_with_threads(
-                    &packed,
-                    n,
-                    &vector,
-                    &mut got,
-                    thread_count,
-                );
-                scalar_right_mult_with_vector_ff(&packed, n, &vector, &mut expect);
-                assert_f32_bits(
-                    &got,
-                    &expect,
-                    &format!("mixed n={n} threads={thread_count}"),
-                );
-            }
         }
     }
 }

@@ -2,11 +2,13 @@
 # Render neato graphs at one thread and at four, and require the same bytes.
 #
 # The binary must be built with the layout crate's `parallel` feature.
-# GRAPHVIZ_PURE_THREADS=1 is sequential. =4 splits only at MIN_N (one million
-# nodes today: four threads lost to one on musl PGO at 1300–2000). tests/neato
-# is far below that. This script also generates a 1400-node pinned graph so a
-# large CLI run still has to match at one thread and at four. The owned kernel
-# itself is checked by the layout unit tests at every thread count.
+# Neato's mat-vec is sequential at every thread count: four threads lost to
+# one on musl PGO at 1300–2000, and a MIN_N of 1,000,000 (packed ~2 TB)
+# made the workers unreachable, so they were removed. GRAPHVIZ_PURE_THREADS
+# does not split this kernel. This script still requires =1 and =4 to match
+# on tests/neato plus a 1400-node pinned graph (large sequential identity,
+# not a parallel split). Sfdp's quadtree repulsion is the parallel path;
+# see parallel-sfdp-bytes.sh.
 #
 # Usage: scripts/parallel-neato-bytes.sh /path/to/graphviz-pure
 set -euo pipefail
