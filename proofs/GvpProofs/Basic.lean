@@ -13,7 +13,8 @@ Conventions:
   the same rounding sequence) as the C-mirror path. Never "a better approximation".
 * Prefer stating theorems over the Aeneas-extracted Rust in `GvpProofs/Extracted/`; when
   extraction rejects a module, state them over a Lean model and name the gap in the PR.
-* No `sorry` on `master`. A proof in progress stays on its branch.
+* No placeholder proofs on `master` (`grep -rn sorry proofs/GvpProofs` must print nothing). Work in
+  progress stays on its branch.
 -/
 
 namespace GvpProofs
