@@ -393,4 +393,83 @@ theorem indexUpdate_valid {M : Type*} [AddCommGroup M] {N : ℕ} (hN : N < 2 ^ 6
   simp only [Finset.sum_ite_eq', Finset.mem_Ioc]
 
 
+/-! ## The tree indexes the set bits
+
+`histZ ord S j` is the number of set halves of `S` whose edge has order `j`, as an element of
+`ZMod (2 ^ 64)`. The Fenwick tree is valid for it. -/
+
+/-- Number of halves in `S` whose edge has opening order `j`. -/
+def histZ (ord : ℕ → ℕ) (S : Finset ℕ) (j : ℕ) : ZMod (2 ^ 64) :=
+  ((S.filter (fun h => ord (h / 2) = j)).card : ZMod (2 ^ 64))
+
+theorem histZ_erase (ord : ℕ → ℕ) (S : Finset ℕ) (x : ℕ) (hx : x ∈ S) (j : ℕ) :
+    histZ ord (S.erase x) j = histZ ord S j + (if j = ord (x / 2) then -1 else 0) := by
+  unfold histZ
+  by_cases h : j = ord (x / 2)
+  · have hmem : x ∈ S.filter (fun h => ord (h / 2) = j) := by simp [hx, h]
+    have : (S.erase x).filter (fun h => ord (h / 2) = j)
+        = (S.filter (fun h => ord (h / 2) = j)).erase x := by
+      rw [Finset.filter_erase]
+    rw [this, Finset.card_erase_of_mem hmem, Nat.cast_sub (Finset.card_pos.mpr ⟨x, hmem⟩)]
+    simp [h, sub_eq_add_neg]
+  · have : (S.erase x).filter (fun h => ord (h / 2) = j) = S.filter (fun h => ord (h / 2) = j) := by
+      ext y
+      simp only [Finset.mem_filter, Finset.mem_erase]
+      constructor
+      · rintro ⟨⟨_, hy⟩, hy2⟩; exact ⟨hy, hy2⟩
+      · rintro ⟨hy, hy2⟩; exact ⟨⟨fun e => h (by rw [← hy2, e]), hy⟩, hy2⟩
+    rw [this]; simp [h]
+
+theorem histZ_insert (ord : ℕ → ℕ) (S : Finset ℕ) (x : ℕ) (hx : x ∉ S) (j : ℕ) :
+    histZ ord (insert x S) j = histZ ord S j + (if j = ord (x / 2) then 1 else 0) := by
+  unfold histZ
+  rw [Finset.filter_insert]
+  by_cases h : ord (x / 2) = j
+  · have : x ∉ S.filter (fun h => ord (h / 2) = j) := by simp [hx]
+    simp [h, Finset.card_insert_of_notMem this]
+  · simp [h, Ne.symm h]
+
+theorem histZ_congr (ord ord' : ℕ → ℕ) (S : Finset ℕ) (h : ∀ x ∈ S, ord' (x / 2) = ord (x / 2)) :
+    histZ ord' S = histZ ord S := by
+  funext j
+  unfold histZ
+  congr 2
+  exact Finset.filter_congr (fun x hx => by rw [h x hx])
+
+/-- Prefix of the histogram: the number of halves with order in `1..i`. -/
+theorem sum_histZ (ord : ℕ → ℕ) (S : Finset ℕ) (hpos : ∀ x ∈ S, 1 ≤ ord (x / 2)) (i : ℕ) :
+    ∑ k ∈ Finset.Ioc 0 i, histZ ord S k
+      = ((S.filter (fun h => ord (h / 2) ≤ i)).card : ZMod (2 ^ 64)) := by
+  have h := Finset.card_eq_sum_card_fiberwise (f := fun h => ord (h / 2))
+    (s := S.filter (fun h => ord (h / 2) ≤ i)) (t := Finset.Ioc 0 i)
+    (by intro x hx
+        have hx := Finset.mem_filter.mp (Finset.mem_coe.mp hx)
+        exact Finset.mem_coe.mpr (Finset.mem_Ioc.mpr ⟨hpos x hx.1, hx.2⟩))
+  rw [h, Nat.cast_sum]
+  refine Finset.sum_congr rfl (fun k hk => ?_)
+  unfold histZ
+  congr 2
+  ext x
+  simp only [Finset.mem_filter, Finset.mem_Ioc] at hk ⊢
+  constructor
+  · rintro ⟨hx, hxk⟩; exact ⟨⟨hx, by omega⟩, hxk⟩
+  · rintro ⟨⟨hx, _⟩, hxk⟩; exact ⟨hx, hxk⟩
+
+/-- Erasing a set half takes one unit out of the tree. -/
+theorem valid_erase {len : ℕ} (hN : len < 2 ^ 62) {t : ℕ → ZMod (2 ^ 64)} {ord : ℕ → ℕ}
+    {S : Finset ℕ} (hv : Valid len t (histZ ord S)) {x : ℕ} (hx : x ∈ S)
+    (h0 : 0 < ord (x / 2)) (hl : ord (x / 2) < len) :
+    ∃ t', indexUpdate len (-1) t (ord (x / 2)) = some t' ∧ Valid len t' (histZ ord (S.erase x)) := by
+  obtain ⟨t', ht', hv'⟩ := indexUpdate_valid hN hv (-1) h0 hl
+  refine ⟨t', ht', valid_congr (fun k => ?_) hv'⟩
+  rw [histZ_erase ord S x hx]
+
+theorem valid_insert {len : ℕ} (hN : len < 2 ^ 62) {t : ℕ → ZMod (2 ^ 64)} {ord : ℕ → ℕ}
+    {S : Finset ℕ} (hv : Valid len t (histZ ord S)) {x : ℕ} (hx : x ∉ S)
+    (h0 : 0 < ord (x / 2)) (hl : ord (x / 2) < len) :
+    ∃ t', indexUpdate len 1 t (ord (x / 2)) = some t' ∧ Valid len t' (histZ ord (insert x S)) := by
+  obtain ⟨t', ht', hv'⟩ := indexUpdate_valid hN hv 1 h0 hl
+  refine ⟨t', ht', valid_congr (fun k => ?_) hv'⟩
+  rw [histZ_insert ord S x hx]
+
 end GvpProofs.Circo.Fenwick
