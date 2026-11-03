@@ -783,4 +783,69 @@ theorem exclude_fold {len : ℕ} (hN : len < 2 ^ 62) :
       rw [Finset.filter_congr (fun h _ => hset h)] at v2
       exact v2
 
+theorem opt_some_bind (x : IdxState) (f : IdxState → Option IdxState) :
+    (some x >>= f) = f x := rfl
+
+theorem hits_eq_card (g : Graph) (ord : ℕ → ℕ) (X T : Finset ℕ) (th n : ℕ)
+    (hT : ∀ h, h ∈ T ↔ h ∈ X ∧ g.head (h / 2) ≠ n ∧ g.tail (h / 2) ≠ n) :
+    hits g ord X th n = (T.filter (fun h => th < ord (h / 2))).card := by
+  unfold hits
+  congr 1
+  ext h
+  simp only [Finset.mem_filter, hT]
+  tauto
+
+/-- One query of loop 2: `total - prefix(edge_order)` is the reference's count. -/
+theorem idxQuery_step {len L : ℕ} (hN : len < 2 ^ 62) (hL : L < len) (g : Graph) (n : ℕ)
+    {s : IdxState} {e : ℕ} {T : Finset ℕ} {total : ZMod (2 ^ 64)}
+    (hT : ∀ h, h ∈ T ↔ h ∈ s.bits ∧ g.head (h / 2) ≠ n ∧ g.tail (h / 2) ≠ n)
+    (hv : Valid len s.tree (histZ s.ord T))
+    (hposT : ∀ h ∈ T, 1 ≤ s.ord (h / 2) ∧ s.ord (h / 2) ≤ L)
+    (hcard : T.card < 2 ^ 64) (htot : total = (T.card : ZMod (2 ^ 64))) (he : s.ord e ≤ L) :
+    idxQuery len total s e = some
+      { s with crossings := if 0 < s.ord e then
+          wrapCrossings s.crossings (hits g s.ord s.bits (s.ord e) n) else s.crossings } := by
+  by_cases h0 : 0 < s.ord e
+  · have hp := indexPrefix_eq hN hv (i := s.ord e) (by omega)
+    rw [sum_histZ s.ord T (fun x hx => (hposT x hx).1)] at hp
+    set B := (T.filter (fun h => s.ord (h / 2) ≤ s.ord e)).card with hB
+    have hBA : B ≤ T.card := Finset.card_le_card (Finset.filter_subset _ _)
+    have hsub : checkedSub total (B : ZMod (2 ^ 64)) = some (T.card - B) := by
+      unfold checkedSub
+      rw [htot, ZMod.val_natCast, ZMod.val_natCast, Nat.mod_eq_of_lt hcard,
+        Nat.mod_eq_of_lt (by omega)]
+      simp [hBA]
+    have hcnt : T.card - B = hits g s.ord s.bits (s.ord e) n := by
+      rw [hits_eq_card g s.ord s.bits T _ n hT]
+      have := Finset.card_filter_add_card_filter_not (s := T)
+        (fun h => s.ord (h / 2) ≤ s.ord e)
+      have h2 : (T.filter (fun h => ¬ s.ord (h / 2) ≤ s.ord e))
+          = T.filter (fun h => s.ord e < s.ord (h / 2)) :=
+        Finset.filter_congr (fun _ _ => by omega)
+      rw [h2] at this
+      omega
+    simp [idxQuery, h0, hp, hsub, hcnt]
+  · simp [idxQuery, h0]
+
+/-- Loop 2 over all edges: the tree and the set are left alone, `crossings` gets the closed form. -/
+theorem query_fold {len L : ℕ} (hN : len < 2 ^ 62) (hL : L < len) (g : Graph) (n : ℕ)
+    (T : Finset ℕ) (total : ZMod (2 ^ 64)) :
+    ∀ (es : List ℕ) (s : IdxState),
+      (∀ h, h ∈ T ↔ h ∈ s.bits ∧ g.head (h / 2) ≠ n ∧ g.tail (h / 2) ≠ n) →
+      Valid len s.tree (histZ s.ord T) →
+      (∀ h ∈ T, 1 ≤ s.ord (h / 2) ∧ s.ord (h / 2) ≤ L) →
+      T.card < 2 ^ 64 → total = (T.card : ZMod (2 ^ 64)) → (∀ e ∈ es, s.ord e ≤ L) →
+      es.foldlM (idxQuery len total) s =
+        some { s with crossings := queryAcc g n s.ord s.bits es s.crossings }
+  | [], s, _, _, _, _, _, _ => by simp [queryAcc]
+  | e :: es, s, hT, hv, hposT, hcard, htot, hle => by
+    rw [List.foldlM_cons, idxQuery_step hN hL g n hT hv hposT hcard htot (hle e (by simp))]
+    rw [opt_some_bind]
+    have ih := query_fold hN hL g n T total es
+      { s with crossings := if 0 < s.ord e then
+          wrapCrossings s.crossings (hits g s.ord s.bits (s.ord e) n) else s.crossings }
+      hT hv hposT hcard htot (fun e he => hle e (by simp [he]))
+    rw [ih]
+    simp only [queryAcc, List.foldl_cons]
+
 end GvpProofs.Circo.Fenwick
