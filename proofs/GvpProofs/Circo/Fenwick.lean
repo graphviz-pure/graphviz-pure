@@ -13,7 +13,9 @@ Aeneas extraction was not available when this file was written (no `aeneas` bina
 machine), so the theorems are stated over a Lean model that mirrors the Rust control flow, one Lean
 function per Rust function. Branches that only select between the two counters, and the order of
 writes on paths the theorem shows are never taken, are not mirrored; the "Model vs Rust" list below
-names each such difference.
+names each such difference. Since #770, `FenwickExtractedMain.lean` proves the same statement over
+the Aeneas-extracted Rust, reusing this file's per-node simulation (`idxOccurrence_step`) and its
+Fenwick lemmas; the list below says which differences that removes.
 
 ## Theorems
 
@@ -26,6 +28,28 @@ names each such difference.
 * `updateGo_eq`, `prefixGo_eq`, `indexUpdate_valid`, `indexPrefix_eq`: the Fenwick tree itself.
 
 ## Model vs Rust
+
+`FenwickExtractedMain.count_indexed_eq_reference` (#770) states the theorem over the extracted
+`count_indexed` and `count_all_crossings_reference` themselves, so most of the differences this
+model had are gone for that theorem:
+
+* Removed: the dropped `?`s (the extracted code keeps every `get`/`get_mut`/`index` and the theorem
+  shows none fails); the `Finset` bitset (now `u64` words and the `trailing_zeros` /
+  `bits & (bits - 1)` walk); `ℕ` orders (now the `i32` slice, with the untouched slots equal to the
+  caller's); the tree as a function (now the slice, equal on slots `1..N-1`); the fuel counters;
+  the write order on failure paths (now the real code); the `i32::MAX` domain (now the explicit
+  hypothesis `list.len() ≤ i32::MAX`).
+* Changed: the `i32` total. This model wraps (release arithmetic); the extraction is the checked
+  build (`debug_assertions`), so the extracted theorem assumes the reference returned `ok` (no
+  overflow) and proves the exact count, not the wrapped one. Release behaviour past `i32::MAX` is
+  covered only by `countIndexed_wrapped` below, over the model.
+* Remaining: 64-bit `usize` (`Is64`, now an explicit hypothesis); `MUTATION = 0`;
+  `count_with_policy` and the `Circ` wrapper are not extracted, so the dispatch is still argued
+  here only; the `NodeWf` and size hypotheses are still facts about the caller; Aeneas's library
+  models of the standard library (slice and range iterators, `fill`, `get`, `?`) and the
+  hand-written `FunsExternal.lean` are trusted, as is the extraction itself.
+
+The list below is this model's own, as written for #728.
 
 * `?` on `get()`/`get_mut()` of the arena, adjacency, offsets and `open` is dropped: arrays are
   total functions `ℕ → _`. In Rust those paths hand the recount to the reference. The `none`s that

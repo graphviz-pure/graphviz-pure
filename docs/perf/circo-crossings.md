@@ -5,16 +5,19 @@ The retained bitset scan is `count_all_crossings_reference` in `blockpath.rs`.
 The production counter replaces its enumeration with Fenwick suffix queries.
 This is integer kernel restructuring (T8), with reused scratch (T9).
 
-Proof of record: `proofs/GvpProofs/Circo/Fenwick.lean` (Lean 4, `scripts/proofs/lake.sh build`).
-`proofs/GvpProofs/Circo/FenwickExtracted.lean` restates its Fenwick lemmas over the Lean that Aeneas
-generates from the shipped `index_update`, `index_prefix` and `add_crossings`
-(`proofs/GvpProofs/Extracted/CircoCount/`); the simulation itself is still over the model.
-It proves `count_indexed` returns the reference's count, final orders and half set, on a Lean model
-of the two functions. The prose below is the informal reading of that proof; the proof states two
+Proof of record: `proofs/GvpProofs/Circo/FenwickExtractedMain.lean` (Lean 4,
+`scripts/proofs/lake.sh build`), theorem `count_indexed_eq_reference`. It is stated over the Lean
+that Aeneas generates from the shipped `count_indexed` and `count_all_crossings_reference`
+(`proofs/GvpProofs/Extracted/CircoCount/`): whenever the reference returns `ok` (its checked `i32`
+additions did not overflow), `count_indexed` returns the same count, final orders and half set, and
+the count is the exact crossing count. It reuses the simulation of
+`proofs/GvpProofs/Circo/Fenwick.lean` (the model proof, #728) and the Fenwick lemmas of
+`FenwickExtracted.lean`. The prose below is the informal reading of that proof; the proof states two
 hypotheses the prose only implies: each node's adjacency slice lists every incident block edge
-exactly once, and every set half belongs to a block edge. The runtime check (`circo-check`)
-stays; the proof does not retire it, because the theorem is about the model (see "Model vs Rust"
-in the Lean file's header).
+exactly once, and every set half belongs to a block edge. The runtime check (`circo-check`) stays:
+the theorem covers 64-bit targets, the checked build and `MUTATION = 0`, takes the caller's graph
+facts as hypotheses, and trusts Aeneas's standard-library models (see "Model vs Rust" in
+`Fenwick.lean`'s header).
 
 ## Invariant and predicate
 
