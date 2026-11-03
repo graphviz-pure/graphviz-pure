@@ -102,6 +102,42 @@ pub fn gv_calloc_grow<T: Clone + Default>(v: &mut Vec<T>, nmemb: u64) -> Result<
     Ok(())
 }
 
+/// Not in C. The most `pointf` vertices `poly_init` and `point_init` may ask `gv_calloc` for
+/// (`outp * sides`): `peripheries` and `sides` are unbounded `int`s, so
+/// `peripheries=2147483647` or `sides=2147483647` asks for 64 GiB, which C allocates (#591).
+/// The reference machine has the memory for that, so C does not report it: it writes vertices
+/// until the machine runs out of memory (the OOM killer, or minutes of swapping).
+///
+/// Measured on the reference build under an 8 GB limit (`peripheries=n` on the default
+/// ellipse, two 16-byte vertices per periphery; `-Tdot` is the layout alone): C takes 0.07 s
+/// and 66 MB at n = 1e6 and 0.3 s and 0.63 GB at 1e7; at n = 67108863 (a 2 GiB array per
+/// node) 2.7 s and 2.1 GB for one node, and the port the same memory. `-Tsvg` writes 182
+/// bytes per periphery and takes 3 s at 1e6 and 29 s at 1e7 (1.8 GB). `shape=polygon
+/// sides=n`: C takes 42 s and 7.8 GB at 1e8. The cost is linear in the vertices, and C's
+/// resident memory is about the array's size per node, so the budget of 2^31 vertices, a
+/// 32 GiB array, needs about 64 GB and, for the layout alone, minutes in C (extrapolated: the
+/// 8 GB limit forbids measuring it). That is the point where C stops finishing on a normal
+/// machine, and C does everything below it that fits in memory. Past it the port reports
+/// C's out-of-memory message for C's request and exits 1, as C does under a memory limit.
+///
+/// A 32-bit target (wasm32) has at most 4 GiB; there the budget is 2^24 vertices (256 MiB).
+#[cfg(not(target_pointer_width = "32"))]
+pub const MAX_VERTICES: u64 = 1 << 31;
+/// See the 64-bit constant.
+#[cfg(target_pointer_width = "32")]
+pub const MAX_VERTICES: u64 = 1 << 24;
+
+/// The check that comes before `gv_calloc(nmemb, size_of::<T>())` for an array whose size the
+/// input chooses: C's overflow check first, then the port's budget of `max` elements, which
+/// reports the allocation C asked for as failed. Not in C (see [`MAX_VERTICES`]).
+pub fn gv_calloc_budget<T>(nmemb: u64, max: u64) -> Result<(), AllocFailure> {
+    let bytes = check(nmemb, size_of::<T>() as u64)?;
+    if nmemb > max {
+        return Err(AllocFailure::OutOfMemory { bytes });
+    }
+    Ok(())
+}
+
 /// The number of elements of C's `gv_calloc(nmemb, size)`, from the two counts C
 /// multiplies (`outp * sides` in `poly_init`).
 ///
@@ -149,6 +185,35 @@ mod tests {
         assert_eq!(v, vec![0; 4]);
         let v: Vec<u8> = gv_calloc(3, 1).unwrap();
         assert_eq!(v, vec![0; 3]);
+    }
+
+    #[test]
+    fn a_count_past_the_budget_reports_the_allocation_c_asked_for() {
+        // `peripheries=2147483647` on an ellipse: 2^31 peripheries of 2 vertices of 16 bytes.
+        let err =
+            gv_calloc_budget::<[f64; 2]>(element_count(1 << 31, 2), MAX_VERTICES).unwrap_err();
+        assert_eq!(
+            err.message(),
+            "out of memory when trying to allocate 68719476736 bytes"
+        );
+        // 2 peripheries of 2^31 sides: the same 64 GiB.
+        let err =
+            gv_calloc_budget::<[f64; 2]>(element_count(2, 1 << 31), MAX_VERTICES).unwrap_err();
+        assert_eq!(
+            err.message(),
+            "out of memory when trying to allocate 68719476736 bytes"
+        );
+        // The product overflows `size_t` once multiplied by 16: C's overflow message.
+        let err = gv_calloc_budget::<[f64; 2]>(element_count(1 << 31, 1 << 31), MAX_VERTICES)
+            .unwrap_err();
+        assert!(matches!(err, AllocFailure::Overflow { .. }), "{err:?}");
+        // One vertex past the budget is refused, the budget itself is not.
+        assert!(gv_calloc_budget::<[f64; 2]>(MAX_VERTICES, MAX_VERTICES).is_ok());
+        let err = gv_calloc_budget::<[f64; 2]>(MAX_VERTICES + 1, MAX_VERTICES).unwrap_err();
+        assert_eq!(
+            err.message(),
+            "out of memory when trying to allocate 34359738384 bytes"
+        );
     }
 
     #[test]
