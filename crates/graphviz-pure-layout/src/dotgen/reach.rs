@@ -121,7 +121,7 @@ impl ReachCache {
             let found = set.reaches(nodes, edges, v);
             // A set only grows past its reservation if `nodes` grew since it was admitted.
             if set.bits.len() > set.charged {
-                self.words = self.words.saturating_add(set.bits.len() - set.charged);
+                self.words = self.words.saturating_add(set.bits.len().saturating_sub(set.charged));
                 set.charged = set.bits.len();
             }
             return found;
