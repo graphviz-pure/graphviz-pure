@@ -614,4 +614,40 @@ theorem idxRestore_step {len : ℕ} (hN : len < 2 ^ 62) {s : IdxState} {e : ℕ}
     rw [hset, ho] at v2
     exact v2
 
+theorem idxRestoreClose_step {len : ℕ} (hN : len < 2 ^ 62) (g : Graph) (n : ℕ) {s : IdxState}
+    {e : ℕ} {rest : Finset ℕ} (he : e ∈ rest)
+    (hv : Valid len s.tree (histZ s.ord (s.bits.filter (fun h => h / 2 ∉ rest))))
+    (hpos : ∀ h ∈ s.bits, 1 ≤ s.ord (h / 2) ∧ s.ord (h / 2) < len) :
+    ∃ s', idxRestoreClose g n len s e = some s' ∧ s'.ord = s.ord ∧
+      s'.crossings = s.crossings ∧
+      s'.bits = (if 0 < s.ord e then s.bits.erase (halfOf g n e) else s.bits) ∧
+      Valid len s'.tree (histZ s.ord (s'.bits.filter (fun h => h / 2 ∉ rest.erase e))) := by
+  obtain ⟨s1, h1, c1, v1⟩ := idxRestore_step hN he hv hpos
+  have hb : s1.bits = s.bits := by rw [show s1.bits = s1.toRefState.bits from rfl, c1]
+  have ho : s1.ord = s.ord := by rw [show s1.ord = s1.toRefState.ord from rfl, c1]
+  have hc : s1.crossings = s.crossings := by
+    rw [show s1.crossings = s1.toRefState.crossings from rfl, c1]
+  have hhalf : (halfOf g n e) / 2 = e := by unfold halfOf; split_ifs <;> omega
+  by_cases h0 : 0 < s.ord e
+  · by_cases hm : halfOf g n e ∈ s.bits
+    · have hmU : halfOf g n e ∈ s.bits.filter (fun h => h / 2 ∉ rest.erase e) :=
+        Finset.mem_filter.mpr ⟨hm, by rw [hhalf]; simp⟩
+      obtain ⟨t', ht', hv'⟩ := valid_erase hN v1 hmU (by rw [hhalf]; exact h0)
+        (by rw [hhalf]; exact (hhalf ▸ (hpos _ hm).2))
+      rw [hhalf] at ht'
+      refine ⟨{ s1 with bits := s1.bits.erase (halfOf g n e), tree := t' }, ?_, ho, hc, ?_, ?_⟩
+      · simp [idxRestoreClose, h1, ho, hb, h0, hm, ht']
+      · simp [hb, h0]
+      · show Valid len t' (histZ s.ord (Finset.filter _ (s1.bits.erase _)))
+        rw [hb, Finset.filter_erase]
+        exact hv'
+    · refine ⟨s1, ?_, ho, hc, ?_, ?_⟩
+      · simp [idxRestoreClose, h1, ho, hb, h0, hm]
+      · simp [hb, h0, Finset.erase_eq_of_notMem hm]
+      · rw [hb]; exact v1
+  · refine ⟨s1, ?_, ho, hc, ?_, ?_⟩
+    · simp [idxRestoreClose, h1, ho, h0]
+    · simp [hb, h0]
+    · rw [hb]; exact v1
+
 end GvpProofs.Circo.Fenwick
