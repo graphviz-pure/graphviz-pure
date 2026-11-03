@@ -783,7 +783,7 @@ theorem exclude_fold {len : ℕ} (hN : len < 2 ^ 62) :
       rw [Finset.filter_congr (fun h _ => hset h)] at v2
       exact v2
 
-theorem opt_some_bind (x : IdxState) (f : IdxState → Option IdxState) :
+theorem opt_some_bind {α : Type} (x : α) (f : α → Option IdxState) :
     (some x >>= f) = f x := rfl
 
 theorem hits_eq_card (g : Graph) (ord : ℕ → ℕ) (X T : Finset ℕ) (th n : ℕ)
@@ -947,5 +947,106 @@ theorem open_fold {adjacency : List ℕ} {E len order : ℕ} (hN : len < 2 ^ 62)
     refine ⟨s2, ?_, ?_, i2⟩
     · rw [List.foldlM_cons, h1]; exact h2
     · rw [c2, List.foldl_cons, c1]
+
+/-! ## One occurrence -/
+
+theorem card_le_of_bits {E : ℕ} {S : Finset ℕ} (h : ∀ x ∈ S, x < 2 * E) : S.card ≤ 2 * E := by
+  have : S ⊆ Finset.range (2 * E) := fun x hx => Finset.mem_range.mpr (h x hx)
+  simpa using Finset.card_le_card this
+
+/-- One list occurrence: the indexed counter keeps the reference's `order`/`open`/`crossings`
+and re-establishes the invariant. -/
+theorem idxOccurrence_step {adjacency : List ℕ} {E len L k : ℕ} (hN : len < 2 ^ 62)
+    (hL : L < len) (hk : k + 1 ≤ L) (hE62 : E < 2 ^ 62) (g : Graph) (n : ℕ)
+    (hE : ∀ e ∈ adjacency, e < E) (hnd : (g.adj n).Nodup)
+    (hadj : ∀ e, e ∈ g.adj n ↔ g.head e = n ∨ g.tail e = n)
+    (hsub : ∀ e ∈ g.adj n, e ∈ adjacency) {s : IdxState} (hI : Inv adjacency E len k s) :
+    ∃ s', idxOccurrence g L len n (k + 1) s = some s' ∧
+      s'.toRefState = refOccurrence g n (k + 1) s.toRefState ∧ Inv adjacency E len (k + 1) s' := by
+  set es := g.adj n with hes
+  have hpos : ∀ h ∈ s.bits, 1 ≤ s.ord (h / 2) ∧ s.ord (h / 2) < len := fun h hh => by
+    have := hI.pos h hh; omega
+  -- loop 1
+  obtain ⟨sA, hA, cA, vA⟩ := exclude_fold hN es ∅ s hnd (fun e _ => by simp)
+    (by simpa using hI.tree) hpos
+  have oA := toRef_ord cA
+  have bA := toRef_bits cA
+  have crA := toRef_crossings cA
+  set T := s.bits.filter (fun h => h / 2 ∉ ∅ ∪ es.toFinset) with hTdef
+  have hT : ∀ h, h ∈ T ↔ h ∈ sA.bits ∧ g.head (h / 2) ≠ n ∧ g.tail (h / 2) ≠ n := by
+    intro h
+    rw [bA, hTdef, Finset.mem_filter]
+    have := hadj (h / 2)
+    simp only [Finset.empty_union, List.mem_toFinset]
+    constructor
+    · rintro ⟨h1, h2⟩
+      exact ⟨h1, fun hh => h2 (this.mpr (Or.inl hh)), fun hh => h2 (this.mpr (Or.inr hh))⟩
+    · rintro ⟨h1, h2, h3⟩
+      exact ⟨h1, fun hh => by rcases this.mp hh with hh | hh <;> contradiction⟩
+  have hTsub : ∀ h ∈ T, h ∈ s.bits := fun h hh => (Finset.mem_filter.mp hh).1
+  have vA' : Valid len sA.tree (histZ sA.ord T) := by rw [oA]; exact vA
+  have hposT : ∀ h ∈ T, 1 ≤ sA.ord (h / 2) ∧ sA.ord (h / 2) ≤ L := fun h hh => by
+    rw [oA]; have := hI.pos h (hTsub h hh); omega
+  have hcard : T.card < 2 ^ 64 := by
+    have := card_le_of_bits (E := E) (S := T) (fun x hx => hI.lt x (hTsub x hx))
+    omega
+  -- total
+  have htotal : indexPrefix len sA.tree L = some (T.card : ZMod (2 ^ 64)) := by
+    rw [indexPrefix_eq hN vA' hL, sum_histZ sA.ord T (fun x hx => (hposT x hx).1)]
+    congr 3
+    exact Finset.filter_true_of_mem (fun x hx => (hposT x hx).2)
+  -- loop 2
+  have hle : ∀ e ∈ es, sA.ord e ≤ L := fun e he => by
+    rw [oA]; have := hI.ord_le e (hsub e he); omega
+  have hB := query_fold hN hL g n T (T.card : ZMod (2 ^ 64)) es sA hT vA' hposT hcard rfl hle
+  set sB : IdxState := { sA with crossings := queryAcc g n sA.ord sA.bits es sA.crossings } with hsB
+  -- loop 3
+  have hposB : ∀ h ∈ sB.bits, 1 ≤ sB.ord (h / 2) ∧ sB.ord (h / 2) < len := by
+    intro h hh; show 1 ≤ sA.ord (h / 2) ∧ sA.ord (h / 2) < len
+    rw [oA]; rw [bA] at hh; exact hpos h hh
+  have vB : Valid len sB.tree (histZ sB.ord (sB.bits.filter (fun h => h / 2 ∉ es.toFinset))) := by
+    show Valid len sA.tree (histZ sA.ord (sA.bits.filter (fun h => h / 2 ∉ es.toFinset)))
+    rw [oA, bA]
+    have e : s.bits.filter (fun h => h / 2 ∉ es.toFinset) = T := by simp [hTdef]
+    rw [e]; exact vA
+  obtain ⟨sC, hC, oC, crC, bC, vC⟩ := restoreClose_fold hN g n es es.toFinset sB hnd
+    (fun e he => List.mem_toFinset.mpr he) vB hposB
+  have oC' : sC.ord = s.ord := oC.trans oA
+  have bC' : sC.bits = s.bits \ erased g n s.ord es := by
+    rw [bC]; show sA.bits \ erased g n sA.ord es = _; rw [bA, oA]
+  have crC' : sC.crossings = queryAcc g n s.ord s.bits es s.crossings := by
+    rw [crC]; show queryAcc g n sA.ord sA.bits es sA.crossings = _; rw [oA, bA, crA]
+  have hIC : Inv adjacency E len (k + 1) sC := by
+    refine ⟨?_, ?_, ?_, ?_⟩
+    · intro h hh
+      rw [bC'] at hh
+      have := hI.pos h (Finset.mem_sdiff.mp hh).1
+      rw [oC']; omega
+    · intro h hh
+      rw [bC'] at hh
+      exact hI.lt h (Finset.mem_sdiff.mp hh).1
+    · intro e he
+      rw [oC']; have := hI.ord_le e he; omega
+    · have : ∀ h, (h / 2 ∉ es.toFinset \ es.toFinset) := by simp
+      rw [Finset.filter_true_of_mem (fun h _ => this h)] at vC
+      have e : sB.ord = s.ord := oA
+      rw [e] at vC
+      show Valid len sC.tree (histZ sC.ord sC.bits)
+      rw [oC']; exact vC
+  -- loop 4
+  obtain ⟨sD, hD, cD, iD⟩ := open_fold hN (order := k + 1) (by omega) (by omega) g n hE es sC
+    (fun e he => hsub e he) hIC
+  refine ⟨sD, ?_, ?_, iD⟩
+  · unfold idxOccurrence
+    rw [← hes, hA, opt_some_bind, htotal, opt_some_bind, hB, opt_some_bind, hC, opt_some_bind]
+    exact hD
+  · unfold refOccurrence
+    rw [← hes, refClose_fold g n es s.toRefState (fun e he => (hadj e).mp he), cD]
+    have : sC.toRefState = { s.toRefState with
+        crossings := queryAcc g n s.ord s.bits es s.crossings
+        bits := s.bits \ erased g n s.ord es } := by
+      show RefState.mk sC.ord sC.bits sC.crossings = RefState.mk s.ord _ _
+      rw [oC', bC', crC']
+    rw [this]
 
 end GvpProofs.Circo.Fenwick
