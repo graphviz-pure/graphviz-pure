@@ -47,10 +47,10 @@
    "instructions": 830205029
   },
   "synth/twopi_tree_5000.gv -Tsvg": {
-   "heap_blocks": 366345,
-   "heap_bytes": 48829135,
+   "heap_blocks": 366337,
+   "heap_bytes": 48377071,
    "heap_peak_bytes": 23533386,
-   "instructions": 472290072
+   "instructions": 462619500
   },
   "tests/circo/wild_gv16_directed_sdh_29b016.gv -Tsvg": {
    "heap_blocks": 17705,
@@ -101,10 +101,10 @@
    "instructions": 618829934
   },
   "tests/twopi/fx_arrows.gv -Tsvg": {
-   "heap_blocks": 16206,
-   "heap_bytes": 6541262,
-   "heap_peak_bytes": 834546,
-   "instructions": 2070691238
+   "heap_blocks": 16198,
+   "heap_bytes": 6537006,
+   "heap_peak_bytes": 834498,
+   "instructions": 2070602261
   },
   "tests/wild/gv16_graphs_b143_5416de.gv -Tplain": {
    "heap_blocks": 99958,

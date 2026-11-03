@@ -1,0 +1,25 @@
+# Lean 4 proofs for graphviz-pure: "Improvement through Math Proofs" (milestone 10).
+# Every theorem has the shape "fast path = C-mirror path". Build with scripts/proofs/lake.sh.
+name = "gvp-proofs"
+version = "0.1.0"
+defaultTargets = ["GvpProofs"]
+
+[[require]]
+name = "mathlib"
+scope = "leanprover-community"
+rev = "v4.35.0"
+
+# The Lean library that Aeneas-extracted files import. Pinned to the commit the Aeneas binary was
+# built from (docs/research/lean-experiment/README.md); bump the binary and this rev together.
+[[require]]
+name = "aeneas"
+git = { url = "https://github.com/AeneasVerif/aeneas", subDir = "backends/lean" }
+rev = "ab34bd28458a08c150b7cbf1873e59af74588138"
+
+[[lean_lib]]
+name = "GvpProofs"
+# Glob: a proof PR adds proofs/GvpProofs/<Engine>/<Name>.lean and nothing else.
+globs = ["GvpProofs.+"]
+# An unknown name is an error, not an implicit variable: Aeneas prints types it does not define
+# (F64, see GvpProofs/Extracted/Floats.lean), and auto-binding would let them through silently.
+leanOptions = { autoImplicit = false }
