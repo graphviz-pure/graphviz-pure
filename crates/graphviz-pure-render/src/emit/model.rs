@@ -30,9 +30,30 @@ pub(crate) struct TextFont {
     pub ps: Option<&'static PostscriptFontAlias>,
 }
 
+type PostscriptAnswer = (
+    graphviz_pure_core::font::FontName,
+    Option<&'static PostscriptFontAlias>,
+);
+
+thread_local! {
+    static LAST_POSTSCRIPT_FONT: std::cell::RefCell<Option<PostscriptAnswer>> =
+        const { std::cell::RefCell::new(None) };
+}
+
 impl TextFont {
     pub fn new(name: graphviz_pure_core::font::FontName, size: f64, flags: u8) -> Self {
-        let ps = translate_postscript_fontname(&name);
+        // A drawing repeats its fonts: remember the last answer of the table search.
+        let ps = LAST_POSTSCRIPT_FONT.with(|last| {
+            let mut last = last.borrow_mut();
+            match &*last {
+                Some((font, ps)) if *font == name => *ps,
+                _ => {
+                    let ps = translate_postscript_fontname(&name);
+                    *last = Some((name.clone(), ps));
+                    ps
+                }
+            }
+        });
         TextFont {
             name,
             size,
@@ -706,6 +727,23 @@ mod ownership_tests {
                 assert_eq!(node.label.pos.x.to_bits(), node.coord.x.to_bits());
                 assert_eq!(node.label.pos.y.to_bits(), node.coord.y.to_bits());
             }
+        }
+    }
+
+    #[test]
+    fn repeated_fonts_get_the_table_answer_of_their_own_name() {
+        for name in [
+            "Times-Roman",
+            "AvantGarde-Book",
+            "Times-Roman",
+            "no such font",
+            "Times-Roman",
+        ] {
+            let font = TextFont::new(name.to_string().into(), 14.0, 0);
+            assert_eq!(
+                font.ps.map(|a| a.name),
+                translate_postscript_fontname(name).map(|a| a.name)
+            );
         }
     }
 
