@@ -66,6 +66,15 @@ def tree(n, engine="twopi"):
     return "\n".join(out) + "\n"
 
 
+def parallel_minlen(k, length):
+    """k two-way forks with one branch `length` ranks long, the other two edges: long chains of
+    virtual nodes, whose entering edges tie. Network simplex's tie-breaking stays on this shape."""
+    edges = "".join(
+        f" a -> b{j} [minlen={length}];\n a -> c{j};\n c{j} -> b{j};\n" for j in range(k)
+    )
+    return f"digraph par_{k}_{length} {{\nlayout=dot;\n" + edges + "}\n"
+
+
 def components(n):
     out = [f"digraph components_{n} {{", "layout=dot;"]
     for i in range(n):
@@ -156,6 +165,7 @@ GRAPHS = {
     # Ratchet-only: enough nodes to expose a register spill in the quadratic
     # membership scan, while -Knop2 -Tcanon avoids a layout-dominated case.
     "nop2_subgraph_10000": lambda: large_subgraph(10000),
+    "dot_par_10_500": lambda: parallel_minlen(10, 500),
 }
 for n in (1000, 5000, 20000):
     GRAPHS[f"dot_dag_{n}"] = lambda n=n: dag(n)

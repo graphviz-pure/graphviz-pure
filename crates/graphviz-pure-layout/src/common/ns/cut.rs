@@ -13,6 +13,11 @@
 //!   when the pivots end;
 //! - **parent pointers**, re-hung at each pivot. `lim`/`low` are not maintained.
 //!
+//! The cut sets come in two kinds ([`Kind`]). Stored in a pool, a pivot costs about
+//! |cut set of e| × |tree cycle of f|, and large graphs shaped like dot's DAGs want that.
+//! Computed when asked for (`computed.rs`), nothing is stored and a pivot costs about the
+//! smaller side of e's cut, which is what the rest want: their tree cycles are long.
+//!
 //! C's candidates for `enter_edge(e)` are exactly the members of e's cut set that cross
 //! against `e`. C returns the first of minimum slack in the order its stack-based scan meets
 //! them; that order is recomputed from the parent pointers, only between tied candidates. A
@@ -35,9 +40,26 @@
 
 use super::{Ctx, NsGraph, dfs_range_impl, exchange_tree_edges, seq, slack, tree_edge};
 
-/// Selector: graphs with fewer nodes than this keep C's search. Their subtree walks are short,
-/// and the cut sets' storage would not pay for itself.
-const CUT_SETS_MIN_NODES: usize = 2500;
+mod computed;
+
+/// How a run gets a tree edge's cut set.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub(super) enum Kind {
+    /// Stored in the pool, and edited at each pivot.
+    #[default]
+    Pool,
+    /// Computed when asked for, from the smaller side of the cut (`computed.rs`).
+    Computed,
+}
+
+/// Selector: runs with fewer nodes than this keep C's functions. Their walks are short, and
+/// building even the computed path's links would not pay for itself (`docs/perf/ns-cut-sets.md`,
+/// "The selector").
+const COMPUTED_MIN_NODES: usize = 64;
+
+/// Selector: graphs with fewer nodes than this do not store their cut sets. Computing them
+/// is faster until the smaller side of a cut is larger than the edits a stored set needs.
+const CUT_SETS_MIN_NODES: usize = 10_000;
 
 /// Selector: the largest estimated cost ratio, (mean tree-cycle length × mean cut-set size) /
 /// node count, for which the cut sets are faster than C's walks. Tuned on the corpus
@@ -56,14 +78,29 @@ const CUT_SETS_SAMPLE: usize = 64;
 
 /// The cut sets' pool may hold at most this many four-byte words per node and non-tree edge.
 /// The selector's estimate is a sample of the initial tree; this is the bound that holds
-/// during the run. A build that needs more keeps C's functions, and a pivot that could take
-/// the pool past it hands the rest of the run to them, before it changes anything.
+/// during the run. A build that needs more computes its cut sets instead, and a pivot that could
+/// take the pool past it hands the rest of the run to C's functions, before it changes anything.
 const CUT_SETS_MAX_WORDS: usize = 24;
 
 /// Storage kept between runs, in four-byte words: a store that grew past this is released
 /// when its run ends, so a large graph's cut sets do not stay allocated for the rest of the
 /// layout. Smaller ones are kept and reused by the next run.
 const CUT_SETS_KEEP_WORDS: usize = 1 << 18;
+
+/// The same for the computed path. Its storage is cheap to build and the largest run comes
+/// late, so all but a small store is released: the peak of the layout comes after it.
+const COMPUTED_KEEP_WORDS: usize = 1 << 12;
+
+/// How many steps up the tree one query may spend comparing tied candidates two by two. It costs
+/// ties × depth, which is little on most graphs, where ties are few and the tree is shallow, and
+/// quadratic on long chains: past this, C's own scan order settles the tie, for no more than that
+/// scan costs (`docs/perf/ns-cut-sets.md` §4.1).
+const TIE_CLIMBS: u32 = 1024;
+
+/// How many nodes, per node of the run, computed cuts may walk in `LR_balance` beyond what C's
+/// functions must visit on the same queries. Past that, C's functions finish it
+/// (`docs/perf/ns-cut-sets.md` §4.3).
+const BALANCE_SPARE_WALKS: usize = 8;
 
 /// Cut-set entry flag: the edge crosses from head(t)'s side of the cut to tail(t)'s side.
 const AGAINST: u32 = 0x8000_0000;
@@ -147,6 +184,12 @@ pub struct CutStore {
     budget: usize,
     /// The pivot [`CutStore::prepare`] checked, its cycle in `work`, for `update`.
     prepared: Option<Prepared>,
+    kind: Kind,
+    /// The computed path's storage.
+    computed: computed::Computed,
+    /// By edge: the number of the last tie it was in. Grown when a run first has a tie.
+    tie_mark: Vec<u32>,
+    tie_gen: u32,
 }
 
 /// A pivot whose cut sets, LCA, tree cycle and pool budget were checked.
@@ -246,19 +289,34 @@ fn worth_it<G: NsGraph + ?Sized>(g: &G) -> bool {
     entries <= CUT_SETS_MAX_ENTRIES * (n as f64 + m as f64) && cost <= CUT_SETS_MAX_COST
 }
 
-/// Starts the cut-set pivots after `feasible_tree` (`lim`/`low` valid), when [`worth_it`]
-/// (always in check mode); `None` keeps C's functions.
-pub(super) fn begin<G: NsGraph + ?Sized>(g: &mut G, ctx: &mut Ctx) -> Option<CutStore> {
-    if !check::ON && !worth_it(g) {
-        return None;
-    }
-    let mut store = g.take_cut_store();
-    if store.build(g, ctx) {
-        Some(store)
-    } else {
-        g.keep_cut_store(store);
+/// Which path a run takes: C's functions on small runs, else stored cut sets when [`worth_it`],
+/// else computed ones.
+fn choose<G: NsGraph + ?Sized>(g: &G) -> Option<Kind> {
+    if g.nlist().len() < COMPUTED_MIN_NODES {
         None
+    } else if worth_it(g) {
+        Some(Kind::Pool)
+    } else {
+        Some(Kind::Computed)
     }
+}
+
+/// Starts the cut-set pivots after `feasible_tree` (`lim`/`low` valid), on the path [`choose`]
+/// picks (check mode picks both, in turn); `None` keeps C's functions. A pool that would not
+/// fit its budget computes its cut sets instead.
+pub(super) fn begin<G: NsGraph + ?Sized>(g: &mut G, ctx: &mut Ctx) -> Option<CutStore> {
+    let kind = if check::ON { check::kind() } else { choose(g)? };
+    let mut store = g.take_cut_store();
+    store.kind = kind;
+    if store.build(g, ctx) {
+        return Some(store);
+    }
+    store.kind = Kind::Computed;
+    if kind == Kind::Pool && store.build(g, ctx) {
+        return Some(store);
+    }
+    g.keep_cut_store(store);
+    None
 }
 
 impl CutStore {
@@ -296,9 +354,34 @@ impl CutStore {
         self.set_entry(start.wrapping_sub(1), cap);
     }
 
+    /// How many edges are in tree slot `s`'s cut set. On the computed path, it must be the
+    /// one last computed.
+    fn cut_len(&self, s: usize) -> u32 {
+        match self.kind {
+            Kind::Pool => self.tree(s).len,
+            Kind::Computed => self.computed.cross.len() as u32,
+        }
+    }
+
+    /// Entry `i` of tree slot `s`'s cut set.
+    fn cut_entry(&self, s: usize, i: u32) -> u32 {
+        match self.kind {
+            Kind::Pool => self.entry(self.tree(s).start.wrapping_add(i)),
+            Kind::Computed => self.computed.cross.get(i as usize).copied().unwrap_or(0),
+        }
+    }
+
     /// Check mode's corruption: takes `f` out of tree slot `s`'s cut set.
     #[cfg(any(test, feature = "ns-check"))]
     fn remove_member(&mut self, s: usize, f: usize) {
+        if self.kind == Kind::Computed {
+            let at = (0..self.cut_len(s))
+                .find(|&i| self.edge(self.cut_entry(s, i) & ID).edge as usize == f);
+            if let Some(i) = at {
+                self.computed.cross.swap_remove(i as usize);
+            }
+            return;
+        }
         let set = self.tree(s);
         let at = (0..set.len)
             .find(|&i| self.edge(self.entry(set.start.wrapping_add(i)) & ID).edge as usize == f);
@@ -309,9 +392,11 @@ impl CutStore {
 
     /// The local index of `f` among the members of tree slot `s`'s cut set.
     fn member(&self, s: usize, f: usize) -> Option<u32> {
-        let set = self.tree(s);
-        (0..set.len)
-            .map(|i| self.entry(set.start.wrapping_add(i)) & ID)
+        if self.kind == Kind::Computed && self.computed.cut_of != Some(s) {
+            return None;
+        }
+        (0..self.cut_len(s))
+            .map(|i| self.cut_entry(s, i) & ID)
             .find(|&k| self.edge(k).edge as usize == f)
     }
 
@@ -329,8 +414,14 @@ impl CutStore {
             .capacity()
             .saturating_add(self.work.capacity())
             .saturating_add(self.edges.capacity().saturating_mul(4))
-            .saturating_add(self.tree.capacity().saturating_mul(5));
-        if words > CUT_SETS_KEEP_WORDS {
+            .saturating_add(self.tree.capacity().saturating_mul(5))
+            .saturating_add(self.tie_mark.capacity())
+            .saturating_add(self.computed.words());
+        let keep = match self.kind {
+            Kind::Pool => CUT_SETS_KEEP_WORDS,
+            Kind::Computed => COMPUTED_KEEP_WORDS,
+        };
+        if words > keep {
             *self = CutStore::default();
         }
     }
@@ -357,6 +448,8 @@ impl CutStore {
         self.tree.resize(ctx.tree_edge.len(), TreeSlot::default());
         self.mark_gen = 0;
         self.stamp_gen = 0;
+        self.tie_mark.fill(0);
+        self.tie_gen = 0;
         self.garbage = 0;
         self.prepared = None;
         self.root_rank = g.nlist().first().map_or(0, |&r| g.rank(r));
@@ -379,6 +472,9 @@ impl CutStore {
                 };
                 ts.edge = k;
             }
+        }
+        if self.kind == Kind::Computed {
+            return self.build_computed(g);
         }
         // count, lay the segments out with room to grow, then fill
         for e in all_edges(g).filter(|&e| !tree_edge(g, e)) {
@@ -441,7 +537,8 @@ impl CutStore {
     /// C's candidates are the non-tree edges crossing e's cut against `e` (from head(e)'s
     /// side to tail(e)'s side): the `AGAINST` members of e's cut set. C keeps the first of
     /// minimum slack in its scan order, which [`CutStore::scanned_before`] decides between
-    /// two tied candidates. That is C's answer only while no candidate has a negative slack:
+    /// two tied candidates, within `TIE_CLIMBS` steps, and [`CutStore::first_tied`] past them.
+    /// That is C's answer only while no candidate has a negative slack:
     /// below 0, C's `Slack > 0` pruning can stop its scan before the minimum ([`Fallback`]).
     /// A pivot with no candidate at all asks C's search too ([`Fallback`]).
     ///
@@ -459,10 +556,16 @@ impl CutStore {
         };
         let tail_is_child = g.par(g.tail(e)) == Some(e);
         let v = if tail_is_child { g.tail(e) } else { g.head(e) };
-        let set = self.tree(s);
+        if self.kind == Kind::Computed {
+            check::corrupt(self, check::Corrupt::Links, v, 0);
+            self.compute_cut(s, v, tail_is_child);
+        }
         let mut best: Option<(u32, i32)> = None;
-        for i in 0..set.len {
-            let x = self.entry(set.start.wrapping_add(i));
+        let mut climbs = check::climbs().unwrap_or(TIE_CLIMBS);
+        // the tie at `best` that the climbs could not settle
+        let mut unsettled = false;
+        for i in 0..self.cut_len(s) {
+            let x = self.cut_entry(s, i);
             if x & AGAINST == 0 {
                 continue;
             }
@@ -475,20 +578,38 @@ impl CutStore {
                 None => true,
                 Some((w, sw)) if sk == sw => {
                     check::count(&check::TIES);
-                    self.scanned_before(g, tail_is_child, v, k, w)
+                    if unsettled {
+                        false
+                    } else if let Some(before) =
+                        self.scanned_before(g, tail_is_child, v, k, w, &mut climbs)
+                    {
+                        before
+                    } else {
+                        unsettled = true;
+                        false
+                    }
                 }
                 Some((_, sw)) => sk < sw,
             };
             if better {
+                if best.is_some_and(|(_, sw)| sk < sw) {
+                    unsettled = false;
+                }
                 best = Some((k, sk));
             }
         }
         // no candidate: for a pivot, C's search is asked (`rank2` reports it if C finds none
         // either); `LR_balance` skips such edges, as C does
-        let Some((k, _)) = best else {
+        let Some((k, least)) = best else {
             return if pivot { Err(Fallback) } else { Ok(None) };
         };
-        let f = self.edge(k).edge as usize;
+        let f = if unsettled {
+            check::count(&check::TIE_SCANS);
+            self.first_tied(g, s, least, tail_is_child, v)
+                .ok_or(Fallback)?
+        } else {
+            self.edge(k).edge as usize
+        };
         if pivot {
             check::corrupt(self, check::Corrupt::Enter, s, f);
             self.prepare(g, e, f)?;
@@ -508,6 +629,7 @@ impl CutStore {
         ) else {
             return Err(Fallback);
         };
+        let pool = self.kind == Kind::Pool;
         let (ft, fh) = (g.tail(f), g.head(f));
         let Some(lca) = self.lca(g, ft, fh) else {
             return Err(Fallback);
@@ -527,14 +649,16 @@ impl CutStore {
                 // t's set gains at most e's members (all but f, plus e itself), so it ends
                 // the pivot with at most `last` entries. It moves only when full, each time
                 // to the end of the pool with capacity 2·cap + 4 and a header: replay that
-                growth = growth.saturating_add(moves(self.tree(s), len_e));
+                if pool {
+                    growth = growth.saturating_add(moves(self.tree(s), len_e));
+                }
                 u = other(g, t, u);
             }
         }
-        if self.pool.len().saturating_add(growth) > self.budget && self.garbage > 0 {
+        if pool && self.pool.len().saturating_add(growth) > self.budget && self.garbage > 0 {
             self.compact();
         }
-        if self.pool.len().saturating_add(growth) > self.budget {
+        if pool && self.pool.len().saturating_add(growth) > self.budget {
             return Err(Fallback);
         }
         self.prepared = Some(Prepared { e, f, se, kf, lca });
@@ -549,6 +673,8 @@ impl CutStore {
     /// an out-tree edge in `ND_tree_out` order; `dfs_enter_outedge` the same with in and out
     /// swapped. So nodes come in pre-order, children in the reverse of their push order, and
     /// edges in list order within a node.
+    ///
+    /// `None` when the climbs would pass `climbs`, the steps this query has left.
     fn scanned_before<G: NsGraph + ?Sized>(
         &mut self,
         g: &G,
@@ -556,7 +682,8 @@ impl CutStore {
         v: usize,
         c: u32,
         w: u32,
-    ) -> bool {
+        climbs: &mut u32,
+    ) -> Option<bool> {
         let (c, w) = (self.edge(c).edge as usize, self.edge(w).edge as usize);
         let end = |e: usize| if insearch { g.head(e) } else { g.tail(e) };
         let (sc, sw) = (end(c), end(w));
@@ -566,25 +693,30 @@ impl CutStore {
             } else {
                 g.out_edges(sc)
             };
-            return first_of(list, c, w);
+            return Some(first_of(list, c, w));
         }
         // both ancestor paths up to v, one after the other
         let mut walk = std::mem::take(&mut self.work);
         walk.clear();
-        let climb = |walk: &mut Vec<u32>, mut u: usize| {
+        let mut climb = |walk: &mut Vec<u32>, mut u: usize| {
             walk.push(u as u32);
             while u != v {
-                let Some(p) = parent(g, u) else {
-                    debug_assert!(false, "candidate end outside the searched subtree");
-                    return;
+                let Some(p) = parent(g, u).filter(|_| *climbs > 0) else {
+                    debug_assert!(*climbs == 0, "candidate end outside the searched subtree");
+                    return false;
                 };
+                *climbs = climbs.wrapping_sub(1);
                 u = p;
                 walk.push(u as u32);
             }
+            true
         };
-        climb(&mut walk, sc);
+        let reached = climb(&mut walk, sc);
         let split = walk.len();
-        climb(&mut walk, sw);
+        if !reached || !climb(&mut walk, sw) {
+            self.work = walk;
+            return None;
+        }
         let (a, b) = walk.split_at(split);
         // the common part, from v down to the LCA
         let common = a
@@ -609,7 +741,85 @@ impl CutStore {
             }
         };
         self.work = walk;
-        before
+        Some(before)
+    }
+
+    /// The first candidate of slack `least` in C's scan of the subtree under `v`, when several
+    /// have it, and comparing them two by two would climb too far.
+    ///
+    /// C: lib/common/ns.c:dfs_enter_inedge, dfs_enter_outedge. This is that scan up to the first
+    /// tied candidate: with no candidate below `least`, C's `Slack > 0` test has pruned nothing
+    /// before that point, so it visits exactly the nodes C has visited by then, and never more
+    /// than C's scan does. "Child" is tested as `par(other) == edge`, which is C's
+    /// `lim(other) < lim(u)`.
+    fn first_tied<G: NsGraph + ?Sized>(
+        &mut self,
+        g: &G,
+        s: usize,
+        least: i32,
+        insearch: bool,
+        v: usize,
+    ) -> Option<usize> {
+        // mark the tied edges, by edge: the lists below hold edges, not local indices
+        if self.tie_gen == u32::MAX {
+            self.tie_mark.fill(0);
+            self.tie_gen = 0;
+        }
+        self.tie_gen = self.tie_gen.wrapping_add(1);
+        let mut tied = 0u32;
+        for i in 0..self.cut_len(s) {
+            let x = self.cut_entry(s, i);
+            let es = self.edge(x & ID);
+            if x & AGAINST != 0 && es.slack == least {
+                tied = tied.wrapping_add(1);
+                let e = es.edge as usize;
+                if self.tie_mark.len() <= e {
+                    self.tie_mark.resize(e.wrapping_add(1), 0);
+                }
+                if let Some(m) = self.tie_mark.get_mut(e) {
+                    *m = self.tie_gen;
+                }
+            }
+        }
+        debug_assert!(tied > 1, "a scan for a tie with no tie");
+        let (marks, mark) = (&self.tie_mark, self.tie_gen);
+        let mut stack = std::mem::take(&mut self.work);
+        stack.clear();
+        stack.push(v as u32);
+        let mut found = None;
+        'scan: while let Some(u) = stack.pop() {
+            let u = u as usize;
+            let list = if insearch {
+                g.in_edges(u)
+            } else {
+                g.out_edges(u)
+            };
+            for &e in list {
+                if marks.get(e).copied() == Some(mark) {
+                    found = Some(e);
+                    break 'scan;
+                }
+                if tree_edge(g, e) {
+                    let c = other(g, e, u);
+                    if g.par(c) == Some(e) {
+                        stack.push(c as u32);
+                    }
+                }
+            }
+            let across = if insearch {
+                g.tree_out(u)
+            } else {
+                g.tree_in(u)
+            };
+            for &e in across {
+                let c = other(g, e, u);
+                if g.par(c) == Some(e) {
+                    stack.push(c as u32);
+                }
+            }
+        }
+        self.work = stack;
+        found
     }
 
     /// C's `rerank` of e's child side by `-shift`, on the slacks: only `e` and the members
@@ -623,16 +833,16 @@ impl CutStore {
                 sl.wrapping_add(shift)
             }
         };
-        let set = self.tree(s);
-        for i in 0..set.len {
-            let x = self.entry(set.start.wrapping_add(i));
+        for i in 0..self.cut_len(s) {
+            let x = self.cut_entry(s, i);
             // AGAINST clear: tail(g) is on tail(e)'s side, which moves when tail(e) is the child
             let tail_inside = (x & AGAINST == 0) == tail_is_child;
             if let Some(es) = self.edge_mut(x & ID) {
                 es.slack = moved(es.slack, tail_inside);
             }
         }
-        if let Some(es) = self.edge_mut(set.edge) {
+        let ke = self.tree(s).edge;
+        if let Some(es) = self.edge_mut(ke) {
             es.slack = moved(es.slack, tail_is_child);
         }
     }
@@ -936,10 +1146,19 @@ impl CutStore {
             };
             g.set_cutvalue(t, next);
         }
-        self.move_cut_sets(se, ke, kf);
         // re-hang the subtree below e from f: f's end in it is the new top
         let v = if tail_is_child { et } else { eh };
         let mut u = if tail_is_child { fh } else { ft };
+        match self.kind {
+            Kind::Pool => self.move_cut_sets(se, ke, kf),
+            Kind::Computed => {
+                self.computed.cut_of = None;
+                if let Some(ts) = self.tree_mut(se) {
+                    ts.edge = kf;
+                }
+                self.move_links(v, u, other(g, f, u), lca);
+            }
+        }
         let mut above = f;
         let mut rehung = check::rehung_start();
         loop {
@@ -962,6 +1181,7 @@ impl CutStore {
         exchange_tree_edges(g, ctx, e, f);
         check::dfs_range(g, ctx, lca, lca_low, &rehung);
         check::slacks(g, self, e, f);
+        check::links(g, self);
         if self.garbage > self.pool.len().wrapping_div(2) {
             self.compact();
         }
@@ -1108,11 +1328,25 @@ pub(super) fn lr_balance<G: NsGraph + ?Sized>(
         super::lr_balance(g, ctx);
         return;
     }
+    // A computed cut costs its smaller side whatever the query, while C's scan stops at a slack of
+    // 0, so a run of such queries is cheaper on C's functions. Each query therefore spends what it
+    // walks and earns what C would have had to visit, and when the allowance is gone C's functions
+    // finish the run.
+    let mut spare = check::balance_spare()
+        .unwrap_or_else(|| BALANCE_SPARE_WALKS.saturating_mul(g.nlist().len()));
     for i in 0..ctx.tree_edge.len() {
         let Some(&e) = ctx.tree_edge.get(i) else {
             break;
         };
         if g.cutvalue(e) == 0 {
+            if spare == 0
+                && cut
+                    .as_ref()
+                    .is_some_and(|store| store.kind == Kind::Computed)
+            {
+                check::count(&check::BALANCE_HANDED_OVER);
+                hand_over(g, ctx, cut);
+            }
             let Some(mut f) = enter_edge(g, ctx, cut, e, false) else {
                 continue;
             };
@@ -1138,12 +1372,21 @@ pub(super) fn lr_balance<G: NsGraph + ?Sized>(
                 f = c;
             }
             let delta = known.map_or_else(|| slack(g, f), |(d, _)| d);
-            if delta <= 1 {
-                continue;
-            }
             let (t, h) = (g.tail(e), g.head(e));
             // `par` is right on either path; `lim`/`low` only on C's
             let tail_is_child = g.par(t) == Some(e);
+            if let Some(store) = cut.as_ref().filter(|store| store.kind == Kind::Computed) {
+                let child = if tail_is_child { t } else { h };
+                debug_assert_eq!(
+                    g.par(child),
+                    Some(e),
+                    "the size of e's child, not its parent"
+                );
+                spare = store.computed.spare_after_query(spare, child, delta);
+            }
+            if delta <= 1 {
+                continue;
+            }
             debug_assert!(cut.is_some() || tail_is_child == (g.lim(t) < g.lim(h)));
             let (node, d) = if tail_is_child {
                 (t, delta.wrapping_div(2))
@@ -1176,6 +1419,11 @@ pub(super) fn end<G: NsGraph + ?Sized>(g: &mut G, cut: &mut Option<CutStore>) {
 /// root (any valid numbering serves: C reads them only as subtree membership).
 fn fall_back<G: NsGraph + ?Sized>(g: &mut G, ctx: &mut Ctx, cut: &mut Option<CutStore>) {
     check::fell_back();
+    hand_over(g, ctx, cut);
+}
+
+/// Gives the run to C's functions: what they read is made current.
+fn hand_over<G: NsGraph + ?Sized>(g: &mut G, ctx: &mut Ctx, cut: &mut Option<CutStore>) {
     end(g, cut);
     if let Some(&root) = g.nlist().first() {
         dfs_range_impl(g, ctx, root, None, 1, false);
@@ -1188,29 +1436,46 @@ mod check;
 /// Check mode is off: these do nothing.
 #[cfg(not(any(test, feature = "ns-check")))]
 mod check {
-    use super::{CutStore, NsGraph};
+    use super::{CutStore, Kind, NsGraph};
     use crate::common::ns::Ctx;
 
     pub(super) const ON: bool = false;
+    #[inline(always)]
+    pub(super) fn kind() -> Kind {
+        Kind::Pool
+    }
+    #[inline(always)]
+    pub(super) fn links<G: NsGraph + ?Sized>(_: &G, _: &CutStore) {}
     pub(super) struct Rehung;
     pub(super) struct Counter;
     pub(super) static WHOLE_TREE: Counter = Counter;
     pub(super) static TIES: Counter = Counter;
+    pub(super) static TIE_SCANS: Counter = Counter;
     pub(super) static RELOCATIONS: Counter = Counter;
     pub(super) static COMPACTIONS: Counter = Counter;
     pub(super) static BALANCE_FALLBACKS: Counter = Counter;
+    pub(super) static BALANCE_HANDED_OVER: Counter = Counter;
     pub(super) static RESELECTIONS: Counter = Counter;
 
     pub(super) enum Corrupt {
         Enter,
         Update,
         Balance,
+        Links,
     }
 
     #[inline(always)]
     pub(super) fn corrupt(_: &mut CutStore, _: Corrupt, _: usize, _: usize) {}
     #[inline(always)]
     pub(super) fn budget(_: usize) -> Option<usize> {
+        None
+    }
+    #[inline(always)]
+    pub(super) fn climbs() -> Option<u32> {
+        None
+    }
+    #[inline(always)]
+    pub(super) fn balance_spare() -> Option<usize> {
         None
     }
 
