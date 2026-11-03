@@ -6,8 +6,8 @@ open Finset
 # circo: the incremental crossing delta equals the full recount (#730)
 
 Model of `crates/graphviz-pure-layout/src/circogen/blockpath.rs` (`count_all_crossings`,
-`Delta::phi`, `apply_delta`), not extracted code: the Aeneas binary was not installed when this
-was written. See `docs/perf/circo-crossings.md` for the argument in prose and the list of what
+`Delta::phi`, `apply_delta`), not extracted code: `Delta::phi` uses closures, iterator adapters and `?`
+in loops, which Aeneas does not accept yet (see `docs/research/lean-experiment/extraction.md`). See `docs/perf/circo-crossings.md` for the argument in prose and the list of what
 the model leaves to the runtime oracle (`circo-check`).
 
 * `crossings_formula`: the pair count equals `sum fd * span - sum C(d, 2)`.

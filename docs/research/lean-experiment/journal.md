@@ -387,8 +387,8 @@ each neighbour, the in-edges of the neighbour's own neighbours, `O(sum of neighb
 with `x` still in them, which needs a second pass over the neighbour pairs. Cutting `x` out first
 makes the arrays independent of where `x` sits, so one build serves all `2 * deg` tentative moves.
 
-**What Lean did.** Model, not extraction: `/jobs/work/gvp-lean/aeneas/bin/aeneas` did not exist
-when I reached this step. The model is the list as a position function (positions `2 rank + 1`
+**What Lean did.** Model, not extraction: when I reached this step `/jobs/work/gvp-lean/aeneas/bin/aeneas` did not
+exist and `scripts/proofs/extract.sh` was not on the base branch. The model is the list as a position function (positions `2 rank + 1`
 for the other nodes and `2 c` for the moved one, so the move needs no renumbering), the block as
 a symmetric irreflexive relation. Proved: `crossings_formula` (the pair count equals the degree
 formula), `crossings_move` (moving `x` to cut `c` gives `Kc + phi c`, with `phi` written as the
@@ -402,7 +402,11 @@ state-machine proof over edge halves, about 200 more lines by estimate; covered 
 every-move oracle and the randomized tests instead), that `insert_nodelist` is the cut
 `rank(n) + j`, and that the loops in `Delta::prepare` build `FP`/`DP`.
 
-**Extraction verdict.** Not attempted: no Aeneas binary on the machine.
+**Extraction verdict.** Not attempted. The binary appeared as I finished, but #747's report
+names closures, iterator adapters (`enumerate`, `partition_point`) and `?` inside loops as
+Aeneas blockers, and `Delta::phi` and `Delta::prepare` use all three. Extracting them would first
+need a rewrite into loop-per-helper free functions over slices, as #745 does for `count_indexed`;
+that is the follow-up that would retire the "model" gap.
 
 **Oracle kept.** `count_all_crossings` stays; under `cfg(test)` and `circo-check` every
 tentative move is recounted and asserted equal to the delta. Production lists of 16 or fewer
