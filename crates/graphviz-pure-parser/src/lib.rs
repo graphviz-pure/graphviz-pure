@@ -589,6 +589,81 @@ mod tests {
         assert_eq!(ends, pairs.map(|(t, h)| (t.to_string(), h.to_string())));
     }
 
+    // agsubg searches only the current parent's children, even after reopening it.
+    #[test]
+    fn subgraph_lookup_keeps_parent_identity_and_creation_order() {
+        let g = parse_dot(
+            r#"digraph {
+            subgraph p { subgraph same { a } }
+            subgraph same { b }
+            subgraph q { subgraph same { c } }
+            subgraph p { subgraph same { d } subgraph later { e } }
+            subgraph same { f }
+        }"#,
+        )
+        .unwrap();
+        let names: Vec<_> = g.subgraphs.iter().map(|s| s.name.as_str()).collect();
+        assert_eq!(names, ["p", "same", "same", "q", "same", "later"]);
+        assert_eq!(
+            g.subgraphs[0].subgraphs,
+            [
+                graphviz_pure_core::SubgraphId(1),
+                graphviz_pure_core::SubgraphId(5)
+            ]
+        );
+        assert_eq!(
+            g.subgraphs[3].subgraphs,
+            [graphviz_pure_core::SubgraphId(4)]
+        );
+        let nodes = |i: usize| {
+            g.subgraphs[i]
+                .nodes
+                .iter()
+                .map(|id| g.nodes[id.0 as usize].name.as_str())
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(nodes(1), ["a", "d"]);
+        assert_eq!(nodes(2), ["b", "f"]);
+        assert_eq!(nodes(4), ["c"]);
+    }
+
+    #[test]
+    fn subgraph_lookup_distinguishes_html_empty_and_anonymous_names() {
+        let g = parse_dot(
+            r#"digraph {
+            subgraph s { a } subgraph <s> { b }
+            subgraph "" { c } subgraph <> { d }
+            { e } { f }
+            subgraph s { g } subgraph <s> { h }
+            subgraph "" { i } subgraph <> { j }
+            subgraph "s" + "" { k }
+        }"#,
+        )
+        .unwrap();
+        assert_eq!(g.subgraphs.len(), 6);
+        let nodes: Vec<_> = g
+            .subgraphs
+            .iter()
+            .map(|s| {
+                s.nodes
+                    .iter()
+                    .map(|id| g.nodes[id.0 as usize].name.as_str())
+                    .collect::<Vec<_>>()
+            })
+            .collect();
+        assert_eq!(
+            nodes,
+            [
+                vec!["a", "g", "k"],
+                vec!["b", "h"],
+                vec!["c", "i"],
+                vec!["d", "j"],
+                vec!["e"],
+                vec!["f"]
+            ]
+        );
+    }
+
     // #303: only a missing name makes a graph anonymous; "" and <> are names.
     #[test]
     fn an_empty_name_is_a_name() {

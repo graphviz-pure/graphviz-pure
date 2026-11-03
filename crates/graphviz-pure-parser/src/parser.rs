@@ -98,6 +98,10 @@ pub struct Parser<'a> {
     anon_ctr: u64,
     /// Parent of each subgraph (`None`: the root graph).
     sub_parent: Vec<Option<usize>>,
+    /// C: lib/cgraph/subg.c:agfindsubg_by_id
+    /// Lookup only: the graph's vectors still define creation and traversal order.
+    /// Borrow token text where possible; anonymous subgraphs have no entry.
+    sub_names: std::collections::BTreeMap<(Option<SubgraphId>, Cow<'a, str>, bool), SubgraphId>,
     /// Whether grammar.y's `startgraph` has run (the header was read).
     started: bool,
     /// The ids of local names (`%…`) in cgraph's internal map (`aginternalmapinsert`), by
@@ -170,6 +174,7 @@ impl<'a> Parser<'a> {
             html_keys: std::collections::BTreeSet::new(),
             anon_ctr: 1,
             sub_parent: Vec::new(),
+            sub_names: std::collections::BTreeMap::new(),
             started: false,
             local_ids: std::collections::BTreeMap::new(),
             yydepth: 1,
@@ -402,6 +407,7 @@ impl<'a> Parser<'a> {
         self.graph.node_defaults.extend_from(&self.globals.node);
         self.graph.edge_defaults.extend_from(&self.globals.edge);
         self.sub_parent.clear();
+        self.sub_names.clear();
         self.graph.dicts = vec![graphviz_pure_core::AttrDicts::default()];
         // gvContext declares the node label on cgraph's ProtoGraph, which every root copies.
         self.graph.dicts[0].node.insert(
@@ -874,31 +880,16 @@ impl<'a> Parser<'a> {
         }
     }
 
+    /// C: lib/cgraph/subg.c:agsubg
     /// `agsubg(S->g, name, 1)`. Only a missing name makes an anonymous subgraph; a name
     /// starting with `%` (`LOCALNAMEPREFIX`) is a local one, which also takes an anonymous
     /// id (`agmapnametoid`).
     fn open_subgraph(&mut self, name: Option<Atom<'a>>) -> SubgraphId {
         let current_parent = self.scope_stack.last().copied();
         if let Some(name) = &name
-            && let Some(existing_id) = self.graph.subgraphs.iter().find_map(|s| {
-                if (s.name.is_empty() && !s.empty_name)
-                    || s.name != name.text
-                    || s.html_name != name.html
-                {
-                    return None;
-                }
-                let has_same_parent = match current_parent {
-                    Some(pid) => self.graph.subgraphs[pid.0 as usize]
-                        .subgraphs
-                        .contains(&s.id),
-                    None => !self
-                        .graph
-                        .subgraphs
-                        .iter()
-                        .any(|p| p.subgraphs.contains(&s.id)),
-                };
-                has_same_parent.then_some(s.id)
-            })
+            && let Some(&existing_id) =
+                self.sub_names
+                    .get(&(current_parent, Cow::Borrowed(name.text.as_ref()), name.html))
         {
             // Declarations made in the root or an enclosing subgraph while this one was
             // closed still reach the nodes and edges it creates now: `agmakeattrs` walks
@@ -928,6 +919,10 @@ impl<'a> Parser<'a> {
         }
 
         let id = SubgraphId(self.graph.subgraphs.len() as u32);
+        if let Some(name) = &name {
+            self.sub_names
+                .insert((current_parent, name.text.clone(), name.html), id);
+        }
         let named = name.is_some();
         let (name, html) = name.map_or((String::new(), false), |a| (a.text.into_owned(), a.html));
         let empty_name = named && name.is_empty();
@@ -956,9 +951,8 @@ impl<'a> Parser<'a> {
             .push(graphviz_pure_core::AttrDicts::default());
         if let Some(&parent_id) = self.scope_stack.last() {
             let parent_subgraphs = &mut self.graph.subgraphs[parent_id.0 as usize].subgraphs;
-            if !parent_subgraphs.contains(&id) {
-                parent_subgraphs.push(id);
-            }
+            // `id` is fresh; only the reopen path above can return an existing child.
+            parent_subgraphs.push(id);
         }
 
         self.graph.subgraphs.push(SubgraphData {
