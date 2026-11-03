@@ -12,6 +12,8 @@ pub mod emit;
 pub mod json;
 mod map_engine;
 pub mod plugins;
+mod ps_engine;
+pub use ps_engine::PostscriptJob;
 mod svg_engine;
 mod xdot_engine;
 
@@ -65,6 +67,7 @@ use graphviz_pure_core::{Graph, GraphvizError, Result};
 pub enum OutputFormat {
     Svg,
     SvgInline,
+    Ps,
     Cmapx,
     Json,
     Json0,
@@ -80,6 +83,7 @@ impl OutputFormat {
     const FORMATS: &'static [(&'static str, Self)] = &[
         ("svg", Self::Svg),
         ("svg_inline", Self::SvgInline),
+        ("ps", Self::Ps),
         ("cmapx", Self::Cmapx),
         ("json", Self::Json),
         ("json0", Self::Json0),
@@ -116,6 +120,7 @@ pub fn render_graph(graph: &Graph, format: OutputFormat) -> Result<String> {
     let name = match format {
         OutputFormat::Svg => "svg",
         OutputFormat::SvgInline => "svg_inline",
+        OutputFormat::Ps => "ps",
         OutputFormat::Cmapx => "cmapx",
         OutputFormat::Json => "json",
         OutputFormat::Json0 => "json0",
@@ -470,7 +475,13 @@ impl<'g> GraphJobs<'g> {
         }
         // Renderers other than dot, xdot, json and canon run before undoClusterEdges.
         let drawn = match (format, graph.render_view.as_deref()) {
-            (OutputFormat::Svg | OutputFormat::SvgInline | OutputFormat::Cmapx, Some(v)) => v,
+            (
+                OutputFormat::Svg
+                | OutputFormat::SvgInline
+                | OutputFormat::Cmapx
+                | OutputFormat::Ps,
+                Some(v),
+            ) => v,
             _ => graph,
         };
         let m = emit::model::Model::build(drawn)?;
@@ -478,6 +489,18 @@ impl<'g> GraphJobs<'g> {
         // output, which the writers below write at the end
         let mut pre = String::new();
         let text = match format {
+            OutputFormat::Ps => {
+                emit::run_job(
+                    &m,
+                    ps_engine::PsEngine::default(),
+                    emit::RunJob {
+                        output_file: true,
+                        ..opts
+                    },
+                )
+                .0
+                .out
+            }
             OutputFormat::Svg => {
                 let eng = if cairo {
                     svg_engine::SvgEngine::cairo(name)

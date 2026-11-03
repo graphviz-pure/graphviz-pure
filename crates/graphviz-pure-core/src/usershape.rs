@@ -6,7 +6,7 @@
 //! As C, the port reads no image data: it classifies the file's header as `imagetype`
 //! does and reads the size from it (the readers in [`size`]), and keeps what it read by
 //! name, as `ImageDict` does, for the renderers (`gvrender_usershape`). For `shape=epsf`
-//! it reads the `%%BoundingBox` comment, which gives the node its size.
+//! it reads the `%%BoundingBox` comment and caches the contents for PostScript emission.
 //!
 //! Paths follow C's Unix rules on every platform: `imagepath` and `--filepath` list
 //! directories separated by `:`, joined to the file name with `/`, and a name starting with
@@ -105,6 +105,8 @@ struct RunState {
     /// 30 characters of inline storage, then on reallocation), and a closed graph's key
     /// whose memory was reused ([`EpsfTree::cmp`]).
     epsf_contents: EpsfTree,
+    /// C: lib/common/psusershape.c:user_init (usershape_t::data).
+    epsf_data: HashMap<i32, EpsfDefinition>,
     /// `N_EPSF_files`.
     n_epsf_files: i32,
 }
@@ -143,6 +145,17 @@ pub struct UserShapes {
     pub images: BTreeMap<String, UserShape>,
     /// What `epsf_init` gave each node.
     pub epsf: Vec<EpsfNode>,
+    /// `epsf_define`: cached files in `dtfirst`/`dtnext` order.
+    pub epsf_definitions: Vec<EpsfDefinition>,
+}
+
+/// C: lib/common/psusershape.c:user_init,epsf_define
+/// A cached EPS body, read once when its macro is allocated.
+#[derive(Debug, Clone, PartialEq)]
+pub struct EpsfDefinition {
+    pub macro_id: i32,
+    pub body: std::sync::Arc<[u8]>,
+    pub must_inline: bool,
 }
 
 /// `epsf_init` of one node.
@@ -219,11 +232,30 @@ pub fn begin_layout(imagepath: Option<&str>, shapefile_declared: bool, dpi: f64)
 
 /// The usershape context the layout leaves on the graph.
 pub fn layout_result() -> UserShapes {
-    let images = run(|r| {
-        r.image_dict
+    let (images, epsf_definitions) = run(|r| {
+        let images = r
+            .image_dict
             .iter()
             .map(|(k, (us, _))| (k.clone(), us.clone()))
-            .collect()
+            .collect();
+        // C: lib/common/psusershape.c:epsf_define; lib/cdt/dttree.c:DT_FIRST,DT_NEXT
+        let mut definitions = Vec::new();
+        let mut stack = Vec::new();
+        let mut at = r.epsf_contents.root;
+        loop {
+            while let Some(i) = at {
+                stack.push(i);
+                at = r.epsf_contents.nodes[i].left;
+            }
+            let Some(i) = stack.pop() else {
+                break;
+            };
+            if let Some(data) = r.epsf_data.get(&r.epsf_contents.nodes[i].us.macro_id) {
+                definitions.push(data.clone());
+            }
+            at = r.epsf_contents.nodes[i].right;
+        }
+        (images, definitions)
     });
     graph(|g| UserShapes {
         imagepath: g.imagepath.clone(),
@@ -232,6 +264,7 @@ pub fn layout_result() -> UserShapes {
         shapefile_declared: g.shapefile_declared,
         dpi: g.dpi,
         images,
+        epsf_definitions,
         epsf: g
             .epsf_nodes
             .iter()
@@ -887,7 +920,8 @@ fn user_init(shapefile: Option<&str>, node: &str) -> (Option<EpsfShape>, Vec<Str
     let Ok(mut f) = open(&path) else {
         return (None, vec![format!("couldn't open epsf file {path}\n")]);
     };
-    let Some(bb) = bounding_box(&f.all()) else {
+    let data = f.all();
+    let Some(bb) = bounding_box(&data) else {
         let m = format!("BoundingBox not found in epsf file {path}\n");
         return (None, vec![m]);
     };
@@ -898,6 +932,21 @@ fn user_init(shapefile: Option<&str>, node: &str) -> (Option<EpsfShape>, Vec<Str
             macro_id: r.n_epsf_files,
         };
         r.n_epsf_files += 1;
+        // `fgets(BUFSIZ)` + `strstr`: inspect each 8191-byte line fragment.
+        let must_inline = data.split(|b| *b == b'\n').any(|line| {
+            line.chunks(8191).any(|part| {
+                let part = part.split(|b| *b == 0).next().unwrap_or_default();
+                part.first() != Some(&b'%') && part.windows(4).any(|w| w == b"read")
+            })
+        });
+        r.epsf_data.insert(
+            us.macro_id,
+            EpsfDefinition {
+                macro_id: us.macro_id,
+                body: std::sync::Arc::from(data),
+                must_inline,
+            },
+        );
         let key = if via_buffer {
             EpsfKey::Static
         } else {
@@ -1081,6 +1130,23 @@ mod tests {
             shape(&t, t.root, &mut got);
             assert_eq!(got, want);
         }
+    }
+
+    #[test]
+    fn epsf_macro_contents_survive_file_changes_after_layout() {
+        let original = b"%!PS\n%%BoundingBox: 0 0 10 20\n0 0 moveto\n";
+        let ps = scratch_file("ps-macro-cache.ps", original);
+        begin_layout(None, false, 0.0);
+        let shape = epsf_init(Some(&ps), "a").unwrap();
+        std::fs::write(&ps, b"%%BoundingBox: 0 0 1 2\nread\n").unwrap();
+        let snapshot = layout_result();
+        let cached = snapshot
+            .epsf_definitions
+            .iter()
+            .find(|d| d.macro_id == shape.macro_id)
+            .unwrap();
+        assert_eq!(&*cached.body, original);
+        assert!(!cached.must_inline);
     }
 
     #[test]

@@ -68,11 +68,22 @@ pub fn render_dot_all_with_options(
     // One call is one C process: its graphs share the C library's generator states (the
     // caller's, inside a `with_rand_state`) and `Nop`.
     let mut options = options;
+    let mut ps = crate::PostscriptJob::default();
     in_rand_run(|| {
-        graphs
+        let mut out: Vec<String> = graphs
             .into_iter()
-            .map(|graph| render_parsed(graph, engine, output_format, format, &mut options))
-            .collect()
+            .map(|graph| {
+                if output_format == OutputFormat::Ps {
+                    render_parsed_ps(graph, engine, &mut options, &mut ps)
+                } else {
+                    render_parsed(graph, engine, output_format, format, &mut options)
+                }
+            })
+            .collect::<Result<_>>()?;
+        if let Some(last) = out.last_mut() {
+            last.push_str(&ps.finish());
+        }
+        Ok(out)
     })
 }
 
@@ -88,9 +99,18 @@ pub fn render_dot_all_partial(
         Ok(f) => f,
         Err(e) => return (Vec::new(), Some(e)),
     };
-    render_partial(dot_source, globals, options, |graph, options| {
-        render_parsed(graph, engine, output_format, format, options)
-    })
+    let mut ps = crate::PostscriptJob::default();
+    let (mut out, err) = render_partial(dot_source, globals, options, |graph, options| {
+        if output_format == OutputFormat::Ps {
+            render_parsed_ps(graph, engine, options, &mut ps)
+        } else {
+            render_parsed(graph, engine, output_format, format, options)
+        }
+    });
+    if let Some(last) = out.last_mut() {
+        last.push_str(&ps.finish());
+    }
+    (out, err)
 }
 
 /// `graphviz_pure::render_svg_all_partial` on decoded text.
@@ -243,4 +263,20 @@ fn root_attr<'g>(graph: &'g Graph, name: &str) -> Option<&'g str> {
             .and_then(|d| d.graph.get(name))
             .map(|sym| sym.defval.as_str())
     })
+}
+
+/// C: lib/gvc/gvlayout.c:gvLayoutJobs; lib/gvc/gvrender.c:gvrender_begin_job
+fn render_parsed_ps(
+    mut graph: Graph,
+    engine: &str,
+    options: &mut LayoutOptions,
+    ps: &mut crate::PostscriptJob,
+) -> Result<String> {
+    let engine = LayoutEngine::parse(engine)?;
+    let engine = match graph.graph_attrs.get("layout") {
+        Some(name) if !name.trim().is_empty() => LayoutEngine::parse(name.trim())?,
+        _ => engine,
+    };
+    layout_graph_in_run(&mut graph, engine, options)?;
+    ps.render(&graph, 0)
 }

@@ -1,0 +1,2 @@
+digraph first { graph [comment="first graph"]; a -> b }
+digraph second { graph [rotate=90, center=true, margin="0.4,0.2"]; x [shape=box, style=filled, fillcolor="/accent3/2"]; x -> y }

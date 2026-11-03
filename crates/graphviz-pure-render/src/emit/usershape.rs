@@ -57,6 +57,9 @@ impl<E: Engine> Emitter<'_, E> {
         imagepos: &str,
     ) {
         let Some(us) = usershape::find(name) else {
+            if usershape::find_user_shape(name) {
+                self.eng.library_shape(&self.job, name, a, filled);
+            }
             // a name that never loaded: C draws it here only as a shape library member, with
             // PostScript's `library_shape` (a member `gvusershape_open` took leaves below,
             // at the 0x0 check)

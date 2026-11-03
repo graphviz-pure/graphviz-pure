@@ -34,7 +34,7 @@ pub const LAYOUT_PLUGINS: [(&str, &str); 11] = [
 ];
 
 /// The output device plugins: type (`format:render`) and package, in `gvplugin_list` order.
-pub const DEVICE_PLUGINS: [(&str, &str); 20] = [
+pub const DEVICE_PLUGINS: [(&str, &str); 21] = [
     ("canon:dot", "core"),
     ("cmapx:map", "core"),
     ("cmapx_np:map", "core"),
@@ -49,6 +49,7 @@ pub const DEVICE_PLUGINS: [(&str, &str); 20] = [
     ("plain:dot", "core"),
     ("plain-ext:dot", "core"),
     ("png:cairo", "cairo"),
+    ("ps:ps", "core"),
     ("svg:svg", "core"),
     ("svg_inline:svg", "core"),
     ("xdot:xdot", "core"),
@@ -118,13 +119,14 @@ const API_LOADIMAGE: usize = 4;
 
 /// The render plugins: type and package, in `gvc->apis[API_render]` order (by type). The
 /// `json` renderer writes four formats, which C lists as four types, as here.
-pub const RENDER_PLUGINS: [(&str, &str); 10] = [
+pub const RENDER_PLUGINS: [(&str, &str); 11] = [
     ("cairo", "cairo"),
     ("dot", "core"),
     ("dot_json", "core"),
     ("json", "core"),
     ("json0", "core"),
     ("map", "core"),
+    ("ps", "core"),
     ("svg", "core"),
     ("svg_inline", "core"),
     ("xdot", "core"),
@@ -133,10 +135,11 @@ pub const RENDER_PLUGINS: [(&str, &str); 10] = [
 
 /// The loadimage plugins (`gvloadimage_core_types` for the port's renderers): `type:render`
 /// and package, in `gvc->apis[API_loadimage]` order: by type, the plugin installed last first.
-pub const LOADIMAGE_PLUGINS: [(&str, &str); 31] = [
+pub const LOADIMAGE_PLUGINS: [(&str, &str); 33] = [
     ("eps:xdot", "core"),
     ("eps:dot", "core"),
     ("eps:map", "core"),
+    ("eps:ps", "core"),
     ("gif:xdot", "core"),
     ("gif:dot", "core"),
     ("gif:map", "core"),
@@ -162,6 +165,7 @@ pub const LOADIMAGE_PLUGINS: [(&str, &str); 31] = [
     ("ps:xdot", "core"),
     ("ps:dot", "core"),
     ("ps:map", "core"),
+    ("ps:ps", "core"),
     ("svg:svg", "core"),
     ("svg:xdot", "core"),
     ("svg:dot", "core"),
