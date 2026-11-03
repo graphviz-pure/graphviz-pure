@@ -1400,7 +1400,11 @@ mod tests {
         let mut g = CGraph::default();
         g.edge(&mut c.arena, 0, 1);
         g.edge(&mut c.arena, 2, 3);
-        let back = c.arena.new_edge(1, 0);
+        c.arena.tail.push(1);
+        c.arena.head.push(0);
+        c.arena.order.push(0);
+        c.arena.orig.push(None);
+        let back = c.arena.tail.len() - 1;
         g.subedge(&c.arena, back);
         let s = Crossings::new(&c, &g, 4);
         assert!(Delta::new(&c, &s, &[0, 1, 2, 3]).is_none());
