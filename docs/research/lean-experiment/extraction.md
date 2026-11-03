@@ -14,7 +14,7 @@ file. Raw logs stay on the shared machine under `/jobs/work/gvp-lean/logs/`.
   for #728–#735.
 - **Integer kernels extract and compile today**: circo's Fenwick update and prefix query, its
   indexed crossing count `count_indexed` and the reference scan it equals (`CircoCount`, after the
-  refactor of #745, below), and twopi's `set_n_steps_to_leaf` and `set_subtree_size`. All are
+  refactor of #745, below), and twopi's BFS kernel `leaf_bfs` (the search inside `set_n_steps_to_leaf`, after the #766 split) and `set_subtree_size`. All are
   committed under `proofs/GvpProofs/Extracted/` and rest on no axioms beyond Lean's three.
 - **`count_indexed` extracts only in single-loop pieces** (#745). Before the refactor it was
   rejected (a `?` inside a nested loop), and `count_all_crossings_reference` needed `Iterator::zip`.
@@ -106,9 +106,33 @@ opaque type in a `TypesExternal` template.
 
 | Function | Aeneas | Lean | Notes |
 |---|---|---|---|
-| `set_n_steps_to_leaf` (iterative DFS with an explicit stack) | accepted, 2 s total | compiles, no extra axioms | `Vec::clear`, `Vec::pop`, `last_mut` and `Range::clone` modelled by hand |
-| `set_subtree_size` (walk to the root per leaf) | accepted | compiles, no extra axioms | `RNode.subtree_size + 1` is a checked add in Lean (it fails on overflow), as in a debug build |
+| `set_n_steps_to_leaf` (iterative DFS with an explicit stack; the version before #729) | accepted, 2 s total | compiles, no extra axioms | `Vec::clear`, `Vec::pop`, `last_mut` and `Range::clone` modelled by hand. **Gone since #766**: #736 replaced this code by a BFS and left the extraction of the old code in the tree |
+| `set_n_steps_to_leaf` (multi-source BFS, as shipped by #729) | **internal error** in `translate_fun_sigs` (`iterator.rs` 42:0, the `Iterator` trait declaration), no file written | — | the function takes `&LGraph` and walks `g.all_edges(sg, n)`, an `impl Iterator` built from closures and `chain`; Charon accepts it, Aeneas dies on the signatures it pulls in. Extracting from the function itself is hopeless; see "The #766 split" |
+| `leaf_bfs` + `relax_run` (the BFS over a snapshot of the adjacency, #766) | accepted, 2 s | compiles, no extra axioms | only `Vec::clear` modelled by hand |
+| `set_subtree_size` (walk to the root per leaf; the version before #729) | accepted | compiles, no extra axioms | gone since #766 |
+| `set_subtree_size` (one reverse sweep, as shipped by #729) | rejected as written: `Can't end abstraction … as it is set as non-endable` on the closure in `parent.and_then(\|p\| r.d.get_mut(p))`, and a warning that the library has no model of `Iterator::rev` | compiles after the fix, no extra axioms | #766: a countdown `while` loop and `if let … && let …` instead of `.rev()` and the closure |
 | `set_child_subtree_spans`, `set_subtree_spans`, positions | not tried in the crate | — | float arithmetic and `PI`: see below |
+
+### The #766 split
+
+`extract.sh --check` failed on `TwopiCircle` on master (Aeneas internal error, no file written).
+The cause was not a toolchain change and not a later commit: the committed extraction was of the
+code *before* #729. #736 squashed the BFS rewrite into the same commit and left the older
+`Funs.lean` (it still has `LeafFrame` and the DFS stack) in the tree. The check script had not run
+on it since. Re-extracting at #736's own commit fails the same way.
+
+Two changes to `circle.rs` made the current code extract, with the same integers in the same order:
+
+| What the BFS code did | Aeneas | The fix |
+|---|---|---|
+| `set_n_steps_to_leaf(g: &LGraph, sg, r)` walks `g.all_edges(sg, n)` | internal error while translating the signatures of `Iterator` and everything `LGraph` and `impl Iterator` pull in | the function becomes a wrapper that snapshots every node's neighbours, in `all_edges` order, into three `RData` scratch vectors (`adj`, `adj_lo`, `adj_hi`; reused across components), then calls `leaf_bfs` on plain slices. **The extraction starts from `leaf_bfs`**, not from the wrapper, so `LGraph` stays out of the module. The snapshot is the shape #604 used before #729 |
+| `queue.extend(nodes.iter().copied().filter(\|&n\| …))`, `.and_then(\|node\| …)`, `let else { continue }` in a loop that also has a nested loop | closures and adaptors | `for &n in nodes { if let … { queue.push(n) } }`, an `if let (Some(nsteps), Some(&lo), Some(&hi)) = …`, and the neighbour loop moved to its own function `relax_run` (a counter `while`) |
+| `for i in (0..len).rev()` in `set_subtree_size` | no model of `Iterator::rev` | `let mut i = len; while i > 0 { i = i.saturating_sub(1); … }` |
+| `parent.and_then(\|p\| r.d.get_mut(p))` | `Can't end abstraction … non-endable` (a closure returning a `&mut` borrow) | `if let Some(pi) = parent && let Some(p) = r.d.get_mut(pi)` |
+
+`leaf_bfs` takes `d: &mut [RNode]`, so the F64 fields of `RNode` stay in the types but no function
+reads them. `extract.args` now names `leaf_bfs` and `set_subtree_size`. The cost of the snapshot is
+one more flat pass over the component's edges; the ratchet table in the PR has the numbers.
 
 `RNode` carries `span` and `theta` as `f64`. They extract as `F64` fields, which needed
 `GvpProofs/Extracted/Floats.lean` (below), and the two integer kernels never read them.

@@ -21,36 +21,8 @@ set_option maxRecDepth 2048
 
 namespace GvpProofs.Extracted.TwopiCircle
 
-/-- [graphviz_pure_core::geom::Point]
-    Source: 'crates/graphviz-pure-core/src/geom.rs', lines 5:0-5:16
-    Name pattern: [graphviz_pure_core::geom::Point]
-    Visibility: public -/
-@[rust_type "graphviz_pure_core::geom::Point"]
-structure graphviz_pure_core.geom.Point where
-  x : F64
-  y : F64
-
-/-- [graphviz_pure_core::geom::BoundingBox]
-    Source: 'crates/graphviz-pure-core/src/geom.rs', lines 35:0-35:22
-    Name pattern: [graphviz_pure_core::geom::BoundingBox]
-    Visibility: public -/
-@[rust_type "graphviz_pure_core::geom::BoundingBox"]
-structure graphviz_pure_core.geom.BoundingBox where
-  ll : graphviz_pure_core.geom.Point
-  ur : graphviz_pure_core.geom.Point
-
-/-- [graphviz_pure_layout::common::types::Sub]
-    Source: 'crates/graphviz-pure-layout/src/common/types.rs', lines 221:0-231:1
-    Visibility: public -/
-structure common.types.Sub where
-  nodes : alloc.vec.Vec Std.Usize
-  member : alloc.vec.Vec Bool
-  bb : graphviz_pure_core.geom.BoundingBox
-  clusters : alloc.vec.Vec Std.Usize
-  «name» : String
-
 /-- [graphviz_pure_layout::twopigen::circle::RNode]
-    Source: 'crates/graphviz-pure-layout/src/twopigen/circle.rs', lines 18:0-26:1
+    Source: 'crates/graphviz-pure-layout/src/twopigen/circle.rs', lines 17:0-25:1
     Visibility: public -/
 structure twopigen.circle.RNode where
   n_steps_to_leaf : Std.U64
@@ -62,18 +34,13 @@ structure twopigen.circle.RNode where
   theta : F64
 
 /-- [graphviz_pure_layout::twopigen::circle::RData]
-    Source: 'crates/graphviz-pure-layout/src/twopigen/circle.rs', lines 29:0-34:1
+    Source: 'crates/graphviz-pure-layout/src/twopigen/circle.rs', lines 28:0-39:1
     Visibility: public -/
 structure twopigen.circle.RData where
   d : alloc.vec.Vec twopigen.circle.RNode
-  leaf_offsets : alloc.vec.Vec (core.ops.range.Range Std.Usize)
-
-/-- [graphviz_pure_layout::twopigen::circle::LeafFrame]
-    Source: 'crates/graphviz-pure-layout/src/twopigen/circle.rs', lines 53:0-58:1 -/
-structure twopigen.circle.LeafFrame where
-  n : Std.Usize
-  prev : Option Std.Usize
-  edges : core.ops.range.Range Std.Usize
-  nsteps : Std.U64
+  order : alloc.vec.Vec Std.Usize
+  adj : alloc.vec.Vec Std.Usize
+  adj_lo : alloc.vec.Vec Std.Usize
+  adj_hi : alloc.vec.Vec Std.Usize
 
 end GvpProofs.Extracted.TwopiCircle

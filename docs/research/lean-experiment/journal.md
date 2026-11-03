@@ -872,3 +872,55 @@ sum meaningful.
 accumulator are now proved over the shipped definitions. The remaining distance to the full theorem
 is one refinement lemma per helper (list in the wip file); the slice-iterator loops and the
 `trailing_zeros` bit walk are the two kinds of step not yet exercised on generated code.
+
+## 2026-11-03 #766: `extract.sh --check` fails on `TwopiCircle`
+
+**Hours.** About 1.5 on Rust and extraction, 0 on proofs (no theorem changed), 0.5 on docs.
+
+**Symptom.** `scripts/proofs/extract.sh --check` ended with `Internal error, please file an issue`
+(`Aeneas.Errors.CFailure`, raised in `translate_fun_sigs`, source `core/src/iter/traits/iterator.rs`
+42:0, the `Iterator` trait declaration) on `TwopiCircle`, and wrote no file. `CircoCount` was current.
+
+**Diagnosis (about 20 minutes).** The issue guessed that a signature elsewhere in the crate had
+changed since #736. It had not: `git checkout 91793636 -- crates`, the same Charon and Aeneas
+binaries and the recorded `extract.args` fail in the same way, so the failure is in #736 itself. The
+committed `Types.lean` shows why: it defines `LeafFrame`, the stack frame of the *depth-first*
+`set_n_steps_to_leaf` that #729 replaced. #736 squashed the BFS rewrite and the extraction of the
+code before it into one commit, and `--check` did not exist then. Two causes, then: the extraction
+was stale, and the current code does not extract.
+
+**What Aeneas rejects in the BFS code** (bisected by extracting each function alone):
+- `set_subtree_size`: `parent.and_then(|p| r.d.get_mut(p))` fails with `Can't end abstraction 6 as it
+  is set as non-endable` (a closure that returns a `&mut` borrow), and `(0..n).rev()` draws the
+  warning that the library has no `Iterator::rev`. A countdown `while` and `if let … && let …` fix
+  both.
+- `set_n_steps_to_leaf`: it takes `&LGraph` and walks `g.all_edges(sg, n)`, an `impl Iterator` made
+  of closures and `chain`. Aeneas dies in `translate_fun_sigs` while translating the `Iterator`
+  trait, before it reaches the body. No tweak to the loop helps while the function names `LGraph`.
+
+**Fix (option b of the ticket).** `set_n_steps_to_leaf` keeps its signature and becomes a wrapper:
+it writes every component node's neighbours, in `all_edges` order, into three `RData` scratch
+vectors, then calls `leaf_bfs` on slices (and `relax_run` for the inner loop, one early-exit-free
+loop per function). The extraction starts at `leaf_bfs`. The integers and the queue order are the
+same, because the snapshot is `other(g, ep, n)` over the same `all_edges` sequence. This is the
+snapshot shape #604 had before #729. `extract.args` names `leaf_bfs` and `set_subtree_size`;
+`FunsExternal.lean` shrank to one definition (`Vec::clear`), no `axiom`. `lake build` is green and
+`--check` ends with "every extraction is current".
+
+**What Lean caught.** Nothing; no theorem depends on `TwopiCircle` (`Twopi/LeafDist.lean` is over a
+model, which is still the case). That is the finding: for a day the only thing standing between the
+shipped BFS and a statement over its extraction was a check nobody had run on it.
+
+**Dead ends / friction.**
+- Running `cargo fmt` after extracting moved the Rust lines, and the generated `Source:` comments
+  carry line numbers, so the extraction went stale again. Format first, extract last.
+- The first attempt extracted from `set_n_steps_to_leaf` after moving the loop into helpers; it
+  still failed because the wrapper (and `LGraph`) stayed reachable from `--start-from`. The start
+  has to be the first function that touches only slices.
+- Observed again: closures anywhere in the reachable code are the usual failure, and the error
+  message names the closure's span, not the function.
+
+**Extraction verdict.** Extracted (`leaf_bfs`, `relax_run`, `set_subtree_size`), but only the search
+over a snapshot; the snapshot builder (`all_edges`, `LGraph`) is not extractable and stays outside
+the module. A proof that BFS equals the C relaxation over the extraction must take the snapshot as
+its hypothesis.

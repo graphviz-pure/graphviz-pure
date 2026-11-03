@@ -31,6 +31,11 @@ pub struct RData {
     /// `set_n_steps_to_leaf`, then the discovery order of `set_n_steps_to_center`
     /// that `set_subtree_size` reads backwards. Kept across components.
     order: Vec<usize>,
+    /// Scratch for `set_n_steps_to_leaf`: the neighbours of every node of the component, one
+    /// run per node in `all_edges` order, and the `adj_lo[n]..adj_hi[n]` run of node `n`.
+    adj: Vec<usize>,
+    adj_lo: Vec<usize>,
+    adj_hi: Vec<usize>,
 }
 
 impl RData {
@@ -38,6 +43,9 @@ impl RData {
         Self {
             d: vec![RNode::default(); n],
             order: Vec::new(),
+            adj: Vec::new(),
+            adj_lo: vec![0; n],
+            adj_hi: vec![0; n],
         }
     }
 }
@@ -56,34 +64,80 @@ fn other(g: &LGraph<'_>, e: usize, n: usize) -> usize {
 /// Proof: `proofs/GvpProofs/Twopi/LeafDist.lean`; the C-shaped relaxation lives on
 /// as the oracle in this file's tests.
 fn set_n_steps_to_leaf(g: &LGraph<'_>, sg: &Sub, r: &mut RData) {
+    // Snapshot the component's neighbours in `all_edges` order, so the search below sees
+    // plain slices (Aeneas cannot extract `LGraph` or its `impl Iterator` edge walks, #766).
+    r.adj.clear();
+    for &n in &sg.nodes {
+        let start = r.adj.len();
+        r.adj.extend(g.all_edges(sg, n).map(|ep| other(g, ep, n)));
+        if let Some(lo) = r.adj_lo.get_mut(n) {
+            *lo = start;
+        }
+        if let Some(hi) = r.adj_hi.get_mut(n) {
+            *hi = r.adj.len();
+        }
+    }
     let mut queue = std::mem::take(&mut r.order);
-    queue.clear();
-    queue.extend(
-        sg.nodes
-            .iter()
-            .copied()
-            .filter(|&n| r.d.get(n).is_some_and(|node| node.n_steps_to_leaf == 0)),
+    leaf_bfs(
+        &mut r.d, &sg.nodes, &r.adj, &r.adj_lo, &r.adj_hi, &mut queue,
     );
+    r.order = queue;
+}
+
+/// The search of `set_n_steps_to_leaf` over a snapshot of the adjacency: node `n`'s neighbours
+/// are `adj[adj_lo[n]..adj_hi[n]]`. The queue it leaves is the discovery order.
+/// Written with indices and single-purpose loops so that Aeneas extracts it (one early-exit
+/// loop per function, no closures, no `Iterator` adaptors).
+fn leaf_bfs(
+    d: &mut [RNode],
+    nodes: &[usize],
+    adj: &[usize],
+    adj_lo: &[usize],
+    adj_hi: &[usize],
+    queue: &mut Vec<usize>,
+) {
+    queue.clear();
+    for &n in nodes {
+        if let Some(node) = d.get(n)
+            && node.n_steps_to_leaf == 0
+        {
+            queue.push(n);
+        }
+    }
     let mut head = 0usize;
     while let Some(&n) = queue.get(head) {
         head = head.saturating_add(1);
-        let Some(nsteps) =
-            r.d.get(n)
-                .and_then(|node| node.n_steps_to_leaf.checked_add(1))
-        else {
-            continue;
-        };
-        for ep in g.all_edges(sg, n) {
-            let next = other(g, ep, n);
-            if let Some(node) = r.d.get_mut(next)
-                && nsteps < node.n_steps_to_leaf
-            {
-                node.n_steps_to_leaf = nsteps;
-                queue.push(next);
-            }
+        let mut nsteps = None;
+        if let Some(node) = d.get(n) {
+            nsteps = node.n_steps_to_leaf.checked_add(1);
+        }
+        if let (Some(nsteps), Some(&lo), Some(&hi)) = (nsteps, adj_lo.get(n), adj_hi.get(n)) {
+            relax_run(d, adj, lo, hi, nsteps, queue);
         }
     }
-    r.order = queue;
+}
+
+/// One node's relaxation: every neighbour in `adj[lo..hi]` that is farther than `nsteps` from a
+/// leaf gets `nsteps` and joins the queue.
+fn relax_run(
+    d: &mut [RNode],
+    adj: &[usize],
+    lo: usize,
+    hi: usize,
+    nsteps: u64,
+    queue: &mut Vec<usize>,
+) {
+    let mut k = lo;
+    while k < hi {
+        if let Some(&next) = adj.get(k)
+            && let Some(node) = d.get_mut(next)
+            && nsteps < node.n_steps_to_leaf
+        {
+            node.n_steps_to_leaf = nsteps;
+            queue.push(next);
+        }
+        k = k.saturating_add(1);
+    }
 }
 
 /// `isLeaf(g, n)`.
@@ -180,14 +234,20 @@ fn set_parent_nodes(g: &LGraph<'_>, sg: &Sub, r: &mut RData, center: usize) -> u
 /// every node of the component discovered, and `subtree_size` still 0 (each node
 /// belongs to one component and is laid out once).
 fn set_subtree_size(r: &mut RData) {
-    for i in (0..r.order.len()).rev() {
+    // A countdown, not `(0..len).rev()` and `Option::and_then` with a closure: Aeneas models
+    // neither `Iterator::rev` nor a closure that returns a `&mut` borrow (#766).
+    let mut i = r.order.len();
+    while i > 0 {
+        i = i.saturating_sub(1);
         let Some(&n) = r.order.get(i) else { continue };
         let Some(node) = r.d.get_mut(n) else { continue };
         node.subtree_size = node
             .subtree_size
             .saturating_add(u64::from(node.n_children == 0));
         let (size, parent) = (node.subtree_size, node.parent);
-        if let Some(p) = parent.and_then(|p| r.d.get_mut(p)) {
+        if let Some(pi) = parent
+            && let Some(p) = r.d.get_mut(pi)
+        {
             p.subtree_size = p.subtree_size.saturating_add(size);
         }
     }
