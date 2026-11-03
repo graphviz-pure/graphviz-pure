@@ -30,15 +30,16 @@ use super::matrix_ops::{add_slot, dot_from_zero, fma_slot, lane_at, lane_f32, sc
 /// Sequential below this.
 ///
 /// After #705 the sequential 8-wide kernel is as fast as one thread of the
-/// old lower-triangle gather, so four gather threads were no faster than one
-/// near n = 1300. Workers now run that sequential kernel on an output range.
-/// There is no extra triangle copy. On an x86-64-v3 gnu release, four threads
-/// of a 1300-node pinned graph were 0.62 s wall against 0.78 s at one thread
-/// (median of three); a 2000-node sparse graph was 4.18 s against 5.59 s.
-/// Peak RSS matched the one-thread run. A musl PGO v3 build on a loaded host
-/// was slower at four threads; `GRAPHVIZ_PURE_THREADS=1` stays sequential.
-/// n = 1000 stays sequential. The CI graph is 1400 nodes, above this gate.
-pub(super) const MIN_N: usize = 1300;
+/// old lower-triangle gather. Workers run that kernel on an output range,
+/// with no extra triangle copy. On the shipped musl x86-64-v3 PGO binary,
+/// four threads were slower than one at every size timed (pinned 1300 and
+/// 1400, sparse 2000): sparse_2000 was 5.18 s at one thread and 10.80 s at
+/// four, with CPU 3.7×. Sharing `owned_rows` so PGO trains the sequential
+/// path still left prefix scatter and clipped 8-wide blocks cold — training
+/// never reaches this gate. A gnu v3 build without PGO had a modest win;
+/// that is not the shipped shape. Until four threads beat one there, stay
+/// sequential. Unit tests still run the owned kernel at every thread count.
+pub(super) const MIN_N: usize = 1_000_000;
 
 pub(super) fn use_parallel(n: usize) -> bool {
     n >= MIN_N && super::par::configured_threads() > 1
@@ -260,7 +261,7 @@ fn right_mult_with_threads(
     });
 }
 
-fn owned_rows(upper: &[f32], n: usize, vector: &[f32], slot: &mut [f32], j0: usize) {
+pub(super) fn owned_rows(upper: &[f32], n: usize, vector: &[f32], slot: &mut [f32], j0: usize) {
     debug_assert!(j0 + slot.len() <= n);
     slot.fill(0.0);
     prefix_scatter(upper, n, vector, slot, j0);

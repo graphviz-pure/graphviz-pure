@@ -52,29 +52,38 @@ pub fn orthog1f(vec: &mut [f32]) {
 /// `fma(A[j, k], vector[k], …)` from the diagonal through column `n - 1`,
 /// starting from `+0`.
 pub fn right_mult_with_vector_ff(packed: &[f32], n: usize, vector: &[f32], result: &mut [f32]) {
-    // One-shot callers stay here. The parallel path runs this same kernel on
-    // an output range (plus a prefix scatter) and lives in `matvec_parallel`.
-    let mut vector = &vector[..n];
-    let mut result = &mut result[..n];
-    result.fill(0.0);
-    let mut packed = packed;
-    while vector.len() >= 8 {
-        let (packed_rest, result_tail) = right_mult_ff_block8(packed, vector, result);
-        packed = packed_rest;
-        result = result_tail;
-        vector = vector.split_at(8).1;
+    // Under `parallel`, this is the same `owned_rows` workers run, so PGO of
+    // the sequential path covers the full-width kernel. Prefix scatter and
+    // clipped blocks still need a graph above MIN_N. Default-feature codegen
+    // is unchanged.
+    #[cfg(all(feature = "parallel", not(target_family = "wasm")))]
+    {
+        super::matvec_parallel::owned_rows(packed, n, &vector[..n], &mut result[..n], 0);
     }
-    while vector.len() >= 4 {
-        let (packed_rest, result_tail) = right_mult_ff_block4(packed, vector, result);
-        packed = packed_rest;
-        result = result_tail;
-        vector = vector.split_at(4).1;
-    }
-    while !vector.is_empty() {
-        let (packed_rest, result_tail) = right_mult_ff_row(packed, vector, result);
-        packed = packed_rest;
-        result = result_tail;
-        vector = vector.split_at(1).1;
+    #[cfg(not(all(feature = "parallel", not(target_family = "wasm"))))]
+    {
+        let mut vector = &vector[..n];
+        let mut result = &mut result[..n];
+        result.fill(0.0);
+        let mut packed = packed;
+        while vector.len() >= 8 {
+            let (packed_rest, result_tail) = right_mult_ff_block8(packed, vector, result);
+            packed = packed_rest;
+            result = result_tail;
+            vector = vector.split_at(8).1;
+        }
+        while vector.len() >= 4 {
+            let (packed_rest, result_tail) = right_mult_ff_block4(packed, vector, result);
+            packed = packed_rest;
+            result = result_tail;
+            vector = vector.split_at(4).1;
+        }
+        while !vector.is_empty() {
+            let (packed_rest, result_tail) = right_mult_ff_row(packed, vector, result);
+            packed = packed_rest;
+            result = result_tail;
+            vector = vector.split_at(1).1;
+        }
     }
 }
 
@@ -104,6 +113,7 @@ pub(super) fn lane_at(row: &[f32], index: usize) -> f32 {
 /// do not touch the eight accumulators or `result[8..]`, so each float's FMA
 /// sequence is unchanged, and the triangle coefficients are dead before the
 /// tail loop (eight live accumulators, not the triangle as well).
+#[cfg(not(all(feature = "parallel", not(target_family = "wasm"))))]
 fn right_mult_ff_block8<'p, 'r>(
     packed: &'p [f32],
     vector: &[f32],
@@ -255,6 +265,7 @@ fn right_mult_ff_block8<'p, 'r>(
 /// Four packed rows starting at `vector[0]`. `vector` and `result` have the
 /// same length, at least 4. The four `res` values are independent left-to-right
 /// chains; scatters into a single `result[j]` stay in increasing row order.
+#[cfg(not(all(feature = "parallel", not(target_family = "wasm"))))]
 fn right_mult_ff_block4<'p, 'r>(
     packed: &'p [f32],
     vector: &[f32],
@@ -362,6 +373,7 @@ fn right_mult_ff_block4<'p, 'r>(
 
 /// One packed row. The running dot stays a single left-to-right chain, and the
 /// scatter of `factor * row` into later `result` entries is a separate loop.
+#[cfg(not(all(feature = "parallel", not(target_family = "wasm"))))]
 fn right_mult_ff_row<'p, 'r>(
     packed: &'p [f32],
     vector: &[f32],
