@@ -650,4 +650,39 @@ theorem idxRestoreClose_step {len : ℕ} (hN : len < 2 ^ 62) (g : Graph) (n : �
     · simp [hb, h0]
     · rw [hb]; exact v1
 
+/-! ## The reference side: closed form of one occurrence -/
+
+/-- Number of set halves the reference scan counts for an incident edge of order `th`. -/
+def hits (g : Graph) (ord : ℕ → ℕ) (X : Finset ℕ) (th n : ℕ) : ℕ :=
+  (X.filter (fun h => th < ord (h / 2) ∧ g.head (h / 2) ≠ n ∧ g.tail (h / 2) ≠ n)).card
+
+/-- What the first loop adds to `crossings`, edge by edge, if the scanned set stayed `X`. -/
+def queryAcc (g : Graph) (n : ℕ) (ord : ℕ → ℕ) (X : Finset ℕ) (es : List ℕ) (c : BitVec 32) :
+    BitVec 32 :=
+  es.foldl (fun c e => if 0 < ord e then wrapCrossings c (hits g ord X (ord e) n) else c) c
+
+/-- The halves the first loop erases. -/
+def erased (g : Graph) (n : ℕ) (ord : ℕ → ℕ) (es : List ℕ) : Finset ℕ :=
+  ((es.filter (fun e => 0 < ord e)).map (halfOf g n)).toFinset
+
+theorem foldl_count {α : Type*} (P : α → Prop) [DecidablePred P] (l : List α) (c : BitVec 32) :
+    l.foldl (fun c a => if P a then c + 1 else c) c = c + BitVec.ofNat 32 (l.countP P) := by
+  induction l generalizing c with
+  | nil => simp
+  | cons a l ih =>
+    rw [List.foldl_cons, ih]
+    by_cases h : P a
+    · simp [h, List.countP_cons_of_pos, BitVec.ofNat_add, add_assoc, add_comm]
+    · simp [h]
+
+theorem refQuery_eq (g : Graph) (ord : ℕ → ℕ) (X : Finset ℕ) (th n : ℕ) (c : BitVec 32) :
+    refQuery g ord X th n c = wrapCrossings c (hits g ord X th n) := by
+  unfold refQuery wrapCrossings hits
+  rw [foldl_count (fun half => th < ord (half / 2) ∧ g.head (half / 2) ≠ n ∧ g.tail (half / 2) ≠ n)]
+  congr 2
+  have := Multiset.coe_countP (fun half => th < ord (half / 2) ∧ g.head (half / 2) ≠ n ∧ g.tail (half / 2) ≠ n) (X.sort (· ≤ ·))
+  rw [Finset.sort_eq] at this
+  rw [← this, Multiset.countP_eq_card_filter]
+  rfl
+
 end GvpProofs.Circo.Fenwick
