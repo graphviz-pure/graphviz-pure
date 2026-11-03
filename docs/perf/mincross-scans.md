@@ -230,14 +230,40 @@ The shortcut calls the same `in_cross` and `out_cross` on the same inputs, so wh
 wrapped or not, is what it remembers. Its additions wrap where the reference's plain `+` wraps in a
 release build; they cannot overflow on real penalties.
 
-**Wrapping can stop `transpose` from ending.** Without wrapping, the sum of crossing products falls
-by `delta` each round and never rises, so `delta >= 1` cannot last. A wrapped `out_cross` breaks that,
-and a small DOT file reaches it. **#682** has eight nodes with `group` set, 40 parallel edges between
-half of the pairs and one edge between the others, so merged penalties are 40,000 and two products
-add up past `i32`. C, the merge base and this code all run past every limit tried on it, so it is not
-a regression, and the matching behaviour is correct for fidelity. `scan/tests.rs` has its ranks. The
-shortcut reads what the reference reads, for as long as it reads it, and allocates nothing while
-doing so, so memory stays flat. #682 records the open question of whether C's loop ever ends.
+**Wrapping stops `transpose` from ending.** Without wrapping, the sum of crossing products falls by
+`delta` each round and never rises, so `delta >= 1` cannot last. A wrapped `out_cross` breaks that,
+and a small DOT file reaches it. **#682** has eight nodes with `group=a` (`a_0..a_3` on rank 0,
+`b_0..b_3` on rank 1), 40 parallel edges when `i + j` is even and 1 otherwise. Each edge starts with
+`ED_xpenalty = CL_CROSS = 1,000` (`dotinit.c:70`), and `merge_oneway` (`fastgr.c:238`) sums parallel
+penalties in `short` (`types.h:568`), wrapping `40,000` to `-25,536`. Two `-25,536` bundles still have
+a positive product `(-25,536)² = 652,087,296`, and once `b_1` and `b_2` exchange in round 0 of
+`build_ranks(g, 0)`'s `transpose(g, false)`, an odd and an even node on rank 0 have four such products
+plus two `(-25,536) × 1,000` products, summing to `2,557,277,184 > INT32_MAX`. Signed `int` overflow in
+`out_cross` is undefined behaviour in C, which the standard does not guarantee to wrap; where `int`
+addition wraps modulo 2³² (usual on gcc and clang without `-ftrapv`, `-fwrapv` or UBSan), `out_cross` on
+rank 0 wraps `2,557,277,184` to `-1,737,690,112 < -47,072,000` and exchanges with
+`c0 - c1 = 1,690,618,112`, while on rank 1 `in_cross` keeps `int64_t` (`2,557,277,184 > -47,072,000`)
+and exchanges the opposite way with `c0 - c1 = 2,604,349,184`:
+
+| round | rank 0 (`cand`) | rank 1 (`cand`) | `r = 0` step | `r = 1` step | round `delta` |
+| --: | :-- | :-- | --: | --: | --: |
+| 0 | `[a_0, a_1, a_2, a_3]` (1) | `[b_0, b_1, b_2, b_3]` (1) | `1,302,174,592` | `2,604,349,184` | `3,906,523,776` |
+| 1 | `[a_0, a_2, a_1, a_3]` (1) | `[b_0, b_2, b_1, b_3]` (1) | `3,381,236,224` | `0` | `3,381,236,224` |
+| 2 | `[a_0, a_1, a_3, a_2]` (1) | `[b_0, b_2, b_1, b_3]` (0) | `3,381,236,224` | `5,208,698,368` | `8,589,934,592` |
+| 3 | `[a_1, a_3, a_0, a_2]` (1) | `[b_0, b_1, b_3, b_2]` (1) | `0` | `5,208,698,368` | `5,208,698,368` |
+| 4 | `[a_1, a_3, a_0, a_2]` (1) | `[b_1, b_3, b_0, b_2]` (1) | `3,381,236,224` | `0` | `3,381,236,224` |
+| 5 | `[a_1, a_0, a_2, a_3]` (1) | `[b_1, b_3, b_0, b_2]` (0) | `3,381,236,224` | `5,208,698,368` | `8,589,934,592` |
+| 6 | `[a_0, a_2, a_1, a_3]` (1) | `[b_1, b_0, b_2, b_3]` (1) | `0` | `5,208,698,368` | `5,208,698,368` |
+| 7 | `[a_0, a_2, a_1, a_3]` (1) | `[b_0, b_2, b_1, b_3]` (1) | — | — | repeats round 1 |
+
+At round 7 all mutable state read by `transpose` (`GD_rank(g)[r].v`, `ND_order`,
+`GD_rank(g)[r].candidate`, and `GD_rank(Root)[r].valid = false`) equals round 1's state, so the 6-cycle
+is a build-dependent consequence of that modulo-2³² wrap in C's `do { ... } while (delta >= 1)` loop
+(and likewise with period 6 for 24..=26 parallel edges and period 2 for 27..=32 parallel edges, where
+`short` stays positive at `24,000..=32,000`, or with `40,000` directly in `EdgeInfo`; all tested in
+`scan/tests.rs`). Matching C is therefore correct for fidelity. `scan/tests.rs` traces the state repeats
+and checks the read cap. The shortcut reads what the reference reads, for as long as it reads it, and
+allocates nothing while doing so, so memory stays flat.
 
 ## 5. When C's functions run
 
@@ -291,7 +317,7 @@ The tests in `scan/tests.rs` are:
   flat-edge matrices, on a window of the root's ranks as a cluster has, and with stale orders tying
   with such a window;
 - that check (W) declines exactly the views that break it;
-- the ranks of #682, which stop at the read limit, as C's loop and as the fallback;
+- the ranks of #682, which repeat their state in C's loop and stop at the read limit in check mode;
 - three tests that break the shortcut on purpose (no remote invalidation; ties left unrotated; (W)
   not checked) and assert that the cross-check fails.
 
