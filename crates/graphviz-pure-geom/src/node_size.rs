@@ -457,7 +457,7 @@ pub fn node_font(attrs: &AttrMap) -> (&str, f64) {
 pub fn node_geometry(node: &NodeData, env: &NodeSizeEnv<'_>) -> Result<NodeGeometry> {
     // `<G>` and `G` are two nodes: the tag keeps the HTML flag, as the node lookup does
     let key = graphviz_pure_core::Graph::node_key(&node.name, node.html_name);
-    graphviz_pure_core::font::textfont_object(format!("node:{key}"), || {
+    graphviz_pure_core::font::textfont_object(["node:", &key].concat(), || {
         node_geometry_measured(node, env)
     })
 }
@@ -735,6 +735,13 @@ pub fn edge_label_geometry_of(
     directed: bool,
     env: &NodeSizeEnv<'_>,
 ) -> EdgeLabelGeometry {
+    // Without a label no font is looked up, so there is nothing to record or replay.
+    let labelled = ["label", "xlabel", "headlabel", "taillabel"]
+        .iter()
+        .any(|key| attrs.get(*key).is_some_and(|s| !s.is_empty()));
+    if !labelled {
+        return edge_label_geometry(attrs, tail_name, head_name, directed, env);
+    }
     let tag = format!("edge:{tail_name}->{head_name}#{id}");
     graphviz_pure_core::font::textfont_object(tag, || {
         edge_label_geometry(attrs, tail_name, head_name, directed, env)
@@ -1812,6 +1819,16 @@ mod tests {
     }
 
     // Expected values are `dot -Tdot` output of Graphviz 16.1.0 with the LUT text estimator.
+    #[test]
+    fn unlabelled_edges_match_with_and_without_the_object_scope() {
+        let env = NodeSizeEnv::new("G");
+        let attrs = AttrMap::new();
+        let scoped = edge_label_geometry(&attrs, "a", "b", true, &env);
+        let tagged = edge_label_geometry_of(1, &attrs, "a", "b", true, &env);
+        assert_eq!(scoped.label, tagged.label);
+        assert_eq!(scoped.label_float, tagged.label_float);
+    }
+
     #[test]
     fn ellipse_hello_world() {
         let g = node_geometry(&node(&[("label", "hello world")]), &NodeSizeEnv::new("G")).unwrap();

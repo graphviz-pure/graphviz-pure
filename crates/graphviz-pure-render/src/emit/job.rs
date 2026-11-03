@@ -355,6 +355,8 @@ pub(crate) struct Job<'a> {
     pub pages: (i32, i32),
     /// The active `colorscheme` (`setColorScheme`).
     pub color_scheme: Option<String>,
+    /// Rust-only: the last name found in `features.knowncolors`, which a drawing repeats.
+    last_known_color: std::cell::RefCell<Option<ColorName>>,
     /// `job->layerNum` and `job->numLayers`.
     pub layer_num: i32,
     pub num_layers: i32,
@@ -572,6 +574,7 @@ impl<'a> Job<'a> {
             dpi: Point::new(dpi, dpi),
             pages: (1, 1),
             color_scheme: None,
+            last_known_color: std::cell::RefCell::new(None),
             layer_num: 0,
             num_layers: 1,
             layer_ids: Vec::new(),
@@ -628,13 +631,20 @@ impl<'a> Job<'a> {
 
     /// `gvrender_resolve_color`.
     pub fn resolve_color(&self, name: &str) -> GvColor {
+        if let Some(last) = &*self.last_known_color.borrow()
+            && *last == *name
+        {
+            return GvColor::Str(last.clone());
+        }
         let known = self
             .features
             .knowncolors
             .binary_search_by(|k| cmp_ignore_case(k, name))
             .is_ok();
         if known {
-            return GvColor::Str(ColorName::new(name));
+            let color = ColorName::new(name);
+            *self.last_known_color.borrow_mut() = Some(color.clone());
+            return GvColor::Str(color);
         }
         // `colorxlate`: a renderer that takes color names (`COLOR_STRING`) keeps the name,
         // and is warned about an unknown one all the same.
