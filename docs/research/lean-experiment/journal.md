@@ -416,3 +416,86 @@ inputs; none was declined.
 **Ratchet surprise.** First version added 19 allocations on the circo case (the ratchet allows
 none). Fix: `list_copy` is allocated only when a move is recounted, and `Delta::new` shares one
 vector for membership and rank. Net: one allocation fewer than before.
+## 2026-11-03 #733: limit_boxes retry takes only the new samples, with a binary64 lemma
+
+Ticket: when `routesplines_` doubles `delta` and runs `limitBoxes` again, reuse the even samples and
+take only the odd ones; prove the reuse bit-exact over an IEEE 754 model. First float lemma of the
+experiment. Branch `perf/733-limit-boxes-reuse`, stacked on #706 (which rewrites `limit_boxes`).
+
+**Time.** About 1 h on Rust (read the loop, the change, a unit test and a check-mode assertion;
+plus waiting, the first release build queued 28 min for a build slot on a loaded machine), about
+2.5 h on Lean (library setup 15 min, the float lemmas 1.5 h, the list and fold bookkeeping 40 min),
+30 min on measurement and docs. The Lean file is 650 lines, 466 of them statements and proofs once comments and blank lines are
+left out (the module comment is the "Model against Rust" section).
+
+**Step 1: how is `t` computed?** The ticket warned that an accumulated `t` makes the lemma false.
+It is `si / num_div` with `si += 1.0` from `0.0`: `si` accumulates, but a sum of whole numbers
+below 2^53 is exact, so `si` is exactly the integer `k`; `t` is a quotient of two exact integers,
+not an accumulated one. `num_div = delta * boxn` is the exact whole number `10 * 2^j * boxn`. So
+the reuse is valid. Measured nothing here; read C and Rust, then proved it.
+
+**Library choice.** FloatLib (`lean-dojo/FloatLib`, commit 8c88715) builds against our pin: its
+`lean-toolchain` is `v4.35.0` and its manifest pins the same Mathlib commit (56a00585), so the
+dependency adds no second Mathlib. Added as one `[[require]]` in `proofs/lakefile.toml`, with the
+revision pinned; `lake update FloatLib` took 13 s, the first build of the 2,394 jobs it needs took
+2 min 17 s on top of the Mathlib cache, and the package directory is 831 MB in the shared lake
+directory. Nothing broke. FloatSpec (`Beneficial-AI-Foundation/FloatSpec`, the Flocq port) was not
+tried: it is on `v4.34.0-rc2` with a Mathlib `v4.34.0-rc2` and a `cslib` dependency, so it cannot
+share our Mathlib; bumping or duplicating would be its own ticket.
+
+**What FloatLib gave.** A bit-exact `Model binary64` (`Model.div`, `Model.add`, `Model.mul`), with
+`toReal_div_eq_roundAt_of_abs_div_le_posMaxFinite` (an operation is the real result rounded once,
+finite under a bound), `roundAt` (Flocq's rounding), `roundDyadic_of_representable` (a whole number
+below 2^53 is a binary64 value) and `eq_of_toReal_eq_of_nonzero` (equal reals of two nonzero finite
+words are the same word). That was nearly all of it. Friction: the namespaces are long and the
+names are in `FloatLib.Floats.Formats.BinaryInterchange.Model`; there is no `Model.ofNat`, so
+`n as f64` is `roundDyadic` of a dyadic and has to be shown exact each time; one lemma I wanted
+(`2^52 <= posMaxFinite`) is `private`, and I re-proved a weaker one; `linarith` does not see
+through `2^971` (a `gcongr` step does); and nothing says a positive quotient of whole numbers does
+not round to zero, so that took a monotonicity argument about `2^-53`. I did not find a bug in
+FloatLib.
+
+**What Lean caught.**
+- The premise was too narrow. The ticket said power-of-two scaling is exact, so `fl(2k)/fl(2N) =
+  fl(k)/fl(N)`. The lemma needs no scaling: a binary64 quotient is the real quotient rounded once
+  and `2k/2N = k/N` as reals. It holds for any common factor of whole numbers below 2^53, not only
+  2. It is shorter than the scaling proof would have been.
+- `k = 0` is a separate case, and the first sample of every segment (`si = 0`) is it. The word
+  equality rests on `eq_of_toReal_eq_of_nonzero`, which needs a nonzero result, so `0.0 / x` is
+  handled by the sign rule (`+0.0` over a positive denominator), and for `k > 0` a positive
+  quotient of whole numbers has to be shown not to underflow to zero.
+- Writing the "folding a sample twice changes nothing" step as a lemma over `fmin`/`fmax` forced
+  the question of ties: `fmin(-0.0, +0.0)` may return either, and the choice is the code
+  generator's (x86 `minsd` returns its second operand, wasm `f64.min` returns `-0.0`). With a
+  tie that keeps the current limit the lemma is clean; with the real `f64::min` the retry could
+  flip the sign of a zero limit. The Rust now takes the odd-only retry only when no box limit
+  is a zero (`may_skip_even_samples`). That guard came from the proof attempt, not from a failing
+  test. The guard's own correctness is argued in prose in `docs/perf/limit-boxes-reuse.md`, not
+  in Lean.
+- The design the ticket described ("keep the even samples from the previous pass") needs no storage:
+  C does not reset the boxes between passes, so they already hold every even sample. The change
+  keeps nothing and computes less.
+
+**Dead ends.**
+- Looked for a Flocq scaling lemma for `roundAt` (`roundAt (2 * x) = 2 * roundAt x`); there is
+  none in FloatLib, and it turned out unnecessary.
+- First draft of the fold lemma used Mathlib's `min` on a linear order; that excludes NaN and says
+  nothing about ties. Replaced by an abstract "absorbing step" (`keep`, `stable`, `covers`) with
+  `<` only, which covers binary64's `<` with NaNs.
+- Deleted the working Lean file with a mistyped `rm` while tidying, and rebuilt it from the
+  scratch pieces in 15 minutes. The file now lives in the PR from the first commit on.
+
+**Extraction.** Aeneas and Charon are installed under the shared Lean directory. A two-function
+crate (`si / num_div` on `f64`, and an integer loop counting the odd samples) went through
+`charon cargo --preset=aeneas` and `aeneas -backend lean`: the integer loop extracts to a Lean
+loop body with checked arithmetic; the `f64` division gives "Invalid inputs for binop" and its
+body is `sorry`. So the float lemma is over a hand model of the loop (`passVals`, `oddRetryVals`),
+and the integer shape of the odd loop could be extracted separately; I did not do that, as the
+lemma that matters is the float one. No extracted file is committed.
+
+**Runtime result.** Retries are rare. In 9,652 spline routes over the corpus 96 passes were
+retries, in three dot inputs. None of the twopi/circo/fdp `splines=true` rows the ticket named
+ever retries, so for them the change is neutral (+0.006 % instructions on twopi `ngk10_4`, the
+cost of the loop bounds). Where it does retry the gain is real but small in absolute terms:
+b57 -14.6 % instructions, b51 -4.9 %, b106 -0.3 %. The ticket's measurement target was wrong; the
+proof and the saving stand regardless. Details in `docs/perf/limit-boxes-reuse.md`.

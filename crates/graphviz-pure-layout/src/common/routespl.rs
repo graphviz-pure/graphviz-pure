@@ -125,14 +125,42 @@ fn y_range(boxes: &[BoundingBox], order: YOrder, y: f64) -> (usize, usize) {
 /// C: lib/common/routespl.c:limitBoxes. Widens each box to the x-extent of the spline samples
 /// within it.
 fn limit_boxes(boxes: &mut [BoundingBox], pps: &[Point], delta: f64) {
+    limit_boxes_samples(boxes, pps, delta, Samples::All);
+}
+
+/// Which of `limitBoxes`'s samples `si = 0, 1, .., num_div` to take.
+#[derive(Clone, Copy, PartialEq, Debug)]
+enum Samples {
+    /// Every one, as C does.
+    All,
+    /// Only the odd `si`: the retry after `delta` doubled, where every even `si` has the `t` of a
+    /// sample the pass before took (`docs/perf/limit-boxes-reuse.md`).
+    Odd,
+}
+
+/// Whether a retry may take only the odd samples ([`Samples::Odd`]) on `boxes`, which the pass
+/// before widened over the same splines at half the `delta`.
+///
+/// A re-taken sample `e` leaves a limit `c` that already holds `e` unchanged, except where `c` and
+/// `e` are zeros of opposite sign: `fmin`/`fmax` return either one, so the sign could flip. No
+/// limit being a zero rules that out (`proofs/GvpProofs/Geom/LimitBoxes.lean`, `Retry`).
+fn may_skip_even_samples(boxes: &[BoundingBox]) -> bool {
+    boxes.iter().all(|b| b.ll.x != 0.0 && b.ur.x != 0.0)
+}
+
+fn limit_boxes_samples(boxes: &mut [BoundingBox], pps: &[Point], delta: f64, samples: Samples) {
     let boxn = boxes.len();
     let num_div = delta * boxn as f64;
     let pn = pps.len();
     // the loop below writes only x
     let order = y_order(boxes);
+    let (first, step) = match samples {
+        Samples::All => (0.0f64, 1.0f64),
+        Samples::Odd => (1.0, 2.0),
+    };
     let mut splinepi = 0;
     while splinepi + 3 < pn {
-        let mut si = 0.0f64;
+        let mut si = first;
         while si <= num_div {
             let t = si / num_div;
             let mut sp = [
@@ -172,7 +200,7 @@ fn limit_boxes(boxes: &mut [BoundingBox], pps: &[Point], delta: f64) {
                     b.ur.x = b.ur.x.max(sp[0].x);
                 }
             }
-            si += 1.0;
+            si += step;
         }
         splinepi += 3;
     }
@@ -424,8 +452,30 @@ pub fn routesplines_(pp: &mut Path, polyline: bool, real: RealEdge<'_>) -> Optio
     }
     let mut delta = INIT_DELTA;
     let mut loopcnt = 0;
+    // the pass before widened `boxes` over `ps` at half this `delta`
+    let mut widened_before = false;
+    #[cfg(any(test, feature = "routing-check"))]
+    let mut c_boxes = boxes.to_vec();
     while unbounded && loopcnt < LOOP_TRIES {
-        limit_boxes(boxes, &ps, delta);
+        let samples = if widened_before && may_skip_even_samples(boxes) {
+            Samples::Odd
+        } else {
+            Samples::All
+        };
+        limit_boxes_samples(boxes, &ps, delta, samples);
+        widened_before = true;
+        #[cfg(any(test, feature = "routing-check"))]
+        {
+            // C's pass, all the samples every time: the two must agree to the bit
+            limit_boxes_samples(&mut c_boxes, &ps, delta, Samples::All);
+            for (a, b) in boxes.iter().zip(&c_boxes) {
+                assert_eq!(
+                    (a.ll.x.to_bits(), a.ur.x.to_bits()),
+                    (b.ll.x.to_bits(), b.ur.x.to_bits()),
+                    "limit_boxes: retry {loopcnt} at delta {delta} differs from C's"
+                );
+            }
+        }
         let mut all = true;
         for b in boxes.iter() {
             if b.ll.x == f64::MAX || b.ur.x == -f64::MAX {
@@ -1033,6 +1083,70 @@ mod limit_boxes_tests {
             }
         }
         assert!(seen.iter().all(|&n| n > 0), "{seen:?}");
+    }
+
+    fn limits(list: &[BoundingBox]) -> Vec<[u64; 2]> {
+        list.iter()
+            .map(|b| [b.ll.x.to_bits(), b.ur.x.to_bits()])
+            .collect()
+    }
+
+    /// The retry after `delta` doubles: odd samples only, where the limits allow it, give the
+    /// bits of C's full passes at every `delta` of the chain.
+    #[test]
+    fn odd_samples_only_retry_matches_full_passes() {
+        let mut rng = Rng(0x1357_9bdf_0246_8ace);
+        let (mut skipped, mut guarded) = (0u32, 0u32);
+        for case in 0..3000 {
+            let shape = rng.below(3);
+            let mut original = boxes(&mut rng, shape);
+            for b in &mut original {
+                (b.ll.x, b.ur.x) = (f64::MAX, -f64::MAX);
+            }
+            let top = original.iter().map(|b| b.ur.y).fold(f64::MIN, f64::max);
+            let pps: Vec<Point> = (0..3 * (1 + rng.below(4)) + 1)
+                .map(|_| {
+                    // whole numbers from -20, so 0.0 and -0.0 limits do occur
+                    Point::new(
+                        rng.below(60) as f64 - 20.0,
+                        rng.below(top.max(1.0) as u64 + 1) as f64,
+                    )
+                })
+                .collect();
+            let (mut fast, mut full) = (original.clone(), original);
+            let mut delta = [0.25, 0.5, 1.0][rng.below(3) as usize];
+            for pass in 0..5 {
+                let samples = if pass > 0 && may_skip_even_samples(&fast) {
+                    skipped += 1;
+                    Samples::Odd
+                } else {
+                    guarded += u32::from(pass > 0);
+                    Samples::All
+                };
+                limit_boxes_samples(&mut fast, &pps, delta, samples);
+                limit_boxes(&mut full, &pps, delta);
+                assert_eq!(limits(&fast), limits(&full), "case {case} pass {pass}");
+                delta *= 2.0;
+            }
+        }
+        assert!(skipped > 1000 && guarded > 10, "{skipped} {guarded}");
+    }
+
+    #[test]
+    fn a_zero_limit_of_either_sign_keeps_the_even_samples() {
+        let mut list = vec![BoundingBox {
+            ll: Point::new(1.0, 0.0),
+            ur: Point::new(2.0, 1.0),
+        }];
+        assert!(may_skip_even_samples(&list));
+        for z in [0.0, -0.0] {
+            list[0].ll.x = z;
+            assert!(!may_skip_even_samples(&list));
+            list[0].ll.x = 1.0;
+            list[0].ur.x = z;
+            assert!(!may_skip_even_samples(&list));
+            list[0].ur.x = 2.0;
+        }
     }
 
     #[test]
