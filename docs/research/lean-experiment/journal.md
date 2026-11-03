@@ -866,7 +866,7 @@ sum meaningful.
   the file turns off `unusedSimpArgs`).
 - `scripts/proofs/extract.sh --check` fails on `TwopiCircle` with an Aeneas internal error
   (`translate_fun_sigs`), and does so on a clean checkout of master as well, so it is not from this
-  change; filed separately. `CircoCount` is current under `--check`.
+  change; filed as #766. `CircoCount` is current under `--check`.
 
 **Extraction verdict.** Extracted, with a refactor, and the Fenwick data structure plus the `i32`
 accumulator are now proved over the shipped definitions. The remaining distance to the full theorem
