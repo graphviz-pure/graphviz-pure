@@ -14120,3 +14120,83 @@ fn issue524_svg_inline_and_cmapx_match_c() {
 "#
     );
 }
+
+/// Issue #691: `getObjId` (`lib/common/emit.c:209-247`) takes the object's own `id` attribute as
+/// it is, and `initMapData` (`lib/common/emit.c:163-194`) substitutes the escapes in it
+/// afterwards, so an `id` that substitutes to nothing leaves an empty id. The SVG renderer
+/// writes the `id` attribute whatever the id is (`svg_print_id_class`,
+/// `plugin/core/gvrender_core_svg.c:98-114`), so the port wrote no attribute at all. Output is
+/// C 16.1.0's.
+#[test]
+fn issue691_svg_writes_an_id_that_substitutes_to_nothing() {
+    // `\E` is the edge's name; a node has no edge, so the id substitutes to nothing.
+    let (out, err, ok) = run(&["-Tsvg"], r#"digraph G { a [id="\E"]; }"#);
+    assert!(ok && err.is_empty(), "{err}");
+    assert_eq!(
+        out.split_once("-->\n").unwrap().1,
+        "\
+         <!-- Title: G Pages: 1 -->\n\
+         <svg width=\"62pt\" height=\"44pt\"\n\
+         \x20viewBox=\"0.00 0.00 62.00 44.00\" xmlns=\"http://www.w3.org/2000/svg\" xmlns:xlink=\"http://www.w3.org/1999/xlink\">\n\
+         <g id=\"graph0\" class=\"graph\" transform=\"scale(1 1) rotate(0) translate(4 40)\">\n\
+         <title>G</title>\n\
+         <polygon fill=\"white\" stroke=\"none\" points=\"-4,4 -4,-40 58,-40 58,4 -4,4\"/>\n\
+         <!-- a -->\n\
+         <g id=\"\" class=\"node\">\n\
+         <title>a</title>\n\
+         <ellipse fill=\"none\" stroke=\"black\" cx=\"27\" cy=\"-18\" rx=\"27\" ry=\"18\"/>\n\
+         <text xml:space=\"preserve\" text-anchor=\"middle\" x=\"27\" y=\"-13.8\" font-family=\"Times,serif\" font-size=\"14.00\">a</text>\n\
+         </g>\n\
+         </g>\n\
+         </svg>\n"
+    );
+}
+
+/// Issue #691: the root graph's `id` is substituted in the root graph's own context
+/// (`graph_init`, `lib/common/input.c:787-788`), and the result prefixes the other objects'
+/// ids (`getObjId`, `lib/common/emit.c:213-227`). The port used the root graph's `id` as it
+/// was, so its escapes were substituted again in each object's own context. Output is
+/// C 16.1.0's.
+#[test]
+fn issue691_the_root_graph_id_prefixes_the_other_ids() {
+    fn ids(svg: &str) -> Vec<&str> {
+        svg.lines()
+            .filter_map(|l| l.strip_prefix("<g id=\""))
+            .map(|l| l.split_once('"').unwrap().0)
+            .collect()
+    }
+    for (src, want) in [
+        (
+            r#"digraph G { id="\E"; a -> b; }"#,
+            &["", "_node1", "_node2", "_edge1"][..],
+        ),
+        (
+            r#"digraph G { id="\L"; label="GL"; a -> b; }"#,
+            &["GL", "GL_node1", "GL_node2", "GL_edge1"][..],
+        ),
+        (
+            r#"digraph G { id="\\E"; a -> b; }"#,
+            &["\\E", "_node1", "_node2", "a&#45;&gt;b_edge1"][..],
+        ),
+    ] {
+        let (out, err, ok) = run(&["-Tsvg"], src);
+        assert!(ok && err.is_empty(), "{err}");
+        assert_eq!(ids(&out), want, "{src}");
+    }
+
+    // The same prefix in the image map, whose `id` attribute C writes only when it is not
+    // empty (`map_output_shape`, `plugin/core/gvrender_core_map.c:87-91`).
+    let (out, err, ok) = run(
+        &["-Tcmapx"],
+        r#"digraph G { id="\E"; a [href="http://x"]; a -> b [href="http://y"]; }"#,
+    );
+    assert!(ok && err.is_empty(), "{err}");
+    assert_eq!(
+        out,
+        r#"<map id="G" name="G">
+<area shape="poly" id="_node1" href="http://x" title="a" alt="" coords="77,29,76,22,70,15,62,10,52,7,41,5,30,7,20,10,12,15,7,22,5,29,7,37,12,43,20,49,30,52,41,53,52,52,62,49,70,43,76,37"/>
+<area shape="poly" id="_edge1" href="http://y" alt="" coords="42,51,44,86,39,86,40,56"/>
+</map>
+"#
+    );
+}
