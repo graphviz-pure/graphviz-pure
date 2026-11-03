@@ -1394,6 +1394,16 @@ mod tests {
         g.edge(&mut c.arena, 3, 3);
         let s = Crossings::new(&c, &g, 4);
         assert!(Delta::new(&c, &s, &[0, 1, 2, 3]).is_none());
+        // Parallel edges: `CGraph::edge` coalesces them, so add the reverse edge as its own id,
+        // the way a block subgraph can list one neighbour under two edge ids.
+        let mut c = circ_n(4);
+        let mut g = CGraph::default();
+        g.edge(&mut c.arena, 0, 1);
+        g.edge(&mut c.arena, 2, 3);
+        let back = c.arena.new_edge(1, 0);
+        g.subedge(&c.arena, back);
+        let s = Crossings::new(&c, &g, 4);
+        assert!(Delta::new(&c, &s, &[0, 1, 2, 3]).is_none());
     }
 
     #[test]
