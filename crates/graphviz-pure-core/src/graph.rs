@@ -11,30 +11,157 @@ pub struct EdgeId(pub u32);
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct SubgraphId(pub u32);
 
-/// An object's attributes (cgraph's `agxget`/`agxset` values), by name. The values are
-/// strings, and [`AttrMap::is_html`] tells which are HTML strings (cgraph's `aghtmlstr`, a
-/// flag on the string), whose value is the inner text. The flag is not an attribute: no
-/// attribute name sets it (#365). The map reads like a `BTreeMap<String, String>`, which it
-/// dereferences to; it changes only through its methods, which keep the flags in step with
-/// the values (writing a plain value clears the flag, as `agxset` of a plain string does).
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+/// At most this many entries are kept in the sorted-`Vec` form. Real objects
+/// carry a handful of attributes, where a flat sorted vector beats a tree on
+/// allocation and cache locality; beyond this the map promotes to a
+/// `BTreeMap`, so insertion stays logarithmic instead of the quadratic
+/// shifting a sorted vector alone showed on reverse-ordered 10k-attribute
+/// input (#536).
+const SMALL_LIMIT: usize = 16;
+
+/// An object's attributes (cgraph's `agxget`/`agxset` values), by name, in
+/// lexical (byte) key order — the order every writer emits. The values are
+/// strings, and [`AttrMap::is_html`] tells which are HTML strings (cgraph's
+/// `aghtmlstr`, a flag on the string), whose value is the inner text. The
+/// flag is not an attribute: no attribute name sets it (#365). Storage is a
+/// hybrid: a sorted `Vec` up to [`SMALL_LIMIT`] entries, then a `BTreeMap`;
+/// both iterate in the same lexical order, so output order never depends on
+/// which form a map is in. The map changes only through its methods, which
+/// keep the flags in step with the values (writing a plain value clears the
+/// flag, as `agxset` of a plain string does).
+/// C: lib/cgraph/attr.c:agxget; agxset
+#[derive(Debug, Default)]
 pub struct AttrMap {
-    values: BTreeMap<String, String>,
+    values: Values,
     /// The keys whose value is an HTML string.
     html: BTreeSet<String>,
 }
+
+#[derive(Debug)]
+enum Values {
+    Small(Vec<(String, String)>),
+    // Boxed so the enum fits in the Vec's niche and `AttrMap` stays 48 bytes.
+    #[allow(clippy::box_collection)]
+    Large(Box<BTreeMap<String, String>>),
+}
+
+impl Default for Values {
+    fn default() -> Self {
+        Self::Small(Vec::new())
+    }
+}
+
+impl Clone for AttrMap {
+    fn clone(&self) -> Self {
+        // Clones are often extended (defaults, then pos/height/width):
+        // keep three spare slots in the small form.
+        let values = match &self.values {
+            Values::Small(v) if v.is_empty() => Values::Small(Vec::new()),
+            Values::Small(v) => {
+                let mut c =
+                    Vec::with_capacity(v.len().saturating_add(3).min(SMALL_LIMIT.max(v.len())));
+                c.extend(v.iter().cloned());
+                Values::Small(c)
+            }
+            Values::Large(m) => Values::Large(m.clone()),
+        };
+        Self {
+            values,
+            html: self.html.clone(),
+        }
+    }
+}
+
+impl PartialEq for AttrMap {
+    fn eq(&self, other: &Self) -> bool {
+        self.html == other.html && self.iter().eq(other.iter())
+    }
+}
+impl Eq for AttrMap {}
 
 impl AttrMap {
     pub fn new() -> Self {
         Self::default()
     }
 
-    /// A map of plain (not HTML) values.
+    /// A map of plain (not HTML) values, keeping the last of each duplicate key.
     pub fn from_plain(values: impl IntoIterator<Item = (String, String)>) -> Self {
-        AttrMap {
-            values: values.into_iter().collect(),
+        let mut v: Vec<_> = values.into_iter().collect();
+        if v.len() <= SMALL_LIMIT {
+            v.sort_by(|a, b| a.0.cmp(&b.0));
+            v.dedup_by(|later, earlier| {
+                if later.0 == earlier.0 {
+                    std::mem::swap(&mut later.1, &mut earlier.1);
+                    true
+                } else {
+                    false
+                }
+            });
+            return Self {
+                values: Values::Small(v),
+                html: BTreeSet::new(),
+            };
+        }
+        Self {
+            values: Values::Large(Box::new(v.into_iter().collect())),
             html: BTreeSet::new(),
         }
+    }
+
+    fn promote(&mut self) {
+        if let Values::Small(v) = &mut self.values {
+            let small = std::mem::take(v);
+            self.values = Values::Large(Box::new(small.into_iter().collect()));
+        }
+    }
+
+    /// A value by name (`agxget`).
+    pub fn get<Q: AsRef<str> + ?Sized>(&self, key: &Q) -> Option<&String> {
+        let key = key.as_ref();
+        match &self.values {
+            Values::Small(v) if v.len() <= 8 => {
+                v.iter().find(|(k, _)| k == key).map(|(_, val)| val)
+            }
+            Values::Small(v) => {
+                let mut i = 0;
+                while i < v.len() {
+                    if v[i].0 == key {
+                        return Some(&v[i].1);
+                    }
+                    i += 1;
+                }
+                None
+            }
+            Values::Large(m) => m.get(key),
+        }
+    }
+
+    pub fn contains_key<Q: AsRef<str> + ?Sized>(&self, key: &Q) -> bool {
+        self.get(key).is_some()
+    }
+    pub fn len(&self) -> usize {
+        match &self.values {
+            Values::Small(v) => v.len(),
+            Values::Large(m) => m.len(),
+        }
+    }
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+    /// Names and values in lexical key order, whichever form the map is in.
+    pub fn iter(&self) -> AttrIter<'_> {
+        match &self.values {
+            Values::Small(v) => AttrIter::Small(v.iter()),
+            Values::Large(m) => AttrIter::Large(m.iter()),
+        }
+    }
+    /// Names in lexical key order.
+    pub fn keys(&self) -> impl DoubleEndedIterator<Item = &String> + ExactSizeIterator {
+        self.iter().map(|(k, _)| k)
+    }
+    /// Values in lexical key order.
+    pub fn values(&self) -> impl DoubleEndedIterator<Item = &String> + ExactSizeIterator {
+        self.iter().map(|(_, v)| v)
     }
 
     /// `aghtmlstr(agget(obj, key))`: whether the value of `key` is an HTML string.
@@ -50,25 +177,70 @@ impl AttrMap {
         } else {
             self.html.remove(key);
         }
-        self.values.insert(key.to_string(), value)
+        // One search, and no key allocation when the key already exists.
+        let at = match &mut self.values {
+            Values::Small(v) => match v.binary_search_by(|(k, _)| k.as_str().cmp(key)) {
+                Ok(i) => return Some(std::mem::replace(&mut v[i].1, value)),
+                Err(i) => i,
+            },
+            Values::Large(m) => {
+                if let Some(v) = m.get_mut(key) {
+                    return Some(std::mem::replace(v, value));
+                }
+                return m.insert(key.to_owned(), value);
+            }
+        };
+        if matches!(&self.values, Values::Small(v) if v.len() >= SMALL_LIMIT) {
+            self.promote();
+            if let Values::Large(m) = &mut self.values {
+                return m.insert(key.to_owned(), value);
+            }
+        }
+        if let Values::Small(v) = &mut self.values {
+            v.insert(at, (key.to_owned(), value));
+        }
+        None
     }
 
     /// Sets `key` to the plain string `value` (`agxset`), clearing its HTML flag.
     pub fn insert(&mut self, key: String, value: String) -> Option<String> {
         self.html.remove(&key);
-        self.values.insert(key, value)
+        self.insert_owned(key, value)
+    }
+
+    fn insert_owned(&mut self, key: String, value: String) -> Option<String> {
+        if matches!(&self.values, Values::Small(v) if v.len() >= SMALL_LIMIT && !v.iter().any(|(k, _)| *k == key))
+        {
+            self.promote();
+        }
+        match &mut self.values {
+            Values::Small(v) => match v.binary_search_by(|(k, _)| k.as_str().cmp(&key)) {
+                Ok(i) => Some(std::mem::replace(&mut v[i].1, value)),
+                Err(i) => {
+                    v.insert(i, (key, value));
+                    None
+                }
+            },
+            Values::Large(m) => m.insert(key, value),
+        }
     }
 
     /// Removes `key` and its HTML flag.
     pub fn remove(&mut self, key: &str) -> Option<String> {
         self.html.remove(key);
-        self.values.remove(key)
+        match &mut self.values {
+            Values::Small(v) => v
+                .binary_search_by(|(k, _)| k.as_str().cmp(key))
+                .ok()
+                .map(|i| v.remove(i).1),
+            Values::Large(m) => m.remove(key),
+        }
     }
 
     /// The map with `f` applied to every key and value, keeping the HTML flags.
     pub fn map(&self, f: impl Fn(&str) -> Cow<'_, str>) -> AttrMap {
         let mut out = AttrMap::new();
-        for (k, v) in &self.values {
+        for (k, v) in self.iter() {
             out.set(&f(k), f(v).into_owned(), self.is_html(k));
         }
         out
@@ -77,17 +249,26 @@ impl AttrMap {
     /// Keeps the attributes `keep` accepts, with their flags.
     pub fn retain(&mut self, mut keep: impl FnMut(&String, &String) -> bool) {
         let html = &mut self.html;
-        self.values.retain(|k, v| {
-            let kept = keep(k, v);
-            if !kept {
-                html.remove(k);
-            }
-            kept
-        });
+        match &mut self.values {
+            Values::Small(v) => v.retain(|(k, val)| {
+                let kept = keep(k, val);
+                if !kept {
+                    html.remove(k);
+                }
+                kept
+            }),
+            Values::Large(m) => m.retain(|k, val| {
+                let kept = keep(k, val);
+                if !kept {
+                    html.remove(k);
+                }
+                kept
+            }),
+        }
     }
 
     pub fn clear(&mut self) {
-        self.values.clear();
+        self.values = Values::Small(Vec::new());
         self.html.clear();
     }
 
@@ -98,7 +279,7 @@ impl AttrMap {
 
     /// Sets every attribute of `src` on `self`, each with its HTML flag (`applyattrs`).
     pub fn extend_from(&mut self, src: &AttrMap) {
-        for (k, v) in &src.values {
+        for (k, v) in src.iter() {
             self.set(k, v.clone(), src.is_html(k));
         }
     }
@@ -106,7 +287,7 @@ impl AttrMap {
     /// The attributes `keep` accepts, with their flags.
     pub fn filtered(&self, mut keep: impl FnMut(&String, &String) -> bool) -> AttrMap {
         let mut out = AttrMap::new();
-        for (k, v) in &self.values {
+        for (k, v) in self.iter() {
             if keep(k, v) {
                 out.set(k, v.clone(), self.is_html(k));
             }
@@ -115,18 +296,49 @@ impl AttrMap {
     }
 }
 
-impl std::ops::Deref for AttrMap {
-    type Target = BTreeMap<String, String>;
-    fn deref(&self) -> &Self::Target {
-        &self.values
+/// Iterator over an [`AttrMap`] in lexical key order, in either storage form.
+pub enum AttrIter<'a> {
+    Small(std::slice::Iter<'a, (String, String)>),
+    Large(std::collections::btree_map::Iter<'a, String, String>),
+}
+
+impl<'a> Iterator for AttrIter<'a> {
+    type Item = (&'a String, &'a String);
+    fn next(&mut self) -> Option<Self::Item> {
+        match self {
+            Self::Small(it) => it.next().map(|(k, v)| (k, v)),
+            Self::Large(it) => it.next(),
+        }
+    }
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        match self {
+            Self::Small(it) => it.size_hint(),
+            Self::Large(it) => it.size_hint(),
+        }
+    }
+}
+impl DoubleEndedIterator for AttrIter<'_> {
+    fn next_back(&mut self) -> Option<Self::Item> {
+        match self {
+            Self::Small(it) => it.next_back().map(|(k, v)| (k, v)),
+            Self::Large(it) => it.next_back(),
+        }
+    }
+}
+impl ExactSizeIterator for AttrIter<'_> {}
+
+impl std::ops::Index<&str> for AttrMap {
+    type Output = String;
+    fn index(&self, key: &str) -> &String {
+        self.get(key).expect("no entry found for key")
     }
 }
 
 impl<'a> IntoIterator for &'a AttrMap {
     type Item = (&'a String, &'a String);
-    type IntoIter = std::collections::btree_map::Iter<'a, String, String>;
+    type IntoIter = AttrIter<'a>;
     fn into_iter(self) -> Self::IntoIter {
-        self.values.iter()
+        self.iter()
     }
 }
 
@@ -1133,6 +1345,122 @@ mod agnameof_tests {
 #[cfg(test)]
 mod attr_map_tests {
     use super::*;
+
+    #[test]
+    fn hybrid_matches_btree_across_promotion_and_reverse_insertion() {
+        // Reverse-ordered insertion is the sorted-Vec quadratic case (#536):
+        // past SMALL_LIMIT the map must promote and stay lexical.
+        let mut actual = AttrMap::new();
+        let mut expected: BTreeMap<String, String> = BTreeMap::new();
+        for i in (0..2000u32).rev() {
+            let k = format!("k{i:05}");
+            assert_eq!(
+                actual.insert(k.clone(), format!("v{i}")),
+                expected.insert(k, format!("v{i}"))
+            );
+        }
+        assert!(matches!(actual.values, Values::Large(_)));
+        assert_eq!(
+            actual.iter().collect::<Vec<_>>(),
+            expected.iter().collect::<Vec<_>>()
+        );
+        assert_eq!(
+            actual.keys().collect::<Vec<_>>(),
+            expected.keys().collect::<Vec<_>>()
+        );
+        // Updates, removals and retain on the large form.
+        assert_eq!(
+            actual.set("k01000", "new".into(), true),
+            Some("v1000".into())
+        );
+        assert!(actual.is_html("k01000"));
+        assert_eq!(actual.remove("k01000"), Some("new".into()));
+        assert!(!actual.is_html("k01000"));
+        actual.retain(|k, _| k.as_str() >= "k01990");
+        assert_eq!(actual.len(), 10);
+        assert_eq!(
+            actual.iter().next().map(|(k, _)| k.as_str()),
+            Some("k01990")
+        );
+        // Equality is by contents, not storage form.
+        let small = AttrMap::from_plain([("a".to_string(), "1".to_string())]);
+        let mut large = AttrMap::new();
+        for i in 0..(SMALL_LIMIT + 5) {
+            large.insert(format!("x{i:02}"), "y".into());
+        }
+        large.retain(|k, _| k == "x00");
+        large.remove("x00");
+        large.insert("a".into(), "1".into());
+        assert_eq!(small, large);
+        // from_plain keeps the last duplicate, in both forms.
+        let pairs = [("z", "first"), ("a", "a"), ("z", "last")];
+        let m = AttrMap::from_plain(pairs.map(|(k, v)| (k.to_owned(), v.to_owned())));
+        assert_eq!(m.get("z").map(String::as_str), Some("last"));
+        let many: Vec<_> = (0..100)
+            .map(|i| (format!("k{i:03}"), i.to_string()))
+            .chain([("k050".into(), "last".into())])
+            .collect();
+        assert_eq!(
+            AttrMap::from_plain(many).get("k050").map(String::as_str),
+            Some("last")
+        );
+    }
+
+    #[test]
+    fn hybrid_random_ops_match_btree() {
+        let mut actual = AttrMap::new();
+        let mut values = BTreeMap::new();
+        let mut html = BTreeSet::new();
+        let mut state = 610_u64;
+        for step in 0..3000 {
+            state = state.wrapping_mul(6364136223846793005).wrapping_add(1);
+            let key = format!("k{:02}", (state >> 32) % 43);
+            let value = format!("value-{step}");
+            match state % 6 {
+                0 | 1 => {
+                    let flagged = state & 16 != 0;
+                    if flagged {
+                        html.insert(key.clone());
+                    } else {
+                        html.remove(&key);
+                    }
+                    assert_eq!(
+                        actual.set(&key, value.clone(), flagged),
+                        values.insert(key, value)
+                    );
+                }
+                2 => {
+                    html.remove(&key);
+                    assert_eq!(
+                        actual.insert(key.clone(), value.clone()),
+                        values.insert(key, value)
+                    );
+                }
+                3 => {
+                    html.remove(&key);
+                    assert_eq!(actual.remove(&key), values.remove(&key));
+                }
+                4 => {
+                    actual.unmark_html(&key);
+                    html.remove(&key);
+                }
+                _ => {
+                    let drop = key.clone();
+                    actual.retain(|k, _| k != &drop);
+                    values.retain(|k, _| k != &drop);
+                    html.remove(&drop);
+                }
+            }
+            assert_eq!(
+                actual.iter().collect::<Vec<_>>(),
+                values.iter().collect::<Vec<_>>()
+            );
+            for (k, v) in &values {
+                assert_eq!(actual.get(k), Some(v));
+                assert_eq!(actual.is_html(k), html.contains(k));
+            }
+        }
+    }
 
     // #365: the HTML flag is not an attribute, so no attribute name sets it.
     #[test]
