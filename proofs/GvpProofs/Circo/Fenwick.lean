@@ -1049,4 +1049,92 @@ theorem idxOccurrence_step {adjacency : List ℕ} {E len L k : ℕ} (hN : len < 
       rw [oC', bC', crC']
     rw [this]
 
+/-! ## The whole scan -/
+
+/-- What the counters assume of the block graph at node `n`. In production `CGraph` builds the
+adjacency slice of `n` from the edges incident to `n`, each edge id once, loops included. -/
+structure NodeWf (g : Graph) (adjacency : List ℕ) (n : ℕ) : Prop where
+  nodup : (g.adj n).Nodup
+  incident : ∀ e, e ∈ g.adj n ↔ g.head e = n ∨ g.tail e = n
+  sub : ∀ e ∈ g.adj n, e ∈ adjacency
+
+theorem idxRun_ok {adjacency : List ℕ} {E len L : ℕ} (hN : len < 2 ^ 62) (hL : L < len)
+    (hE62 : E < 2 ^ 62) (g : Graph) (hE : ∀ e ∈ adjacency, e < E) :
+    ∀ (rest : List ℕ) (k : ℕ) (s : IdxState), k + rest.length ≤ L →
+      (∀ n ∈ rest, NodeWf g adjacency n) → Inv adjacency E len k s →
+      ∃ s', idxRun g L len (k + 1) rest s = some s' ∧
+        s'.toRefState = refRun g (k + 1) rest s.toRefState ∧
+        Inv adjacency E len (k + rest.length) s'
+  | [], k, s, _, _, hI => ⟨s, rfl, rfl, hI⟩
+  | n :: rest, k, s, hlen, hwf, hI => by
+    have w := hwf n (by simp)
+    obtain ⟨s1, h1, c1, i1⟩ := idxOccurrence_step hN hL (by simp at hlen; omega) hE62 g n hE
+      w.nodup w.incident w.sub hI
+    obtain ⟨s2, h2, c2, i2⟩ := idxRun_ok hN hL hE62 g hE rest (k + 1) s1
+      (by simp at hlen; omega) (fun m hm => hwf m (by simp [hm])) i1
+    refine ⟨s2, ?_, ?_, ?_⟩
+    · rw [idxRun, h1, opt_some_bind]; exact h2
+    · rw [refRun, ← c1]; exact c2
+    · have : k + 1 + rest.length = k + (n :: rest).length := by simp; omega
+      rw [← this]; exact i2
+
+theorem foldl_update_zero (l : List ℕ) (o : ℕ → ℕ) :
+    ∀ e ∈ l, (l.foldl (fun o e => Function.update o e 0) o) e = 0 := by
+  induction l generalizing o with
+  | nil => simp
+  | cons a l ih =>
+    intro e he
+    rw [List.foldl_cons]
+    by_cases h : e ∈ l
+    · exact ih _ e h
+    · have : e = a := by simpa [h] using he
+      subst this
+      -- later updates only touch members of `l`, and `e ∉ l`
+      have key : ∀ (l : List ℕ) (o : ℕ → ℕ), e ∉ l →
+          (l.foldl (fun o e => Function.update o e 0) o) e = o e := by
+        intro l
+        induction l with
+        | nil => intro o _; rfl
+        | cons b l ih2 =>
+          intro o hb
+          rw [List.foldl_cons, ih2 _ (fun h => hb (List.mem_cons_of_mem _ h))]
+          exact Function.update_of_ne (fun h => hb (by simp [h])) _ _
+      rw [key l _ h]; simp
+
+theorem initInv {adjacency : List ℕ} (E len : ℕ) (ord0 : ℕ → ℕ) :
+    Inv adjacency E len 0 { initState adjacency ord0 with tree := fun _ => 0 } := by
+  refine ⟨by simp [initState], by simp [initState], ?_, ?_⟩
+  · intro e he
+    exact (foldl_update_zero adjacency ord0 e he).le
+  · refine valid_congr (a := fun _ => 0) (fun k => ?_) (valid_zero len)
+    show (0 : ZMod (2 ^ 64)) = _
+    unfold histZ
+    show (0 : ZMod (2 ^ 64)) = ((Finset.filter _ (∅ : Finset ℕ)).card : ZMod (2 ^ 64))
+    rw [Finset.filter_empty]; simp
+
+/-- **Main theorem.** On a well-formed block graph, `count_indexed` never takes its `?` early
+return, and returns exactly the reference's final `order` array, `open` bitset and `i32` total. -/
+theorem countIndexed_eq_reference {adjacency : List ℕ} {E : ℕ} (g : Graph) (ord0 : ℕ → ℕ)
+    (list : List ℕ) (len : ℕ) (hN : len < 2 ^ 62) (hL : list.length < len)
+    (hE62 : E < 2 ^ 62) (hE : ∀ e ∈ adjacency, e < E)
+    (hwf : ∀ n ∈ list, NodeWf g adjacency n) :
+    countIndexed g adjacency ord0 list len = some (countReference g adjacency ord0 list) := by
+  obtain ⟨s', h, c, _⟩ := idxRun_ok (L := list.length) hN hL hE62 g hE list 0
+    { initState adjacency ord0 with tree := fun _ => 0 } (by simp) hwf (initInv E len ord0)
+  unfold countIndexed countReference
+  rw [h]
+  simp only [Option.map_some]
+  exact congrArg some c
+
+/-- The dispatch in `count_with_policy` returns the reference's state on every input. -/
+theorem countWithPolicy_eq_reference {adjacency : List ℕ} {E : ℕ} (g : Graph) (ord0 : ℕ → ℕ)
+    (list : List ℕ) (len : ℕ) (hN : len < 2 ^ 62)
+    (hE62 : E < 2 ^ 62) (hE : ∀ e ∈ adjacency, e < E)
+    (hwf : ∀ n ∈ list, NodeWf g adjacency n) :
+    countWithPolicy g adjacency ord0 list len = countReference g adjacency ord0 list := by
+  unfold countWithPolicy
+  by_cases h : len ≤ list.length
+  · simp [h]
+  · rw [if_neg h, countIndexed_eq_reference g ord0 list len hN (by omega) hE62 hE hwf]
+
 end GvpProofs.Circo.Fenwick
