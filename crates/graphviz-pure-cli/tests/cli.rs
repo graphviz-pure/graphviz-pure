@@ -1329,6 +1329,41 @@ fn png_and_jpeg_output_are_images_at_graphviz_sizes() {
     assert_eq!(&std::fs::read(&jpg).unwrap()[..2], &[0xFF, 0xD8]);
 }
 
+#[test]
+fn oversized_png_scales_like_cairo_without_changing_svg() {
+    let src = "digraph { dpi=72; viewport=\"100000,100,1\"; a }";
+    let png = tmp("cairo_limit.png");
+    let (_, err, ok) = run(&["-Tpng", "-o", png.to_str().unwrap()], src);
+    assert!(ok, "{err}");
+    assert_eq!(
+        err,
+        "graphviz-pure: graph is too large for cairo-renderer bitmaps. Scaling by 0.32767 to fit\n"
+    );
+    let bytes = std::fs::read(&png).unwrap();
+    assert_eq!(&bytes[1..4], b"PNG");
+    assert_eq!(u32::from_be_bytes(bytes[16..20].try_into().unwrap()), 32767);
+    assert_eq!(u32::from_be_bytes(bytes[20..24].try_into().unwrap()), 32);
+
+    let (svg, err, ok) = run(&["-Tsvg"], src);
+    assert!(ok, "{err}");
+    assert_eq!(err, "");
+    assert!(svg.contains("<svg width=\"100000pt\" height=\"100pt\""));
+}
+
+#[test]
+fn zero_after_cairo_scaling_writes_an_empty_png_like_c() {
+    for viewport in ["100000,1,1", "1,100000,1"] {
+        let src = format!("digraph {{ dpi=72; viewport=\"{viewport}\"; a }}");
+        let (out, err, ok) = run(&["-Tpng"], &src);
+        assert!(ok, "{err}");
+        assert!(out.is_empty());
+        assert_eq!(
+            err,
+            "graphviz-pure: graph is too large for cairo-renderer bitmaps. Scaling by 0.32767 to fit\n"
+        );
+    }
+}
+
 // Issue #355: C draws png and jpg with its cairo renderer, which has none of the SVG
 // renderer's maps, tooltips, targets and labels, and whose devices have no layers. So C
 // converts no edge tooltip for them (`emit_begin_edge`'s `preprocessTooltip` runs only with

@@ -297,6 +297,24 @@ pub fn fprintf_stderr(msg: &str) {
     write_stderr(&crate::charset::encode(msg));
 }
 
+/// A renderer warning C writes with `fprintf(stderr, ...)`, returned by a capturing
+/// library call instead of filtered or prefixed like an `agerr` warning.
+pub fn render_warning(msg: &str) {
+    let bytes = crate::charset::encode(msg);
+    if capturing() {
+        let message = String::from_utf8_lossy(&bytes).into_owned();
+        let diagnostic =
+            crate::error::Diagnostic::new(crate::error::DiagnosticLevel::Warning, message);
+        FRAMES.with(|frames| {
+            if let Some(frame) = frames.borrow_mut().top.as_mut() {
+                frame.diagnostics.push(diagnostic);
+            }
+        });
+        return;
+    }
+    write_stderr(&bytes);
+}
+
 /// One line of a `GVDUMP` debugging trace. These have no C counterpart and are not diagnostics.
 pub fn dump(line: &str) {
     write_stderr(format!("{line}\n").as_bytes());
@@ -403,13 +421,13 @@ impl Drop for FrameGuard {
     }
 }
 
-/// Runs `f` and returns the `agerr` messages it wrote, in order, instead of
-/// writing them to stderr.
+/// Runs `f` and returns its `agerr` and [`render_warning`] messages, in order,
+/// instead of writing them to stderr.
 ///
 /// The frame is this call's alone. A nested [`capture`] keeps its own messages
 /// and its own once-only set, and another thread has its own frame, so two
-/// layouts cannot mix diagnostics. `fprintf` to stderr (including `-v`) is
-/// dropped for the duration: the command line does not capture, so its progress
+/// layouts cannot mix diagnostics. [`fprintf_stderr`] output (including `-v`)
+/// is dropped for the duration: the command line does not capture, so its progress
 /// and its own messages still go to stderr as they are written.
 ///
 /// A warning C prints once per process stays once per process on the command
@@ -558,6 +576,19 @@ mod tests {
         assert_eq!(second.len(), 1);
         assert_eq!(second[0].message(), "Warning: beta\n");
         assert!(second.iter().all(|d| !d.message().contains("alpha")));
+    }
+
+    #[test]
+    fn render_warning_is_captured_without_agerr_filter_or_prefix() {
+        reset_errors();
+        let old = agseterr(AgErrLevel::Err);
+        let ((), messages) = capture(|| render_warning("cairo warning\n"));
+        assert_eq!(messages.len(), 1);
+        assert_eq!(messages[0].level(), crate::error::DiagnosticLevel::Warning);
+        assert_eq!(messages[0].message(), "cairo warning\n");
+        assert_eq!(error_count(), 0);
+        assert_eq!(agseterr(old), AgErrLevel::Err);
+        reset_errors();
     }
 
     #[test]

@@ -626,10 +626,10 @@ fn auto_output_filename(input: Option<&OsStr>, graph_index: usize, langname: &st
     name
 }
 
-/// Writes collected `agerr` text, in order. The message is already the stderr line.
-fn print_diagnostics(diagnostics: &[graphviz_pure_core::Diagnostic]) {
+/// Writes collected raster diagnostics, in order, with C's command-name prefix.
+fn print_raster_diagnostics(cmdname: &str, diagnostics: &[graphviz_pure_core::Diagnostic]) {
     for diagnostic in diagnostics {
-        fprintf_stderr(diagnostic.message());
+        fprintf_stderr(&format!("{cmdname}: {}", diagnostic.message()));
     }
 }
 
@@ -640,6 +640,7 @@ fn render_job(
     job: usize,
     graph: &Graph,
     langname: &str,
+    cmdname: &str,
 ) -> Result<Vec<u8>, graphviz_pure_core::GraphvizError> {
     let typ = langname.split(':').next().unwrap_or("");
     if let Some(fmt) = graphviz_pure_raster::RasterFormat::parse(typ) {
@@ -647,16 +648,13 @@ fn render_job(
         // `resolution`), which then scales the drawing.
         let explicit_dpi = graphviz_pure_core::cnum::drawing_dpi(&graph.graph_attrs) > 0.0;
         let svg = jobs.render_raster_svg_as(job, langname)?;
-        // Raster does not report diagnostics today. Print any a later encoder
-        // emits, in the order they were collected, instead of dropping them
-        // with the bytes.
         return match graphviz_pure_raster::rasterize(&svg, fmt, explicit_dpi) {
             Ok(rendered) => {
-                print_diagnostics(rendered.diagnostics());
+                print_raster_diagnostics(cmdname, rendered.diagnostics());
                 Ok(rendered.into_output())
             }
             Err(error) => {
-                print_diagnostics(error.diagnostics());
+                print_raster_diagnostics(cmdname, error.diagnostics());
                 Err(error)
             }
         };
@@ -787,7 +785,7 @@ impl Run<'_> {
                     .render(graph, n)
                     .map(|s| graphviz_pure_core::charset::encode(&s).into_owned())
             } else {
-                render_job(&mut graph_jobs, n, graph, &langname)
+                render_job(&mut graph_jobs, n, graph, &langname, &self.opts.cmdname)
             };
             // what the job wrote to the standard output (`-Tjson`'s xdot job) came first
             let stdout = graph_jobs.take_stdout();
