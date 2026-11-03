@@ -3,6 +3,7 @@
 //! separation constraints (`create_aux_edges`), whose ranks are the X values.
 
 use super::Dot;
+use super::reach::ReachCache;
 use super::types::*;
 use super::utils::*;
 use graphviz_pure_core::Point;
@@ -155,22 +156,17 @@ impl Dot<'_> {
         }
     }
 
-    /// `canreach(u, v)`: reachability over `ND_out` (C `go` without memo).
-    fn canreach(&self, u: N, v: N) -> bool {
-        let mut seen = std::collections::HashSet::new();
-        let mut stack = vec![u];
-        while let Some(x) = stack.pop() {
-            if x == v {
-                return true;
-            }
-            if !seen.insert(x) {
-                continue;
-            }
-            for &e in &self.nodes[x].out {
-                stack.push(self.edges[e].head);
-            }
-        }
-        false
+    /// `canreach(u, v)`: reachability over `ND_out` (C `go` without memo), from the reach sets
+    /// kept for this `make_lr_constraints` (`reach.rs`).
+    fn canreach(&self, cache: &mut ReachCache, u: N, v: N) -> bool {
+        let got = cache.canreach(&self.nodes, &self.edges, u, v);
+        #[cfg(any(test, feature = "position-check"))]
+        assert_eq!(
+            got,
+            super::reach::canreach_fresh(&self.nodes, &self.edges, u, v),
+            "canreach({u}, {v}): the search from scratch differs"
+        );
+        got
     }
 
     fn nlist_nodes(&self, g: G) -> Vec<N> {
@@ -199,6 +195,7 @@ impl Dot<'_> {
             [nodesep, nodesep]
         };
         let flip = self.graphs[0].flip();
+        let mut reach = ReachCache::default();
         for i in self.graphs[g].minrank..=self.graphs[g].maxrank {
             let n = self.rank_n(g, i);
             if n == 0 {
@@ -241,13 +238,13 @@ impl Dot<'_> {
                         let m0 = self.edges[e].minlen.wrapping_mul(nodesep) / 2;
                         let (t0, h0) = (self.edges[e0].tail, self.edges[e0].head);
                         let m1 = m0 as f64 + self.nodes[h0].rw + self.nodes[t0].lw;
-                        if !self.canreach(t0, h0) {
+                        if !self.canreach(&mut reach, t0, h0) {
                             let w = self.edges[e].weight;
                             self.make_aux_edge(h0, t0, m1, w);
                         }
                         let (t1, h1) = (self.edges[e1].tail, self.edges[e1].head);
                         let m1 = m0 as f64 + self.nodes[t1].rw + self.nodes[h1].lw;
-                        if !self.canreach(h1, t1) {
+                        if !self.canreach(&mut reach, h1, t1) {
                             let w = self.edges[e].weight;
                             self.make_aux_edge(t1, h1, m1, w);
                         }
