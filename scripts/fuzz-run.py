@@ -98,7 +98,7 @@ def classify(path, c=None, need_stable=True, debug=True):
     elif is_panic(rel):
         outcome = "port_crash"
         d["panic"] = rel[2].decode("utf-8", "replace")[-400:]
-    elif rel[0] != c[0] and (rel[0] != 0) != (c[0] != 0):
+    elif rel[0] != c[0]:
         outcome = "exit_diff"
         d["c_status"], d["port_status"] = c[0], rel[0]
     elif rel[1] != c[1]:
@@ -108,7 +108,10 @@ def classify(path, c=None, need_stable=True, debug=True):
         if dbg[0] != "timeout" and (is_panic(dbg) or dbg[1] != rel[1] or dbg[0] != rel[0]):
             outcome = "debug_diff"
             d["panic"] = dbg[2].decode("utf-8", "replace")[-400:]
-    if outcome is None:
+    if outcome in ("svg_diff", "exit_diff"):
+        if norm_err(c[2], path) != norm_err(rel[2], path):
+            d["stderr_diff"] = True
+    elif outcome is None:
         if norm_err(c[2], path) != norm_err(rel[2], path):
             d["stderr_diff"] = True
         return "same", d
