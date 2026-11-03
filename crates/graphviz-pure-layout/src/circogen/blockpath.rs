@@ -638,6 +638,247 @@ fn reduce(
     list
 }
 
+/// Whether production tries the incremental delta for a list of this length.
+/// Lists of 16 or fewer keep the recount scan (as `count_with_policy` does);
+/// check builds always take the delta so the oracle compares it on every move.
+const CHECK: bool = cfg!(any(test, feature = "circo-check"));
+
+fn delta_wanted(list_len: usize) -> bool {
+    CHECK || list_len > 16
+}
+
+/// C: lib/circogen/blockpath.c:count_all_crossings, reduce
+/// Incremental crossing delta for moving one node of a list, exact for the
+/// reference count whenever the list is a permutation of a strict loop-free
+/// block (`Delta::new` declines otherwise).
+///
+/// For such a list, the reference count is
+/// `sum_z fd(z) * span(z) - sum_z C(d(z), 2)` over the list's nodes, where
+/// `d(z)` counts neighbours earlier in the list, `fd(z)` later ones, and
+/// `span(z)` the edges with one end before and one after `z`. The node `x`
+/// being moved is cut out first: the arrays below describe the list without
+/// `x` and without `x`'s edges, and stay valid while `x` tries every slot.
+/// `phi(c)` is what putting `x` back before the nodes of rank `c` adds to the
+/// count of that list. The delta of a move is `phi(new) - phi(old)`, from
+/// `x`'s neighbour ranks and prefix sums only. Proved in
+/// `proofs/GvpProofs/Circo/CrossingDelta.lean`; docs/perf/circo-crossings.md.
+struct Delta {
+    /// Other end of each entry of `Crossings::edges`.
+    adj_nodes: Vec<usize>,
+    /// Rank of each node in the list without the current node.
+    rank: Vec<usize>,
+    /// Prefix sums over that list of `fd` and `d` in the graph without `x`.
+    fd_pre: Vec<i64>,
+    d_pre: Vec<i64>,
+    /// Sorted ranks of the current node's neighbours.
+    nbr: Vec<usize>,
+}
+
+impl Delta {
+    fn new(c: &Circ, s: &Crossings, list: &[usize]) -> Option<Self> {
+        if list.len() != s.nodes.len() {
+            return None;
+        }
+        // `rank` doubles as the membership mark until `prepare` fills it.
+        let mut rank = vec![usize::MAX; s.offsets.len()];
+        for &z in list {
+            let seen = rank.get_mut(z)?;
+            if *seen != usize::MAX {
+                return None;
+            }
+            *seen = 0;
+        }
+        let mut stamp = vec![usize::MAX; s.offsets.len()];
+        let mut adj_nodes = Vec::with_capacity(s.edges.len());
+        for &z in &s.nodes {
+            for &e in s.edges.get(s.offsets.get(z)?.clone())? {
+                let (t, h) = (*c.arena.tail.get(e)?, *c.arena.head.get(e)?);
+                if t == h || (t != z && h != z) {
+                    return None;
+                }
+                let w = if h == z { t } else { h };
+                let last = stamp.get_mut(w)?;
+                if *rank.get(w)? == usize::MAX || *last == z {
+                    return None;
+                }
+                *last = z;
+                adj_nodes.push(w);
+            }
+        }
+        // Every block node must be in the list (the lengths already match).
+        if s.nodes.iter().any(|&z| rank.get(z) == Some(&usize::MAX)) {
+            return None;
+        }
+        Some(Self {
+            adj_nodes,
+            rank,
+            fd_pre: Vec::with_capacity(list.len().saturating_add(1)),
+            d_pre: Vec::with_capacity(list.len().saturating_add(1)),
+            nbr: Vec::with_capacity(s.offsets.iter().map(|o| o.len()).max().unwrap_or(0)),
+        })
+    }
+
+    /// Cut `x` out of `list` and describe the rest; returns `x`'s current cut.
+    fn prepare(
+        &mut self,
+        x: usize,
+        list: &[usize],
+        offsets: &[std::ops::Range<usize>],
+    ) -> Option<usize> {
+        let mut next = 0usize;
+        let mut cut = None;
+        for (i, &z) in list.iter().enumerate() {
+            if z == x {
+                cut = Some(i);
+            } else {
+                *self.rank.get_mut(z)? = next;
+                next = next.wrapping_add(1);
+            }
+        }
+        self.fd_pre.clear();
+        self.d_pre.clear();
+        self.fd_pre.push(0);
+        self.d_pre.push(0);
+        let (mut fd_sum, mut d_sum) = (0i64, 0i64);
+        for &z in list.iter().filter(|&&z| z != x) {
+            let rz = *self.rank.get(z)?;
+            for &w in self.adj_nodes.get(offsets.get(z)?.clone())? {
+                if w == x {
+                    continue;
+                }
+                if *self.rank.get(w)? < rz {
+                    d_sum = d_sum.wrapping_add(1);
+                } else {
+                    fd_sum = fd_sum.wrapping_add(1);
+                }
+            }
+            self.fd_pre.push(fd_sum);
+            self.d_pre.push(d_sum);
+        }
+        self.nbr.clear();
+        for &w in self.adj_nodes.get(offsets.get(x)?.clone())? {
+            self.nbr.push(*self.rank.get(w)?);
+        }
+        self.nbr.sort_unstable();
+        cut
+    }
+
+    /// What `x` adds to the count when it sits before the nodes of rank `c`.
+    fn phi(&self, c: usize) -> Option<i64> {
+        let fp = |r: usize| self.fd_pre.get(r).copied();
+        let dp = |r: usize| self.d_pre.get(r).copied();
+        let q = self.nbr.len() as i64;
+        let below = self.nbr.partition_point(|&r| r < c) as i64;
+        let cut = fp(c)?.wrapping_sub(dp(c)?);
+        let mut total = q
+            .wrapping_sub(below)
+            .wrapping_mul(cut)
+            .wrapping_sub(below.wrapping_mul(below.wrapping_sub(1)).wrapping_shr(1));
+        for (k, &rho) in self.nbr.iter().enumerate() {
+            let (f_rho, d_lo, d_hi) = (fp(rho)?, dp(rho)?, dp(rho.wrapping_add(1))?);
+            let term = if rho >= c {
+                // between the cut and the neighbour, minus its earlier-neighbour pairs
+                f_rho
+                    .wrapping_sub(fp(c)?)
+                    .wrapping_sub(d_hi.wrapping_sub(d_lo))
+            } else {
+                // between the neighbour and the cut, plus the neighbour's own span
+                fp(c)?
+                    .wrapping_sub(fp(rho.wrapping_add(1))?)
+                    .wrapping_add(f_rho.wrapping_sub(d_hi))
+                    .wrapping_add(k as i64)
+            };
+            total = total.wrapping_add(term);
+        }
+        Some(total)
+    }
+}
+
+/// `old + delta` with the recount's i32 wrapping; checked builds panic exactly
+/// where the reference recount would (the mathematical total leaves i32).
+fn apply_delta(value: i32, delta: i64) -> i32 {
+    if cfg!(debug_assertions) {
+        assert!(
+            (0..=i64::from(i32::MAX)).contains(&i64::from(value).wrapping_add(delta)),
+            "crossing count overflow"
+        );
+    }
+    wrap_delta(value, delta)
+}
+
+/// Release arithmetic of `apply_delta`, split out so tests reach it in debug.
+/// C: lib/circogen/blockpath.c:count_all_crossings
+fn wrap_delta(value: i32, delta: i64) -> i32 {
+    value.wrapping_add(delta as i32)
+}
+
+/// `reduce` with the incremental delta: the same node, edge and slot order,
+/// the same strict `<` acceptance, restore and zero exit, but a tentative move
+/// costs `O(deg)` and touches the list only when it is kept. Check builds also
+/// recount every move with the reference and assert the same integer.
+fn reduce_delta(
+    c: &mut Circ,
+    mut list: Vec<usize>,
+    scratch: &mut Crossings,
+    delta: &mut Delta,
+    cnt: &mut i32,
+) -> Vec<usize> {
+    let mut crossings = *cnt;
+    // Allocated only if a move is recounted (check builds, fallbacks).
+    let mut list_copy = Vec::new();
+    let Crossings {
+        nodes,
+        offsets,
+        edges,
+        open,
+    } = scratch;
+    for &curnode in nodes.iter() {
+        let node_edges = offsets.get(curnode).and_then(|o| edges.get(o.clone()));
+        let mut base = None;
+        if node_edges.is_some_and(|es| !es.is_empty()) {
+            base = delta
+                .prepare(curnode, &list, offsets)
+                .and_then(|cut| delta.phi(cut));
+        }
+        for &e in node_edges.unwrap_or_default() {
+            let neighbor = c.arena.other(e, curnode);
+            for j in 0..2 {
+                let fast = base.and_then(|old| {
+                    let cut = delta.rank.get(neighbor)?.wrapping_add(j);
+                    let new = delta.phi(cut)?;
+                    Some((new, apply_delta(crossings, new.wrapping_sub(old))))
+                });
+                let recount = CHECK || fast.is_none();
+                let mut new_crossings = fast.map_or(0, |(_, n)| n);
+                if recount {
+                    list_copy.clone_from(&list);
+                    insert_nodelist(&mut list, curnode, neighbor, j as i32);
+                    let full = count_all_crossings(c, &list, offsets, edges, open);
+                    if fast.is_some() {
+                        assert_eq!(full, new_crossings, "circo incremental crossing delta");
+                    }
+                    new_crossings = full;
+                }
+                if new_crossings < crossings {
+                    if !recount {
+                        insert_nodelist(&mut list, curnode, neighbor, j as i32);
+                    }
+                    crossings = new_crossings;
+                    base = fast.map(|(phi, _)| phi);
+                    if crossings == 0 {
+                        *cnt = 0;
+                        return list;
+                    }
+                } else if recount {
+                    list.clone_from(&list_copy);
+                }
+            }
+        }
+    }
+    *cnt = crossings;
+    list
+}
+
 /// `reduce_edge_crossings(list, subg)`.
 fn reduce_edge_crossings(c: &mut Circ, mut list: Vec<usize>, subg: &CGraph) -> Vec<usize> {
     let mut scratch = Crossings::new(c, subg, list.len());
@@ -651,9 +892,17 @@ fn reduce_edge_crossings(c: &mut Circ, mut list: Vec<usize>, subg: &CGraph) -> V
     if crossings == 0 {
         return list;
     }
+    let mut delta = if delta_wanted(list.len()) {
+        Delta::new(c, &scratch, &list)
+    } else {
+        None
+    };
     for _ in 0..CROSS_ITER {
         let orig_crossings = crossings;
-        list = reduce(c, list, &mut scratch, &mut crossings);
+        list = match delta.as_mut() {
+            Some(delta) => reduce_delta(c, list, &mut scratch, delta, &mut crossings),
+            None => reduce(c, list, &mut scratch, &mut crossings),
+        };
         if orig_crossings == crossings || crossings == 0 {
             return list;
         }
@@ -1044,6 +1293,119 @@ mod tests {
     fn check_policy_still_indexes_small_lists() {
         let (mut c, mut s) = crossing_fixture();
         count_with_policy::<6, true>(&mut c, &[0, 1, 2, 3], &s.offsets, &s.edges, &mut s.open);
+    }
+
+    fn circ_n(n: usize) -> Circ {
+        let mut c = circ();
+        c.nd = vec![CData::default(); n];
+        c
+    }
+
+    /// A random strict graph on `n` nodes (sparse ids when `gap`) and a random list.
+    fn random_block(
+        seed: &mut u64,
+        n: usize,
+        density: u64,
+        gap: bool,
+    ) -> (Circ, CGraph, Vec<usize>) {
+        let mut next = |m: usize| {
+            *seed = seed
+                .wrapping_mul(6364136223846793005)
+                .wrapping_add(1442695040888963407);
+            (*seed >> 33) as usize % m
+        };
+        let mut c = circ_n(n * if gap { 2 } else { 1 });
+        let ids: Vec<usize> = (0..n).map(|i| if gap { i * 2 } else { i }).collect();
+        let mut g = CGraph::default();
+        for &i in &ids {
+            g.add_node(i);
+        }
+        for a in 0..n {
+            for b in a + 1..n {
+                if next(100) < density as usize {
+                    if next(2) == 0 {
+                        g.edge(&mut c.arena, ids[a], ids[b]);
+                    } else {
+                        g.edge(&mut c.arena, ids[b], ids[a]);
+                    }
+                }
+            }
+        }
+        let mut list = ids.clone();
+        for i in (1..n).rev() {
+            list.swap(i, next(i + 1));
+        }
+        (c, g, list)
+    }
+
+    /// `phi` differences equal the reference recount for every tentative move,
+    /// and `reduce_delta` ends on the same list and count as `reduce`.
+    #[test]
+    fn incremental_delta_matches_recount_on_random_strict_graphs() {
+        let mut seed = 99u64;
+        let mut moves = 0usize;
+        for round in 0..400 {
+            let n = 2 + round % 23;
+            let density = [5, 15, 40, 80][round % 4];
+            let (mut c, g, list) = random_block(&mut seed, n, density, round % 3 == 0);
+            let mut s = Crossings::new(&c, &g, list.len());
+            let Some(mut d) = Delta::new(&c, &s, &list) else {
+                panic!("strict loop-free permutation was declined");
+            };
+            let base = count_all_crossings(&mut c, &list, &s.offsets, &s.edges, &mut s.open);
+            for &x in &s.nodes.clone() {
+                if s.offsets[x].is_empty() {
+                    continue;
+                }
+                let cut = d.prepare(x, &list, &s.offsets).unwrap();
+                let old = d.phi(cut).unwrap();
+                for &e in &s.edges[s.offsets[x].clone()] {
+                    let nb = c.arena.other(e, x);
+                    for j in 0..2 {
+                        let new = d.phi(d.rank[nb] + j).unwrap();
+                        let mut moved = list.clone();
+                        insert_nodelist(&mut moved, x, nb, j as i32);
+                        let want =
+                            count_all_crossings(&mut c, &moved, &s.offsets, &s.edges, &mut s.open);
+                        assert_eq!(apply_delta(base, new - old), want, "{list:?} {x} {nb} {j}");
+                        moves += 1;
+                    }
+                }
+            }
+            let mut by_recount = base;
+            let a = reduce(&mut c, list.clone(), &mut s, &mut by_recount);
+            let mut by_delta = base;
+            let b = reduce_delta(&mut c, list.clone(), &mut s, &mut d, &mut by_delta);
+            assert_eq!((a, by_recount), (b, by_delta), "{list:?}");
+        }
+        assert!(moves > 5000);
+    }
+
+    #[test]
+    fn delta_declines_loops_parallel_edges_and_repeats() {
+        let mut c = circ_n(4);
+        let mut g = CGraph::default();
+        g.edge(&mut c.arena, 0, 1);
+        g.edge(&mut c.arena, 2, 3);
+        let s = Crossings::new(&c, &g, 4);
+        assert!(Delta::new(&c, &s, &[0, 1, 2, 3]).is_some());
+        assert!(Delta::new(&c, &s, &[0, 1, 2, 2]).is_none());
+        assert!(Delta::new(&c, &s, &[0, 1, 2]).is_none());
+        g.edge(&mut c.arena, 3, 3);
+        let s = Crossings::new(&c, &g, 4);
+        assert!(Delta::new(&c, &s, &[0, 1, 2, 3]).is_none());
+    }
+
+    #[test]
+    fn delta_wrapping_matches_the_recount_kernel() {
+        assert_eq!(wrap_delta(i32::MAX, 1), i32::MIN);
+        assert_eq!(wrap_delta(5, -7 - (1 << 32)), -2);
+        assert_eq!(wrap_delta(0, (1i64 << 32) + 3), 3);
+        assert_eq!(wrap_delta(i32::MAX - 1, 3), wrap_crossings(i32::MAX - 1, 3));
+        if cfg!(debug_assertions) {
+            assert!(std::panic::catch_unwind(|| apply_delta(i32::MAX, 1)).is_err());
+            assert!(std::panic::catch_unwind(|| apply_delta(0, -1)).is_err());
+        }
     }
 
     #[test]

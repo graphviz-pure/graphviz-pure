@@ -363,3 +363,52 @@ Floats: rejected in bodies (`Invalid inputs for binop`, `Improperly typed consta
 draft PR AeneasVerif/aeneas#1073 or later. Two more upstream bugs: `?` on `Option<&mut T>` emits a
 `Try::branch` shape that contradicts its own template, so the Fenwick update and query are
 extracted separately; and Charon's `--monomorphize-mut` panics. Details in `extraction.md`.
+## 2026-11-03 #730: circo incremental crossing delta
+
+Rust change in `circogen/blockpath.rs`, proof in `proofs/GvpProofs/Circo/CrossingDelta.lean`
+(601 lines, no `sorry`). Time: about 1.3 h on the Rust side (derivation, code, tests, measuring)
+and about 1 h on Lean, overlapped. About 35 minutes of the wall clock went to waiting for the
+shared build slots, which refuse to start below 20 GB free on the cache disk.
+
+**What the issue assumed, and what is true.** The issue says the delta of a move depends on the
+moved node's edges alone. It does not. `count_all_crossings` is not a chord-crossing count: on a
+permutation it counts every pair of edges `(a,b)`, `(a',b')` with `a < a' < b` and `b' != b`
+(nested chords included), because the C code erases the opposite edge half at the closing end and
+so never closes anything. The pairs a move changes include every edge that starts between the old
+and the new slot, which is a range sum over the whole list. The delta needs prefix sums of the
+list without the moved node, plus the sorted ranks of the node's neighbours. Per tentative move
+that is `O(deg)`; the prefix arrays are built once per node, `O(n + m)`.
+
+**Derivation.** I found the closed form `sum fd*span - sum C(d,2)` by hand from the C loop, then
+checked it against a Python port of the reference on 600 random graphs and 29,004 tentative moves
+before writing any Rust or Lean. Dead ends on the way: (1) a pair-by-pair delta, which needs, for
+each neighbour, the in-edges of the neighbour's own neighbours, `O(sum of neighbour degrees)`;
+(2) composing the move from adjacent swaps, `O(n * deg)`; (3) a delta over the full prefix arrays
+with `x` still in them, which needs a second pass over the neighbour pairs. Cutting `x` out first
+makes the arrays independent of where `x` sits, so one build serves all `2 * deg` tentative moves.
+
+**What Lean did.** Model, not extraction: `/jobs/work/gvp-lean/aeneas/bin/aeneas` did not exist
+when I reached this step. The model is the list as a position function (positions `2 rank + 1`
+for the other nodes and `2 c` for the moved one, so the move needs no renumbering), the block as
+a symmetric irreflexive relation. Proved: `crossings_formula` (the pair count equals the degree
+formula), `crossings_move` (moving `x` to cut `c` gives `Kc + phi c`, with `phi` written as the
+Rust loop), `fast_eq_recount` (the wrapped `i32` sum of the old total and the delta is the wrapped
+total of the moved list; `toI32` is the `i32` representative, `wrap_foldl` covers the recount
+adding its queries one at a time). Lean caught no bug in the Rust or in the Python derivation. It
+forced three hypotheses to be explicit, which became `Delta::new`'s eligibility test: no loops,
+symmetric adjacency, positions distinct. Parallel edges are outside the model; the Rust declines
+them. Not proved: that C's operational loop on a permutation equals the pair count (a
+state-machine proof over edge halves, about 200 more lines by estimate; covered by the
+every-move oracle and the randomized tests instead), that `insert_nodelist` is the cut
+`rank(n) + j`, and that the loops in `Delta::prepare` build `FP`/`DP`.
+
+**Extraction verdict.** Not attempted: no Aeneas binary on the machine.
+
+**Oracle kept.** `count_all_crossings` stays; under `cfg(test)` and `circo-check` every
+tentative move is recounted and asserted equal to the delta. Production lists of 16 or fewer
+keep the recount scan. The delta applies to all 37 non-trivial blocks of the 282 circo test
+inputs; none was declined.
+
+**Ratchet surprise.** First version added 19 allocations on the circo case (the ratchet allows
+none). Fix: `list_copy` is allocated only when a move is recounted, and `Delta::new` shares one
+vector for membership and rank. Net: one allocation fewer than before.
