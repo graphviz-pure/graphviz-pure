@@ -157,3 +157,48 @@ binary, so the theorem is over a hand-written model; the PR lists every differen
 Rust" in the file header). The risk that remains is that the model and the Rust drift apart, which
 extraction would remove. The review above is the first measurement of that risk: two documentation
 gaps, zero semantic ones, found in about an hour of a second model's time.
+## 2026-11-03 #729: twopi multi-source BFS and reverse sweep
+
+Rust change: `set_n_steps_to_leaf` (a depth-first relaxation from every leaf) became one
+multi-source BFS in `find_center_node`; `set_subtree_size` (a walk to the root from every childless
+node) became one pass over the discovery order of `set_n_steps_to_center` backwards. The old code
+stays in the test module as the oracle, next to the recursion it was itself checked against.
+
+- **Time.** About 0.3 h on Rust and tests, about 0.4 h on Lean, plus 27 min waiting for a cargo
+  slot on a loaded machine. Most of the Lean time went into choosing the invariants; each lemma
+  then compiled in one to three tries. Measurements are in the PR.
+- **Proof size.** `proofs/GvpProofs/Twopi/LeafDist.lean`: 859 lines (about 715 of definitions and
+  proof, the rest the header and comments), 31 theorems. No `sorry`; the headline theorems depend on
+  `propext`, `Classical.choice` and `Quot.sound` only. Build: 3.5 s on a warm Mathlib cache.
+- **Extraction verdict.** Not tried: the Aeneas binary did not exist on this machine when the Lean
+  step began, so the theorems are over a Lean model. `LeafDist.lean` lists the seven differences
+  from the Rust (finite type for indices, `ℕ` for `u64`, adjacency lists as input, the old
+  iterative stack replaced by the recursion it mirrors, fuel, `parent`/`order` as inputs).
+- **What Lean caught.** Nothing wrong in the code. It did sharpen three claims:
+  1. The issue says "tree". The relaxation fixpoint equals the distance to the nearest leaf on every
+     connected component, with cycles, parallel edges and loops. The theorem is stated for that
+     (`SimpleGraph.dist` of `fromRel` of the neighbour lists), not for trees.
+  2. The BFS loop is correct for **any** pop order, because a node is pushed every time its label
+     drops. The proof never uses FIFO; BFS order only makes each node pushed once (a performance
+     fact, not a correctness one). The `prev` skip of the old relaxation is sound for a reason
+     that is not obvious in the C: the child's entry label is two above `prev`'s, so skipping
+     the edge back can never leave a pair more than one apart. The proof has to carry that as a
+     precondition of every call (`val prev + 2 ≤ ns`).
+  3. The size sweep and the per-leaf walks agree without assuming that `n_children == 0` means
+     "no node has this parent". Both just count with the same `n_children == 0` test. What the
+     sweep does need is that every parent comes before its children in `order`; that is a property
+     of `set_n_steps_to_center` that the proof takes as a hypothesis and the random test checks
+     (it asserts the position order on every case).
+- **Dead ends.**
+  1. First plan for the old relaxation: a stack machine with an invariant per frame ("the newest
+     frame of `x` has `ns = val x + 1`", frames sorted by value). Abandoned before writing code:
+     the invariant needs an ordering fact between old and new frames of the same node that nothing
+     else uses. The recursion with a Hoare-style contract (`go_pre`) was shorter: lowered labels
+     keep the property "no pair more than one out of line unless it already was", proved by induction on
+     fuel with the stale `ns` as a parameter.
+  2. Stating the sweep by induction on the reversed list needed a "done" set; induction on the
+     list in discovery order, read through `foldr`, needed none (`sweep_form`).
+  3. Lean 4.35's `if_pos`/`if_neg` are deprecated in favour of `ite_eq_left`/`ite_eq_right`, which
+     reads backwards; the compiler's own hint was correct, only confusing.
+- **Panic sites.** The BFS and the sweep use `get` and saturating arithmetic where the old code did;
+  `circle.rs` goes from 56 index / 8 arith sites to 50 / 6.
