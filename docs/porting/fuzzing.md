@@ -351,6 +351,36 @@ recorded here: first `cur_cross = -68008599552`, exit 0, no `edge` lines, 59,204
 SHA-256 `04d7a0e19b62931dae51c7f313a86544aed34f2fb90fb1c8e5b19045d3cf1b04`. Those are the same
 bytes as this PR and `/opt`; the macOS build does not reproduce `-mfma`'s full drawing either.
 
+### Libc `qsort` tie order: the zero-weight and one-spline-line classes of #681
+
+The zero-weight (4 of 300) and flat-edge (2 of 300) classes of #681 are the libc `qsort` class
+of `docs/porting/libm.md` ("Linux: C does not agree with itself"): Graphviz sorts with `qsort(3)`, several of its
+comparators return 0 for distinct elements, and glibc's `qsort` (a stable mergesort) leaves
+those ties in input order while Apple's (the FreeBSD quicksort) does not. The goldens are
+macOS bytes, so the port reproduces Apple's (`cutil::qsort_by`, `docs/porting/dotgen.md`).
+A C oracle that is not preloaded with `graphviz-pure-portable-libm --features apple-libc`
+(or a stock Linux `dot`) shows the glibc order. Membership test: preload the `apple-libc`
+build (it exports `qsort`) and require C to match the port; the four repros below do, under the
+plain, bump, `tcache_count`, `MALLOC_TOP_PAD_`, `MALLOC_MMAP_THRESHOLD_` and `MALLOC_PERTURB_`
+allocator settings alike, so none of this is address-dependent.
+
+The stress generator was regenerated for this issue (1,500 graphs: zero-weight edges, flat
+edges, `rank=same` sets, clusters, groups, parallel edges, `concentrate`, `ortho`). Against the
+`-mfma` build *without* the preload, 42 of the first 300 differed, all stably across the six
+allocator settings; with the preload, 0 of 1,500 differed (C exit-1, crash and timeout cases
+excluded; the port exits 1 with C on the exit-1 cases). The 42 reduce to four comparators,
+each pinned in `crates/graphviz-pure-cli/tests/cli.rs` to C's bytes under Apple's `qsort`:
+
+| Comparator | Tie | Repro (minimised) | Visible effect |
+|---|---|---|---|
+| `edgelblcmpfn` (`lib/dotgen/dotsplines.c:966`) | every pair of unlabelled edges in a flat bundle with a label | `flat_labelled_bundle_tie_order_matches_apple_qsort`: a cluster node with eight parallel edges to an outside node, three `weight=0`, one labelled, and a `weight=5` back edge; `weight=0` keeps the two nodes on one rank | the seven unlabelled splines are assigned to different edges; `weight=1` separates the ranks and every libc agrees (the issue's "changing `weight=0` to 1 makes them match") |
+| `decreasingrankcmpf` in `TB_balance` (`lib/common/ns.c:798`) | nodes of equal rank | `zero_weight_rank_balance_tie_order_matches_apple_qsort`: `weight=0` edges leave two nodes free to move to a less populated rank | two nodes swap ranks |
+| `edgecmp` (`lib/dotgen/dotsplines.c:542`) | the virtual pieces of one concentrated edge, which share `AGSEQ` (`lib/dotgen/fastgr.c:143`) | `concentrated_edge_piece_order_matches_apple_qsort`: `concentrate=true`, six edges into one sink | the beziers of one edge change order inside its `edge` line (the issue's "one spline line") |
+| `edgecmp` in `orthoEdges` (`lib/ortho/ortho.c:1240`) | two parallel edges of equal length | `ortho_parallel_edge_order_matches_apple_qsort`: `splines=ortho` with a doubled edge | the two equal `edge` lines trade places |
+
+The grouped class of #681 is separate: the negative-mincross failure path (#688) and the
+build-dependent `rcross` overflow above.
+
 ### Declaration-order-dependent C `E_dir` after an aux abort
 
 C's `taperfun` reads `E_dir` after a flat-edge aux graph has aborted (`emit.c:2088`). The inferred
