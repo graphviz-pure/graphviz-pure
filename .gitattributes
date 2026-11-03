@@ -7,3 +7,4 @@ site/public/samples/** -text
 *.gv -text
 *.dot -text
 *.svg -text
+*.ps -text
