@@ -744,4 +744,43 @@ theorem refClose_fold (g : Graph) (n : ℕ) :
       rw [h1, refClose_fold g n es _ (fun e' he' => hes e' (by simp [he']))]
       simp [queryAcc, erased_cons, h0]
 
+/-! ## The indexed side: the four loops over one node's edges -/
+
+theorem toRef_ord {s s' : IdxState} (h : s'.toRefState = s.toRefState) : s'.ord = s.ord :=
+  congrArg RefState.ord h
+
+theorem toRef_bits {s s' : IdxState} (h : s'.toRefState = s.toRefState) : s'.bits = s.bits :=
+  congrArg RefState.bits h
+
+theorem toRef_crossings {s s' : IdxState} (h : s'.toRefState = s.toRefState) :
+    s'.crossings = s.crossings :=
+  congrArg RefState.crossings h
+
+/-- Loop 1 over all of a node's edges: the tree then indexes exactly the set halves of the
+non-incident edges. -/
+theorem exclude_fold {len : ℕ} (hN : len < 2 ^ 62) :
+    ∀ (es : List ℕ) (ps : Finset ℕ) (s : IdxState), es.Nodup → (∀ e ∈ es, e ∉ ps) →
+      Valid len s.tree (histZ s.ord (s.bits.filter (fun h => h / 2 ∉ ps))) →
+      (∀ h ∈ s.bits, 1 ≤ s.ord (h / 2) ∧ s.ord (h / 2) < len) →
+      ∃ s', es.foldlM (idxExclude len) s = some s' ∧ s'.toRefState = s.toRefState ∧
+        Valid len s'.tree (histZ s.ord (s.bits.filter (fun h => h / 2 ∉ ps ∪ es.toFinset)))
+  | [], ps, s, _, _, hv, _ => ⟨s, rfl, rfl, by simpa using hv⟩
+  | e :: es, ps, s, hnd, hnot, hv, hpos => by
+    have hnd' := List.nodup_cons.mp hnd
+    obtain ⟨s1, h1, c1, v1⟩ := idxExclude_step hN (hnot e (by simp)) hv hpos
+    have hb := toRef_bits c1
+    have ho := toRef_ord c1
+    obtain ⟨s2, h2, c2, v2⟩ := exclude_fold hN es (insert e ps) s1 hnd'.2
+      (fun x hx => by
+        simp only [Finset.mem_insert, not_or]
+        exact ⟨fun h => hnd'.1 (h ▸ hx), hnot x (by simp [hx])⟩)
+      (by rw [hb, ho]; exact v1) (by rw [hb, ho]; exact hpos)
+    refine ⟨s2, ?_, by rw [c2, c1], ?_⟩
+    · rw [List.foldlM_cons, h1]; exact h2
+    · rw [hb, ho] at v2
+      have hset : ∀ h, (h / 2 ∉ insert e ps ∪ es.toFinset) ↔ (h / 2 ∉ ps ∪ (e :: es).toFinset) := by
+        intro h; simp only [Finset.mem_union, Finset.mem_insert, List.toFinset_cons]; tauto
+      rw [Finset.filter_congr (fun h _ => hset h)] at v2
+      exact v2
+
 end GvpProofs.Circo.Fenwick
