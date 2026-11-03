@@ -103,16 +103,19 @@ user is `GvpProofs/Geom/LimitBoxes.lean` (#733). Its friction is logged in the j
 Lean version policy: pinned to the toolchain Aeneas's Lean backend requires (`v4.35.0` on
 2026-11-03) and to the Mathlib tag of the same name. Bump both together, in their own PR.
 
-## Tickets
+## Tickets and outcomes (first wave, 2026-11-03)
 
-| # | Ticket | Kind |
-|---|---|---|
-| #727 | Lake project, Mathlib, Aeneas/Charon extraction, CI | plumbing |
-| #728 | circo Fenwick count = bitset count | proof of shipped code |
-| #729 | twopi multi-source BFS and postorder sizes | speedup + proof |
-| #730 | circo incremental crossing delta | speedup + proof |
-| #731 | dot NS leave-edge index | speedup + proof |
-| #732 | NS cut-set and mincross-scan prose proofs | proof of shipped code |
-| #733 | spline routing: reuse even samples after delta doubles | speedup + float lemma |
-| #734 | neato: skip the stress mat-vec when `orthog1f` is a no-op | measure, then maybe speedup |
-| #735 | pathplan triangle adjacency, dot `canreach` memo | speedup + trivial proofs |
+| # | Ticket | Kind | Outcome |
+|---|---|---|---|
+| #727 | Lake project, Mathlib, Aeneas/Charon extraction, CI | plumbing | done (#736, #747): per-function extraction works, five kernels extracted; whole-crate and floats rejected |
+| #728 | circo Fenwick count = bitset count | proof of shipped code | proved, 1,285 lines (#742); two implicit hypotheses made explicit |
+| #729 | twopi multi-source BFS and postorder sizes | speedup + proof | shipped (#744): about 1.1–1.25× on `tree_20000` |
+| #730 | circo incremental crossing delta | speedup + proof | shipped (#753): up to 188× vs 1.0 on `circo_sparse_400`, exponent 3.1 → 1.9 |
+| #731 | dot NS leave-edge index | speedup + proof | shipped (#754, pending its base): 1–9% instructions; the ticket's premise was wrong |
+| #732 | NS cut-set and mincross-scan prose proofs | proof of shipped code | proved, 4,255 lines (#746); 12 prose gaps; scope narrowed by review (#750, #751) |
+| #733 | spline routing: reuse even samples after delta doubles | speedup + float lemma | shipped (#749): −14.5% instructions on one input; retries are rare |
+| #734 | neato: skip the stress mat-vec when `orthog1f` is a no-op | measure, then maybe speedup | measured 1.6% hit rate; no change (#741) |
+| #735 | pathplan triangle adjacency, dot `canreach` memo | speedup + trivial proofs | shipped (#743): no speedup possible; the proof caught a wrong design first |
+
+Follow-ups: #745 (refactor `count_indexed` so Aeneas accepts it), #750 (NS theorem for pivots with
+stale numbering), #751 (mincross no-NaN port invariant).

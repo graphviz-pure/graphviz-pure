@@ -551,3 +551,50 @@ the resume does not.
 the memory cap are in `reach.rs` and not in the Lean model; the tests in `reach.rs` and the
 `position-check` feature (an answer from scratch beside every answer) stand for them. The
 `position-check` run is the runtime check this proof does not retire.
+
+## 2026-11-03 coord: first wave wrap-up
+
+Nine tickets, nine delegates, nine adversarial reviews, one day. What landed on master by 17:10 UTC:
+the Lake project and Aeneas extraction (#736, #747), four proofs of shipped code (#742, #746), three
+speedups with proofs (#744 twopi, #753 circo, #749 spline routing, plus #743 with none), and one
+measured negative (#741). #754 (NS index) is reviewed and waits on the branch it stacks on.
+
+**What the proofs bought.** Three kinds of result, in order of value:
+1. *Speed with an equivalence argument too fiddly for prose.* The circo delta (#730) is the headline:
+   the ticket's premise (a delta from the moved node's edges alone) was wrong, the derivation that
+   replaced it needs prefix sums over the whole list, and the proof forced three eligibility
+   hypotheses that became the fallback test. 86% fewer instructions on the ratchet case, up to 188×
+   wall time against 1.0, output byte-identical on all 282 circo inputs.
+2. *Finding gaps in arguments the code already relied on.* No shipped code was wrong. Every
+   formalisation surfaced hypotheses the prose used silently: duplicate-free adjacency slices and
+   block-only halves (#728), parent-before-child order (#729), twelve imprecisions across the NS and
+   mincross pages (#732), the no-NaN limit invariant and the `boxn` bound (#733).
+3. *Stopping bad ideas before code.* Writing the `canreach` statement (#735) showed a plain memo of
+   answers would be wrong because edges are appended between queries; measuring the stress gate
+   (#734) showed it fires on 1.6% of calls and is not worth stating.
+
+**What the reviews bought.** Every PR was reviewed by a model from a different family (GPT-6.1 Sol)
+with the Rust and the Lean side by side. Lean's kernel checks the proof; the review checks the one
+thing it cannot: that the model is the code and the hypotheses hold where the code is called. The
+reviews found: a theorem whose `Valid` hypothesis is false on production state after the first NS
+pivot (#746, reproduced through `rank2`; now #750), an unenforced memory cap (#743, 64 MiB against a
+32 MiB cap), a vacuous freshness check and a cgroup escape in the extraction script (#747), the
+`i32::MAX` domain of the Fenwick theorem (#742), a wrong `Float` contract (#747), and several
+overclaims in headers and journal entries. Zero false alarms across nine reviews. Each finding was
+fixed on the PR before merge, by the coordinator, in under an hour.
+
+**What extraction bought, and did not.** Aeneas accepts single functions, not the crate; five
+integer kernels are extracted and type-check. No theorem in this wave is stated over extracted code
+yet: every proof is over a model with a "Model vs Rust" list, because the functions proved about use
+floats, closures, `?` in loops, or iterator adapters that Aeneas rejects (#745 is the first refactor
+to change that). The honest status is that extraction is plumbing in place, not a result.
+
+**Costs.** Lean time per ticket ranged from 0.7 h (#728, after a first attempt that wrote nothing) to
+most of a session (#732). The machine lost about 40 minutes for every delegate to a full `/cache`
+disk unrelated to this work. Three CI runs were cancelled externally mid-run and re-run. The journal
+conflicts every time two PRs land, because every PR appends to this file; keeping both sides has
+been the right resolution each time.
+
+**For the write-up.** The sentence to lead with: under a byte-identical output rule, a speedup is an
+equation, and a theorem prover is the right tool for equations. The sentence to follow it with: the
+prover never found a bug in the code, and it found a gap in every argument.
