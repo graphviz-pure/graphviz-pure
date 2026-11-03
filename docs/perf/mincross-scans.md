@@ -8,6 +8,9 @@ hand over to them when a condition below does not hold (§5), and in check mode 
 
 Measurements are in the pull request that added this page.
 
+Proof of record: `proofs/GvpProofs/Dot/MincrossScans.lean` (Lean 4, #732). It covers §3: (W),
+(F), (E), (M) and the §3.3 induction, for any number of rounds. §2 (`reorder`) is not covered.
+
 ## 1. Where the work goes
 
 `mincross_step` runs `medians` and `reorder` on each rank, then `transpose`. On the corpus-sized

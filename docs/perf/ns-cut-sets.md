@@ -9,6 +9,10 @@ being an argmin or an invariant check fails (§5), and in check mode runs beside
 
 Issue #641; measurements are in its pull request.
 
+Proof of record: `proofs/GvpProofs/Ns/CutSets.lean` (Lean 4, #732). It covers §2 with Lemma 1,
+(I1) of §3, §4.1, and the cut-set, cut-value and slack algebra of §4.2. Not yet covered: the
+`treeupdate` walks and the LCA climb, the parent pointers (I3), and §4.3 beyond `enter_edge`.
+
 ## 1. Why C's pivot is quadratic
 
 `rank2` repeats `leave_edge` → `enter_edge(e)` → `update(e, f)` (ns.c:982–1001). With `v` the

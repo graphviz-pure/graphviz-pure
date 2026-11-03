@@ -202,3 +202,92 @@ stays in the test module as the oracle, next to the recursion it was itself chec
      reads backwards; the compiler's own hint was correct, only confusing.
 - **Panic sites.** The BFS and the sweep use `get` and saturating arithmetic where the old code did;
   `circle.rs` goes from 56 index / 8 arith sites to 50 / 6.
+
+## 2026-11-03 #732: NS cut-set and mincross-scan prose proofs
+
+Formalised the two prose proofs behind dot's largest shipped speedups, over Lean models of the
+shipped code. No Rust change. Both files build with no `sorry` and only the standard axioms
+(`propext`, `Classical.choice`, `Quot.sound`).
+
+- `proofs/GvpProofs/Dot/MincrossScans.lean`, 1,773 lines, 113 definitions and theorems.
+  `transpose_same`: when `build_scan` accepts, C's `transpose` loop and the memo scan make the same
+  reads, with the same counts and exchange decisions in the same order. They stop in the same
+  round and leave the same orders, `candidate` and `valid`, and, after `publish_scans`, the same
+  rank buffers and `ND_order`. It is stated per round, because the loop need not end (#682).
+- `proofs/GvpProofs/Ns/CutSets.lean`, 2,482 lines, 171 definitions and theorems.
+  `Net.Valid.enterEdge_eq`: on a valid tree with (I1) for `e`, the cut-set `enter_edge(e)` with its
+  fallback returns what C's stack-based `enter_edge(e)` returns once its loop ends, ties
+  included. Around it: the interval characterisation of subtrees, the candidate set as a
+  root-free cut, Lemma 1 over the pruned stack machine, `scanned_before` as C's scan order, and
+  §4.2's algebra. That algebra is a cut basis, the pivot's new basis, the four cut-set bullets,
+  `cutvalue(t) −= σ(t)·cutvalue(e)`, the slack shift, and (I1) for the new tree however it is
+  stored. A tiny concrete instance per file shows the hypotheses can hold.
+
+**Hours.** About 1.1 h wall clock: 0.3 h reading the pages and the Rust and designing the
+models, 0.3 h on the mincross file, 0.5 h on the network-simplex file. Rust: 0 h. A single-file
+check takes 5 to 30 s; the full `lake.sh build` takes 11 s on a warm cache.
+
+**What the prose left out or got imprecise.** Nothing in either page is wrong. These are the
+places the formalisation had to add a step or correct a word:
+
+1. mincross §3.2, (M) after an exchange: `forget_pairs` walks v's and w's edges to find the
+   pairs (x, y) of rank r ± 1 that have edges to v and w. The counts it protects are read from
+   x's and y's edge lists. So the argument needs every edge listed at both ends. The page never
+   says so; the model needs it as `View.Sym`.
+2. mincross §3.1, (E): the proof uses (W) and the proven permutation at every exchange. The page
+   checks them once, before the `transpose`, and does not say that exchanges keep them.
+   `exchange_inv` proves they do; this was the one step the prose left out entirely.
+3. mincross §3.2: "`exchange(v, w)` swaps two adjacent orders". The scan does not swap. It writes
+   the absolute places `base + i + 1` and `base + i`, which equal C's swap only on a proven
+   permutation (`stepS_sim`).
+4. mincross §3.3, deferred `ND_order`: `publish_scans` writes only moved ranks. So the claim needs
+   `ND_order` to equal the compact order on entry for every node outside a moved window. The
+   page does not state this precondition; the model assumes it in `buildScan`.
+5. mincross (W): the code's test (`windows_hold_their_orders`) equals the page's wording only on
+   a proven permutation (`holds_iff_w`), which `build_scan` checks first.
+6. NS §4.1: "the lower index in that node's list comes first (precomputed: these lists don't
+   change)". The code computes nothing in advance: `first_of` walks the list. This is wrong about
+   cost, not about correctness.
+7. NS §4.1: the cut sets take the minimum in their storage order, using `scanned_before` only
+   between equal slacks. That equals C's first minimum only if `scanned_before` is a transitive,
+   total order. It is, since it is position in one list, but the page does not say it is needed
+   (`foldl_cutStep_spec`).
+8. NS §2 and §4.1: "the first candidate of minimum slack" needs each candidate to appear once in
+   C's scan. The page does not argue this; `nodup_scanList` proves it from the tree (one parent
+   per node, disjoint sibling subtrees, duplicate-free edge lists).
+9. NS Lemma 1 uses, without saying so, that `Enter` is set whenever `Slack ≤ 0`. That holds
+   because `Slack` starts at `INT_MAX`; pruning would be unsafe from any start of `Slack ≤ 0`
+   (`Ok`).
+10. NS §4.2, Ranks: "an edge's slack changes exactly when one of its ends is in S" should read
+    "only when exactly one of its ends is in S".
+11. NS §4.2, Cut sets: "a fundamental cycle has no coefficient ±2" is asserted, and the toggle
+    rule rests on it for the *new* tree. The proof had to show that `T − e + f` is again a
+    spanning tree (it needs σ(e) = +1) and that cut potentials take two values
+    (`CutBasis.pivot`, `pot_two`, `coef_range`).
+12. NS §2, the child test, and the in/out choice: C picks the search by `lim(tail) < lim(head)`,
+    the cut sets by `par(tail) == e`. They agree on a valid tree (`tail_child_iff`), which the page
+    takes for granted. The model also had to state outright that every tree edge is the parent
+    edge of exactly one end, and that `ND_tree_in`/`ND_tree_out` hold exactly the tree edges.
+
+**What the formalisation forced into the open.** It used a root-free definition of a cut's sides
+(joined by tree edges other than `e`), which turns "does not depend on the rooting" into a
+definition. It replaced the incidence algebra of §4.2 with cut potentials. In that form, (I1)'s
+"equivalently: the fundamental cycle contains t" and the cut-value update are each a few lines of
+linear algebra. Scan order is one recursive list, `scanList`, and "comes before" is a sublist
+`[c, w] <+ scanList`. With that, the climb to the LCA in `scanned_before` became an induction on
+two down-paths.
+
+**Dead ends.** None at the level of the proof. Lean fixes: `if_pos`/`if_neg` are deprecated in
+this Mathlib (`ite_eq_left`/`ite_eq_right`); `to` is a keyword; `rw` across two cut-basis types
+that are defeq but not syntactically equal fails, and `exact` is needed instead.
+
+**Not covered yet.** NS: that C's two `treeupdate` walks and the cut sets' LCA climb visit exactly
+the edges with σ(t) ≠ 0 (the cut-value theorem is stated per edge); the re-hanging of parent
+pointers (I3); that `rerank` reaches exactly the subtree under its start; §5–§8. Mincross: §2
+(`reorder_settled`), and §2.1's claim that an unconstrained view's `left2right` is false.
+
+**Extraction verdict.** Not attempted: the Aeneas binary was not installed when the Lean work
+started. Both theorems are stated over models that follow the Rust functions' shape. Each file's
+header has a "Model vs Rust" section. The `ns-check` and `mincross-check` features stay. This
+proof retires neither of them: they also check the parts not formalised here, and they check the
+shipped code, not the models.
