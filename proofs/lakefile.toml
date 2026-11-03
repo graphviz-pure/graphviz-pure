@@ -15,6 +15,10 @@ rev = "v4.35.0"
 name = "aeneas"
 git = { url = "https://github.com/AeneasVerif/aeneas", subDir = "backends/lean" }
 rev = "ab34bd28458a08c150b7cbf1873e59af74588138"
+[[require]]
+name = "FloatLib"
+git = "https://github.com/lean-dojo/FloatLib"
+rev = "8c8871576a941a86e73dcf0882702b823139aa93"
 
 [[lean_lib]]
 name = "GvpProofs"

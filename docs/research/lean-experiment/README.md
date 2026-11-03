@@ -94,6 +94,12 @@ Adding a proof: create `proofs/GvpProofs/<Engine>/<Name>.lean`, state the theore
 then say in the PR which runtime check the proof retires. Branch names follow the perf scheme:
 `proofs/<issue>-<slug>` for Lean-only changes, `perf/<issue>-<slug>` when Rust changes too.
 
+Float lemmas use [FloatLib](https://github.com/lean-dojo/FloatLib) (`lean-dojo/FloatLib`, pinned by
+commit in `proofs/lakefile.toml`), a Flocq-style bit-exact model of IEEE binary formats. It targets
+the same Lean and Mathlib versions as this project, so it adds no second Mathlib. Import
+`FloatLib.Floats.Formats.BinaryInterchange.Semantics` and work with `Model binary64`; the first
+user is `GvpProofs/Geom/LimitBoxes.lean` (#733). Its friction is logged in the journal.
+
 Lean version policy: pinned to the toolchain Aeneas's Lean backend requires (`v4.35.0` on
 2026-11-03) and to the Mathlib tag of the same name. Bump both together, in their own PR.
 
