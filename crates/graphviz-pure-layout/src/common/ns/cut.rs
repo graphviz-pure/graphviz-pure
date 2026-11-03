@@ -1145,6 +1145,8 @@ impl CutStore {
                 cv.wrapping_add(cutvalue)
             };
             g.set_cutvalue(t, next);
+            // `leave_edge`'s index follows the cut value of the tree slot
+            ctx.neg.set((step & ID) as usize, next < 0);
         }
         // re-hang the subtree below e from f: f's end in it is the new top
         let v = if tail_is_child { et } else { eh };

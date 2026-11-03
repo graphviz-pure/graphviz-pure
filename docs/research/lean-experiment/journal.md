@@ -598,3 +598,69 @@ been the right resolution each time.
 **For the write-up.** The sentence to lead with: under a byte-identical output rule, a speedup is an
 equation, and a theorem prover is the right tool for equations. The sentence to follow it with: the
 prover never found a bug in the code, and it found a gap in every argument.
+## 2026-11-03 #731: dot NS `leave_edge` index
+
+Stacked on #703 (`perf/702-ns-computed-cuts`), which edits the same file; the skeleton of #727 was
+cherry-picked so `proofs/` exists. 
+
+**What was built.** `NegSlots` (`common/ns/leave.rs`): the tree slots with a negative cut value as a
+64-ary tree of bit words, edited at the three places that change a tree edge's cut value
+(`treeupdate`, the cut-set path's cycle loop, `exchange_tree_edges`). `leave_edge` visits only
+members from the cursor. `proofs/GvpProofs/Ns/LeaveEdge.lean` proves it returns C's slot and leaves
+C's cursor.
+
+**Extraction verdict.** Statement over a Lean model, not over extracted Rust. When the Lean step
+began `/jobs/work/gvp-lean/aeneas/bin/aeneas` did not exist; it appeared while the Rust was being
+measured. A probe in a scratch directory (Charon `--start-from crate::common::ns::leave`, then
+Aeneas, 3 s) gave: the 64-ary tree (`NegSlots::build`, `set`, `next_from`, `insert_bit`, `word`)
+extracts with bodies; `members` (the walk over the index) does not ("Could not match the contexts":
+a `?` inside a `while`), and neither does the reference walk `ns::leave_edge` that it pulls in
+("Breaks to outer loops are not supported yet": a `return` inside nested control flow). Charon
+rejects `--start-from` on an inherent-impl method (`{impl T}::m` is only accepted as a whole-path
+prefix), so a method is extracted by naming its module. Nothing was committed: the extracted files
+import `Aeneas`, which `proofs/lakefile.toml` does not require until #727's extraction PR lands. The
+follow-up that would close the model gap: rewrite `members` and the reference walk without `?` and
+early `return` in loops, extract the module, and prove `next_from` against `NextSpec` (the one
+piece of the bridge that is tested but not proved). The theorem is over an abstract ordered set
+(`Finset` plus a successor query), so it does not change when that proof arrives.
+
+**What Lean caught.** Nothing wrong in the Rust: the index was written from the C before the proof,
+and the proof went through on the first full attempt. What the proof forced into the open, and the
+prose argument would have let slide:
+- the equality is false unless the cursor satisfies `s ≤ L`: slots past the end read as arbitrary
+  values in the wrap loop. That is an invariant of C's loop, not a precondition of the function, and
+  it took `leaveRef_cursor_le` to carry it across pivots (`run_idx_eq_run_ref`);
+- the cursor after a scan that finds fewer than `Search_size` negatives is `j`, but `L` (not 0) when
+  `j` was 0, because the first loop runs to the end and the wrap loop is skipped; and the cursor
+  stays *on* the slot of the last counted negative, so the next call counts it again. Both are in
+  the Rust and in the model; a "restore the start" model is wrong on exactly those calls;
+- the `ns-check` oracle compares the chosen edge and the cursor, but the index could also be wrong
+  in a way that a given run never exercises (a missed edit site on a path the test graphs do not
+  take). The invariant `Inv` and the edit lemma `inv_set` turn that into a closed list of edit
+  sites, which the oracle checks on every slot at every pivot instead of only on the chosen ones.
+
+**Dead ends / friction.**
+- `Finset.min'` is not in `Mathlib.Data.Finset.Basic` (import `Mathlib.Data.Finset.Max`).
+- A first `scanRange_skip` without the hypothesis `i ≤ q` is false (natural subtraction), found when
+  the zero case of the induction could not be closed.
+- The shared build machine's cargo guard refused every build for over half an hour (the `/cache`
+  disk was below the 20 GB the guard wants, because of an unrelated 63 GB Go build cache). With the
+  owner's leave the Rust builds ran with `MIN_FREE_CACHE_GB=8` and `SCCACHE_DIR` on `/jobs`; the
+  Lean steps were unaffected (`lake.sh` has no such guard) and the stall cost no Lean time.
+
+**Measured, and the answer the ticket did not expect.** The ticket assumed the walk is most of what
+is left of a pivot after #653/#702. It is not. A profile of `dot_dag_20000` on #703's head puts
+`rank2_with` (where the walk is inlined) at 3% self time in all, with no samples on the walk's own
+source lines; instructions fall 1.2% with the index, wall time by under 2%. The remaining network
+simplex cost there is `CutStore::move_cut_sets`, `compact` and `push` (about 11% together). The walk
+matters on graphs whose cut values go non-negative early and stay so (long parallel chains): −8.7%
+instructions on `dot_par_10_500`, −5.7% on `par_20_500`, −5% wall on the first. Output is
+byte-identical on all of them and on the whole test suite. Allocation counts fall on every ratchet
+case that runs network simplex (the index adds one; sizing `Tree_edge` once removes about log₂ n
+reallocations per run).
+
+**Cost.** Roughly 0.7 h on Lean (model, five lemmas, the run theorem, worked cases: first full
+compile was the whole file; 404 lines of which 282 are code, 28 declarations, standard axioms
+only), 1.0 h on Rust (index, three edit sites, check-mode oracle, differential and randomised unit
+tests, two clippy rounds), 1.2 h measuring and profiling (ratchet before and after, perf, interleaved
+timings), and about 0.6 h stalled on the machine's disk guard and a server restart.
