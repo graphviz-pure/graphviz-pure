@@ -142,15 +142,17 @@ match C (pos/lp/head_lp/tail_lp/xlp within 2pt) except where C itself exceeds a
   generated concentrate inputs), 28 outputs still differ for this reason alone,
   and on 15 more C's own output varies from run to run.
 * In `mincross`, `out_cross` (`mincross.c:609`) sums `ED_xpenalty` products in
-  32-bit `int` while `in_cross` (`mincross.c:591`) uses `int64_t`. When `group`
-  or cluster crossing penalties (`CL_CROSS = 1000`) on parallel edges make an
-  `out_cross` sum wrap `i32`, `transpose_step` on rank `r` and `in_cross` on
-  rank `r + 1` can exchange pairs in opposite directions with `delta >= 1` on
-  every round, so C's `transpose` loop repeats an earlier state and never
-  finishes (on #682's 8-node, 328-edge `group=a` graph, `build_ranks`'s first
-  `transpose` enters a 6-round cycle at round 1 and repeats at round 7; see
+  32-bit `int` while `in_cross` (`mincross.c:591`) uses `int64_t`. Signed `int`
+  overflow in `out_cross` is undefined behaviour in C and the standard does not
+  guarantee wrapping; where `int` addition wraps modulo 2³² (usual on gcc and
+  clang without `-ftrapv`, `-fwrapv` or UBSan), `group` or cluster crossing
+  penalties (`CL_CROSS = 1000`) on parallel edges can make `out_cross` wrap so
+  `transpose_step` on rank `r` and `in_cross` on rank `r + 1` exchange pairs in
+  opposite directions with `delta >= 1` on every round. On #682's 8-node,
+  328-edge `group=a` graph, `build_ranks`'s first `transpose` enters a 6-round
+  cycle at round 1 and repeats at round 7 as a build-dependent consequence (see
   [perf/mincross-scans.md](../perf/mincross-scans.md#4-integer-widths)). The
-  port reproduces C's loop.
+  port wraps `i32` and reproduces that loop.
 
 ## Validation
 

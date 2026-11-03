@@ -234,10 +234,12 @@ and a small DOT file reaches it. **#682** has eight nodes with `group=a` (`a_0..
 penalties in `short` (`types.h:568`), wrapping `40,000` to `-25,536`. Two `-25,536` bundles still have
 a positive product `(-25,536)² = 652,087,296`, and once `b_1` and `b_2` exchange in round 0 of
 `build_ranks(g, 0)`'s `transpose(g, false)`, an odd and an even node on rank 0 have four such products
-plus two `(-25,536) × 1,000` products, summing to `2,557,277,184 > INT32_MAX`. On rank 0, `out_cross`
-wraps that in `int` to `-1,737,690,112 < -47,072,000` and exchanges with `c0 - c1 = 1,690,618,112`; on
-rank 1, `in_cross` keeps `int64_t` (`2,557,277,184 > -47,072,000`) and exchanges the opposite way with
-`c0 - c1 = 2,604,349,184`:
+plus two `(-25,536) × 1,000` products, summing to `2,557,277,184 > INT32_MAX`. Signed `int` overflow in
+`out_cross` is undefined behaviour in C, which the standard does not guarantee to wrap; where `int`
+addition wraps modulo 2³² (usual on gcc and clang without `-ftrapv`, `-fwrapv` or UBSan), `out_cross` on
+rank 0 wraps `2,557,277,184` to `-1,737,690,112 < -47,072,000` and exchanges with
+`c0 - c1 = 1,690,618,112`, while on rank 1 `in_cross` keeps `int64_t` (`2,557,277,184 > -47,072,000`)
+and exchanges the opposite way with `c0 - c1 = 2,604,349,184`:
 
 | round | rank 0 (`cand`) | rank 1 (`cand`) | `r = 0` step | `r = 1` step | round `delta` |
 | --: | :-- | :-- | --: | --: | --: |
@@ -251,11 +253,12 @@ rank 1, `in_cross` keeps `int64_t` (`2,557,277,184 > -47,072,000`) and exchanges
 | 7 | `[a_0, a_2, a_1, a_3]` (1) | `[b_0, b_2, b_1, b_3]` (1) | — | — | repeats round 1 |
 
 At round 7 all mutable state read by `transpose` (`GD_rank(g)[r].v`, `ND_order`,
-`GD_rank(g)[r].candidate`, and `GD_rank(Root)[r].valid = false`) equals round 1's state, so C's
-`do { ... } while (delta >= 1)` loop repeats rounds 1..6 forever (and likewise with period 2 or 6 when
-24..32 parallel edges keep `short` positive at `24,000..32,000`, or with `40,000` directly in
-`EdgeInfo`). Matching C is therefore correct for fidelity. `scan/tests.rs` traces the state repeat and
-checks the read cap. The shortcut reads what the reference reads, for as long as it reads it, and
+`GD_rank(g)[r].candidate`, and `GD_rank(Root)[r].valid = false`) equals round 1's state, so the 6-cycle
+is a build-dependent consequence of that modulo-2³² wrap in C's `do { ... } while (delta >= 1)` loop
+(and likewise with period 6 for 24..=26 parallel edges and period 2 for 27..=32 parallel edges, where
+`short` stays positive at `24,000..=32,000`, or with `40,000` directly in `EdgeInfo`; all tested in
+`scan/tests.rs`). Matching C is therefore correct for fidelity. `scan/tests.rs` traces the state repeats
+and checks the read cap. The shortcut reads what the reference reads, for as long as it reads it, and
 allocates nothing while doing so, so memory stays flat.
 
 ## 5. When C's functions run

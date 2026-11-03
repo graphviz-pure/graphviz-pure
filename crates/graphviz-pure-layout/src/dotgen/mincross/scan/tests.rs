@@ -572,19 +572,47 @@ fn the_ranks_of_issue_682_repeat_their_state() -> Result<(), &'static str> {
     assert_eq!(round_7.valid, [false, false]);
     assert_eq!(round_7, states[1]);
 
-    // Unwrapped 40,000 penalty: round 2 repeats round 0 directly (period 2).
-    let mut d_unwrapped = issue_682_ranks(&input, [0, 1, 2, 3], [0, 1, 2, 3], 40_000);
-    d_unwrapped.prepare_mincross(0)?;
-    for r in 0..=1 {
-        d_unwrapped.rk_mut(0, r).candidate = true;
+    // Unwrapped 40,000 penalty and 27..=32 parallel edges (where `short` stays positive at
+    // 27,000..=32,000): round 2 repeats round 0 directly (period 2).
+    for penalty in (27..=32)
+        .map(|k| {
+            let p = crate::dotgen::fastgr::short(k * CL_CROSS);
+            assert_eq!(p, k * CL_CROSS);
+            p
+        })
+        .chain([40_000])
+    {
+        let mut d_pos = issue_682_ranks(&input, [0, 1, 2, 3], [0, 1, 2, 3], penalty);
+        d_pos.prepare_mincross(0)?;
+        for r in 0..=1 {
+            d_pos.rk_mut(0, r).candidate = true;
+        }
+        let round_0 = transpose_round_state(&d_pos);
+        assert!(step_transpose_round(&mut d_pos)? >= 1);
+        let round_1 = transpose_round_state(&d_pos);
+        assert_eq!(round_1.r0, [1, 0, 3, 2]);
+        assert_eq!(round_1.r1, [5, 4, 7, 6]);
+        assert!(step_transpose_round(&mut d_pos)? >= 1);
+        assert_eq!(transpose_round_state(&d_pos), round_0);
     }
-    let round_0 = transpose_round_state(&d_unwrapped);
-    assert_eq!(step_transpose_round(&mut d_unwrapped)?, 8_589_934_592);
-    let round_1 = transpose_round_state(&d_unwrapped);
-    assert_eq!(round_1.r0, [1, 0, 3, 2]);
-    assert_eq!(round_1.r1, [5, 4, 7, 6]);
-    assert_eq!(step_transpose_round(&mut d_unwrapped)?, 8_589_934_592);
-    assert_eq!(transpose_round_state(&d_unwrapped), round_0);
+
+    // 24..=26 parallel edges (where `short` stays positive at 24,000..=26,000): round 7 repeats
+    // round 1 (period 6).
+    for k in 24..=26 {
+        let penalty = crate::dotgen::fastgr::short(k * CL_CROSS);
+        assert_eq!(penalty, k * CL_CROSS);
+        let mut d_pos = issue_682_ranks(&input, [0, 1, 2, 3], [0, 1, 2, 3], penalty);
+        d_pos.prepare_mincross(0)?;
+        for r in 0..=1 {
+            d_pos.rk_mut(0, r).candidate = true;
+        }
+        let mut pos_states = Vec::new();
+        for _ in 0..7 {
+            pos_states.push(transpose_round_state(&d_pos));
+            assert!(step_transpose_round(&mut d_pos)? >= 1);
+        }
+        assert_eq!(transpose_round_state(&d_pos), pos_states[1]);
+    }
     Ok(())
 }
 
