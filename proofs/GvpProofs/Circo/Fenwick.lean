@@ -881,4 +881,71 @@ theorem restoreClose_fold {len : ℕ} (hN : len < 2 ^ 62) (g : Graph) (n : ℕ) 
       rw [Finset.filter_congr (fun h _ => this h)] at v2
       exact v2
 
+/-! ## The invariant -/
+
+/-- After `k` list occurrences: every set half belongs to an edge of order `1..k` and fits the
+bitset (`< 2 * E`, where `E` is `arena.order.len()`), every block edge has order at most `k`, and
+the tree is the Fenwick tree of the set's histogram. -/
+structure Inv (adjacency : List ℕ) (E len k : ℕ) (s : IdxState) : Prop where
+  pos : ∀ h ∈ s.bits, 1 ≤ s.ord (h / 2) ∧ s.ord (h / 2) ≤ k
+  lt : ∀ h ∈ s.bits, h < 2 * E
+  ord_le : ∀ e ∈ adjacency, s.ord e ≤ k
+  tree : Valid len s.tree (histZ s.ord s.bits)
+
+theorem idxOpen_step {adjacency : List ℕ} {E len order : ℕ} (hN : len < 2 ^ 62)
+    (hord1 : 1 ≤ order) (hord : order < len) (g : Graph) (n : ℕ) {s : IdxState} {e : ℕ}
+    (he : e ∈ adjacency) (hE : ∀ e ∈ adjacency, e < E) (hI : Inv adjacency E len order s) :
+    ∃ s', idxOpen g n len order s e = some s' ∧
+      s'.toRefState = refOpen g n order s.toRefState e ∧ Inv adjacency E len order s' := by
+  have hhalf : (halfOf g n e) / 2 = e := by unfold halfOf; split_ifs <;> omega
+  by_cases h0 : s.ord e = 0
+  · have hx : halfOf g n e ∉ s.bits := fun hm => by
+      have := (hI.pos _ hm).1
+      rw [hhalf] at this; omega
+    have hne : ∀ h ∈ s.bits, h / 2 ≠ e := fun h hh he' => hx (by
+      have := (hI.pos h hh).1
+      rw [he'] at this; omega)
+    have hcongr : histZ (Function.update s.ord e order) s.bits = histZ s.ord s.bits :=
+      histZ_congr _ _ _ (fun h hh => Function.update_of_ne (hne h hh) _ _)
+    have hv : Valid len s.tree (histZ (Function.update s.ord e order) s.bits) := by
+      rw [hcongr]; exact hI.tree
+    obtain ⟨t', ht', hv'⟩ := valid_insert hN hv hx (ord := Function.update s.ord e order)
+      (by rw [hhalf]; simp; omega) (by rw [hhalf]; simp; omega)
+    rw [hhalf] at ht'
+    simp only [Function.update_self] at ht'
+    refine ⟨{ s with ord := Function.update s.ord e order, bits := insert (halfOf g n e) s.bits, tree := t' }, ?_, ?_, ?_⟩
+    · simp [idxOpen, h0, ht']
+    · simp [refOpen, h0]
+    · refine ⟨?_, ?_, ?_, hv'⟩
+      · intro h hh
+        rcases Finset.mem_insert.mp hh with rfl | hh
+        · simp only [hhalf, Function.update_self]; omega
+        · have := hI.pos h hh
+          simp only [Function.update_of_ne (hne h hh)]
+          omega
+      · intro h hh
+        rcases Finset.mem_insert.mp hh with rfl | hh
+        · have := hE e he; unfold halfOf; split_ifs <;> omega
+        · exact hI.lt h hh
+      · intro e' he'
+        by_cases hee : e' = e
+        · subst hee; simp
+        · simp only [Function.update_of_ne hee]; exact hI.ord_le e' he'
+  · refine ⟨s, by simp [idxOpen, h0], by simp [refOpen, h0], hI⟩
+
+theorem open_fold {adjacency : List ℕ} {E len order : ℕ} (hN : len < 2 ^ 62)
+    (hord1 : 1 ≤ order) (hord : order < len) (g : Graph) (n : ℕ)
+    (hE : ∀ e ∈ adjacency, e < E) :
+    ∀ (es : List ℕ) (s : IdxState), (∀ e ∈ es, e ∈ adjacency) → Inv adjacency E len order s →
+      ∃ s', es.foldlM (idxOpen g n len order) s = some s' ∧
+        s'.toRefState = es.foldl (refOpen g n order) s.toRefState ∧ Inv adjacency E len order s'
+  | [], s, _, hI => ⟨s, rfl, rfl, hI⟩
+  | e :: es, s, hes, hI => by
+    obtain ⟨s1, h1, c1, i1⟩ := idxOpen_step hN hord1 hord g n (hes e (by simp)) hE hI
+    obtain ⟨s2, h2, c2, i2⟩ := open_fold hN hord1 hord g n hE es s1
+      (fun x hx => hes x (by simp [hx])) i1
+    refine ⟨s2, ?_, ?_, i2⟩
+    · rw [List.foldlM_cons, h1]; exact h2
+    · rw [c2, List.foldl_cons, c1]
+
 end GvpProofs.Circo.Fenwick
