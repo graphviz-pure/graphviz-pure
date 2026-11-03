@@ -381,10 +381,12 @@ impl SvgEngine {
         gvdouble_into(&mut self.out, v);
     }
 
-    fn print_id_class(&mut self, id: &str, kind: &str, class: Option<&str>) {
-        // A job without maps has no ids (the cairo job): no `id` attribute then.
+    /// `svg_print_id_class` (`plugin/core/gvrender_core_svg.c:98-114`): the `id` attribute is
+    /// always written, even when it is empty. A job without maps (the cairo job) has no id at
+    /// all, and then there is no `id` attribute.
+    fn print_id_class(&mut self, id: Option<&str>, kind: &str, class: Option<&str>) {
         self.put("<g");
-        if !id.is_empty() {
+        if let Some(id) = id {
             self.put(" id=\"");
             self.put(&xml(id));
             self.put("\"");
@@ -644,7 +646,7 @@ impl Engine for SvgEngine {
     }
 
     fn begin_layer(&mut self, j: &Job, name: &str) {
-        self.print_id_class(name, "layer", Self::obj_class(j, ObjKind::Root));
+        self.print_id_class(Some(name), "layer", Self::obj_class(j, ObjKind::Root));
         self.put(">\n");
     }
 
@@ -654,8 +656,7 @@ impl Engine for SvgEngine {
 
     fn begin_page(&mut self, j: &Job) {
         let o = j.obj();
-        let id = o.id.clone().unwrap_or_default();
-        self.print_id_class(&id, "graph", Self::obj_class(j, ObjKind::Root));
+        self.print_id_class(o.id.as_deref(), "graph", Self::obj_class(j, ObjKind::Root));
         self.put(" transform=\"scale(");
         fmt_g_into(&mut self.out, j.scale.x, 6);
         self.put(" ");
@@ -680,8 +681,7 @@ impl Engine for SvgEngine {
     fn begin_cluster(&mut self, j: &Job) {
         let o = j.obj();
         let ObjKind::Cluster(c) = o.kind else { return };
-        let id = o.id.clone().unwrap_or_default();
-        self.print_id_class(&id, "cluster", Self::obj_class(j, o.kind));
+        self.print_id_class(o.id.as_deref(), "cluster", Self::obj_class(j, o.kind));
         self.put(">\n<title>");
         self.put(&xml(&j.m.clusters[c].name));
         self.put("</title>\n");
@@ -694,16 +694,20 @@ impl Engine for SvgEngine {
     fn begin_node(&mut self, j: &Job) {
         let o = j.obj();
         let ObjKind::Node(n) = o.kind else { return };
-        let mut id = o.id.clone().unwrap_or_default();
-        if j.layer_num > 1 {
-            id.push('_');
-            id.push_str(&xml_raw_id(
-                j.layer_ids
-                    .get(j.layer_num as usize)
-                    .map_or("", String::as_str),
-            ));
-        }
-        self.print_id_class(&id, "node", Self::obj_class(j, o.kind));
+        // `svg_print_id_class`'s `idx`: the layer's name goes after the id, separated by `_`.
+        let id = o.id.as_ref().map(|id| {
+            let mut id = id.clone();
+            if j.layer_num > 1 {
+                id.push('_');
+                id.push_str(&xml_raw_id(
+                    j.layer_ids
+                        .get(j.layer_num as usize)
+                        .map_or("", String::as_str),
+                ));
+            }
+            id
+        });
+        self.print_id_class(id.as_deref(), "node", Self::obj_class(j, o.kind));
         self.put(">\n<title>");
         self.put(&xml(j.m.nodes[n].name));
         self.put("</title>\n");
@@ -716,8 +720,7 @@ impl Engine for SvgEngine {
     fn begin_edge(&mut self, j: &Job) {
         let o = j.obj();
         let ObjKind::Edge(e) = o.kind else { return };
-        let id = o.id.clone().unwrap_or_default();
-        self.print_id_class(&id, "edge", Self::obj_class(j, o.kind));
+        self.print_id_class(o.id.as_deref(), "edge", Self::obj_class(j, o.kind));
         self.put(">\n<title>");
         let m = j.m;
         let ed = &m.edges[e];

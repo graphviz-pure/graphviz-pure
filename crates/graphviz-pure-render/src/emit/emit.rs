@@ -11,7 +11,7 @@ use super::job::{
     GVRENDER_DOES_MAP_RECTANGLE, GVRENDER_DOES_MAPS, GVRENDER_DOES_TARGETS, GVRENDER_DOES_TOOLTIPS,
     GVRENDER_DOES_TRANSFORM, GVRENDER_NO_WHITE_BG, MapShape, ObjKind, RGRADIENT,
 };
-use super::model::{Bz, TextLabel};
+use super::model::{Bz, Model, TextLabel};
 use super::shapes::{is_exactly_zero, is_rect, p_ellipse, rect2poly};
 use graphviz_pure_core::diag::{agerr_prev, agerrorf, agwarningf};
 use graphviz_pure_core::font::{
@@ -351,6 +351,35 @@ fn interpret_crnl(s: &str) -> String {
     out
 }
 
+/// `getObjId` (`lib/common/emit.c:209-247`): the object's id, or the generated one.
+///
+/// `prefix` is `layerPagePrefix`'s. The object's own `id` attribute is taken as it is; the
+/// drawing's id (`GD_drawing(root)->id`, which C substituted in the root graph's own context
+/// in `graph_init`) goes in front of the generated one.
+fn get_obj_id(m: &Model<'_>, kind: ObjKind, prefix: &str) -> String {
+    let a = m.obj_attrs(kind);
+    let mut s = prefix.to_string();
+    if let Some(id) = a.nonempty("id") {
+        s.push_str(id);
+        return s;
+    }
+    if kind != ObjKind::Root
+        && let Some(gid) = m.drawing_id.as_deref()
+    {
+        s.push_str(gid);
+        s.push('_');
+    }
+    match kind {
+        ObjKind::Root => s.push_str("graph0"),
+        ObjKind::Cluster(c) => {
+            s.push_str(&format!("clust{}", m.clusters[c].seq));
+        }
+        ObjKind::Node(n) => s.push_str(&format!("node{}", m.node_seq(n))),
+        ObjKind::Edge(e) => s.push_str(&format!("edge{}", m.edge_seq(e))),
+    }
+    s
+}
+
 impl<'a, E: Engine> Emitter<'a, E> {
     /// Substitution context for an object.
     pub(crate) fn ctx(&self, kind: ObjKind) -> LabelSubstContext<'a> {
@@ -406,38 +435,12 @@ impl<'a, E: Engine> Emitter<'a, E> {
     }
 
     pub(crate) fn obj_attrs(&self, kind: ObjKind) -> Attrs<'a> {
-        let m = self.job.m;
-        match kind {
-            ObjKind::Root => m.root_attrs(),
-            ObjKind::Cluster(c) => m.clusters[c].attrs,
-            ObjKind::Node(n) => m.nodes[n].attrs,
-            ObjKind::Edge(e) => m.edges[e].attrs,
-        }
+        self.job.m.obj_attrs(kind)
     }
 
-    /// `getObjId`.
+    /// `getObjId` (`lib/common/emit.c:209-247`): the object's id, or the generated one.
     fn obj_id(&self, kind: ObjKind) -> String {
-        let a = self.obj_attrs(kind);
-        let mut s = self.layer_page_prefix();
-        if let Some(id) = a.nonempty("id") {
-            s.push_str(id);
-            return s;
-        }
-        if kind != ObjKind::Root
-            && let Some(gid) = self.job.m.root_attrs().nonempty("id")
-        {
-            s.push_str(gid);
-            s.push('_');
-        }
-        match kind {
-            ObjKind::Root => s.push_str("graph0"),
-            ObjKind::Cluster(c) => {
-                s.push_str(&format!("clust{}", self.job.m.clusters[c].seq));
-            }
-            ObjKind::Node(n) => s.push_str(&format!("node{}", self.job.m.node_seq(n))),
-            ObjKind::Edge(e) => s.push_str(&format!("edge{}", self.job.m.edge_seq(e))),
-        }
-        s
+        get_obj_id(self.job.m, kind, &self.layer_page_prefix())
     }
 
     fn preprocess_tooltip(&self, s: &str) -> String {
@@ -1456,20 +1459,7 @@ impl<'a, E: Engine> Emitter<'a, E> {
         }
         let pick = |k1: &str, k2: &str| a.nonempty(k1).or_else(|| a.nonempty(k2));
         if flags & GVRENDER_DOES_MAPS != 0 {
-            let id = {
-                let prefix = layer_prefix.clone();
-                if let Some(id) = a.nonempty("id") {
-                    format!("{prefix}{id}")
-                } else {
-                    let mut s = prefix;
-                    if let Some(gid) = m.root_attrs().nonempty("id") {
-                        s.push_str(gid);
-                        s.push('_');
-                    }
-                    s.push_str(&format!("edge{}", m.edge_seq(e)));
-                    s
-                }
-            };
+            let id = get_obj_id(m, ObjKind::Edge(e), &layer_prefix);
             o.id = Some(sub(&id));
             let dflt_url = pick("href", "URL").map(sub);
             o.url = pick("edgehref", "edgeURL").map(sub).or(dflt_url.clone());

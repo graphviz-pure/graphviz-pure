@@ -9,7 +9,11 @@
 //! `neato -n` reads them, as its layout.
 
 use super::attrs::Attrs;
-use graphviz_pure_core::font::{PostscriptFontAlias, TextJustify, translate_postscript_fontname};
+use super::job::ObjKind;
+use graphviz_pure_core::font::{
+    LabelSubstContext, PostscriptFontAlias, TextJustify, strdup_and_subst_obj,
+    translate_postscript_fontname,
+};
 use graphviz_pure_core::strtod::sscanf;
 use graphviz_pure_core::{
     AttrMap, BoundingBox, ClusterReg, Graph, GraphKind, GraphLayout, LabelPlace, Point, PortNames,
@@ -265,8 +269,24 @@ pub(crate) struct Model<'g> {
     pub out_edges: Vec<Vec<usize>>,
     pub clusters: Vec<RCluster<'g>>,
     pub root_clusters: Vec<usize>,
+    /// `GD_drawing(g)->id` (`lib/common/input.c:787-788`): the root graph's `id`, when it is
+    /// not empty, substituted in the root graph's own context. `getObjId` puts it in front of
+    /// every other object's id.
+    pub drawing_id: Option<String>,
     #[allow(dead_code)]
     pub has_labels: u32,
+}
+
+impl<'g> Model<'g> {
+    /// The attributes of the object `kind` names.
+    pub fn obj_attrs(&self, kind: ObjKind) -> Attrs<'g> {
+        match kind {
+            ObjKind::Root => Attrs(&self.g.graph_attrs),
+            ObjKind::Cluster(c) => self.clusters[c].attrs,
+            ObjKind::Node(n) => self.nodes[n].attrs,
+            ObjKind::Edge(e) => self.edges[e].attrs,
+        }
+    }
 }
 
 impl<'g> Model<'g> {
@@ -698,6 +718,21 @@ impl<'g> Model<'g> {
             l
         });
 
+        // `GD_drawing(g)->id` (`lib/common/input.c:787-788`): the root graph's `id`, when it is
+        // not empty, substituted in the root graph's own context. C computes it in
+        // `graph_init`, after `do_graph_label`, so `\L` is the graph label's text.
+        let drawing_id = ga.nonempty("id").map(|id| {
+            strdup_and_subst_obj(
+                id,
+                &LabelSubstContext {
+                    graph_name: g.root_name(),
+                    label_text: label.as_ref().map_or("", |l| l.text.as_str()),
+                    has_label: label.is_some(),
+                    ..Default::default()
+                },
+            )
+        });
+
         Ok(Model {
             g,
             node_penwidth_declared: g.node_attr_declared("penwidth"),
@@ -709,6 +744,7 @@ impl<'g> Model<'g> {
             out_edges,
             clusters,
             root_clusters,
+            drawing_id,
             has_labels,
         })
     }
