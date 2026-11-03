@@ -40,6 +40,12 @@
    "heap_peak_bytes": 14202023,
    "instructions": 935360867
   },
+  "synth/dot_par_10_500.gv -Tsvg": {
+   "heap_blocks": 124730,
+   "heap_bytes": 127942160,
+   "heap_peak_bytes": 63854123,
+   "instructions": 1580971971
+  },
   "synth/nop2_subgraph_10000.gv -Tcanon -Knop2": {
    "heap_blocks": 674923,
    "heap_bytes": 68925348,
