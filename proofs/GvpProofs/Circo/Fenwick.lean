@@ -132,16 +132,18 @@ def checkedSub (a b : ZMod (2 ^ 64)) : Option ℕ :=
 /-- `wrap_crossings`: `value.wrapping_add(count as i32)`. -/
 def wrapCrossings (value : BitVec 32) (count : ℕ) : BitVec 32 := value + BitVec.ofNat 32 count
 
-/-- Tree update guarded by "the half is set": the shape of both `for half in ..` loops over an
-edge's two halves (`2e`, `2e + 1`) in `count_indexed`. -/
+/-- Tree update guarded by "the half is set": the body of both `for half in ..` loops over an
+edge's two halves in `count_indexed`. -/
+def idxHalf (len : ℕ) (d : ZMod (2 ^ 64)) (e : ℕ) (s : IdxState) (half : ℕ) :
+    Option IdxState :=
+  if half ∈ s.bits then do
+    let t ← indexUpdate len d s.tree (s.ord e)
+    pure { s with tree := t }
+  else pure s
+
+/-- `for half in e << 1..(e << 1) + 2` (halves `2e` and `2e + 1`). -/
 def idxHalves (len : ℕ) (d : ZMod (2 ^ 64)) (e : ℕ) (s : IdxState) : Option IdxState :=
-  (List.range' (2 * e) 2).foldlM
-    (fun s half =>
-      if half ∈ s.bits then do
-        let t ← indexUpdate len d s.tree (s.ord e)
-        pure { s with tree := t }
-      else pure s)
-    s
+  (List.range' (2 * e) 2).foldlM (idxHalf len d e) s
 
 /-- Loop 1: take every set half of the incident edge out of the tree. -/
 def idxExclude (len : ℕ) (s : IdxState) (e : ℕ) : Option IdxState := idxHalves len (-1) e s
@@ -209,5 +211,186 @@ def countWithPolicy (g : Graph) (adjacency : List ℕ) (ord0 : ℕ → ℕ) (lis
     match countIndexed g adjacency ord0 list len with
     | some r => r
     | none => countReference g adjacency ord0 list
+
+/-! ## The Fenwick data structure
+
+`Valid N t a` says that the `u64` array `t` (length `N`, slot 0 unused) is the Fenwick tree of the
+array `a`: slot `j` holds the sum of `a` over `(j - lowbit j, j]`. Over `ZMod (2 ^ 64)` the
+wrapping arithmetic of the Rust code is exact ring arithmetic. The lemmas are stated for any
+additive group.
+-/
+
+section Bits
+
+theorem bv_odd (x : BitVec 64) (h : x.getLsbD 0 = true) : x &&& -x = 1 := by bv_decide
+theorem bv_even (x : BitVec 64) (h : x < 0x8000000000000000#64) :
+    (2 * x) &&& -(2 * x) = 2 * (x &&& -x) := by bv_decide
+theorem bv_prev (x : BitVec 64) : x &&& (x - 1) = x - (x &&& -x) := by bv_decide
+
+theorem lowbit_eq_bv (i : ℕ) (hi : i < 2 ^ 64) :
+    lowbit i = (BitVec.ofNat 64 i &&& -BitVec.ofNat 64 i).toNat := by
+  have : i % 18446744073709551616 = i := Nat.mod_eq_of_lt hi
+  simp [lowbit, BitVec.toNat_and, BitVec.toNat_neg, this]
+
+theorem lowbit_odd (a : ℕ) (h : 2 * a + 1 < 2 ^ 64) : lowbit (2 * a + 1) = 1 := by
+  rw [lowbit_eq_bv _ h, bv_odd]
+  · rfl
+  · simp [BitVec.getLsbD_ofNat]
+
+theorem lowbit_even (a : ℕ) (h : a < 2 ^ 63) : lowbit (2 * a) = 2 * lowbit a := by
+  have h1 : 2 * a < 2 ^ 64 := by omega
+  rw [lowbit_eq_bv _ h1, lowbit_eq_bv _ (by omega)]
+  have : BitVec.ofNat 64 (2 * a) = 2 * BitVec.ofNat 64 a := by
+    rw [BitVec.ofNat_mul]; rfl
+  rw [this, bv_even]
+  · have hm : a % 18446744073709551616 = a := Nat.mod_eq_of_lt (by omega)
+    simp [BitVec.toNat_mul, hm]
+    have := Nat.and_le_left (n := a) (m := (18446744073709551616 - a) % 18446744073709551616)
+    omega
+  · rw [BitVec.lt_def]; simp [BitVec.toNat_ofNat]; omega
+
+theorem lowbit_le (i : ℕ) : lowbit i ≤ i := Nat.and_le_left
+
+theorem prevIdx_eq (i : ℕ) (hi : i < 2 ^ 64) : prevIdx i = i - lowbit i := by
+  have h := congrArg BitVec.toNat (bv_prev (BitVec.ofNat 64 i))
+  have hl := lowbit_eq_bv _ hi
+  have hle := lowbit_le i
+  have hm : i % 18446744073709551616 = i := Nat.mod_eq_of_lt hi
+  simp [BitVec.toNat_and, BitVec.toNat_sub, BitVec.toNat_neg, hm] at h
+  have hl' : lowbit i = i &&& (18446744073709551616 - i) % 18446744073709551616 := by
+    simp [lowbit]
+  rw [← hl'] at h
+  have e : (18446744073709551616 - lowbit i + i) % 18446744073709551616 = i - lowbit i := by
+    have : 18446744073709551616 - lowbit i + i = (i - lowbit i) + 18446744073709551616 := by omega
+    rw [this, Nat.add_mod_right]; exact Nat.mod_eq_of_lt (by omega)
+  rw [e] at h
+  simpa [prevIdx, Nat.add_comm] using h
+
+end Bits
+
+theorem lowbit_pos (i : ℕ) (h0 : 0 < i) (h : i < 2 ^ 64) : 0 < lowbit i := by
+  induction i using Nat.strong_induction_on with
+  | _ i ih =>
+    rcases Nat.even_or_odd' i with ⟨a, rfl | rfl⟩
+    · have := lowbit_even a (by omega)
+      have := ih a (by omega) (by omega) (by omega)
+      omega
+    · rw [lowbit_odd a h]; omega
+
+theorem nextIdx_eq (i : ℕ) (h : i < 2 ^ 63) : nextIdx i = i + lowbit i := by
+  have := lowbit_le i
+  unfold nextIdx
+  exact Nat.mod_eq_of_lt (by omega)
+
+/-- The heart of the update proof. The slots an update from `i` touches are `i`, then those of the
+update from `i + lowbit i`; slot `j` is touched by an update at `i` iff `j - lowbit j < i ≤ j`. -/
+theorem touch_step (i : ℕ) (hi0 : 0 < i) (hi : i < 2 ^ 63) (j : ℕ) (hj0 : 0 < j)
+    (hj : j < 2 ^ 63) :
+    (j - lowbit j < i ∧ i ≤ j) ↔
+      (j = i ∨ (j - lowbit j < i + lowbit i ∧ i + lowbit i ≤ j)) := by
+  induction i using Nat.strong_induction_on generalizing j with
+  | _ i ih =>
+    have hli := lowbit_le i
+    have hlj := lowbit_le j
+    rcases Nat.even_or_odd' i with ⟨a, rfl | rfl⟩ <;>
+      rcases Nat.even_or_odd' j with ⟨b, rfl | rfl⟩
+    · have ha := lowbit_even a (by omega)
+      have hb := lowbit_even b (by omega)
+      have := ih a (by omega) (by omega) (by omega) b (by omega) (by omega)
+      rw [ha, hb]
+      omega
+    · rw [lowbit_even a (by omega), lowbit_odd b (by omega)]
+      omega
+    · rw [lowbit_odd a (by omega), lowbit_even b (by omega)]
+      omega
+    · rw [lowbit_odd a (by omega), lowbit_odd b (by omega)]
+      omega
+
+theorem updateGo_eq {M : Type*} [AddCommGroup M] (len : ℕ) (hlen : len < 2 ^ 62) (d : M) :
+    ∀ (fuel i : ℕ) (t : ℕ → M), len - i ≤ fuel → 0 < i →
+      ∀ j, 0 < j → j < len →
+        updateGo len d fuel i t j = t j + (if j - lowbit j < i ∧ i ≤ j then d else 0)
+  | 0, i, t, hf, hi, j, hj0, hj => by
+    have : ¬ (j - lowbit j < i ∧ i ≤ j) := by omega
+    simp [updateGo, this]
+  | fuel + 1, i, t, hf, hi, j, hj0, hj => by
+    by_cases hil : i < len
+    · have hnext := nextIdx_eq i (by omega)
+      have hpos := lowbit_pos i hi (by omega)
+      have ih := updateGo_eq len hlen d fuel (i + lowbit i) (Function.update t i (t i + d))
+        (by omega) (by omega) j hj0 hj
+      have key := touch_step i hi (by omega) j hj0 (by omega)
+      simp only [updateGo, hil, ↓reduceIte, hnext, ih]
+      by_cases hji : j = i
+      · subst hji
+        have h1 : ¬ (j - lowbit j < j + lowbit j ∧ j + lowbit j ≤ j) := by omega
+        have h2 : (j - lowbit j < j ∧ j ≤ j) := by omega
+        simp only [Function.update_self, h1, h2, ↓reduceIte, add_zero, and_self]
+      · by_cases hs : j - lowbit j < i + lowbit i ∧ i + lowbit i ≤ j
+        · have h2 : (j - lowbit j < i ∧ i ≤ j) := key.mpr (Or.inr hs)
+          simp [Function.update_of_ne hji, hs, h2]
+        · have h2 : ¬ (j - lowbit j < i ∧ i ≤ j) := fun h => by
+            rcases key.mp h with h | h
+            · exact hji h
+            · exact hs h
+          simp [Function.update_of_ne hji, hs, h2]
+    · have : ¬ (j - lowbit j < i ∧ i ≤ j) := by omega
+      simp [updateGo, hil, this]
+
+theorem prefixGo_eq {M : Type*} [AddCommGroup M] (t a : ℕ → M) (N : ℕ) (hN : N < 2 ^ 62)
+    (hv : ∀ j, 0 < j → j < N → t j = ∑ k ∈ Finset.Ioc (j - lowbit j) j, a k) :
+    ∀ (fuel i : ℕ) (sum : M), i ≤ fuel → i < N →
+      prefixGo t fuel i sum = sum + ∑ k ∈ Finset.Ioc 0 i, a k
+  | 0, i, sum, hf, hi => by
+    have : i = 0 := by omega
+    subst this
+    simp [prefixGo]
+  | fuel + 1, i, sum, hf, hi => by
+    by_cases hi0 : 0 < i
+    · have hp := prevIdx_eq i (by omega)
+      have hpos := lowbit_pos i hi0 (by omega)
+      have ih := prefixGo_eq t a N hN hv fuel (i - lowbit i) (sum + t i) (by omega) (by omega)
+      have e : prefixGo t (fuel + 1) i sum = prefixGo t fuel (i - lowbit i) (sum + t i) := by
+        simp [prefixGo, hi0, hp]
+      rw [e, ih, hv i hi0 hi, add_assoc, ← Finset.sum_Ioc_consecutive a
+        (Nat.zero_le (i - lowbit i)) (Nat.sub_le i (lowbit i))]
+      abel
+    · have : i = 0 := by omega
+      subst this
+      simp [prefixGo]
+
+/-- `Valid N t a`: `t` is the Fenwick tree of `a`. -/
+def Valid {M : Type*} [AddCommGroup M] (N : ℕ) (t a : ℕ → M) : Prop :=
+  ∀ j, 0 < j → j < N → t j = ∑ k ∈ Finset.Ioc (j - lowbit j) j, a k
+
+theorem valid_zero {M : Type*} [AddCommGroup M] (N : ℕ) : Valid N (fun _ : ℕ => (0 : M)) (fun _ => 0) := by
+  intro j _ _
+  simp
+
+theorem valid_congr {M : Type*} [AddCommGroup M] {N : ℕ} {t a b : ℕ → M} (h : ∀ k, a k = b k)
+    (hv : Valid N t a) : Valid N t b := by
+  have : a = b := funext h
+  subst this
+  exact hv
+
+/-- `index_prefix` returns the prefix sum `a[1] + … + a[i]`. -/
+theorem indexPrefix_eq {M : Type*} [AddCommGroup M] {N : ℕ} (hN : N < 2 ^ 62) {t a : ℕ → M}
+    (hv : Valid N t a) {i : ℕ} (hi : i < N) :
+    indexPrefix N t i = some (∑ k ∈ Finset.Ioc 0 i, a k) := by
+  have := prefixGo_eq t a N hN hv i i 0 le_rfl hi
+  simp [indexPrefix, Nat.not_le.mpr hi, this]
+
+/-- `index_update` on a valid tree for a key in `1..N` adds `d` to `a[i]`. -/
+theorem indexUpdate_valid {M : Type*} [AddCommGroup M] {N : ℕ} (hN : N < 2 ^ 62) {t a : ℕ → M}
+    (hv : Valid N t a) (d : M) {i : ℕ} (hi0 : 0 < i) (hi : i < N) :
+    ∃ t', indexUpdate N d t i = some t' ∧
+      Valid N t' (fun k => a k + if k = i then d else 0) := by
+  refine ⟨updateGo N d N i t, by simp [indexUpdate, Nat.pos_iff_ne_zero.mp hi0, Nat.not_le.mpr hi], ?_⟩
+  intro j hj0 hj
+  rw [updateGo_eq N hN d N i t (by omega) hi0 j hj0 hj, hv j hj0 hj,
+    Finset.sum_add_distrib]
+  congr 1
+  simp only [Finset.sum_ite_eq', Finset.mem_Ioc]
+
 
 end GvpProofs.Circo.Fenwick
