@@ -353,30 +353,65 @@ bytes as this PR and `/opt`; the macOS build does not reproduce `-mfma`'s full d
 
 ### Libc `qsort` tie order: the zero-weight and one-spline-line classes of #681
 
-The zero-weight (4 of 300) and flat-edge (2 of 300) classes of #681 are the libc `qsort` class
-of `docs/porting/libm.md` ("Linux: C does not agree with itself"): Graphviz sorts with `qsort(3)`, several of its
-comparators return 0 for distinct elements, and glibc's `qsort` (a stable mergesort) leaves
-those ties in input order while Apple's (the FreeBSD quicksort) does not. The goldens are
-macOS bytes, so the port reproduces Apple's (`cutil::qsort_by`, `docs/porting/dotgen.md`).
-A C oracle that is not preloaded with `graphviz-pure-portable-libm --features apple-libc`
-(or a stock Linux `dot`) shows the glibc order. Membership test: preload the `apple-libc`
-build (it exports `qsort`) and require C to match the port; the four repros below do, under the
-plain, bump, `tcache_count`, `MALLOC_TOP_PAD_`, `MALLOC_MMAP_THRESHOLD_` and `MALLOC_PERTURB_`
-allocator settings alike, so none of this is address-dependent.
+The zero-weight (4 of 300) and flat-edge "one spline line" (2 of 300) classes of #681 are the
+libc `qsort` class of `docs/porting/libm.md` ("Linux: C does not agree with itself"): Graphviz
+sorts with `qsort(3)`, several of its comparators return 0 for distinct elements, and glibc's
+`qsort` (a stable mergesort) leaves those ties in input order while Apple's (the FreeBSD-derived
+quicksort) does not. The goldens are macOS bytes, so the port sorts with `cutil::qsort_by`, its
+reproduction of Apple's `qsort` (`docs/porting/dotgen.md`). Ties can only show at 8 or more
+elements: Apple's `qsort` insertion-sorts 7 or fewer, which is stable.
 
-The stress generator was regenerated for this issue (1,500 graphs: zero-weight edges, flat
-edges, `rank=same` sets, clusters, groups, parallel edges, `concentrate`, `ortho`). Against the
-`-mfma` build *without* the preload, 42 of the first 300 differed, all stably across the six
-allocator settings; with the preload, 0 of 1,500 differed (C exit-1, crash and timeout cases
-excluded; the port exits 1 with C on the exit-1 cases). The 42 reduce to four comparators,
-each pinned in `crates/graphviz-pure-cli/tests/cli.rs` to C's bytes under Apple's `qsort`:
+Two caveats frame every result below. First, the "Apple" `qsort` the oracle is preloaded with
+is `cutil::qsort_by` itself, the port's own code (`graphviz-pure-portable-libm` with
+`--features apple-libc`, or the `qsort`-only shim below), so a bug in `qsort_by` would move the
+port and the oracle together; the class rests on `qsort_by` matching Apple's `qsort`, for which
+the evidence is `cutil`'s recorded permutations (`qsort_vectors.txt`) and the corpus, where C
+with the port's math and `qsort_by` reproduces the macOS references on 2,588 of 2,595 inputs
+("Linux x86-64", `docs/porting/libm.md`). The pinned tests say "C with the port's `qsort`", not
+"macOS bytes". Second, `apple-libc` also replaces `rand`, `srand` and all of libm, so a
+difference that vanishes under it is not yet attributed to `qsort`.
+
+**Membership test.** Oracle: the `-mfma` C 16.1.0 build (`scripts/c-oracle-linux/Dockerfile`;
+on this machine `/jobs/work/c-oracle/gv-fma`) with the pango-free plugin directory
+(`GVBINDIR=…/lutplugins`), compared with `-Tplain`. Three preloads over glibc:
+
+1. **baseline:** the portable libm without `apple-libc` (glibc `qsort`, glibc `rand`). The case
+   must differ from the port here, stably under the allocator settings (a sequential bump
+   allocator, `glibc.malloc.tcache_count=0` and `=100`, `MALLOC_TOP_PAD_=0`,
+   `MALLOC_MMAP_THRESHOLD_=0`, `MALLOC_PERTURB_`), or it is the fdp/VPSC address class instead;
+2. **`qsort` only:** the same libm plus a shim that exports only `qsort` as `cutil::qsort_by`
+   (`crates/graphviz-pure-portable-libm/src/libc.rs` holds the export; a cdylib with just that
+   symbol does the step). The case must now match the port byte for byte: this is the
+   attribution to `qsort`;
+3. **`apple-libc`:** the full preload must match as well (it does whenever 2 does; it is the
+   fuzz harness's normal oracle).
+
+The stress generator was rebuilt from the recipes (dot digraphs with `weight=0` edges, flat
+edges and `rank=same` sets, clusters, `group`, parallel edges, `concentrate`, `splines=ortho`).
+Against the oracle **without** the preload, 42 of the first 300 graphs differed from the port,
+all stably under the seven allocator settings (plain plus the six above). With `apple-libc`
+preloaded, 0 of those 300 and 0 of 1,200 more differed; 316 of the 1,500 were not comparable
+(C exit 1, where the port exits 1 too; C `SIGSEGV`/`SIGABRT`, where the port reports an
+error; one C timeout the port completes). The 42 all pass step 2. A fresh sample of the issue's three recipes with all three steps per
+case (zero-weight 300, flat-edge 300, group 150, new seeds; the group recipe puts `group` on
+every node and 48–200 parallel edges between two of them): 579 comparable, 0 stable differences
+from the port under `apple-libc`; glibc's `qsort` changes C's bytes on 45, 38 and 22 of them,
+and every one of those 105 matches the port under the `qsort`-only shim.
+
+The 42 reduce to four comparators, each pinned in `crates/graphviz-pure-cli/tests/cli.rs` to
+C's bytes with the port's `qsort`:
 
 | Comparator | Tie | Repro (minimised) | Visible effect |
 |---|---|---|---|
-| `edgelblcmpfn` (`lib/dotgen/dotsplines.c:966`) | every pair of unlabelled edges in a flat bundle with a label | `flat_labelled_bundle_tie_order_matches_apple_qsort`: a cluster node with eight parallel edges to an outside node, three `weight=0`, one labelled, and a `weight=5` back edge; `weight=0` keeps the two nodes on one rank | the seven unlabelled splines are assigned to different edges; `weight=1` separates the ranks and every libc agrees (the issue's "changing `weight=0` to 1 makes them match") |
-| `decreasingrankcmpf` in `TB_balance` (`lib/common/ns.c:798`) | nodes of equal rank | `zero_weight_rank_balance_tie_order_matches_apple_qsort`: `weight=0` edges leave two nodes free to move to a less populated rank | two nodes swap ranks |
-| `edgecmp` (`lib/dotgen/dotsplines.c:542`) | the virtual pieces of one concentrated edge, which share `AGSEQ` (`lib/dotgen/fastgr.c:143`) | `concentrated_edge_piece_order_matches_apple_qsort`: `concentrate=true`, six edges into one sink | the beziers of one edge change order inside its `edge` line (the issue's "one spline line") |
-| `edgecmp` in `orthoEdges` (`lib/ortho/ortho.c:1240`) | two parallel edges of equal length | `ortho_parallel_edge_order_matches_apple_qsort`: `splines=ortho` with a doubled edge | the two equal `edge` lines trade places |
+| `edgelblcmpfn` (`lib/dotgen/dotsplines.c:966`) | every pair of unlabelled edges in a flat bundle with a label | `flat_labelled_bundle_tie_order_matches_port_qsort`: a cluster node with eight parallel edges to an outside node, three `weight=0`, one labelled, and a `weight=5` back edge; `weight=0` keeps the two nodes on one rank | the seven unlabelled splines are assigned to different edges; `weight=1` separates the ranks and every libc agrees (the issue's "changing `weight=0` to 1 makes them match") |
+| `increasingrankcmpf` in `TB_balance` (`lib/common/ns.c:810`, sorted at `:843` through `LIST_SORT`, i.e. `qsort`) | nodes of equal rank | `zero_weight_rank_balance_tie_order_matches_port_qsort`: `weight=0` edges leave two nodes free to move to a less populated rank | two nodes swap ranks |
+| `edgecmp` (`lib/dotgen/dotsplines.c:542`) | the virtual pieces of one concentrated edge, which share `AGSEQ` (`lib/dotgen/fastgr.c:143`) | `concentrated_edge_piece_order_matches_port_qsort`: `concentrate=true`, six edges into one sink | the beziers of one edge change order inside its `edge` line (the issue's "one spline line") |
+| `edgecmp` in `orthoEdges` (`lib/ortho/ortho.c:1240`) | two parallel edges of equal length | `ortho_parallel_edge_order_matches_port_qsort`: `splines=ortho` with a doubled edge | the two equal `edge` lines trade places |
+
+A `qsort_by` mutant (insertion sort up to 8 elements instead of 7) fails all four pinned tests and
+both recorded-permutation tests (`cutil::tests::qsort_matches_libc_on_ties`,
+`dotgen::qsort::tests::matches_recorded_libc_permutations`), so the pinned bytes do depend on
+the exact Apple algorithm.
 
 The grouped class of #681 is separate: the negative-mincross failure path (#688) and the
 build-dependent `rcross` overflow above.

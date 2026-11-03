@@ -4870,11 +4870,12 @@ fn negative_mincross_abort_keeps_node_styles() {
 // n3 on one rank, so the bundle is routed by `makeSimpleFlatLabels`, whose `edgelblcmpfn`
 // (`lib/dotgen/dotsplines.c:966`) returns 0 for every unlabelled pair. The order of those ties
 // is the libc `qsort`'s: glibc's mergesort keeps input order, Apple's quicksort does not. The
-// port reproduces Apple's (`cutil::qsort_by`); these bytes are C 16.1.0's with that `qsort`
-// preloaded (`docs/porting/fuzzing.md`, "Libc qsort tie order"). With `weight=1` the nodes
-// take different ranks and every libc agrees.
+// port sorts with `cutil::qsort_by`, its reproduction of Apple's. These bytes are C 16.1.0's with
+// a `qsort`-only preload of that same `qsort_by` (not macOS bytes: a `qsort_by` bug would move
+// C and the port together; `docs/porting/fuzzing.md`, "Libc qsort tie order"). With `weight=1`
+// the nodes take different ranks and every libc agrees.
 #[test]
-fn flat_labelled_bundle_tie_order_matches_apple_qsort() {
+fn flat_labelled_bundle_tie_order_matches_port_qsort() {
     let src = "digraph G { subgraph cluster_0 { subgraph cluster_0_in { n1; } n2; n4; } n2 -> n4; n3 -> n4 [weight=5]; n1 -> n3; n4 -> n3 [weight=0]; n4 -> n3; n4 -> n3; n4 -> n3; n4 -> n3 [weight=0]; n4 -> n3; n4 -> n3; n4 -> n3 [weight=0,label=\"p\"]; }";
     let expected = "graph 1 3.0556 2.0694\n\
          node n1 1.5972 1.4861 0.75 0.5 n1 solid ellipse black lightgrey\n\
@@ -4900,11 +4901,11 @@ fn flat_labelled_bundle_tie_order_matches_apple_qsort() {
 }
 
 // Issue #681, zero-weight class, second mechanism. `weight=0` leaves n15 and n26 free to move
-// in `TB_balance`, which sorts the nodes by rank only (`lib/common/ns.c:798`); the libc `qsort`
-// decides which equal-rank node moves first, so n15 and n26 swap ranks between glibc and Apple.
-// These bytes are C's with Apple's `qsort`, as the port's.
+// in `TB_balance`, which sorts the nodes with `increasingrankcmpf` (`lib/common/ns.c:810`, rank
+// only, at `:843`); the libc `qsort` decides which equal-rank node moves first, so n15 and n26
+// swap ranks between glibc and Apple. These bytes are C's with the port's `qsort` preloaded.
 #[test]
-fn zero_weight_rank_balance_tie_order_matches_apple_qsort() {
+fn zero_weight_rank_balance_tie_order_matches_port_qsort() {
     let src = "digraph G { n4 -> n17; n11 -> n17; n11 -> n14 [minlen=0]; n14 -> n15 [weight=0]; n17 -> n29 [minlen=3]; n4 -> n26 [weight=0]; n4 -> n16; }";
     let expected = "graph 1 2.8056 4.5\n\
          node n4 2.4028 4.25 0.75 0.5 n4 solid ellipse black lightgrey\n\
@@ -4933,9 +4934,9 @@ fn zero_weight_rank_balance_tie_order_matches_apple_qsort() {
 // virtual pieces that share its sequence number (`lib/dotgen/fastgr.c:143`), so `edgecmp`
 // (`dotsplines.c:542`) returns 0 between them and the libc `qsort` decides the order of the
 // pieces in the edge's spline list. Only the `edge` lines of n0->n10 and n10->n9 move; nodes stay.
-// These bytes are C's with Apple's `qsort`, as the port's.
+// These bytes are C's with the port's `qsort` preloaded.
 #[test]
-fn concentrated_edge_piece_order_matches_apple_qsort() {
+fn concentrated_edge_piece_order_matches_port_qsort() {
     let src = "digraph G { concentrate=true; n0 -> n10 [minlen=2]; n6 -> n9; n3 -> n9; n10 -> n9; n0 -> n9; n1 -> n9 [label=\"FL\"]; }";
     let expected = "graph 1 4.2778 3.275\n\
          node n0 1.1389 3.025 0.75 0.5 n0 solid ellipse black lightgrey\n\
@@ -4959,10 +4960,10 @@ fn concentrated_edge_piece_order_matches_apple_qsort() {
 
 // Issue #681, one-spline-line class under `splines=ortho`: `orthoEdges` sorts the edges by
 // length (`lib/ortho/ortho.c:1240`), and the two equal n2->n3 edges tie, so the libc `qsort`
-// decides which is routed, and printed, first. These bytes are C's with Apple's `qsort`, as the
-// port's.
+// decides which is routed, and printed, first. These bytes are C's with the port's `qsort`
+// preloaded.
 #[test]
-fn ortho_parallel_edge_order_matches_apple_qsort() {
+fn ortho_parallel_edge_order_matches_port_qsort() {
     let src = "digraph G { splines=ortho; n0 -> n3; n2 -> n3; n1 -> n3; n2 -> n3; n0 -> n1; n0 -> n2; n1 -> n2; n1 -> n1; }";
     let expected = "graph 1 1.7639 3.5\n\
          node n0 0.375 3.25 0.75 0.5 n0 solid ellipse black lightgrey\n\
