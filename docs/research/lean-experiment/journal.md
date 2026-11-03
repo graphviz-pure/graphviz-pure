@@ -708,3 +708,87 @@ missing field).
 
 **Cost.** About 0.5 h on Rust (probe, fuzz script, reverting), 0.4 h on Lean, 0.2 h on docs. Extraction
 verdict: not applicable (statement over a Lean model, as in #732).
+## 2026-11-03 #750: cut-set `enter_edge` at production pivots, whose `lim`/`low` are stale
+
+`Net.Valid.enterEdge_eq` (#732) assumed a current `lim`/`low` numbering. Production renumbers only
+when the pivots begin and on a fallback, so the theorem covered the first pivot and no later one.
+`proofs/GvpProofs/Ns/CutSetsStale.lean` (1,343 lines, 95 definitions and theorems, standard axioms
+only) closes that. No Rust change.
+
+**Route.** Route (a) of the ticket: a renumbered reference tree, not a weaker `Valid`. Route (b)
+would have meant re-proving Lemma 1, the candidate set and the tie order on parent pointers alone.
+Those proofs in `CutSets.lean` all go through `lim`/`low` intervals. Route (a) reuses all of them
+unchanged and adds four steps:
+1. The cut-set search reads `par`, the lists, the cut set and the slacks, never the numbering.
+   In the model the only numbering it read was the climbs' fuel (`lim(v) + 1`). That fuel is now
+   a parameter, and past the tree's depth it does not matter (`climb_fuel`).
+2. C's `enter_edge` returns the same edge on every valid numbering of one tree (`cEnter_renum`).
+   This is §5's Lemma 2 for `enter_edge`, proved as "every test C's loop makes is a question
+   about the tree". The step functions of the two runs are equal as functions, so no fuel bound
+   is needed. With 1 and 2: the production `enter_edge(e)` is C's on any valid numbering of the
+   stored tree (`enterEdgeP_eq_every`). Its fallback is C's search after `hand_over`'s
+   renumbering.
+3. `Tree` is `Valid` without the numbering. A finite spanning tree always has a valid numbering
+   (`Tree.exists_valid`, by strong induction on subtree size, with the children glued left to
+   right). Acyclicity comes from the parent chain reaching the root, which has no parent.
+4. (I3), which `CutSets.lean` had listed as not formalised: the pointers Rust's re-hang loop
+   leaves form a spanning tree from the same root (`Valid.rehang_tree`). A spanning tree's
+   parent pointers are fixed by its edges and root (`Tree.par_unique`), so they are the ones C's
+   `dfs_range` assigns. `pivot_step` combines this with `pivot_against`: from the tree before a
+   pivot alone, the tree after it has a valid numbering and the §4.2 cuts. So the hypothesis
+   that `pivot_against` assumed is now proved.
+
+**What the stale numbering breaks, and what it does not.** It breaks C's search on the stored
+state: in `Example750` (three nodes, the issue's shape: after one pivot node 1 hangs below node 2
+with the larger `lim`), C's search on the stale numbering tests the wrong end as the child. It
+searches the parent side of the cut and returns no edge. The answer is `a`, which the cut-set path
+and C's search on a valid numbering both return. In a pivot that would be `rank2`'s "no entering
+edge" error. Production never runs C's search on that state: every route into C's functions
+(`enter_edge`'s and `update`'s `Fallback`, `LR_balance`'s two hand-overs) goes through
+`hand_over`, which renumbers from the root first. So there is no finding about the fallback
+design: the renumbering is needed, and it is there. It does not break the cut-set path: its tie
+climbs, `first_tied`, `lca` and `prepare` test children as `par(c) == e`. In the Rust, the reads of
+`lim`/`low` on that path are `tree_path` (from `worth_it` and the build, when the pivots begin), the
+computed build (also at the beginning), check mode, and a `debug_assert` that runs only once the
+cut sets are gone. The stale values are copied back to dot's nodes after `rank`, and nothing reads
+them there (§6 of the page).
+
+**The oracle.** `ns-check` cannot see this class of bug. Check mode runs C's `dfs_range` after
+every pivot (`check::dfs_range`), so the cut-set path always runs on a current numbering there. A
+cut-set path that wrongly read `lim`/`low` would pass it. The runtime guards for stale numbering
+are the shipped-mode tests that turn the hooks off and compare final results against C
+(`a_fallback_renumbers_the_tree_it_hands_to_c`, `lr_balance_hands_over_when_its_walks_pass_the_allowance`).
+The new theorem retires neither check. It covers, as a model, the stale case that check mode
+cannot reach. Follow-up #765: make check mode compare the cut-set search on the stale production
+state against C's search on a separately renumbered copy.
+
+**What Lean caught.** Nothing wrong in the Rust. Three things the prose glossed over:
+- the climbs' fuel in the #732 model was `lim(v) + 1`. On a stale state that is a number of the
+  old tree and can be too small. It is a modelling artefact, not a Rust bug: Rust climbs until it
+  reaches `v`, within its `TIE_CLIMBS` budget. But the old model, read on a production state, read
+  `lim`/`low` after all;
+- the existence of a valid numbering needs the graph to be finite (`Fintype V`). Without it, a
+  spanning tree can be infinite, and no numbering bounded by `lim(root)` exists;
+- §4.2's (I3) paragraph argues that the re-hang assigns what `dfs_range` assigns. The proof here
+  does not compare with `dfs_range` at all: both sides are spanning trees of `T − e + f` from the
+  same root, and that fixes `par`. That is a shorter argument than the page's, and it needs
+  nothing about `dfs_range`'s pruning.
+
+**Dead ends / friction.**
+- `simp only` turning `(N.renum ..).lim` into `ma` inside an `if` gave a term that was not
+  type-correct, because its `Decidable` instance still mentioned the old form. `by_cases`, then
+  `simp` with the case's fact, avoids it.
+- `rcases ... with ⟨rfl, rfl⟩` on `t = f` substituted `f` away, and a later `hT' f` no longer
+  elaborated. Fixed with a named equation and `rw`.
+- A first `sub_disjoint` proof got tangled. It became four lines once `inSub_last` had a version
+  with no `Valid` argument.
+- `Valid` re-proves `kids` lemmas through the numbering (`kid_ne` via `kid_lim`). For `Tree`, they
+  needed numbering-free proofs (`kid_ne` from `par_excl`: no parent edge is a loop).
+
+**Extraction verdict.** Not attempted: `cut.rs` is the same module whose shape #732 judged out of
+reach (pool, stamps, `Result` early returns in loops), and this ticket is Lean and docs only.
+
+**Hours.** About 0.6 h reading the issue, the brief, the page and the Rust; 1.7 h on Lean (the
+core theorem compiled in five rounds, the `Tree` part and the existence of a numbering in two, the
+re-hang in four, `par_unique` in two; a single-file check takes about 5 s); 0.4 h on the docs.
+Rust: 0 h.

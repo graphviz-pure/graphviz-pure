@@ -15,9 +15,12 @@ fallback, returns what C's `enter_edge(e)` returns once its loop has run to the 
 Scope of `Valid`: it requires the `lim`/`low` numbering to be current. The production cut-set path
 renumbers only at init and on fallback (`cut.rs` re-hangs `par` after a pivot; its `dfs_range` hook
 is a no-op), so the theorem applies as stated to the first pivot after `feasible_tree` and to any
-pivot from a renumbered state. Later production pivots, whose `lim`/`low` are stale, need a
-separately numbered reference tree and a relation to the production `par`/lists/slacks; that is
-not done here (issue #750). `pivot_against` assumes, not establishes, `Valid` for the new tree.
+pivot from a renumbered state. `CutSetsStale.lean` (issue #750) covers the later pivots, whose
+`lim`/`low` are stale: `Net.enterEdgeP_eq_every` says the production `enter_edge(e)` is C's
+`enter_edge(e)` on any valid numbering of the stored tree, and `Net.pivot_step` derives, from the
+tree before a pivot alone, that the tree after it is a spanning tree with a valid numbering, and
+that its cuts are the ones `pivot_against` gives. Here `pivot_against` still takes the new tree's
+`Valid` as a hypothesis; `pivot_step` discharges it.
 
 | prose | here |
 | :-- | :-- |
@@ -34,13 +37,15 @@ not done here (issue #750). `pivot_against` assumes, not establishes, `Valid` fo
 | §4.2 Ranks | `Net.Valid.rerankNode_spec`, `CutBasis.slack_shift_cut`, `Net.Valid.tail_inside_iff` |
 | §4.2 Cut values | `CutBasis.pivot_cutValue`, `CutBasis.pivot_cutValue_f`, `CutBasis.cutValue_eq_check` |
 | §4.2 Cut sets (I1), the four bullets | `CutBasis.pivot`, `pivot_outside`, `pivot_toggle`, `pivot_join_against`, `pivot_coef_e`, `pivot_coef_f_e`, `pivot_coef_f`, `pivot_coef_of_f`, `coef_range` |
-| §4.2 (I1) for the new tree, however it is stored | `Net.Valid.pivot_against` |
+| §4.2 (I1) for the new tree, however it is stored | `Net.Valid.pivot_against`; with nothing assumed of the new tree, `Net.pivot_step` (`CutSetsStale.lean`) |
+| §4.2 (I3) parent pointers, §5 Lemma 2 for `enter_edge`, later pivots | `CutSetsStale.lean`: `Net.Valid.rehang_tree`, `Net.Tree.par_unique`, `Net.cEnter_renum`, `Net.enterEdgeP_eq_every` |
 
 Not formalised here: that C's two `treeupdate` walks and the cut sets' LCA climb visit exactly
-the edges with σ(t) ≠ 0 (the cut-value theorem is stated per edge, with σ); the re-hanging of
-parent pointers (I3); that `rerank` reaches exactly the subtree under its start; §4.3 beyond its
-`enter_edge` (which `enterEdge_eq` covers with `pivot = false`); the validity of the production
-tree after a pivot (issue #750); the fallback's rank reconstruction and renumbering (§5); §5–§8.
+the edges with σ(t) ≠ 0 (the cut-value theorem is stated per edge, with σ); that `rerank` reaches
+exactly the subtree under its start; §4.3 beyond its `enter_edge` (which `enterEdge_eq` covers with
+`pivot = false`); the fallback's rank reconstruction, and that its renumbering is valid (§5);
+§5–§8. The re-hanging of parent pointers (I3) and the production tree after a pivot (issue #750)
+are in `CutSetsStale.lean`.
 
 ## Model vs Rust
 

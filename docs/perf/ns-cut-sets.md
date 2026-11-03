@@ -12,14 +12,19 @@ Everything else here holds for both: they answer the same question.
 
 Issues #641 and #702; measurements are in their pull requests.
 
-Proof of record: `proofs/GvpProofs/Ns/CutSets.lean` (Lean 4, #732). It covers §2 with Lemma 1,
-(I1) of §3, §4.1 as far as comparing two tied candidates by climbing, and the cut-set, cut-value and
-slack algebra of §4.2, for a pivot from a tree whose `lim`/`low` are current (the first pivot, or
-any pivot after a renumbering). Its model was written for stored cut sets with climbs that have no
-budget, so these are argued here in prose only: the climbs' budget and the scan past it (§4.1,
-Lemma 1a), `LR_balance`'s allowance (§4.3) and computed cut sets (§9, Lemma 3). Not yet covered
-either: later production pivots with stale numbering (#750), the fallback's renumbering (§5), the
-`treeupdate` walks and the LCA climb, the parent pointers (I3), and §4.3 beyond `enter_edge`.
+Proof of record: `proofs/GvpProofs/Ns/CutSets.lean` (Lean 4, #732) and
+`proofs/GvpProofs/Ns/CutSetsStale.lean` (#750). The first covers §2 with Lemma 1, (I1) of §3, §4.1
+as far as comparing two tied candidates by climbing, and the cut-set, cut-value and slack algebra
+of §4.2, for a pivot from a tree whose `lim`/`low` are current. The second extends that to every
+pivot of a production run, whose `lim`/`low` are stale after the first. It proves that the cut-set
+search reads no numbering, Lemma 2 of §5 for `enter_edge`, and (I3): the re-hang leaves a spanning
+tree, whose parent pointers are therefore C's. It also proves that a pivot leaves the next pivot's
+hypotheses. The models were written for stored cut sets with climbs that have no budget, so these
+are argued here in prose only: the climbs' budget and the scan past it (§4.1, Lemma 1a),
+`LR_balance`'s allowance (§4.3) and computed cut sets (§9, Lemma 3). Not covered either: that the
+fallback's renumbering is valid (§5; assumed, and checked as shipped by
+`a_fallback_renumbers_the_tree_it_hands_to_c`), the `treeupdate` walks and the LCA climb, the pool
+edits of `move_cut_sets` as lists, and §4.3 beyond `enter_edge`.
 
 ## 1. Why C's pivot is quadratic
 
