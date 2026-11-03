@@ -463,8 +463,10 @@ pub(crate) fn write_plain(
         }
         out.push(' ');
         {
+            // `write_plain` prints `ND_shape(n)->name` ("custom" for a user shape), bound
+            // in the layout; it makes no `safefile` call here.
             let sh = a.late_nnstring("shape", "ellipse");
-            if graphviz_pure_core::usershape::binds_custom(sh, a.nonempty("shapefile")) {
+            if n.geom.usershape {
                 out.push_str("custom");
             } else {
                 out.push_str(sh);

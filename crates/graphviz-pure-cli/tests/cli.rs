@@ -12189,6 +12189,62 @@ digraph {{
     let _ = std::fs::remove_dir_all(&scratch_dir);
 }
 
+/// Issue #683: `safefile` rewrites `findPath`'s buffer on each measurement, and the EPSF
+/// lookup compares against that buffer. C binds each node's shape once
+/// (`lib/common/shapes.c:bind_shape`, in `common_init_node`); its renderer and port
+/// resolution make no `safefile` call, so after `g1` the buffer stays on `I/p.ps`, and
+/// `z`'s lookup misses the entry the buffer keys: C reads `q.ps` (a second file, numbered
+/// `user_shape_1`). A port re-measure that re-ran `safefile` left the buffer on `I/q.ps`,
+/// matched `p.ps`'s entry and gave `z` its 100x50 box. Expected output is C 16.1.0's.
+#[test]
+fn issue683_repeat_sizings_do_not_move_the_epsf_buffer() {
+    let dir = scratch("i683-epsf-buffer");
+    std::fs::create_dir(dir.join("I")).unwrap();
+    std::fs::write(
+        dir.join("I/p.ps"),
+        "%!PS-Adobe-3.0\n%%BoundingBox: 0 0 100 50\n",
+    )
+    .unwrap();
+    std::fs::write(
+        dir.join("I/q.ps"),
+        "%!PS-Adobe-3.0\n%%BoundingBox: 0 0 77 77\n",
+    )
+    .unwrap();
+    let src = "digraph g1 { imagepath=I; b[shapefile=\"q.ps\"]; \
+               a[shape=epsf shapefile=\"p.ps\"] }\n\
+               digraph g2 { z[shape=epsf shapefile=\"I/q.ps\"] }";
+    let (plain, err, code) = run_in(&dir, &["-Tplain"], src);
+    assert_eq!((err.as_str(), code), ("", 0));
+    assert_eq!(
+        plain,
+        "97.5 14.5 translate newpath user_shape_0\n\
+         graph 1 2.7431 1.0972\n\
+         node b 0.54861 0.54861 1.0972 1.0972 b solid custom black lightgrey\n\
+         node a 2.0486 0.54861 1.3889 0.69444 a solid epsf black lightgrey\n\
+         stop\n\
+         0 0 translate newpath user_shape_1\n\
+         graph 1 1.0694 1.0694\n\
+         node z 0.53472 0.53472 1.0694 1.0694 z solid epsf black lightgrey\n\
+         stop\n"
+    );
+    let (dot, err, code) = run_in(&dir, &["-Tdot"], src);
+    assert_eq!((err.as_str(), code), ("", 0));
+    assert!(
+        dot.contains("0 0 translate newpath user_shape_1\n"),
+        "{dot}"
+    );
+    assert!(dot.contains("z\t[height=1.0694,"), "{dot}");
+    assert!(dot.contains("\t\twidth=1.0694];"), "{dot}");
+    // -Tps draws the images from the file the layout opened (`core_loadimage_ps` rewinds
+    // `us->f`): no `safefile` at render, so the buffer stays on `I/p.ps` and z keeps
+    // q.ps's box and its own macro number.
+    let (ps, err, code) = run_in(&dir, &["-Tps"], src);
+    assert_eq!((err.as_str(), code), ("", 0));
+    assert!(ps.contains("%%PageBoundingBox: 36 36 121 121\n"), "{ps}");
+    assert!(ps.contains("0 0 translate newpath user_shape_1\n"), "{ps}");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 // Issue #347: the size readers read headers only. Odd headers give what C reads, and a
 // JPEG that ends before its frame header is warned about once, at its first sizing.
 #[test]

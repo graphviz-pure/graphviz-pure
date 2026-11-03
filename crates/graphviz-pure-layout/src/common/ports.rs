@@ -408,7 +408,8 @@ pub fn shape_port<S: PortGraph + ?Sized>(
         return Ok(rv);
     }
     // IS_BOX: the shape's polygon is p_box, as for box, rect, rectangle, unknown names
-    // (bind_shape copies Shapes[0]) and shapefile user shapes.
+    // (bind_shape copies Shapes[0]) and shapefile user shapes. C reads the shape it bound
+    // in `common_init_node`; `binds_custom` returns that bind, without `safefile` again.
     let shape_name = src
         .attrs
         .get("shape")
@@ -416,6 +417,8 @@ pub fn shape_port<S: PortGraph + ?Sized>(
         .filter(|s| !s.is_empty())
         .unwrap_or("ellipse");
     let custom = graphviz_pure_core::usershape::binds_custom(
+        &src.name,
+        src.html_name,
         shape_name,
         src.attrs.get("shapefile").map(String::as_str),
     );

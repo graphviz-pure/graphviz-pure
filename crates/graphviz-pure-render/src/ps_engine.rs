@@ -222,7 +222,9 @@ impl Engine for PsEngine {
         us: &graphviz_pure_core::usershape::UserShape,
         b: graphviz_pure_core::BoundingBox,
     ) {
-        if let Some(data) = ps_file(&us.name) {
+        // C rewinds `us->f`, the file `gvusershape_open` read: no `safefile` here, so
+        // `findPath`'s buffer does not move at render (#683).
+        if let Some(data) = ps_file_at(&us.path) {
             writeln!(
                 self.out,
                 "gsave {} {} translate newpath",
@@ -489,9 +491,15 @@ fn epsf_body(data: &str) -> String {
     }
     out
 }
-/// C: lib/common/psusershape.c:user_init; plugin/core/gvloadimage_core.c:core_loadimage_ps
+/// C: lib/common/psusershape.c:cat_libfile
 fn ps_file(name: &str) -> Option<String> {
     let path = graphviz_pure_core::usershape::safefile(name)?;
+    ps_file_at(&path)
+}
+
+/// Reads an already-resolved file (`core_loadimage_ps` re-reading `us->f`): no
+/// `safefile` call, so `findPath`'s buffer keeps the path C's layout left in it.
+fn ps_file_at(path: &str) -> Option<String> {
     std::fs::read(path).ok().map(|b| decode_slice(&b))
 }
 
