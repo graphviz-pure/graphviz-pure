@@ -5,6 +5,14 @@ The retained bitset scan is `count_all_crossings_reference` in `blockpath.rs`.
 The production counter replaces its enumeration with Fenwick suffix queries.
 This is integer kernel restructuring (T8), with reused scratch (T9).
 
+Proof of record: `proofs/GvpProofs/Circo/Fenwick.lean` (Lean 4, `scripts/proofs/lake.sh build`).
+It proves `count_indexed` returns the reference's count, final orders and half set, on a Lean model
+of the two functions. The prose below is the informal reading of that proof; the proof states two
+hypotheses the prose only implies: each node's adjacency slice lists every incident block edge
+exactly once, and every set half belongs to a block edge. The runtime check (`circo-check`)
+stays; the proof does not retire it, because the theorem is about the model (see "Model vs Rust"
+in the Lean file's header).
+
 ## Invariant and predicate
 
 At the start of each **list occurrence**'s query phase, the bitset is exactly

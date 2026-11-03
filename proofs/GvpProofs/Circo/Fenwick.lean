@@ -1,0 +1,1298 @@
+import Mathlib
+
+/-!
+# circo: the Fenwick-indexed crossing count equals the bitset reference count
+
+Subject: `crates/graphviz-pure-layout/src/circogen/blockpath.rs`,
+`count_indexed` (production, Fenwick tree over opening orders) against
+`count_all_crossings_reference` (retained bitset scan, a mirror of C's
+`lib/circogen/blockpath.c:count_all_crossings`). Prose argument being replaced:
+`docs/perf/circo-crossings.md`.
+
+Aeneas extraction was not available when this file was written (no `aeneas` binary on the
+machine), so the theorems are stated over a Lean model that mirrors the Rust control flow, one Lean
+function per Rust function. Branches that only select between the two counters, and the order of
+writes on paths the theorem shows are never taken, are not mirrored; the "Model vs Rust" list below
+names each such difference.
+
+## Theorems
+
+* `countIndexed_eq_reference`: on a well-formed block graph `count_indexed` never takes a `?`
+  early return and returns the reference's final `order` array, `open` bitset and `i32` total.
+* `countWithPolicy_eq_reference`: so does the dispatch `count_with_policy` (CHECK off).
+* `query_count_eq_hits`: the `u64` number `total - prefix(edge_order)` of every single query is
+  the number of halves the reference scan counts for that edge (the natural-number statement).
+* `countIndexed_wrapped`: the returned `i32` is the exact crossing count reduced modulo `2 ^ 32`.
+* `updateGo_eq`, `prefixGo_eq`, `indexUpdate_valid`, `indexPrefix_eq`: the Fenwick tree itself.
+
+## Model vs Rust
+
+* `?` on `get()`/`get_mut()` of the arena, adjacency, offsets and `open` is dropped: arrays are
+  total functions `ℕ → _`. In Rust those paths hand the recount to the reference. The `none`s that
+  remain are the semantic guards of `index_update` (zero or out-of-range key), `index_prefix`
+  (absent top slot) and `checked_sub`; the theorem shows none of them fires.
+* The `open: &mut [u64]` bitset is a `Finset ℕ` of set half indices (`half = 2 * e + b`; bit
+  `half % 64` of word `half / 64`). Word packing and `bits &= bits - 1` iteration are not modelled;
+  the scan visits the set bits in ascending order (`Finset.sort`) as the Rust does.
+* `arena.order` entries are `i32` in Rust, `ℕ` here (all stored orders are `1..=list.len()`; the
+  indexed path is only entered when `list.len() <= i32::MAX`).
+* The tree is `ℕ → ZMod (2 ^ 64)` plus its length; `wrapping_add(1)`/`wrapping_sub(1)` on `u64` are
+  exactly `+ 1`/`+ -1` there. `i & i.wrapping_neg()`, `wrapping_add` and `i &= i - 1` are modelled
+  bit-exactly on 64-bit `usize` (`lowbit`, `nextIdx`, `prevIdx`); the three bit identities they need
+  are proved by `bv_decide` (axioms `bv_*._native.bv_decide.ax_*`).
+* The `while` loops of `index_update`/`index_prefix` carry a fuel counter so the Lean functions are
+  total; the fuel (`len`, resp. `i`) is never exhausted (`updateGo_eq`, `prefixGo_eq`).
+* The `i32` total uses release (wrapping) arithmetic: `wrap_crossings` is `+ BitVec.ofNat 32 count`
+  and the reference adds `+ 1`. The checked-build assertion in `add_crossings` (panic when the
+  mathematical total would exceed `i32::MAX`) and the `circo-check` assertions are not modelled.
+* Domain: the theorems are about lists of at most `i32::MAX` nodes. The model's occurrence
+  counter and stored orders are `ℕ`; the Rust reference's are `i32`, and on a longer list its
+  orders wrap negative and fail the `edge_order > 0` test, so the two would differ there. Rust never
+  runs the indexed counter on such a list (`count_with_policy` sends `list.len() > i32::MAX` to the
+  reference), so the claim "indexed = reference" is only made, and only true, below that bound.
+  None of the theorems carries this bound as a hypothesis; it is a precondition of reading them as
+  statements about the Rust.
+* `count_with_policy`: the clauses `list.len() > i32::MAX` and `!CHECK && list.len() <= 16` only
+  select the reference, which is trivially equal to itself, and are not modelled. The `MUTATION`
+  const generic is fixed at 0.
+* Write order on failure paths: Rust's opening pass stores the order and sets the bit before the
+  tree update, and its closing pass clears the bit before the tree decrement; the model performs
+  the tree step first. On the successful path the theorem covers, the final states agree. The
+  partial state Rust leaves when an update fails (and hands to the reference) is not modelled.
+* Hypotheses (`NodeWf`, plus `E`, `len` bounds) are facts about the caller, not proved here:
+  for every list node the adjacency slice has no repeated edge id, is exactly the block edges
+  with an endpoint at the node, and lies inside `adjacency`; edge ids are `< E = arena.order.len()`
+  with `E, len < 2 ^ 62`; `list.len() < len`. `CGraph::edges` provides the first two (out-edges are
+  keyed by head, in-edges by tail and exclude loops, so ids are distinct).
+
+This section holds the definitions first (one Lean function per Rust function), then the Fenwick
+lemmas, then the simulation proof.
+-/
+
+namespace GvpProofs.Circo.Fenwick
+
+/-! ## Fenwick tree operations (`index_update`, `index_prefix`) -/
+
+/-- `i & i.wrapping_neg()` on a 64-bit `usize`. -/
+def lowbit (i : ℕ) : ℕ := i &&& ((2 ^ 64 - i) % 2 ^ 64)
+
+/-- `i.wrapping_add(i & i.wrapping_neg())`. -/
+def nextIdx (i : ℕ) : ℕ := (i + lowbit i) % 2 ^ 64
+
+/-- `i &= i.wrapping_sub(1)`. -/
+def prevIdx (i : ℕ) : ℕ := i &&& ((i + (2 ^ 64 - 1)) % 2 ^ 64)
+
+/-- The `while i < tree.len()` loop of `index_update`, with a fuel counter so that it is total.
+The fuel is `tree.len()`; the loop's index strictly increases, so it never runs out
+(`updateGo_eq`). `tree.get_mut(i)?` cannot fail under the loop guard, and `wrapping_add(1)` /
+`wrapping_sub(1)` on `u64` are `+ 1` / `+ -1` in `ZMod (2 ^ 64)`. -/
+def updateGo {M : Type*} [AddCommGroup M] (len : ℕ) (d : M) :
+    ℕ → ℕ → (ℕ → M) → (ℕ → M)
+  | 0, _, t => t
+  | fuel + 1, i, t =>
+    if i < len then updateGo len d fuel (nextIdx i) (Function.update t i (t i + d)) else t
+
+/-- `index_update(tree, i, insert)`: `d = 1` for `insert = true`, `d = -1` otherwise. -/
+def indexUpdate {M : Type*} [AddCommGroup M] (len : ℕ) (d : M) (t : ℕ → M) (i : ℕ) :
+    Option (ℕ → M) :=
+  if i = 0 ∨ len ≤ i then none else some (updateGo len d len i t)
+
+/-- The `while i > 0` loop of `index_prefix`, with fuel (`i` suffices, `prevIdx i < i`). -/
+def prefixGo {M : Type*} [AddCommGroup M] (t : ℕ → M) : ℕ → ℕ → M → M
+  | 0, _, sum => sum
+  | fuel + 1, i, sum => if 0 < i then prefixGo t fuel (prevIdx i) (sum + t i) else sum
+
+/-- `index_prefix(tree, i)`. -/
+def indexPrefix {M : Type*} [AddCommGroup M] (len : ℕ) (t : ℕ → M) (i : ℕ) : Option M :=
+  if len ≤ i then none else some (prefixGo t i i 0)
+
+/-! ## The block graph -/
+
+/-- What the counters read of `Circ`: `arena.head`, `arena.tail`, and, per node, the slice
+`adjacency[offsets[n]]`. -/
+structure Graph where
+  head : ℕ → ℕ
+  tail : ℕ → ℕ
+  adj : ℕ → List ℕ
+
+/-- The half-key of edge `e` that opens or closes at node `n`:
+`(e << 1) | usize::from(tail[e] != n)`. -/
+def halfOf (g : Graph) (n e : ℕ) : ℕ := 2 * e + (if g.tail e ≠ n then 1 else 0)
+
+/-- The state both counters mutate: `arena.order` (positive `i32`, modelled in `ℕ`), the set
+bits of the `open` bitset (as half indices), and the running `i32` total. -/
+structure RefState where
+  ord : ℕ → ℕ
+  bits : Finset ℕ
+  crossings : BitVec 32
+
+/-! ## `count_all_crossings_reference` -/
+
+/-- The inner scan: every set half in ascending order, `crossings += 1` when
+`order[ep] > edge_order && head[ep] != n && tail[ep] != n`. `i32` addition wraps in release. -/
+def refQuery (g : Graph) (ord : ℕ → ℕ) (bits : Finset ℕ) (edgeOrder n : ℕ) (c : BitVec 32) :
+    BitVec 32 :=
+  (bits.sort (· ≤ ·)).foldl
+    (fun c half =>
+      if edgeOrder < ord (half / 2) ∧ g.head (half / 2) ≠ n ∧ g.tail (half / 2) ≠ n then c + 1
+      else c)
+    c
+
+/-- First loop body: `if edge_order > 0 { scan; clear the closing half }`. -/
+def refClose (g : Graph) (n : ℕ) (s : RefState) (e : ℕ) : RefState :=
+  if 0 < s.ord e then
+    { s with
+      crossings := refQuery g s.ord s.bits (s.ord e) n s.crossings
+      bits := s.bits.erase (halfOf g n e) }
+  else s
+
+/-- Second loop body: `if order[e] == 0 { order[e] = order; set the opening half }`. -/
+def refOpen (g : Graph) (n order : ℕ) (s : RefState) (e : ℕ) : RefState :=
+  if s.ord e = 0 then
+    { s with ord := Function.update s.ord e order, bits := insert (halfOf g n e) s.bits }
+  else s
+
+/-- One list occurrence: node `n` at position `order`. -/
+def refOccurrence (g : Graph) (n order : ℕ) (s : RefState) : RefState :=
+  (g.adj n).foldl (refOpen g n order) ((g.adj n).foldl (refClose g n) s)
+
+/-- `for (&n, order) in list.iter().zip(1..)`. -/
+def refRun (g : Graph) : ℕ → List ℕ → RefState → RefState
+  | _, [], s => s
+  | order, n :: rest, s => refRun g (order + 1) rest (refOccurrence g n order s)
+
+/-- The state after the reset prologue: `open.fill(0)`, `order[e] = 0` for `e` in `adjacency`. -/
+def initState (adjacency : List ℕ) (ord0 : ℕ → ℕ) : RefState :=
+  { ord := adjacency.foldl (fun o e => Function.update o e 0) ord0
+    bits := ∅
+    crossings := 0 }
+
+/-- `count_all_crossings_reference(c, list, offsets, adjacency, open)`. -/
+def countReference (g : Graph) (adjacency : List ℕ) (ord0 : ℕ → ℕ) (list : List ℕ) :
+    RefState :=
+  refRun g 1 list (initState adjacency ord0)
+
+/-! ## `count_indexed` -/
+
+/-- Reference state plus the Fenwick `tree` (wrapping `u64` entries). -/
+structure IdxState extends RefState where
+  tree : ℕ → ZMod (2  ^ 64)
+
+/-- `u64::checked_sub`. -/
+def checkedSub (a b : ZMod (2 ^ 64)) : Option ℕ :=
+  if b.val ≤ a.val then some (a.val - b.val) else none
+
+/-- `wrap_crossings`: `value.wrapping_add(count as i32)`. -/
+def wrapCrossings (value : BitVec 32) (count : ℕ) : BitVec 32 := value + BitVec.ofNat 32 count
+
+/-- Tree update guarded by "the half is set": the body of both `for half in ..` loops over an
+edge's two halves in `count_indexed`. -/
+def idxHalf (len : ℕ) (d : ZMod (2 ^ 64)) (e : ℕ) (s : IdxState) (half : ℕ) :
+    Option IdxState :=
+  if half ∈ s.bits then do
+    let t ← indexUpdate len d s.tree (s.ord e)
+    pure { s with tree := t }
+  else pure s
+
+/-- `for half in e << 1..(e << 1) + 2` (halves `2e` and `2e + 1`). -/
+def idxHalves (len : ℕ) (d : ZMod (2 ^ 64)) (e : ℕ) (s : IdxState) : Option IdxState :=
+  (List.range' (2 * e) 2).foldlM (idxHalf len d e) s
+
+/-- Loop 1: take every set half of the incident edge out of the tree. -/
+def idxExclude (len : ℕ) (s : IdxState) (e : ℕ) : Option IdxState := idxHalves len (-1) e s
+
+/-- Loop 2: `if edge_order > 0 { count = total - prefix(edge_order); crossings += count }`. -/
+def idxQuery (len : ℕ) (total : ZMod (2 ^ 64)) (s : IdxState) (e : ℕ) : Option IdxState :=
+  if 0 < s.ord e then do
+    let p ← indexPrefix len s.tree (s.ord e)
+    let count ← checkedSub total p
+    pure { s with crossings := wrapCrossings s.crossings count }
+  else pure s
+
+/-- Loop 3: restore the incident halves, then apply the reference erasure of the closing half
+(bit and tree unit, only when the bit is set). -/
+def idxRestoreClose (g : Graph) (n len : ℕ) (s : IdxState) (e : ℕ) : Option IdxState := do
+  let s ← idxHalves len 1 e s
+  if 0 < s.ord e then
+    let half := halfOf g n e
+    if half ∈ s.bits then do
+      let t ← indexUpdate len (-1) s.tree (s.ord e)
+      pure { s with bits := s.bits.erase half, tree := t }
+    else pure s
+  else pure s
+
+/-- Loop 4: `if order[e] == 0 { order[e] = order; set the half; index_update(tree, order) }`. -/
+def idxOpen (g : Graph) (n len order : ℕ) (s : IdxState) (e : ℕ) : Option IdxState :=
+  if s.ord e = 0 then do
+    let t ← indexUpdate len 1 s.tree order
+    pure
+      { s with
+        ord := Function.update s.ord e order
+        bits := insert (halfOf g n e) s.bits
+        tree := t }
+  else pure s
+
+/-- One list occurrence of `count_indexed`. `total` is `index_prefix(tree, list.len())`. -/
+def idxOccurrence (g : Graph) (listLen len n order : ℕ) (s : IdxState) : Option IdxState := do
+  let s ← (g.adj n).foldlM (idxExclude len) s
+  let total ← indexPrefix len s.tree listLen
+  let s ← (g.adj n).foldlM (idxQuery len total) s
+  let s ← (g.adj n).foldlM (idxRestoreClose g n len) s
+  (g.adj n).foldlM (idxOpen g n len order) s
+
+/-- `for (&n, order) in list.iter().zip(1..)`. -/
+def idxRun (g : Graph) (listLen len : ℕ) : ℕ → List ℕ → IdxState → Option IdxState
+  | _, [], s => some s
+  | order, n :: rest, s => do
+    let s ← idxOccurrence g listLen len n order s
+    idxRun g listLen len (order + 1) rest s
+
+/-- `count_indexed(c, list, offsets, adjacency, open, tree)`; `none` is the `?` early return
+(the caller then runs the reference). -/
+def countIndexed (g : Graph) (adjacency : List ℕ) (ord0 : ℕ → ℕ) (list : List ℕ)
+    (len : ℕ) : Option RefState :=
+  (idxRun g list.length len 1 list { initState adjacency ord0 with tree := fun _ => 0 }).map
+    IdxState.toRefState
+
+/-- `count_with_policy` with `CHECK = false`: the dispatch between the two counters.
+`len` is `tree.len()`. (The `list.len() <= 16` and `> i32::MAX` clauses only choose the
+reference, which is always correct, so they are not modelled; see the theorem.) -/
+def countWithPolicy (g : Graph) (adjacency : List ℕ) (ord0 : ℕ → ℕ) (list : List ℕ)
+    (len : ℕ) : RefState :=
+  if len ≤ list.length then countReference g adjacency ord0 list
+  else
+    match countIndexed g adjacency ord0 list len with
+    | some r => r
+    | none => countReference g adjacency ord0 list
+
+/-! ## The Fenwick data structure
+
+`Valid N t a` says that the `u64` array `t` (length `N`, slot 0 unused) is the Fenwick tree of the
+array `a`: slot `j` holds the sum of `a` over `(j - lowbit j, j]`. Over `ZMod (2 ^ 64)` the
+wrapping arithmetic of the Rust code is exact ring arithmetic. The lemmas are stated for any
+additive group.
+-/
+
+section Bits
+
+theorem bv_odd (x : BitVec 64) (h : x.getLsbD 0 = true) : x &&& -x = 1 := by bv_decide
+theorem bv_even (x : BitVec 64) (h : x < 0x8000000000000000#64) :
+    (2 * x) &&& -(2 * x) = 2 * (x &&& -x) := by bv_decide
+theorem bv_prev (x : BitVec 64) : x &&& (x - 1) = x - (x &&& -x) := by bv_decide
+
+theorem lowbit_eq_bv (i : ℕ) (hi : i < 2 ^ 64) :
+    lowbit i = (BitVec.ofNat 64 i &&& -BitVec.ofNat 64 i).toNat := by
+  have : i % 18446744073709551616 = i := Nat.mod_eq_of_lt hi
+  simp [lowbit, BitVec.toNat_and, BitVec.toNat_neg, this]
+
+theorem lowbit_odd (a : ℕ) (h : 2 * a + 1 < 2 ^ 64) : lowbit (2 * a + 1) = 1 := by
+  rw [lowbit_eq_bv _ h, bv_odd]
+  · rfl
+  · simp [BitVec.getLsbD_ofNat]
+
+theorem lowbit_even (a : ℕ) (h : a < 2 ^ 63) : lowbit (2 * a) = 2 * lowbit a := by
+  have h1 : 2 * a < 2 ^ 64 := by omega
+  rw [lowbit_eq_bv _ h1, lowbit_eq_bv _ (by omega)]
+  have : BitVec.ofNat 64 (2 * a) = 2 * BitVec.ofNat 64 a := by
+    rw [BitVec.ofNat_mul]; rfl
+  rw [this, bv_even]
+  · have hm : a % 18446744073709551616 = a := Nat.mod_eq_of_lt (by omega)
+    simp [BitVec.toNat_mul, hm]
+    have := Nat.and_le_left (n := a) (m := (18446744073709551616 - a) % 18446744073709551616)
+    omega
+  · rw [BitVec.lt_def]; simp [BitVec.toNat_ofNat]; omega
+
+theorem lowbit_le (i : ℕ) : lowbit i ≤ i := Nat.and_le_left
+
+theorem prevIdx_eq (i : ℕ) (hi : i < 2 ^ 64) : prevIdx i = i - lowbit i := by
+  have h := congrArg BitVec.toNat (bv_prev (BitVec.ofNat 64 i))
+  have hl := lowbit_eq_bv _ hi
+  have hle := lowbit_le i
+  have hm : i % 18446744073709551616 = i := Nat.mod_eq_of_lt hi
+  simp [BitVec.toNat_and, BitVec.toNat_sub, BitVec.toNat_neg, hm] at h
+  have hl' : lowbit i = i &&& (18446744073709551616 - i) % 18446744073709551616 := by
+    simp [lowbit]
+  rw [← hl'] at h
+  have e : (18446744073709551616 - lowbit i + i) % 18446744073709551616 = i - lowbit i := by
+    have : 18446744073709551616 - lowbit i + i = (i - lowbit i) + 18446744073709551616 := by omega
+    rw [this, Nat.add_mod_right]; exact Nat.mod_eq_of_lt (by omega)
+  rw [e] at h
+  simpa [prevIdx, Nat.add_comm] using h
+
+end Bits
+
+theorem lowbit_pos (i : ℕ) (h0 : 0 < i) (h : i < 2 ^ 64) : 0 < lowbit i := by
+  induction i using Nat.strong_induction_on with
+  | _ i ih =>
+    rcases Nat.even_or_odd' i with ⟨a, rfl | rfl⟩
+    · have := lowbit_even a (by omega)
+      have := ih a (by omega) (by omega) (by omega)
+      omega
+    · rw [lowbit_odd a h]; omega
+
+theorem nextIdx_eq (i : ℕ) (h : i < 2 ^ 63) : nextIdx i = i + lowbit i := by
+  have := lowbit_le i
+  unfold nextIdx
+  exact Nat.mod_eq_of_lt (by omega)
+
+/-- The heart of the update proof. The slots an update from `i` touches are `i`, then those of the
+update from `i + lowbit i`; slot `j` is touched by an update at `i` iff `j - lowbit j < i ≤ j`. -/
+theorem touch_step (i : ℕ) (hi0 : 0 < i) (hi : i < 2 ^ 63) (j : ℕ) (hj0 : 0 < j)
+    (hj : j < 2 ^ 63) :
+    (j - lowbit j < i ∧ i ≤ j) ↔
+      (j = i ∨ (j - lowbit j < i + lowbit i ∧ i + lowbit i ≤ j)) := by
+  induction i using Nat.strong_induction_on generalizing j with
+  | _ i ih =>
+    have hli := lowbit_le i
+    have hlj := lowbit_le j
+    rcases Nat.even_or_odd' i with ⟨a, rfl | rfl⟩ <;>
+      rcases Nat.even_or_odd' j with ⟨b, rfl | rfl⟩
+    · have ha := lowbit_even a (by omega)
+      have hb := lowbit_even b (by omega)
+      have := ih a (by omega) (by omega) (by omega) b (by omega) (by omega)
+      rw [ha, hb]
+      omega
+    · rw [lowbit_even a (by omega), lowbit_odd b (by omega)]
+      omega
+    · rw [lowbit_odd a (by omega), lowbit_even b (by omega)]
+      omega
+    · rw [lowbit_odd a (by omega), lowbit_odd b (by omega)]
+      omega
+
+theorem updateGo_eq {M : Type*} [AddCommGroup M] (len : ℕ) (hlen : len < 2 ^ 62) (d : M) :
+    ∀ (fuel i : ℕ) (t : ℕ → M), len - i ≤ fuel → 0 < i →
+      ∀ j, 0 < j → j < len →
+        updateGo len d fuel i t j = t j + (if j - lowbit j < i ∧ i ≤ j then d else 0)
+  | 0, i, t, hf, hi, j, hj0, hj => by
+    have : ¬ (j - lowbit j < i ∧ i ≤ j) := by omega
+    simp [updateGo, this]
+  | fuel + 1, i, t, hf, hi, j, hj0, hj => by
+    by_cases hil : i < len
+    · have hnext := nextIdx_eq i (by omega)
+      have hpos := lowbit_pos i hi (by omega)
+      have ih := updateGo_eq len hlen d fuel (i + lowbit i) (Function.update t i (t i + d))
+        (by omega) (by omega) j hj0 hj
+      have key := touch_step i hi (by omega) j hj0 (by omega)
+      simp only [updateGo, hil, ↓reduceIte, hnext, ih]
+      by_cases hji : j = i
+      · subst hji
+        have h1 : ¬ (j - lowbit j < j + lowbit j ∧ j + lowbit j ≤ j) := by omega
+        have h2 : (j - lowbit j < j ∧ j ≤ j) := by omega
+        simp only [Function.update_self, h1, h2, ↓reduceIte, add_zero, and_self]
+      · by_cases hs : j - lowbit j < i + lowbit i ∧ i + lowbit i ≤ j
+        · have h2 : (j - lowbit j < i ∧ i ≤ j) := key.mpr (Or.inr hs)
+          simp [Function.update_of_ne hji, hs, h2]
+        · have h2 : ¬ (j - lowbit j < i ∧ i ≤ j) := fun h => by
+            rcases key.mp h with h | h
+            · exact hji h
+            · exact hs h
+          simp [Function.update_of_ne hji, hs, h2]
+    · have : ¬ (j - lowbit j < i ∧ i ≤ j) := by omega
+      simp [updateGo, hil, this]
+
+theorem prefixGo_eq {M : Type*} [AddCommGroup M] (t a : ℕ → M) (N : ℕ) (hN : N < 2 ^ 62)
+    (hv : ∀ j, 0 < j → j < N → t j = ∑ k ∈ Finset.Ioc (j - lowbit j) j, a k) :
+    ∀ (fuel i : ℕ) (sum : M), i ≤ fuel → i < N →
+      prefixGo t fuel i sum = sum + ∑ k ∈ Finset.Ioc 0 i, a k
+  | 0, i, sum, hf, hi => by
+    have : i = 0 := by omega
+    subst this
+    simp [prefixGo]
+  | fuel + 1, i, sum, hf, hi => by
+    by_cases hi0 : 0 < i
+    · have hp := prevIdx_eq i (by omega)
+      have hpos := lowbit_pos i hi0 (by omega)
+      have ih := prefixGo_eq t a N hN hv fuel (i - lowbit i) (sum + t i) (by omega) (by omega)
+      have e : prefixGo t (fuel + 1) i sum = prefixGo t fuel (i - lowbit i) (sum + t i) := by
+        simp [prefixGo, hi0, hp]
+      rw [e, ih, hv i hi0 hi, add_assoc, ← Finset.sum_Ioc_consecutive a
+        (Nat.zero_le (i - lowbit i)) (Nat.sub_le i (lowbit i))]
+      abel
+    · have : i = 0 := by omega
+      subst this
+      simp [prefixGo]
+
+/-- `Valid N t a`: `t` is the Fenwick tree of `a`. -/
+def Valid {M : Type*} [AddCommGroup M] (N : ℕ) (t a : ℕ → M) : Prop :=
+  ∀ j, 0 < j → j < N → t j = ∑ k ∈ Finset.Ioc (j - lowbit j) j, a k
+
+theorem valid_zero {M : Type*} [AddCommGroup M] (N : ℕ) : Valid N (fun _ : ℕ => (0 : M)) (fun _ => 0) := by
+  intro j _ _
+  simp
+
+theorem valid_congr {M : Type*} [AddCommGroup M] {N : ℕ} {t a b : ℕ → M} (h : ∀ k, a k = b k)
+    (hv : Valid N t a) : Valid N t b := by
+  have : a = b := funext h
+  subst this
+  exact hv
+
+/-- `index_prefix` returns the prefix sum `a[1] + … + a[i]`. -/
+theorem indexPrefix_eq {M : Type*} [AddCommGroup M] {N : ℕ} (hN : N < 2 ^ 62) {t a : ℕ → M}
+    (hv : Valid N t a) {i : ℕ} (hi : i < N) :
+    indexPrefix N t i = some (∑ k ∈ Finset.Ioc 0 i, a k) := by
+  have := prefixGo_eq t a N hN hv i i 0 le_rfl hi
+  simp [indexPrefix, Nat.not_le.mpr hi, this]
+
+/-- `index_update` on a valid tree for a key in `1..N` adds `d` to `a[i]`. -/
+theorem indexUpdate_valid {M : Type*} [AddCommGroup M] {N : ℕ} (hN : N < 2 ^ 62) {t a : ℕ → M}
+    (hv : Valid N t a) (d : M) {i : ℕ} (hi0 : 0 < i) (hi : i < N) :
+    ∃ t', indexUpdate N d t i = some t' ∧
+      Valid N t' (fun k => a k + if k = i then d else 0) := by
+  refine ⟨updateGo N d N i t, by simp [indexUpdate, Nat.pos_iff_ne_zero.mp hi0, Nat.not_le.mpr hi], ?_⟩
+  intro j hj0 hj
+  rw [updateGo_eq N hN d N i t (by omega) hi0 j hj0 hj, hv j hj0 hj,
+    Finset.sum_add_distrib]
+  congr 1
+  simp only [Finset.sum_ite_eq', Finset.mem_Ioc]
+
+
+/-! ## The tree indexes the set bits
+
+`histZ ord S j` is the number of set halves of `S` whose edge has order `j`, as an element of
+`ZMod (2 ^ 64)`. The Fenwick tree is valid for it. -/
+
+/-- Number of halves in `S` whose edge has opening order `j`. -/
+def histZ (ord : ℕ → ℕ) (S : Finset ℕ) (j : ℕ) : ZMod (2 ^ 64) :=
+  ((S.filter (fun h => ord (h / 2) = j)).card : ZMod (2 ^ 64))
+
+theorem histZ_erase (ord : ℕ → ℕ) (S : Finset ℕ) (x : ℕ) (hx : x ∈ S) (j : ℕ) :
+    histZ ord (S.erase x) j = histZ ord S j + (if j = ord (x / 2) then -1 else 0) := by
+  unfold histZ
+  by_cases h : j = ord (x / 2)
+  · have hmem : x ∈ S.filter (fun h => ord (h / 2) = j) := by simp [hx, h]
+    have : (S.erase x).filter (fun h => ord (h / 2) = j)
+        = (S.filter (fun h => ord (h / 2) = j)).erase x := by
+      rw [Finset.filter_erase]
+    rw [this, Finset.card_erase_of_mem hmem, Nat.cast_sub (Finset.card_pos.mpr ⟨x, hmem⟩)]
+    simp [h, sub_eq_add_neg]
+  · have : (S.erase x).filter (fun h => ord (h / 2) = j) = S.filter (fun h => ord (h / 2) = j) := by
+      ext y
+      simp only [Finset.mem_filter, Finset.mem_erase]
+      constructor
+      · rintro ⟨⟨_, hy⟩, hy2⟩; exact ⟨hy, hy2⟩
+      · rintro ⟨hy, hy2⟩; exact ⟨⟨fun e => h (by rw [← hy2, e]), hy⟩, hy2⟩
+    rw [this]; simp [h]
+
+theorem histZ_insert (ord : ℕ → ℕ) (S : Finset ℕ) (x : ℕ) (hx : x ∉ S) (j : ℕ) :
+    histZ ord (insert x S) j = histZ ord S j + (if j = ord (x / 2) then 1 else 0) := by
+  unfold histZ
+  rw [Finset.filter_insert]
+  by_cases h : ord (x / 2) = j
+  · have : x ∉ S.filter (fun h => ord (h / 2) = j) := by simp [hx]
+    simp [h, Finset.card_insert_of_notMem this]
+  · simp [h, Ne.symm h]
+
+theorem histZ_congr (ord ord' : ℕ → ℕ) (S : Finset ℕ) (h : ∀ x ∈ S, ord' (x / 2) = ord (x / 2)) :
+    histZ ord' S = histZ ord S := by
+  funext j
+  unfold histZ
+  congr 2
+  exact Finset.filter_congr (fun x hx => by rw [h x hx])
+
+/-- Prefix of the histogram: the number of halves with order in `1..i`. -/
+theorem sum_histZ (ord : ℕ → ℕ) (S : Finset ℕ) (hpos : ∀ x ∈ S, 1 ≤ ord (x / 2)) (i : ℕ) :
+    ∑ k ∈ Finset.Ioc 0 i, histZ ord S k
+      = ((S.filter (fun h => ord (h / 2) ≤ i)).card : ZMod (2 ^ 64)) := by
+  have h := Finset.card_eq_sum_card_fiberwise (f := fun h => ord (h / 2))
+    (s := S.filter (fun h => ord (h / 2) ≤ i)) (t := Finset.Ioc 0 i)
+    (by intro x hx
+        have hx := Finset.mem_filter.mp (Finset.mem_coe.mp hx)
+        exact Finset.mem_coe.mpr (Finset.mem_Ioc.mpr ⟨hpos x hx.1, hx.2⟩))
+  rw [h, Nat.cast_sum]
+  refine Finset.sum_congr rfl (fun k hk => ?_)
+  unfold histZ
+  congr 2
+  ext x
+  simp only [Finset.mem_filter, Finset.mem_Ioc] at hk ⊢
+  constructor
+  · rintro ⟨hx, hxk⟩; exact ⟨⟨hx, by omega⟩, hxk⟩
+  · rintro ⟨⟨hx, _⟩, hxk⟩; exact ⟨hx, hxk⟩
+
+/-- Erasing a set half takes one unit out of the tree. -/
+theorem valid_erase {len : ℕ} (hN : len < 2 ^ 62) {t : ℕ → ZMod (2 ^ 64)} {ord : ℕ → ℕ}
+    {S : Finset ℕ} (hv : Valid len t (histZ ord S)) {x : ℕ} (hx : x ∈ S)
+    (h0 : 0 < ord (x / 2)) (hl : ord (x / 2) < len) :
+    ∃ t', indexUpdate len (-1) t (ord (x / 2)) = some t' ∧ Valid len t' (histZ ord (S.erase x)) := by
+  obtain ⟨t', ht', hv'⟩ := indexUpdate_valid hN hv (-1) h0 hl
+  refine ⟨t', ht', valid_congr (fun k => ?_) hv'⟩
+  rw [histZ_erase ord S x hx]
+
+theorem valid_insert {len : ℕ} (hN : len < 2 ^ 62) {t : ℕ → ZMod (2 ^ 64)} {ord : ℕ → ℕ}
+    {S : Finset ℕ} (hv : Valid len t (histZ ord S)) {x : ℕ} (hx : x ∉ S)
+    (h0 : 0 < ord (x / 2)) (hl : ord (x / 2) < len) :
+    ∃ t', indexUpdate len 1 t (ord (x / 2)) = some t' ∧ Valid len t' (histZ ord (insert x S)) := by
+  obtain ⟨t', ht', hv'⟩ := indexUpdate_valid hN hv 1 h0 hl
+  refine ⟨t', ht', valid_congr (fun k => ?_) hv'⟩
+  rw [histZ_insert ord S x hx]
+
+/-! ## Edge-level steps of the two tree-maintenance loops -/
+
+theorem idxHalves_eq (len : ℕ) (d : ZMod (2 ^ 64)) (e : ℕ) (s : IdxState) :
+    idxHalves len d e s = (idxHalf len d e s (2 * e)).bind (fun s => idxHalf len d e s (2 * e + 1)) := by
+  simp [idxHalves, List.range', List.foldlM]
+
+theorem idxHalf_erase {len : ℕ} (hN : len < 2 ^ 62) {s : IdxState} {e x : ℕ} {U : Finset ℕ}
+    (hv : Valid len s.tree (histZ s.ord U)) (hxe : x / 2 = e) (hU : ∀ h ∈ U, h ∈ s.bits)
+    (hxU : x ∈ s.bits → x ∈ U)
+    (hpos : ∀ h ∈ s.bits, 1 ≤ s.ord (h / 2) ∧ s.ord (h / 2) < len) :
+    ∃ s', idxHalf len (-1) e s x = some s' ∧ s'.toRefState = s.toRefState ∧
+      Valid len s'.tree (histZ s.ord (U.erase x)) := by
+  by_cases hx : x ∈ s.bits
+  · obtain ⟨t', ht', hv'⟩ := valid_erase hN hv (hxU hx) (by have := hpos x hx; omega)
+      (hpos x hx).2
+    rw [hxe] at ht'
+    refine ⟨{ s with tree := t' }, ?_, rfl, hv'⟩
+    simp [idxHalf, hx, ht']
+  · have : x ∉ U := fun h => hx (hU x h)
+    refine ⟨s, by simp [idxHalf, hx], rfl, ?_⟩
+    rw [Finset.erase_eq_of_notMem this]; exact hv
+
+theorem idxHalf_insert {len : ℕ} (hN : len < 2 ^ 62) {s : IdxState} {e x : ℕ} {U U' : Finset ℕ}
+    (hv : Valid len s.tree (histZ s.ord U)) (hxe : x / 2 = e) (hxU : x ∉ U)
+    (hU' : ∀ h, h ∈ U' ↔ h ∈ U ∨ (h = x ∧ x ∈ s.bits))
+    (hpos : ∀ h ∈ s.bits, 1 ≤ s.ord (h / 2) ∧ s.ord (h / 2) < len) :
+    ∃ s', idxHalf len 1 e s x = some s' ∧ s'.toRefState = s.toRefState ∧
+      Valid len s'.tree (histZ s.ord U') := by
+  by_cases hx : x ∈ s.bits
+  · obtain ⟨t', ht', hv'⟩ := valid_insert hN hv hxU (by have := hpos x hx; omega)
+      (hpos x hx).2
+    rw [hxe] at ht'
+    have hU'e : U' = insert x U := by
+      ext h; rw [hU' h, Finset.mem_insert]; simp [hx, or_comm]
+    refine ⟨{ s with tree := t' }, ?_, rfl, ?_⟩
+    · simp [idxHalf, hx, ht']
+    · rw [hU'e]; exact hv'
+  · have hU'e : U' = U := by
+      ext h; rw [hU' h]; simp [hx]
+    refine ⟨s, by simp [idxHalf, hx], rfl, ?_⟩
+    rw [hU'e]; exact hv
+
+theorem idxExclude_step {len : ℕ} (hN : len < 2 ^ 62) {s : IdxState} {e : ℕ} {ps : Finset ℕ}
+    (he : e ∉ ps)
+    (hv : Valid len s.tree (histZ s.ord (s.bits.filter (fun h => h / 2 ∉ ps))))
+    (hpos : ∀ h ∈ s.bits, 1 ≤ s.ord (h / 2) ∧ s.ord (h / 2) < len) :
+    ∃ s', idxExclude len s e = some s' ∧ s'.toRefState = s.toRefState ∧
+      Valid len s'.tree (histZ s.ord (s.bits.filter (fun h => h / 2 ∉ insert e ps))) := by
+  obtain ⟨s1, h1, c1, v1⟩ := idxHalf_erase hN hv (e := e) (x := 2 * e) (by omega)
+    (fun h hh => (Finset.mem_filter.mp hh).1)
+    (fun hx => Finset.mem_filter.mpr ⟨hx, by simpa using he⟩) hpos
+  have hb : s1.bits = s.bits := by rw [show s1.bits = s1.toRefState.bits from rfl, c1]
+  have ho : s1.ord = s.ord := by rw [show s1.ord = s1.toRefState.ord from rfl, c1]
+  obtain ⟨s2, h2, c2, v2⟩ := idxHalf_erase hN (s := s1) (e := e) (x := 2 * e + 1)
+    (U := (s.bits.filter (fun h => h / 2 ∉ ps)).erase (2 * e)) (by rw [ho]; exact v1) (by omega)
+    (fun h hh => by rw [hb]; exact (Finset.mem_filter.mp (Finset.mem_of_mem_erase hh)).1)
+    (fun hx => by
+      rw [hb] at hx
+      exact Finset.mem_erase.mpr ⟨by omega, Finset.mem_filter.mpr ⟨hx, by rwa [show (2 * e + 1) / 2 = e by omega]⟩⟩)
+    (by rw [hb, ho]; exact hpos)
+  refine ⟨s2, ?_, by rw [c2, c1], ?_⟩
+  · rw [idxExclude, idxHalves_eq, h1]; exact h2
+  · have ho2 : s2.ord = s.ord := by
+      rw [show s2.ord = s2.toRefState.ord from rfl, c2]; exact ho
+    have hset : ((s.bits.filter (fun h => h / 2 ∉ ps)).erase (2 * e)).erase (2 * e + 1)
+        = s.bits.filter (fun h => h / 2 ∉ insert e ps) := by
+      ext h
+      simp only [Finset.mem_erase, Finset.mem_filter, Finset.mem_insert]
+      have : h / 2 = e ↔ h = 2 * e ∨ h = 2 * e + 1 := by omega
+      constructor
+      · rintro ⟨h1, h2, h3, h4⟩
+        exact ⟨h3, fun hh => hh.elim (fun hh => by omega) h4⟩
+      · rintro ⟨h3, h4⟩
+        refine ⟨by intro hh; apply h4; left; omega, by intro hh; apply h4; left; omega, h3, ?_⟩
+        intro hh; exact h4 (Or.inr hh)
+    rw [hset, ho] at v2
+    exact v2
+
+theorem idxRestore_step {len : ℕ} (hN : len < 2 ^ 62) {s : IdxState} {e : ℕ} {rest : Finset ℕ}
+    (he : e ∈ rest)
+    (hv : Valid len s.tree (histZ s.ord (s.bits.filter (fun h => h / 2 ∉ rest))))
+    (hpos : ∀ h ∈ s.bits, 1 ≤ s.ord (h / 2) ∧ s.ord (h / 2) < len) :
+    ∃ s', idxHalves len 1 e s = some s' ∧ s'.toRefState = s.toRefState ∧
+      Valid len s'.tree (histZ s.ord (s.bits.filter (fun h => h / 2 ∉ rest.erase e))) := by
+  obtain ⟨s1, h1, c1, v1⟩ := idxHalf_insert hN hv (e := e) (x := 2 * e) (by omega)
+    (by simp [he]) (U' := s.bits.filter (fun h => h / 2 ∉ rest ∨ h = 2 * e))
+    (fun h => by
+      simp only [Finset.mem_filter]
+      constructor
+      · rintro ⟨hb, hh | hh⟩
+        · exact Or.inl ⟨hb, hh⟩
+        · exact Or.inr ⟨hh, hh ▸ hb⟩
+      · rintro (⟨hb, hh⟩ | ⟨hh, hb⟩)
+        · exact ⟨hb, Or.inl hh⟩
+        · exact ⟨hh ▸ hb, Or.inr hh⟩) hpos
+  have hb : s1.bits = s.bits := by rw [show s1.bits = s1.toRefState.bits from rfl, c1]
+  have ho : s1.ord = s.ord := by rw [show s1.ord = s1.toRefState.ord from rfl, c1]
+  obtain ⟨s2, h2, c2, v2⟩ := idxHalf_insert hN (s := s1) (e := e) (x := 2 * e + 1)
+    (U := s.bits.filter (fun h => h / 2 ∉ rest ∨ h = 2 * e))
+    (U' := s.bits.filter (fun h => h / 2 ∉ rest ∨ h = 2 * e ∨ h = 2 * e + 1))
+    (by rw [ho]; exact v1) (by omega)
+    (by
+      simp only [Finset.mem_filter]
+      rintro ⟨_, h3 | h3⟩
+      · exact h3 (by rwa [show (2 * e + 1) / 2 = e by omega])
+      · omega)
+    (fun h => by
+      simp only [Finset.mem_filter, hb]
+      constructor
+      · rintro ⟨hb, hh | hh | hh⟩
+        · exact Or.inl ⟨hb, Or.inl hh⟩
+        · exact Or.inl ⟨hb, Or.inr hh⟩
+        · exact Or.inr ⟨hh, hh ▸ hb⟩
+      · rintro (⟨hb, hh | hh⟩ | ⟨hh, hb⟩)
+        · exact ⟨hb, Or.inl hh⟩
+        · exact ⟨hb, Or.inr (Or.inl hh)⟩
+        · exact ⟨hh ▸ hb, Or.inr (Or.inr hh)⟩)
+    (by rw [hb, ho]; exact hpos)
+  refine ⟨s2, ?_, by rw [c2, c1], ?_⟩
+  · rw [idxHalves_eq, h1]; exact h2
+  · have hset : s.bits.filter (fun h => h / 2 ∉ rest ∨ h = 2 * e ∨ h = 2 * e + 1)
+        = s.bits.filter (fun h => h / 2 ∉ rest.erase e) := by
+      apply Finset.filter_congr
+      intro h _
+      have : h / 2 = e ↔ h = 2 * e ∨ h = 2 * e + 1 := by omega
+      simp only [Finset.mem_erase]
+      constructor
+      · rintro (hh | hh | hh)
+        · exact fun h2 => hh h2.2
+        · exact fun h2 => h2.1 (by omega)
+        · exact fun h2 => h2.1 (by omega)
+      · intro hh
+        by_cases h3 : h / 2 ∈ rest
+        · right
+          have : h / 2 = e := by
+            by_contra hne
+            exact hh ⟨hne, h3⟩
+          omega
+        · left; exact h3
+    rw [hset, ho] at v2
+    exact v2
+
+theorem idxRestoreClose_step {len : ℕ} (hN : len < 2 ^ 62) (g : Graph) (n : ℕ) {s : IdxState}
+    {e : ℕ} {rest : Finset ℕ} (he : e ∈ rest)
+    (hv : Valid len s.tree (histZ s.ord (s.bits.filter (fun h => h / 2 ∉ rest))))
+    (hpos : ∀ h ∈ s.bits, 1 ≤ s.ord (h / 2) ∧ s.ord (h / 2) < len) :
+    ∃ s', idxRestoreClose g n len s e = some s' ∧ s'.ord = s.ord ∧
+      s'.crossings = s.crossings ∧
+      s'.bits = (if 0 < s.ord e then s.bits.erase (halfOf g n e) else s.bits) ∧
+      Valid len s'.tree (histZ s.ord (s'.bits.filter (fun h => h / 2 ∉ rest.erase e))) := by
+  obtain ⟨s1, h1, c1, v1⟩ := idxRestore_step hN he hv hpos
+  have hb : s1.bits = s.bits := by rw [show s1.bits = s1.toRefState.bits from rfl, c1]
+  have ho : s1.ord = s.ord := by rw [show s1.ord = s1.toRefState.ord from rfl, c1]
+  have hc : s1.crossings = s.crossings := by
+    rw [show s1.crossings = s1.toRefState.crossings from rfl, c1]
+  have hhalf : (halfOf g n e) / 2 = e := by unfold halfOf; split_ifs <;> omega
+  by_cases h0 : 0 < s.ord e
+  · by_cases hm : halfOf g n e ∈ s.bits
+    · have hmU : halfOf g n e ∈ s.bits.filter (fun h => h / 2 ∉ rest.erase e) :=
+        Finset.mem_filter.mpr ⟨hm, by rw [hhalf]; simp⟩
+      obtain ⟨t', ht', hv'⟩ := valid_erase hN v1 hmU (by rw [hhalf]; exact h0)
+        (by rw [hhalf]; exact (hhalf ▸ (hpos _ hm).2))
+      rw [hhalf] at ht'
+      refine ⟨{ s1 with bits := s1.bits.erase (halfOf g n e), tree := t' }, ?_, ho, hc, ?_, ?_⟩
+      · simp [idxRestoreClose, h1, ho, hb, h0, hm, ht']
+      · simp [hb, h0]
+      · show Valid len t' (histZ s.ord (Finset.filter _ (s1.bits.erase _)))
+        rw [hb, Finset.filter_erase]
+        exact hv'
+    · refine ⟨s1, ?_, ho, hc, ?_, ?_⟩
+      · simp [idxRestoreClose, h1, ho, hb, h0, hm]
+      · simp [hb, h0, Finset.erase_eq_of_notMem hm]
+      · rw [hb]; exact v1
+  · refine ⟨s1, ?_, ho, hc, ?_, ?_⟩
+    · simp [idxRestoreClose, h1, ho, h0]
+    · simp [hb, h0]
+    · rw [hb]; exact v1
+
+/-! ## The reference side: closed form of one occurrence -/
+
+/-- Number of set halves the reference scan counts for an incident edge of order `th`. -/
+def hits (g : Graph) (ord : ℕ → ℕ) (X : Finset ℕ) (th n : ℕ) : ℕ :=
+  (X.filter (fun h => th < ord (h / 2) ∧ g.head (h / 2) ≠ n ∧ g.tail (h / 2) ≠ n)).card
+
+/-- What the first loop adds to `crossings`, edge by edge, if the scanned set stayed `X`. -/
+def queryAcc (g : Graph) (n : ℕ) (ord : ℕ → ℕ) (X : Finset ℕ) (es : List ℕ) (c : BitVec 32) :
+    BitVec 32 :=
+  es.foldl (fun c e => if 0 < ord e then wrapCrossings c (hits g ord X (ord e) n) else c) c
+
+/-- The halves the first loop erases. -/
+def erased (g : Graph) (n : ℕ) (ord : ℕ → ℕ) (es : List ℕ) : Finset ℕ :=
+  ((es.filter (fun e => 0 < ord e)).map (halfOf g n)).toFinset
+
+theorem foldl_count {α : Type*} (P : α → Prop) [DecidablePred P] (l : List α) (c : BitVec 32) :
+    l.foldl (fun c a => if P a then c + 1 else c) c = c + BitVec.ofNat 32 (l.countP P) := by
+  induction l generalizing c with
+  | nil => simp
+  | cons a l ih =>
+    rw [List.foldl_cons, ih]
+    by_cases h : P a
+    · simp [h, List.countP_cons_of_pos, BitVec.ofNat_add, add_assoc, add_comm]
+    · simp [h]
+
+theorem refQuery_eq (g : Graph) (ord : ℕ → ℕ) (X : Finset ℕ) (th n : ℕ) (c : BitVec 32) :
+    refQuery g ord X th n c = wrapCrossings c (hits g ord X th n) := by
+  unfold refQuery wrapCrossings hits
+  rw [foldl_count (fun half => th < ord (half / 2) ∧ g.head (half / 2) ≠ n ∧ g.tail (half / 2) ≠ n)]
+  congr 2
+  have := Multiset.coe_countP (fun half => th < ord (half / 2) ∧ g.head (half / 2) ≠ n ∧ g.tail (half / 2) ≠ n) (X.sort (· ≤ ·))
+  rw [Finset.sort_eq] at this
+  rw [← this, Multiset.countP_eq_card_filter]
+  rfl
+
+theorem hits_erase (g : Graph) (ord : ℕ → ℕ) (X : Finset ℕ) (th n x : ℕ)
+    (hx : g.head (x / 2) = n ∨ g.tail (x / 2) = n) :
+    hits g ord (X.erase x) th n = hits g ord X th n := by
+  unfold hits
+  rw [Finset.filter_erase, Finset.erase_eq_of_notMem]
+  simp only [Finset.mem_filter]
+  rintro ⟨_, _, h1, h2⟩
+  rcases hx with hx | hx
+  · exact h1 hx
+  · exact h2 hx
+
+theorem queryAcc_congr (g : Graph) (n : ℕ) (ord : ℕ → ℕ) (X X' : Finset ℕ) (es : List ℕ)
+    (h : ∀ e ∈ es, hits g ord X' (ord e) n = hits g ord X (ord e) n) (c : BitVec 32) :
+    queryAcc g n ord X' es c = queryAcc g n ord X es c := by
+  induction es generalizing c with
+  | nil => rfl
+  | cons e es ih =>
+    unfold queryAcc at ih ⊢
+    rw [List.foldl_cons, List.foldl_cons, h e (by simp)]
+    exact ih (fun e' he' => h e' (by simp [he'])) _
+
+theorem erased_cons (g : Graph) (n : ℕ) (ord : ℕ → ℕ) (e : ℕ) (es : List ℕ) :
+    erased g n ord (e :: es) = if 0 < ord e then insert (halfOf g n e) (erased g n ord es)
+      else erased g n ord es := by
+  unfold erased
+  by_cases h : 0 < ord e <;> simp [h]
+
+/-- First reference loop in closed form: it counts every query against the original set, because
+it only erases incident halves, which the predicate excludes anyway. -/
+theorem refClose_fold (g : Graph) (n : ℕ) :
+    ∀ (es : List ℕ) (s : RefState), (∀ e ∈ es, g.head e = n ∨ g.tail e = n) →
+      es.foldl (refClose g n) s =
+        { s with crossings := queryAcc g n s.ord s.bits es s.crossings
+                 bits := s.bits \ erased g n s.ord es }
+  | [], s, _ => by simp [queryAcc, erased]
+  | e :: es, s, hes => by
+    rw [List.foldl_cons]
+    have hinc_e := hes e (by simp)
+    have hhalf : (halfOf g n e) / 2 = e := by unfold halfOf; split_ifs <;> omega
+    by_cases h0 : 0 < s.ord e
+    · have h1 : refClose g n s e = { s with crossings := wrapCrossings s.crossings (hits g s.ord s.bits (s.ord e) n), bits := s.bits.erase (halfOf g n e) } := by
+        simp [refClose, h0, refQuery_eq]
+      rw [h1, refClose_fold g n es _ (fun e' he' => hes e' (by simp [he']))]
+      simp only []
+      have hq : queryAcc g n s.ord (s.bits.erase (halfOf g n e)) es (wrapCrossings s.crossings (hits g s.ord s.bits (s.ord e) n))
+          = queryAcc g n s.ord s.bits es (wrapCrossings s.crossings (hits g s.ord s.bits (s.ord e) n)) := by
+        apply queryAcc_congr
+        intro e' _
+        exact hits_erase g s.ord s.bits _ n _ (by rw [hhalf]; exact hinc_e)
+      rw [hq]
+      simp only [queryAcc, List.foldl_cons, h0, erased_cons, ↓reduceIte]
+      congr 1
+      ext h
+      simp only [Finset.mem_sdiff, Finset.mem_erase, Finset.mem_insert]
+      tauto
+    · have h1 : refClose g n s e = s := by simp [refClose, h0]
+      rw [h1, refClose_fold g n es _ (fun e' he' => hes e' (by simp [he']))]
+      simp [queryAcc, erased_cons, h0]
+
+/-! ## The indexed side: the four loops over one node's edges -/
+
+theorem toRef_ord {s s' : IdxState} (h : s'.toRefState = s.toRefState) : s'.ord = s.ord :=
+  congrArg RefState.ord h
+
+theorem toRef_bits {s s' : IdxState} (h : s'.toRefState = s.toRefState) : s'.bits = s.bits :=
+  congrArg RefState.bits h
+
+theorem toRef_crossings {s s' : IdxState} (h : s'.toRefState = s.toRefState) :
+    s'.crossings = s.crossings :=
+  congrArg RefState.crossings h
+
+/-- Loop 1 over all of a node's edges: the tree then indexes exactly the set halves of the
+non-incident edges. -/
+theorem exclude_fold {len : ℕ} (hN : len < 2 ^ 62) :
+    ∀ (es : List ℕ) (ps : Finset ℕ) (s : IdxState), es.Nodup → (∀ e ∈ es, e ∉ ps) →
+      Valid len s.tree (histZ s.ord (s.bits.filter (fun h => h / 2 ∉ ps))) →
+      (∀ h ∈ s.bits, 1 ≤ s.ord (h / 2) ∧ s.ord (h / 2) < len) →
+      ∃ s', es.foldlM (idxExclude len) s = some s' ∧ s'.toRefState = s.toRefState ∧
+        Valid len s'.tree (histZ s.ord (s.bits.filter (fun h => h / 2 ∉ ps ∪ es.toFinset)))
+  | [], ps, s, _, _, hv, _ => ⟨s, rfl, rfl, by simpa using hv⟩
+  | e :: es, ps, s, hnd, hnot, hv, hpos => by
+    have hnd' := List.nodup_cons.mp hnd
+    obtain ⟨s1, h1, c1, v1⟩ := idxExclude_step hN (hnot e (by simp)) hv hpos
+    have hb := toRef_bits c1
+    have ho := toRef_ord c1
+    obtain ⟨s2, h2, c2, v2⟩ := exclude_fold hN es (insert e ps) s1 hnd'.2
+      (fun x hx => by
+        simp only [Finset.mem_insert, not_or]
+        exact ⟨fun h => hnd'.1 (h ▸ hx), hnot x (by simp [hx])⟩)
+      (by rw [hb, ho]; exact v1) (by rw [hb, ho]; exact hpos)
+    refine ⟨s2, ?_, by rw [c2, c1], ?_⟩
+    · rw [List.foldlM_cons, h1]; exact h2
+    · rw [hb, ho] at v2
+      have hset : ∀ h, (h / 2 ∉ insert e ps ∪ es.toFinset) ↔ (h / 2 ∉ ps ∪ (e :: es).toFinset) := by
+        intro h; simp only [Finset.mem_union, Finset.mem_insert, List.toFinset_cons]; tauto
+      rw [Finset.filter_congr (fun h _ => hset h)] at v2
+      exact v2
+
+theorem opt_some_bind {α : Type} (x : α) (f : α → Option IdxState) :
+    (some x >>= f) = f x := rfl
+
+theorem hits_eq_card (g : Graph) (ord : ℕ → ℕ) (X T : Finset ℕ) (th n : ℕ)
+    (hT : ∀ h, h ∈ T ↔ h ∈ X ∧ g.head (h / 2) ≠ n ∧ g.tail (h / 2) ≠ n) :
+    hits g ord X th n = (T.filter (fun h => th < ord (h / 2))).card := by
+  unfold hits
+  congr 1
+  ext h
+  simp only [Finset.mem_filter, hT]
+  tauto
+
+/-- The natural-number content of one query: with `p = index_prefix(tree, edge_order)`, the
+`u64` subtraction `total - p` succeeds and yields exactly the number of halves the reference scan
+counts for this edge. -/
+theorem query_count_eq_hits {len L : ℕ} (hN : len < 2 ^ 62) (hL : L < len) (g : Graph) (n : ℕ)
+    {s : IdxState} {e : ℕ} {T : Finset ℕ} {total : ZMod (2 ^ 64)}
+    (hT : ∀ h, h ∈ T ↔ h ∈ s.bits ∧ g.head (h / 2) ≠ n ∧ g.tail (h / 2) ≠ n)
+    (hv : Valid len s.tree (histZ s.ord T))
+    (hposT : ∀ h ∈ T, 1 ≤ s.ord (h / 2) ∧ s.ord (h / 2) ≤ L)
+    (hcard : T.card < 2 ^ 64) (htot : total = (T.card : ZMod (2 ^ 64))) (he : s.ord e ≤ L) :
+    ∃ p, indexPrefix len s.tree (s.ord e) = some p ∧
+      checkedSub total p = some (hits g s.ord s.bits (s.ord e) n) := by
+  have hp := indexPrefix_eq hN hv (i := s.ord e) (by omega)
+  rw [sum_histZ s.ord T (fun x hx => (hposT x hx).1)] at hp
+  refine ⟨_, hp, ?_⟩
+  set B := (T.filter (fun h => s.ord (h / 2) ≤ s.ord e)).card with hB
+  have hBA : B ≤ T.card := Finset.card_le_card (Finset.filter_subset _ _)
+  have hsub : checkedSub total (B : ZMod (2 ^ 64)) = some (T.card - B) := by
+    unfold checkedSub
+    rw [htot, ZMod.val_natCast, ZMod.val_natCast, Nat.mod_eq_of_lt hcard,
+      Nat.mod_eq_of_lt (by omega)]
+    simp [hBA]
+  have hcnt : T.card - B = hits g s.ord s.bits (s.ord e) n := by
+    rw [hits_eq_card g s.ord s.bits T _ n hT]
+    have := Finset.card_filter_add_card_filter_not (s := T)
+      (fun h => s.ord (h / 2) ≤ s.ord e)
+    have h2 : (T.filter (fun h => ¬ s.ord (h / 2) ≤ s.ord e))
+        = T.filter (fun h => s.ord e < s.ord (h / 2)) :=
+      Finset.filter_congr (fun _ _ => by omega)
+    rw [h2] at this
+    omega
+  rw [hsub, hcnt]
+
+/-- One query of loop 2: `total - prefix(edge_order)` is the reference's count. -/
+theorem idxQuery_step {len L : ℕ} (hN : len < 2 ^ 62) (hL : L < len) (g : Graph) (n : ℕ)
+    {s : IdxState} {e : ℕ} {T : Finset ℕ} {total : ZMod (2 ^ 64)}
+    (hT : ∀ h, h ∈ T ↔ h ∈ s.bits ∧ g.head (h / 2) ≠ n ∧ g.tail (h / 2) ≠ n)
+    (hv : Valid len s.tree (histZ s.ord T))
+    (hposT : ∀ h ∈ T, 1 ≤ s.ord (h / 2) ∧ s.ord (h / 2) ≤ L)
+    (hcard : T.card < 2 ^ 64) (htot : total = (T.card : ZMod (2 ^ 64))) (he : s.ord e ≤ L) :
+    idxQuery len total s e = some
+      { s with crossings := if 0 < s.ord e then
+          wrapCrossings s.crossings (hits g s.ord s.bits (s.ord e) n) else s.crossings } := by
+  by_cases h0 : 0 < s.ord e
+  · obtain ⟨p, hp, hsub⟩ := query_count_eq_hits hN hL g n hT hv hposT hcard htot he
+    simp [idxQuery, h0, hp, hsub]
+  · simp [idxQuery, h0]
+
+/-- Loop 2 over all edges: the tree and the set are left alone, `crossings` gets the closed form. -/
+theorem query_fold {len L : ℕ} (hN : len < 2 ^ 62) (hL : L < len) (g : Graph) (n : ℕ)
+    (T : Finset ℕ) (total : ZMod (2 ^ 64)) :
+    ∀ (es : List ℕ) (s : IdxState),
+      (∀ h, h ∈ T ↔ h ∈ s.bits ∧ g.head (h / 2) ≠ n ∧ g.tail (h / 2) ≠ n) →
+      Valid len s.tree (histZ s.ord T) →
+      (∀ h ∈ T, 1 ≤ s.ord (h / 2) ∧ s.ord (h / 2) ≤ L) →
+      T.card < 2 ^ 64 → total = (T.card : ZMod (2 ^ 64)) → (∀ e ∈ es, s.ord e ≤ L) →
+      es.foldlM (idxQuery len total) s =
+        some { s with crossings := queryAcc g n s.ord s.bits es s.crossings }
+  | [], s, _, _, _, _, _, _ => by simp [queryAcc]
+  | e :: es, s, hT, hv, hposT, hcard, htot, hle => by
+    rw [List.foldlM_cons, idxQuery_step hN hL g n hT hv hposT hcard htot (hle e (by simp))]
+    rw [opt_some_bind]
+    have ih := query_fold hN hL g n T total es
+      { s with crossings := if 0 < s.ord e then
+          wrapCrossings s.crossings (hits g s.ord s.bits (s.ord e) n) else s.crossings }
+      hT hv hposT hcard htot (fun e he => hle e (by simp [he]))
+    rw [ih]
+    simp only [queryAcc, List.foldl_cons]
+
+/-- Loop 3 over all edges: every incident half is restored, the closing halves are erased
+from the set and the tree. -/
+theorem restoreClose_fold {len : ℕ} (hN : len < 2 ^ 62) (g : Graph) (n : ℕ) :
+    ∀ (es : List ℕ) (rest : Finset ℕ) (s : IdxState), es.Nodup → (∀ e ∈ es, e ∈ rest) →
+      Valid len s.tree (histZ s.ord (s.bits.filter (fun h => h / 2 ∉ rest))) →
+      (∀ h ∈ s.bits, 1 ≤ s.ord (h / 2) ∧ s.ord (h / 2) < len) →
+      ∃ s', es.foldlM (idxRestoreClose g n len) s = some s' ∧ s'.ord = s.ord ∧
+        s'.crossings = s.crossings ∧ s'.bits = s.bits \ erased g n s.ord es ∧
+        Valid len s'.tree (histZ s.ord (s'.bits.filter (fun h => h / 2 ∉ rest \ es.toFinset)))
+  | [], rest, s, _, _, hv, _ => ⟨s, rfl, rfl, rfl, by simp [erased], by simpa using hv⟩
+  | e :: es, rest, s, hnd, hmem, hv, hpos => by
+    have hnd' := List.nodup_cons.mp hnd
+    obtain ⟨s1, h1, o1, c1, b1, v1⟩ := idxRestoreClose_step hN g n (hmem e (by simp)) hv hpos
+    have hsub : s1.bits ⊆ s.bits := by
+      rw [b1]; split_ifs
+      · exact Finset.erase_subset _ _
+      · exact le_rfl
+    obtain ⟨s2, h2, o2, c2, b2, v2⟩ := restoreClose_fold hN g n es (rest.erase e) s1 hnd'.2
+      (fun x hx => Finset.mem_erase.mpr ⟨fun h => hnd'.1 (h ▸ hx), hmem x (by simp [hx])⟩)
+      (by rw [o1]; exact v1) (by rw [o1]; exact fun h hh => hpos h (hsub hh))
+    refine ⟨s2, ?_, by rw [o2, o1], by rw [c2, c1], ?_, ?_⟩
+    · rw [List.foldlM_cons, h1]; exact h2
+    · rw [b2, o1, b1, erased_cons]
+      ext h
+      by_cases h0 : 0 < s.ord e
+      · simp [h0, Finset.mem_sdiff, Finset.mem_erase, Finset.mem_insert]; tauto
+      · simp [h0, Finset.mem_sdiff]
+    · rw [o1] at v2
+      have : ∀ h, (h / 2 ∉ (rest.erase e) \ es.toFinset) ↔ (h / 2 ∉ rest \ (e :: es).toFinset) := by
+        intro h
+        simp only [Finset.mem_sdiff, Finset.mem_erase, List.toFinset_cons, Finset.mem_insert]
+        tauto
+      rw [Finset.filter_congr (fun h _ => this h)] at v2
+      exact v2
+
+/-! ## The invariant -/
+
+/-- After `k` list occurrences: every set half belongs to an edge of order `1..k` and fits the
+bitset (`< 2 * E`, where `E` is `arena.order.len()`), every block edge has order at most `k`, and
+the tree is the Fenwick tree of the set's histogram. -/
+structure Inv (adjacency : List ℕ) (E len k : ℕ) (s : IdxState) : Prop where
+  pos : ∀ h ∈ s.bits, 1 ≤ s.ord (h / 2) ∧ s.ord (h / 2) ≤ k
+  lt : ∀ h ∈ s.bits, h < 2 * E
+  mem : ∀ h ∈ s.bits, h / 2 ∈ adjacency
+  ord_le : ∀ e ∈ adjacency, s.ord e ≤ k
+  tree : Valid len s.tree (histZ s.ord s.bits)
+
+theorem idxOpen_step {adjacency : List ℕ} {E len order : ℕ} (hN : len < 2 ^ 62)
+    (hord1 : 1 ≤ order) (hord : order < len) (g : Graph) (n : ℕ) {s : IdxState} {e : ℕ}
+    (he : e ∈ adjacency) (hE : ∀ e ∈ adjacency, e < E) (hI : Inv adjacency E len order s) :
+    ∃ s', idxOpen g n len order s e = some s' ∧
+      s'.toRefState = refOpen g n order s.toRefState e ∧ Inv adjacency E len order s' := by
+  have hhalf : (halfOf g n e) / 2 = e := by unfold halfOf; split_ifs <;> omega
+  by_cases h0 : s.ord e = 0
+  · have hx : halfOf g n e ∉ s.bits := fun hm => by
+      have := (hI.pos _ hm).1
+      rw [hhalf] at this; omega
+    have hne : ∀ h ∈ s.bits, h / 2 ≠ e := fun h hh he' => hx (by
+      have := (hI.pos h hh).1
+      rw [he'] at this; omega)
+    have hcongr : histZ (Function.update s.ord e order) s.bits = histZ s.ord s.bits :=
+      histZ_congr _ _ _ (fun h hh => Function.update_of_ne (hne h hh) _ _)
+    have hv : Valid len s.tree (histZ (Function.update s.ord e order) s.bits) := by
+      rw [hcongr]; exact hI.tree
+    obtain ⟨t', ht', hv'⟩ := valid_insert hN hv hx (ord := Function.update s.ord e order)
+      (by rw [hhalf]; simp; omega) (by rw [hhalf]; simp; omega)
+    rw [hhalf] at ht'
+    simp only [Function.update_self] at ht'
+    refine ⟨{ s with ord := Function.update s.ord e order, bits := insert (halfOf g n e) s.bits, tree := t' }, ?_, ?_, ?_⟩
+    · simp [idxOpen, h0, ht']
+    · simp [refOpen, h0]
+    · refine ⟨?_, ?_, ?_, ?_, hv'⟩
+      · intro h hh
+        rcases Finset.mem_insert.mp hh with rfl | hh
+        · simp only [hhalf, Function.update_self]; omega
+        · have := hI.pos h hh
+          simp only [Function.update_of_ne (hne h hh)]
+          omega
+      · intro h hh
+        rcases Finset.mem_insert.mp hh with rfl | hh
+        · have := hE e he; unfold halfOf; split_ifs <;> omega
+        · exact hI.lt h hh
+      · intro h hh
+        rcases Finset.mem_insert.mp hh with rfl | hh
+        · rw [hhalf]; exact he
+        · exact hI.mem h hh
+      · intro e' he'
+        by_cases hee : e' = e
+        · subst hee; simp
+        · simp only [Function.update_of_ne hee]; exact hI.ord_le e' he'
+  · refine ⟨s, by simp [idxOpen, h0], by simp [refOpen, h0], hI⟩
+
+theorem open_fold {adjacency : List ℕ} {E len order : ℕ} (hN : len < 2 ^ 62)
+    (hord1 : 1 ≤ order) (hord : order < len) (g : Graph) (n : ℕ)
+    (hE : ∀ e ∈ adjacency, e < E) :
+    ∀ (es : List ℕ) (s : IdxState), (∀ e ∈ es, e ∈ adjacency) → Inv adjacency E len order s →
+      ∃ s', es.foldlM (idxOpen g n len order) s = some s' ∧
+        s'.toRefState = es.foldl (refOpen g n order) s.toRefState ∧ Inv adjacency E len order s'
+  | [], s, _, hI => ⟨s, rfl, rfl, hI⟩
+  | e :: es, s, hes, hI => by
+    obtain ⟨s1, h1, c1, i1⟩ := idxOpen_step hN hord1 hord g n (hes e (by simp)) hE hI
+    obtain ⟨s2, h2, c2, i2⟩ := open_fold hN hord1 hord g n hE es s1
+      (fun x hx => hes x (by simp [hx])) i1
+    refine ⟨s2, ?_, ?_, i2⟩
+    · rw [List.foldlM_cons, h1]; exact h2
+    · rw [c2, List.foldl_cons, c1]
+
+/-! ## One occurrence -/
+
+theorem card_le_of_bits {E : ℕ} {S : Finset ℕ} (h : ∀ x ∈ S, x < 2 * E) : S.card ≤ 2 * E := by
+  have : S ⊆ Finset.range (2 * E) := fun x hx => Finset.mem_range.mpr (h x hx)
+  simpa using Finset.card_le_card this
+
+/-- One list occurrence: the indexed counter keeps the reference's `order`/`open`/`crossings`
+and re-establishes the invariant. -/
+theorem idxOccurrence_step {adjacency : List ℕ} {E len L k : ℕ} (hN : len < 2 ^ 62)
+    (hL : L < len) (hk : k + 1 ≤ L) (hE62 : E < 2 ^ 62) (g : Graph) (n : ℕ)
+    (hE : ∀ e ∈ adjacency, e < E) (hnd : (g.adj n).Nodup)
+    (hadj : ∀ e ∈ adjacency, (e ∈ g.adj n ↔ g.head e = n ∨ g.tail e = n))
+    (hsub : ∀ e ∈ g.adj n, e ∈ adjacency) {s : IdxState} (hI : Inv adjacency E len k s) :
+    ∃ s', idxOccurrence g L len n (k + 1) s = some s' ∧
+      s'.toRefState = refOccurrence g n (k + 1) s.toRefState ∧ Inv adjacency E len (k + 1) s' := by
+  set es := g.adj n with hes
+  have hpos : ∀ h ∈ s.bits, 1 ≤ s.ord (h / 2) ∧ s.ord (h / 2) < len := fun h hh => by
+    have := hI.pos h hh; omega
+  -- loop 1
+  obtain ⟨sA, hA, cA, vA⟩ := exclude_fold hN es ∅ s hnd (fun e _ => by simp)
+    (by simpa using hI.tree) hpos
+  have oA := toRef_ord cA
+  have bA := toRef_bits cA
+  have crA := toRef_crossings cA
+  set T := s.bits.filter (fun h => h / 2 ∉ ∅ ∪ es.toFinset) with hTdef
+  have hT : ∀ h, h ∈ T ↔ h ∈ sA.bits ∧ g.head (h / 2) ≠ n ∧ g.tail (h / 2) ≠ n := by
+    intro h
+    rw [bA, hTdef, Finset.mem_filter]
+    simp only [Finset.empty_union, List.mem_toFinset]
+    constructor
+    · rintro ⟨h1, h2⟩
+      have := hadj (h / 2) (hI.mem h h1)
+      exact ⟨h1, fun hh => h2 (this.mpr (Or.inl hh)), fun hh => h2 (this.mpr (Or.inr hh))⟩
+    · rintro ⟨h1, h2, h3⟩
+      have := hadj (h / 2) (hI.mem h h1)
+      exact ⟨h1, fun hh => by rcases this.mp hh with hh | hh <;> contradiction⟩
+  have hTsub : ∀ h ∈ T, h ∈ s.bits := fun h hh => (Finset.mem_filter.mp hh).1
+  have vA' : Valid len sA.tree (histZ sA.ord T) := by rw [oA]; exact vA
+  have hposT : ∀ h ∈ T, 1 ≤ sA.ord (h / 2) ∧ sA.ord (h / 2) ≤ L := fun h hh => by
+    rw [oA]; have := hI.pos h (hTsub h hh); omega
+  have hcard : T.card < 2 ^ 64 := by
+    have := card_le_of_bits (E := E) (S := T) (fun x hx => hI.lt x (hTsub x hx))
+    omega
+  -- total
+  have htotal : indexPrefix len sA.tree L = some (T.card : ZMod (2 ^ 64)) := by
+    rw [indexPrefix_eq hN vA' hL, sum_histZ sA.ord T (fun x hx => (hposT x hx).1)]
+    congr 3
+    exact Finset.filter_true_of_mem (fun x hx => (hposT x hx).2)
+  -- loop 2
+  have hle : ∀ e ∈ es, sA.ord e ≤ L := fun e he => by
+    rw [oA]; have := hI.ord_le e (hsub e he); omega
+  have hB := query_fold hN hL g n T (T.card : ZMod (2 ^ 64)) es sA hT vA' hposT hcard rfl hle
+  set sB : IdxState := { sA with crossings := queryAcc g n sA.ord sA.bits es sA.crossings } with hsB
+  -- loop 3
+  have hposB : ∀ h ∈ sB.bits, 1 ≤ sB.ord (h / 2) ∧ sB.ord (h / 2) < len := by
+    intro h hh; show 1 ≤ sA.ord (h / 2) ∧ sA.ord (h / 2) < len
+    rw [oA]; rw [bA] at hh; exact hpos h hh
+  have vB : Valid len sB.tree (histZ sB.ord (sB.bits.filter (fun h => h / 2 ∉ es.toFinset))) := by
+    show Valid len sA.tree (histZ sA.ord (sA.bits.filter (fun h => h / 2 ∉ es.toFinset)))
+    rw [oA, bA]
+    have e : s.bits.filter (fun h => h / 2 ∉ es.toFinset) = T := by simp [hTdef]
+    rw [e]; exact vA
+  obtain ⟨sC, hC, oC, crC, bC, vC⟩ := restoreClose_fold hN g n es es.toFinset sB hnd
+    (fun e he => List.mem_toFinset.mpr he) vB hposB
+  have oC' : sC.ord = s.ord := oC.trans oA
+  have bC' : sC.bits = s.bits \ erased g n s.ord es := by
+    rw [bC]; show sA.bits \ erased g n sA.ord es = _; rw [bA, oA]
+  have crC' : sC.crossings = queryAcc g n s.ord s.bits es s.crossings := by
+    rw [crC]; show queryAcc g n sA.ord sA.bits es sA.crossings = _; rw [oA, bA, crA]
+  have hIC : Inv adjacency E len (k + 1) sC := by
+    refine ⟨?_, ?_, ?_, ?_, ?_⟩
+    · intro h hh
+      rw [bC'] at hh
+      have := hI.pos h (Finset.mem_sdiff.mp hh).1
+      rw [oC']; omega
+    · intro h hh
+      rw [bC'] at hh
+      exact hI.lt h (Finset.mem_sdiff.mp hh).1
+    · intro h hh
+      rw [bC'] at hh
+      exact hI.mem h (Finset.mem_sdiff.mp hh).1
+    · intro e he
+      rw [oC']; have := hI.ord_le e he; omega
+    · have : ∀ h, (h / 2 ∉ es.toFinset \ es.toFinset) := by simp
+      rw [Finset.filter_true_of_mem (fun h _ => this h)] at vC
+      have e : sB.ord = s.ord := oA
+      rw [e] at vC
+      show Valid len sC.tree (histZ sC.ord sC.bits)
+      rw [oC']; exact vC
+  -- loop 4
+  obtain ⟨sD, hD, cD, iD⟩ := open_fold hN (order := k + 1) (by omega) (by omega) g n hE es sC
+    (fun e he => hsub e he) hIC
+  refine ⟨sD, ?_, ?_, iD⟩
+  · unfold idxOccurrence
+    rw [← hes, hA, opt_some_bind, htotal, opt_some_bind, hB, opt_some_bind, hC, opt_some_bind]
+    exact hD
+  · unfold refOccurrence
+    rw [← hes, refClose_fold g n es s.toRefState (fun e he => (hadj e (hsub e he)).mp he), cD]
+    have : sC.toRefState = { s.toRefState with
+        crossings := queryAcc g n s.ord s.bits es s.crossings
+        bits := s.bits \ erased g n s.ord es } := by
+      show RefState.mk sC.ord sC.bits sC.crossings = RefState.mk s.ord _ _
+      rw [oC', bC', crC']
+    rw [this]
+
+/-! ## The whole scan -/
+
+/-- What the counters assume of the block graph at node `n`. In production `CGraph` builds the
+adjacency slice of `n` from the edges incident to `n`, each edge id once, loops included. -/
+structure NodeWf (g : Graph) (adjacency : List ℕ) (n : ℕ) : Prop where
+  nodup : (g.adj n).Nodup
+  incident : ∀ e ∈ adjacency, (e ∈ g.adj n ↔ g.head e = n ∨ g.tail e = n)
+  sub : ∀ e ∈ g.adj n, e ∈ adjacency
+
+theorem idxRun_ok {adjacency : List ℕ} {E len L : ℕ} (hN : len < 2 ^ 62) (hL : L < len)
+    (hE62 : E < 2 ^ 62) (g : Graph) (hE : ∀ e ∈ adjacency, e < E) :
+    ∀ (rest : List ℕ) (k : ℕ) (s : IdxState), k + rest.length ≤ L →
+      (∀ n ∈ rest, NodeWf g adjacency n) → Inv adjacency E len k s →
+      ∃ s', idxRun g L len (k + 1) rest s = some s' ∧
+        s'.toRefState = refRun g (k + 1) rest s.toRefState ∧
+        Inv adjacency E len (k + rest.length) s'
+  | [], k, s, _, _, hI => ⟨s, rfl, rfl, hI⟩
+  | n :: rest, k, s, hlen, hwf, hI => by
+    have w := hwf n (by simp)
+    obtain ⟨s1, h1, c1, i1⟩ := idxOccurrence_step hN hL (by simp at hlen; omega) hE62 g n hE
+      w.nodup w.incident w.sub hI
+    obtain ⟨s2, h2, c2, i2⟩ := idxRun_ok hN hL hE62 g hE rest (k + 1) s1
+      (by simp at hlen; omega) (fun m hm => hwf m (by simp [hm])) i1
+    refine ⟨s2, ?_, ?_, ?_⟩
+    · rw [idxRun, h1, opt_some_bind]; exact h2
+    · rw [refRun, ← c1]; exact c2
+    · have : k + 1 + rest.length = k + (n :: rest).length := by simp; omega
+      rw [← this]; exact i2
+
+theorem foldl_update_zero (l : List ℕ) (o : ℕ → ℕ) :
+    ∀ e ∈ l, (l.foldl (fun o e => Function.update o e 0) o) e = 0 := by
+  induction l generalizing o with
+  | nil => simp
+  | cons a l ih =>
+    intro e he
+    rw [List.foldl_cons]
+    by_cases h : e ∈ l
+    · exact ih _ e h
+    · have : e = a := by simpa [h] using he
+      subst this
+      -- later updates only touch members of `l`, and `e ∉ l`
+      have key : ∀ (l : List ℕ) (o : ℕ → ℕ), e ∉ l →
+          (l.foldl (fun o e => Function.update o e 0) o) e = o e := by
+        intro l
+        induction l with
+        | nil => intro o _; rfl
+        | cons b l ih2 =>
+          intro o hb
+          rw [List.foldl_cons, ih2 _ (fun h => hb (List.mem_cons_of_mem _ h))]
+          exact Function.update_of_ne (fun h => hb (by simp [h])) _ _
+      rw [key l _ h]; simp
+
+theorem initInv {adjacency : List ℕ} (E len : ℕ) (ord0 : ℕ → ℕ) :
+    Inv adjacency E len 0 { initState adjacency ord0 with tree := fun _ => 0 } := by
+  refine ⟨by simp [initState], by simp [initState], by simp [initState], ?_, ?_⟩
+  · intro e he
+    exact (foldl_update_zero adjacency ord0 e he).le
+  · refine valid_congr (a := fun _ => 0) (fun k => ?_) (valid_zero len)
+    show (0 : ZMod (2 ^ 64)) = _
+    unfold histZ
+    show (0 : ZMod (2 ^ 64)) = ((Finset.filter _ (∅ : Finset ℕ)).card : ZMod (2 ^ 64))
+    rw [Finset.filter_empty]; simp
+
+/-- **Main theorem.** On a well-formed block graph, `count_indexed` never takes its `?` early
+return, and returns exactly the reference's final `order` array, `open` bitset and `i32` total. -/
+theorem countIndexed_eq_reference {adjacency : List ℕ} {E : ℕ} (g : Graph) (ord0 : ℕ → ℕ)
+    (list : List ℕ) (len : ℕ) (hN : len < 2 ^ 62) (hL : list.length < len)
+    (hE62 : E < 2 ^ 62) (hE : ∀ e ∈ adjacency, e < E)
+    (hwf : ∀ n ∈ list, NodeWf g adjacency n) :
+    countIndexed g adjacency ord0 list len = some (countReference g adjacency ord0 list) := by
+  obtain ⟨s', h, c, _⟩ := idxRun_ok (L := list.length) hN hL hE62 g hE list 0
+    { initState adjacency ord0 with tree := fun _ => 0 } (by simp) hwf (initInv E len ord0)
+  unfold countIndexed countReference
+  rw [h]
+  simp only [Option.map_some]
+  exact congrArg some c
+
+/-- The dispatch in `count_with_policy` returns the reference's state on every input. -/
+theorem countWithPolicy_eq_reference {adjacency : List ℕ} {E : ℕ} (g : Graph) (ord0 : ℕ → ℕ)
+    (list : List ℕ) (len : ℕ) (hN : len < 2 ^ 62)
+    (hE62 : E < 2 ^ 62) (hE : ∀ e ∈ adjacency, e < E)
+    (hwf : ∀ n ∈ list, NodeWf g adjacency n) :
+    countWithPolicy g adjacency ord0 list len = countReference g adjacency ord0 list := by
+  unfold countWithPolicy
+  by_cases h : len ≤ list.length
+  · simp [h]
+  · simp only [h, ↓reduceIte]
+    rw [countIndexed_eq_reference g ord0 list len hN (by omega) hE62 hE hwf]
+
+/-! ## Natural-number count and the wrapped `i32` total -/
+
+/-- The crossings counted at one occurrence, as a natural number: for every incident edge that
+already has an order, the number of set halves with a larger order and no endpoint at `n`. -/
+def occHits (g : Graph) (n : ℕ) (s : RefState) : ℕ :=
+  (((g.adj n).filter (fun e => 0 < s.ord e)).map
+    (fun e => hits g s.ord s.bits (s.ord e) n)).sum
+
+/-- The exact (unbounded) crossing count of the scan, by occurrence. -/
+def natCrossings (g : Graph) : ℕ → List ℕ → RefState → ℕ
+  | _, [], _ => 0
+  | order, n :: rest, s => occHits g n s + natCrossings g (order + 1) rest (refOccurrence g n order s)
+
+theorem queryAcc_eq (g : Graph) (n : ℕ) (ord : ℕ → ℕ) (X : Finset ℕ) :
+    ∀ (es : List ℕ) (c : BitVec 32), queryAcc g n ord X es c =
+      c + BitVec.ofNat 32 (((es.filter (fun e => 0 < ord e)).map
+        (fun e => hits g ord X (ord e) n)).sum)
+  | [], c => by simp [queryAcc]
+  | e :: es, c => by
+    have ih := queryAcc_eq g n ord X es
+    unfold queryAcc at ih ⊢
+    rw [List.foldl_cons]
+    by_cases h0 : 0 < ord e
+    · simp only [h0, ↓reduceIte]
+      rw [ih, List.filter_cons_of_pos (by simpa using h0), List.map_cons,
+        List.sum_cons, BitVec.ofNat_add, wrapCrossings, add_assoc]
+    · simp only [h0, ↓reduceIte]
+      rw [ih, List.filter_cons_of_neg (by simpa using h0)]
+
+theorem foldl_refOpen_crossings (g : Graph) (n order : ℕ) :
+    ∀ (es : List ℕ) (s : RefState), (es.foldl (refOpen g n order) s).crossings = s.crossings
+  | [], s => rfl
+  | e :: es, s => by
+    rw [List.foldl_cons, foldl_refOpen_crossings g n order es]
+    unfold refOpen
+    split_ifs <;> rfl
+
+theorem refOccurrence_crossings (g : Graph) (n order : ℕ) (s : RefState)
+    (hinc : ∀ e ∈ g.adj n, g.head e = n ∨ g.tail e = n) :
+    (refOccurrence g n order s).crossings = s.crossings + BitVec.ofNat 32 (occHits g n s) := by
+  unfold refOccurrence
+  rw [foldl_refOpen_crossings, refClose_fold g n _ s hinc, queryAcc_eq]
+  rfl
+
+/-- The reference scan's `i32` total is the exact crossing count modulo `2 ^ 32`. -/
+theorem refRun_crossings (g : Graph) :
+    ∀ (rest : List ℕ) (order : ℕ) (s : RefState),
+      (∀ n ∈ rest, ∀ e ∈ g.adj n, g.head e = n ∨ g.tail e = n) →
+      (refRun g order rest s).crossings =
+        s.crossings + BitVec.ofNat 32 (natCrossings g order rest s)
+  | [], order, s, _ => by simp [refRun, natCrossings]
+  | n :: rest, order, s, hinc => by
+    rw [refRun, refRun_crossings g rest (order + 1) _ (fun m hm => hinc m (by simp [hm])),
+      refOccurrence_crossings g n order s (hinc n (by simp)), natCrossings, BitVec.ofNat_add,
+      add_assoc]
+
+/-- **Wrapped arithmetic.** On a well-formed block graph, `count_indexed` returns the exact
+crossing count reduced modulo `2 ^ 32` (as `i32`, release arithmetic): as a bit-vector, as a
+natural number, and in `ZMod (2 ^ 32)`. -/
+theorem countIndexed_wrapped {adjacency : List ℕ} {E : ℕ} (g : Graph) (ord0 : ℕ → ℕ)
+    (list : List ℕ) (len : ℕ) (hN : len < 2 ^ 62) (hL : list.length < len)
+    (hE62 : E < 2 ^ 62) (hE : ∀ e ∈ adjacency, e < E)
+    (hwf : ∀ n ∈ list, NodeWf g adjacency n) :
+    ∃ r, countIndexed g adjacency ord0 list len = some r ∧
+      r.crossings = BitVec.ofNat 32 (natCrossings g 1 list (initState adjacency ord0)) ∧
+      r.crossings.toNat = natCrossings g 1 list (initState adjacency ord0) % 2 ^ 32 ∧
+      ((r.crossings.toNat : ℕ) : ZMod (2 ^ 32)) =
+        (natCrossings g 1 list (initState adjacency ord0) : ZMod (2 ^ 32)) := by
+  refine ⟨_, countIndexed_eq_reference g ord0 list len hN hL hE62 hE hwf, ?_⟩
+  have h := refRun_crossings g list 1 (initState adjacency ord0)
+    (fun n hn e he => ((hwf n hn).incident e ((hwf n hn).sub e he)).mp he)
+  have h0 : (countReference g adjacency ord0 list).crossings =
+      BitVec.ofNat 32 (natCrossings g 1 list (initState adjacency ord0)) := by
+    unfold countReference; rw [h]; simp [initState]
+  refine ⟨h0, by rw [h0]; simp [BitVec.toNat_ofNat], ?_⟩
+  rw [h0, BitVec.toNat_ofNat]
+  exact (ZMod.natCast_mod _ _)
+
+end GvpProofs.Circo.Fenwick
