@@ -31,9 +31,9 @@ macro_rules! ix_newtype {
         impl Ix for $name {
             #[inline]
             fn from_index(ix: usize) -> Self {
-                match NonZeroU32::new((ix as u32).wrapping_add(1)) {
+                match u32::try_from(ix).ok().and_then(|i| NonZeroU32::new(i.wrapping_add(1))) {
                     Some(ix) => Self(ix),
-                    // Unreachable: the arena would need u32::MAX slots.
+                    // Unreachable: the arena would need u32::MAX (or more) slots.
                     None => panic!(concat!(stringify!($name), " arena index overflow")),
                 }
             }
@@ -152,6 +152,12 @@ mod tests {
             assert_eq!(usize::from(NodeIx::from_index(ix)), ix);
             assert_eq!(usize::from(LabelIx::from(ix)), ix);
         }
+    }
+
+    #[test]
+    #[should_panic]
+    fn an_index_past_u32_panics_instead_of_aliasing_slot_0() {
+        let _ = NodeIx::from_index(1usize << 32);
     }
 
     #[test]
