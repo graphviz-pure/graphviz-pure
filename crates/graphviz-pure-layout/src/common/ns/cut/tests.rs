@@ -1,8 +1,9 @@
 //! Both paths of `rank2` on the same graphs: C's functions alone, and the cut-set pivots
 //! (which, under `cfg(test)`, also assert at every pivot that they agree with C's).
 
+use super::Kind;
 use crate::common::ns::{
-    Ctx, NsData, NsEdge, NsNode, feasible_tree, init_graph, init_rank, rank2_with,
+    Ctx, NsData, NsEdge, NsGraph, NsNode, feasible_tree, init_graph, init_rank, rank2_with,
 };
 
 /// xorshift64*: a fixed sequence, so a failure names its case.
@@ -89,13 +90,25 @@ fn run(g: &NsData, balance: i32, maxiter: i32, search: i32, cut_sets: bool) -> O
     }
 }
 
+/// Runs `f` with this kind of cut sets.
+fn with_kind<R>(kind: Kind, f: impl FnOnce() -> R) -> R {
+    super::check::KIND.with(|k| k.set(Some(kind)));
+    let r = f();
+    super::check::KIND.with(|k| k.set(None));
+    r
+}
+
+const KINDS: [Kind; 2] = [Kind::Pool, Kind::Computed];
+
 fn same_both_ways(g: &NsData, balance: i32, maxiter: i32, search: i32, case: &str) {
     let c = run(g, balance, maxiter, search, false);
-    let cut = run(g, balance, maxiter, search, true);
-    assert_eq!(
-        cut, c,
-        "{case}: balance {balance} maxiter {maxiter} search {search}"
-    );
+    for kind in KINDS {
+        let cut = with_kind(kind, || run(g, balance, maxiter, search, true));
+        assert_eq!(
+            cut, c,
+            "{case}: {kind:?}, balance {balance} maxiter {maxiter} search {search}"
+        );
+    }
 }
 
 #[test]
@@ -152,25 +165,27 @@ fn larger_layered_dags_rank_the_same_on_both_paths() {
 fn wrapped_slacks_hand_the_run_back_to_c() {
     // minimum lengths near i32::MAX make some ranks wrap, so some candidates' slacks are
     // negative and C's scan stops being an argmin: the cut sets must fall back to C
-    let mut rng = Rng(0x2545_f491_4f6c_dd1d);
-    let mut fell_back = 0;
-    for case in 0..300 {
-        let n = 3 + rng.below(25) as usize;
-        let extra = rng.below(2 * n as u64 + 1) as usize;
-        let mut g = random_dag(&mut rng, n, extra, 2);
-        for e in &mut g.edges {
-            if rng.below(3) == 0 {
-                e.minlen = i32::MAX / 2 - rng.below(4) as i32;
+    for kind in KINDS {
+        let mut rng = Rng(0x2545_f491_4f6c_dd1d);
+        let mut fell_back = 0;
+        for case in 0..300 {
+            let n = 3 + rng.below(25) as usize;
+            let extra = rng.below(2 * n as u64 + 1) as usize;
+            let mut g = random_dag(&mut rng, n, extra, 2);
+            for e in &mut g.edges {
+                if rng.below(3) == 0 {
+                    e.minlen = i32::MAX / 2 - rng.below(4) as i32;
+                }
+            }
+            let c = run(&g, 0, i32::MAX, 30, false);
+            let cut = with_kind(kind, || run(&g, 0, i32::MAX, 30, true));
+            assert_eq!(cut, c, "{kind:?}, wrapped case {case}");
+            if super::check::FALLBACKS.with(|f| f.replace(0)) > 0 {
+                fell_back += 1;
             }
         }
-        let c = run(&g, 0, i32::MAX, 30, false);
-        let cut = run(&g, 0, i32::MAX, 30, true);
-        assert_eq!(cut, c, "wrapped case {case}");
-        if super::check::FALLBACKS.with(|f| f.replace(0)) > 0 {
-            fell_back += 1;
-        }
+        assert!(fell_back > 0, "{kind:?}: no case reached the fallback");
     }
-    assert!(fell_back > 0, "no case reached the fallback");
 }
 
 fn ctx() -> Ctx {
@@ -198,7 +213,7 @@ fn the_selector_prefers_c_on_small_graphs() {
 
 #[test]
 fn the_selector_prefers_cut_sets_on_dot_dags() {
-    // dot_dag_5000 of scripts/bench/synth.py, as dot ranks it: each node points to one or
+    // dot_dag_20000 of scripts/bench/synth.py, as dot ranks it: each node points to one or
     // two of the next 40, so tree cycles are short (about 27 edges) and the cut sets small
     // (about 9 entries per node and non-tree edge)
     struct Lcg(u32);
@@ -208,7 +223,7 @@ fn the_selector_prefers_cut_sets_on_dot_dags() {
             (self.0 >> 8) as usize % n
         }
     }
-    let n = 5000;
+    let n = 20_000;
     let mut r = Lcg(n as u32);
     let mut g = NsData {
         nodes: vec![NsNode::default(); n],
@@ -240,6 +255,7 @@ fn the_selector_prefers_cut_sets_on_dot_dags() {
     }
     assert_eq!(feasible_tree(&mut g, &mut ctx()), Ok(0));
     assert!(super::worth_it(&g));
+    assert_eq!(super::choose(&g), Some(Kind::Pool));
 }
 
 #[test]
@@ -277,6 +293,7 @@ fn the_selector_keeps_c_when_the_cut_sets_would_be_large() {
     }
     assert_eq!(feasible_tree(&mut g, &mut ctx()), Ok(0));
     assert!(!super::worth_it(&g));
+    assert_eq!(super::choose(&g), Some(Kind::Computed));
 }
 
 /// The cut-set path with a broken cut set or a pool budget, as the tests arm them.
@@ -299,6 +316,15 @@ fn fallbacks() -> u32 {
 }
 
 #[test]
+fn broken_stored_cut_sets_hand_the_pivot_to_c() {
+    with_kind(Kind::Pool, broken_cut_sets_hand_the_pivot_to_c);
+}
+
+#[test]
+fn broken_computed_cut_sets_hand_the_pivot_to_c() {
+    with_kind(Kind::Computed, broken_cut_sets_hand_the_pivot_to_c);
+}
+
 fn broken_cut_sets_hand_the_pivot_to_c() {
     // f taken out of e's cut set: after enter_edge picks f (the pivot's check phase finds
     // it missing), just before update (which has to check the pivot again), or after an
@@ -306,16 +332,14 @@ fn broken_cut_sets_hand_the_pivot_to_c() {
     // the run with C's results.
     use super::check::Corrupt;
     let mut rng = Rng(0x0123_4567_89ab_cdef);
+    let kinds = [Corrupt::Enter, Corrupt::Update, Corrupt::Balance];
     let mut fell = [0u32; 3];
     for case in 0..300 {
         let n = 8 + rng.below(60) as usize;
         let extra = rng.below(2 * n as u64 + 1) as usize;
         let g = random_dag(&mut rng, n, extra, 3);
         let c = run(&g, 2, i32::MAX, 30, false);
-        for (i, kind) in [Corrupt::Enter, Corrupt::Update, Corrupt::Balance]
-            .into_iter()
-            .enumerate()
-        {
+        for (i, kind) in kinds.into_iter().enumerate() {
             let at = rng.below(6) as u32;
             let before = fallbacks();
             let cut = run_armed(&g, 2, Some((kind, at)), None);
@@ -333,6 +357,238 @@ fn broken_cut_sets_hand_the_pivot_to_c() {
     assert!(super::check::RESELECTIONS.with(|n| n.get()) > 0);
 }
 
+/// As shipped, with nothing to keep `lim`/`low` and the ranks current: a fallback has to write
+/// the ranks and renumber the tree, or C's functions decide on stale numbers. Check mode's own
+/// `dfs_range` would hide that.
+#[test]
+fn a_fallback_renumbers_the_tree_it_hands_to_c() {
+    use super::check::{Corrupt, SHIPPED};
+    SHIPPED.with(|s| s.set(true));
+    for kind in KINDS {
+        let mut rng = Rng(0x0a0b_0c0d_0e0f_1011);
+        let before = fallbacks();
+        for case in 0..400 {
+            let n = 8 + rng.below(80) as usize;
+            let extra = rng.below(2 * n as u64 + 1) as usize;
+            let g = random_dag(&mut rng, n, extra, 3);
+            let c = run(&g, 2, i32::MAX, 30, false);
+            // and with nothing broken
+            let clean = with_kind(kind, || run(&g, 2, i32::MAX, 30, true));
+            assert_eq!(clean, c, "{kind:?}, case {case}");
+            for corruption in [Corrupt::Enter, Corrupt::Update, Corrupt::Balance] {
+                // late, so that the numbers from before the pivots have gone stale
+                let at = 2 + rng.below(12) as u32;
+                let cut = with_kind(kind, || run_armed(&g, 2, Some((corruption, at)), None));
+                assert_eq!(cut, c, "{kind:?}, case {case}, after {at}");
+            }
+        }
+        assert!(fallbacks() > before, "{kind:?}: no run fell back");
+    }
+    // and without a corruption: a wrapped slack is the fallback's real cause
+    for kind in KINDS {
+        let mut rng = Rng(0x2545_f491_4f6c_dd1d);
+        for case in 0..300 {
+            let n = 3 + rng.below(25) as usize;
+            let extra = rng.below(2 * n as u64 + 1) as usize;
+            let mut g = random_dag(&mut rng, n, extra, 2);
+            for e in &mut g.edges {
+                if rng.below(3) == 0 {
+                    e.minlen = i32::MAX / 2 - rng.below(4) as i32;
+                }
+            }
+            let c = run(&g, 0, i32::MAX, 30, false);
+            let cut = with_kind(kind, || run(&g, 0, i32::MAX, 30, true));
+            assert_eq!(cut, c, "{kind:?}, wrapped case {case}");
+        }
+    }
+    SHIPPED.with(|s| s.set(false));
+}
+
+/// Tied candidates come out in C's scan order, however far apart they are. In each gadget the
+/// tree edge `u -> v` has a negative cut value, because the chains under `v` all end in an edge to
+/// `t` that crosses back, and each of those has slack 1. The climbs between them are as long as
+/// the chains, which makes this the shape that used to be quadratic.
+#[test]
+fn ties_on_long_chains_stay_c_s_choice() {
+    let mut rng = Rng(0x3333_1111_2222_4444);
+    for counter in [
+        &super::check::TIES,
+        &super::check::TIE_SCANS,
+        &super::check::FALLBACKS,
+    ] {
+        counter.with(|n| n.set(0));
+    }
+    let mut spent_one = 0;
+    for case in 0..40 {
+        let mut g = NsData::default();
+        let add_node = |g: &mut NsData| {
+            g.nodes.push(NsNode::default());
+            g.nlist.push(g.nodes.len() - 1);
+            g.nodes.len() - 1
+        };
+        let add = |g: &mut NsData, t: usize, h: usize, minlen: i32| {
+            let e = g.edges.len();
+            g.edges.push(NsEdge {
+                tail: t,
+                head: h,
+                minlen,
+                weight: 1,
+                ..NsEdge::default()
+            });
+            g.nodes[t].out.push(e);
+            g.nodes[h].in_.push(e);
+        };
+        let mut most = 0;
+        let mut join = None;
+        for _ in 0..1 + rng.below(3) {
+            let (u, v, t) = (add_node(&mut g), add_node(&mut g), add_node(&mut g));
+            if let Some(j) = join {
+                add(&mut g, j, u, 1);
+            }
+            join = Some(t);
+            add(&mut g, u, v, 1);
+            let lengths: Vec<i32> = (0..3 + rng.below(8))
+                .map(|_| 5 + rng.below(30) as i32)
+                .collect();
+            let longest = lengths.iter().copied().max().unwrap_or(0);
+            most = most.max(longest as u32);
+            let span = longest + 3;
+            add(&mut g, u, t, span);
+            for length in lengths {
+                let mut last = v;
+                for _ in 0..length {
+                    let next = add_node(&mut g);
+                    add(&mut g, last, next, 1);
+                    // a branch that the scan has to go through, or to leave for later
+                    if rng.below(4) == 0 {
+                        let leaf = add_node(&mut g);
+                        add(&mut g, next, leaf, 1);
+                    }
+                    last = next;
+                }
+                // slack 1 whatever the chain's length
+                add(&mut g, last, t, span - length - 2);
+            }
+        }
+        for climbs in [None, Some(0), Some(1), Some(most), Some(4 * most)] {
+            super::check::CLIMBS.with(|c| c.set(climbs));
+            let scans = super::check::TIE_SCANS.with(|n| n.get());
+            for balance in [1, 2] {
+                same_both_ways(
+                    &g,
+                    balance,
+                    i32::MAX,
+                    30,
+                    &format!("chains {case} {climbs:?}"),
+                );
+            }
+            // every chain is longer than one step, so the climbs run out
+            if climbs == Some(1) {
+                spent_one += super::check::TIE_SCANS.with(|n| n.get()) - scans;
+            }
+        }
+    }
+    super::check::CLIMBS.with(|c| c.set(None));
+    assert!(super::check::TIES.with(|n| n.get()) > 0, "no tie");
+    assert!(spent_one > 0, "one step of climbing was enough");
+    assert_eq!(
+        super::check::FALLBACKS.with(|f| f.get()),
+        0,
+        "the scan did not find its edge"
+    );
+}
+
+/// The answer does not depend on how far the climbs may go: with no climbs at all, every tie
+/// takes C's scan order, and with a few they run out part way through a query.
+#[test]
+fn ties_agree_at_any_budget_for_the_climbs() {
+    let mut rng = Rng(0x1111_3333_4444_2222);
+    for counter in [
+        &super::check::TIES,
+        &super::check::TIE_SCANS,
+        &super::check::FALLBACKS,
+    ] {
+        counter.with(|n| n.set(0));
+    }
+    for case in 0..1500 {
+        let n = 2 + rng.below(70) as usize;
+        let extra = rng.below(2 * n as u64 + 1) as usize;
+        let g = random_dag(&mut rng, n, extra, 3);
+        let climbs = [0, 1, 2, 3, 5, 8, 13, 21][rng.below(8) as usize];
+        super::check::CLIMBS.with(|c| c.set(Some(climbs)));
+        let balance = rng.below(3) as i32;
+        same_both_ways(
+            &g,
+            balance,
+            i32::MAX,
+            30,
+            &format!("case {case}, {climbs} climbs"),
+        );
+    }
+    super::check::CLIMBS.with(|c| c.set(None));
+    assert!(super::check::TIES.with(|n| n.get()) > 0, "no tie");
+    assert!(super::check::TIE_SCANS.with(|n| n.get()) > 0, "no scan");
+    assert_eq!(
+        super::check::FALLBACKS.with(|f| f.get()),
+        0,
+        "the scan did not find its edge"
+    );
+}
+
+/// `LR_balance` on computed cuts goes to C's functions when its walks pass their allowance, at
+/// whatever point, as shipped or beside C's functions, and only then. The output cannot show when:
+/// that is what the counter is for.
+#[test]
+fn lr_balance_hands_over_when_its_walks_pass_the_allowance() {
+    use super::check::{BALANCE_HANDED_OVER, BALANCE_SPARE, SHIPPED};
+    let mut rng = Rng(0x5555_1234_0000_7777);
+    for shipped in [false, true] {
+        SHIPPED.with(|s| s.set(shipped));
+        let mut handed = [0u32; 4];
+        for case in 0..200 {
+            let n = 4 + rng.below(60) as usize;
+            let g = random_dag(&mut rng, n, 2 * n, 3);
+            let c = run(&g, 2, i32::MAX, 30, false);
+            // none, a little, a little more, as much as it takes
+            for (i, spare) in [0, 1, 1 + rng.below(40) as usize, usize::MAX]
+                .into_iter()
+                .enumerate()
+            {
+                BALANCE_SPARE.with(|b| b.set(Some(spare)));
+                let before = BALANCE_HANDED_OVER.with(|n| n.get());
+                let cut = with_kind(Kind::Computed, || run(&g, 2, i32::MAX, 30, true));
+                BALANCE_SPARE.with(|b| b.set(None));
+                assert_eq!(cut, c, "shipped {shipped}, case {case}, spare {spare}");
+                handed[i] += BALANCE_HANDED_OVER.with(|n| n.get()) - before;
+                // stored cut sets have no walks to count
+                BALANCE_SPARE.with(|b| b.set(Some(spare)));
+                let before = BALANCE_HANDED_OVER.with(|n| n.get());
+                let cut = with_kind(Kind::Pool, || run(&g, 2, i32::MAX, 30, true));
+                BALANCE_SPARE.with(|b| b.set(None));
+                assert_eq!(cut, c, "shipped {shipped}, stored, case {case}");
+                assert_eq!(BALANCE_HANDED_OVER.with(|n| n.get()), before);
+            }
+        }
+        assert!(handed[0] > 0 && handed[1] > 0, "{handed:?}");
+        assert_eq!(handed[3], 0, "an allowance that cannot run out ran out");
+    }
+    SHIPPED.with(|s| s.set(false));
+}
+
+/// The smallest run that leaves C's functions.
+#[test]
+fn the_selector_starts_at_64_nodes() {
+    for (n, picked) in [(63, false), (64, true)] {
+        let mut rng = Rng(7);
+        let mut g = random_dag(&mut rng, n, n, 2);
+        if !init_graph(&mut g) {
+            init_rank(&mut g);
+        }
+        assert_eq!(feasible_tree(&mut g, &mut ctx()), Ok(0));
+        assert_eq!(super::choose(&g).is_some(), picked, "{n} nodes");
+    }
+}
+
 #[test]
 fn a_full_pool_hands_the_run_to_c() {
     // a budget of the build's own size (no pivot fits) or a little more (some pivots fit):
@@ -346,9 +602,117 @@ fn a_full_pool_hands_the_run_to_c() {
         let balance = rng.below(3) as i32;
         let c = run(&g, balance, i32::MAX, 30, false);
         for slack in [0, 64, 256] {
-            let cut = run_armed(&g, balance, None, Some(slack));
+            let cut = with_kind(Kind::Pool, || run_armed(&g, balance, None, Some(slack)));
             assert_eq!(cut, c, "case {case}, budget slack {slack}");
         }
     }
     assert!(fallbacks() > before, "no run outgrew its budget");
+}
+
+#[test]
+fn a_computed_cut_set_answers_only_for_its_own_edge() {
+    let mut rng = Rng(0x1111_2222_3333_4444);
+    let mut g = random_dag(&mut rng, 40, 30, 2);
+    if !init_graph(&mut g) {
+        init_rank(&mut g);
+    }
+    let mut c = ctx();
+    assert_eq!(feasible_tree(&mut g, &mut c), Ok(0));
+    let mut store = super::CutStore {
+        kind: Kind::Computed,
+        ..super::CutStore::default()
+    };
+    assert!(store.build(&g, &c));
+    let (a, b) = (c.tree_edge[0], c.tree_edge[1]);
+    let (sa, sb) = (
+        super::tree_slot(&g, a).unwrap(),
+        super::tree_slot(&g, b).unwrap(),
+    );
+    let va = if g.par(g.tail(a)) == Some(a) {
+        g.tail(a)
+    } else {
+        g.head(a)
+    };
+    store.compute_cut(sa, va, g.par(g.tail(a)) == Some(a));
+    // an edge in a's cut set is not in another slot's answer, even one that holds it
+    let k = store.cut_entry(sa, 0) & super::ID;
+    let member = store.edge(k).edge as usize;
+    assert_eq!(store.member(sa, member), Some(k));
+    assert_eq!(store.member(sb, member), None);
+}
+
+#[test]
+fn a_tree_that_disagrees_with_lim_is_refused() {
+    let mut rng = Rng(0x5555_6666_7777_8888);
+    let mut g = random_dag(&mut rng, 40, 30, 2);
+    if !init_graph(&mut g) {
+        init_rank(&mut g);
+    }
+    let mut c = ctx();
+    assert_eq!(feasible_tree(&mut g, &mut c), Ok(0));
+    let mut store = super::CutStore {
+        kind: Kind::Computed,
+        ..super::CutStore::default()
+    };
+    assert!(store.build(&g, &c));
+    let root = g.nlist[0];
+    g.nodes[root].low += 1;
+    assert!(!store.build(&g, &c));
+}
+
+#[test]
+#[should_panic(expected = "cut set of tree edge")]
+fn the_cross_check_sees_a_computed_cut_that_misses_nodes() {
+    use super::check::Corrupt;
+    let mut rng = Rng(0x1234_5678_9abc_def1);
+    with_kind(Kind::Computed, || {
+        for _ in 0..200 {
+            let n = 8 + rng.below(60) as usize;
+            let extra = rng.below(2 * n as u64 + 1) as usize;
+            let g = random_dag(&mut rng, n, extra, 3);
+            let _ = run_armed(&g, 2, Some((Corrupt::Links, 0)), None);
+        }
+    });
+}
+
+/// The chain with chords of `the_selector_keeps_c_when_the_cut_sets_would_be_large`, smaller.
+fn chords(n: usize, span: usize, every: usize) -> NsData {
+    let mut g = NsData {
+        nodes: vec![NsNode::default(); n],
+        nlist: (0..n).collect(),
+        ..NsData::default()
+    };
+    let add = |g: &mut NsData, t: usize, h: usize| {
+        let e = g.edges.len();
+        g.edges.push(NsEdge {
+            tail: t,
+            head: h,
+            minlen: 1,
+            weight: 1,
+            ..NsEdge::default()
+        });
+        g.nodes[t].out.push(e);
+        g.nodes[h].in_.push(e);
+    };
+    for i in 1..n {
+        add(&mut g, i - 1, i);
+    }
+    for i in (0..n - span).step_by(every) {
+        add(&mut g, i, i + span);
+    }
+    g
+}
+
+#[test]
+fn the_selector_keeps_small_runs_on_c_and_computes_the_rest() {
+    let mut small = chords(super::COMPUTED_MIN_NODES - 1, 4, 3);
+    let mut mid = chords(super::COMPUTED_MIN_NODES, 4, 3);
+    for g in [&mut small, &mut mid] {
+        if !init_graph(g) {
+            init_rank(g);
+        }
+        assert_eq!(feasible_tree(g, &mut ctx()), Ok(0));
+    }
+    assert_eq!(super::choose(&small), None);
+    assert_eq!(super::choose(&mid), Some(Kind::Computed));
 }

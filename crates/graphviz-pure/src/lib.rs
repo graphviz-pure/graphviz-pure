@@ -592,6 +592,68 @@ mod tests {
     }
 
     #[test]
+    fn ns_attributes_reach_the_pivots() {
+        // `searchsize`, `nslimit`, `nslimit1` and `group` change which pivots run, and no graph
+        // of the corpus sets them. The limits scale with the node count, hence the fractions. Under the `ns-check` feature every pivot here is also checked
+        // against C's functions, on both kinds of cut set.
+        let mut body = String::new();
+        for i in 0..12 {
+            for j in 0..12 {
+                if i + 1 < 12 {
+                    body.push_str(&format!(
+                        "n{i}_{j} -> n{}_{j};
+",
+                        i + 1
+                    ));
+                }
+                if j + 1 < 12 {
+                    let long = if (i + j) % 7 == 0 { " [minlen=3]" } else { "" };
+                    body.push_str(&format!(
+                        "n{i}_{j} -> n{i}_{}{long};
+",
+                        j + 1
+                    ));
+                }
+            }
+        }
+        let render = |attrs: &str| {
+            let src = format!(
+                "digraph G {{
+{attrs}
+{body}}}
+"
+            );
+            render_dot(&src, "dot", "plain")
+                .unwrap_or_else(|e| panic!("{attrs}: {e}"))
+                .output()
+                .clone()
+        };
+        let plain = render("");
+        // one row in a group: its edges weigh 100 times as much and cross the others 1,000 times
+        let group: String = (0..12).map(|j| format!("n5_{j} [group=g];\n")).collect();
+        for attrs in [
+            "searchsize=1;",
+            "searchsize=5;",
+            "searchsize=0;",
+            "nslimit=0.02;",
+            "nslimit=0.2;",
+            "nslimit1=0.02;",
+            "nslimit1=0.2;",
+            "nslimit=0.1; nslimit1=0.1; searchsize=3;",
+        ] {
+            assert!(render(attrs).contains("node n0_0"), "{attrs}");
+            assert!(
+                render(&format!("{group}{attrs}")).contains("node n0_0"),
+                "group, {attrs}"
+            );
+        }
+        // they do reach the pivots
+        assert_ne!(render("nslimit=0.02;"), plain, "nslimit");
+        assert_ne!(render("nslimit1=0.02;"), plain, "nslimit1");
+        assert_ne!(render(&group), plain, "group");
+    }
+
+    #[test]
     fn test_wild_corpus_renders_without_error() {
         let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         let wild_dir = manifest_dir.join("../../tests/wild");
