@@ -942,33 +942,37 @@ def circogen.blockpath.reference_scan_loop0_loop0
 @[rust_loop_body]
 def circogen.blockpath.reference_scan_loop0.body
   (order : Slice Std.I32) (head : Slice Std.Usize) (tail : Slice Std.Usize)
-  («open» : Slice Std.U64) (edge_order : Std.I32) (n : Std.Usize)
-  (iter : core.ops.range.Range Std.Usize) (crossings : Std.I32) :
-  Result (ControlFlow ((core.ops.range.Range Std.Usize) × Std.I32) Std.I32)
+  (edge_order : Std.I32) (n : Std.Usize)
+  (iter : core.iter.adapters.enumerate.Enumerate (core.slice.iter.Iter
+  Std.U64)) (crossings : Std.I32) :
+  Result (ControlFlow ((core.iter.adapters.enumerate.Enumerate
+    (core.slice.iter.Iter Std.U64)) × Std.I32) Std.I32)
   := do
   let (o, iter1) ←
-    core.iter.range.IteratorRange.next core.iter.range.StepUsize iter
+    core.iter.adapters.enumerate.IteratorEnumerate.next
+      (core.iter.traits.iterator.IteratorSliceIter Std.U64) iter
   match o with
   | none => ok (done crossings)
-  | some word_index =>
-    let bits ← Slice.index_usize «open» word_index
+  | some p =>
+    let (word_index, word) := p
     let crossings1 ←
       circogen.blockpath.reference_scan_loop0_loop0 order head tail edge_order
-        n crossings word_index bits
+        n crossings word_index word
     ok (cont (iter1, crossings1))
 
 /-- [graphviz_pure_layout::circogen::blockpath::reference_scan]: loop 0:
     Source: 'crates/graphviz-pure-layout/src/circogen/blockpath.rs', lines 761:4-771:5 -/
 @[rust_loop]
 def circogen.blockpath.reference_scan_loop0
-  (iter : core.ops.range.Range Std.Usize) (order : Slice Std.I32)
-  (head : Slice Std.Usize) (tail : Slice Std.Usize) («open» : Slice Std.U64)
-  (edge_order : Std.I32) (n : Std.Usize) (crossings : Std.I32) :
+  (iter : core.iter.adapters.enumerate.Enumerate (core.slice.iter.Iter
+  Std.U64)) (order : Slice Std.I32) (head : Slice Std.Usize)
+  (tail : Slice Std.Usize) (edge_order : Std.I32) (n : Std.Usize)
+  (crossings : Std.I32) :
   Result Std.I32
   := do
   loop
     (fun (iter1, crossings1) => circogen.blockpath.reference_scan_loop0.body
-      order head tail «open» edge_order n iter1 crossings1)
+      order head tail edge_order n iter1 crossings1)
     (iter, crossings)
 
 /-- [graphviz_pure_layout::circogen::blockpath::reference_scan]:
@@ -979,9 +983,12 @@ def circogen.blockpath.reference_scan
   (crossings : Std.I32) :
   Result Std.I32
   := do
-  let i := Slice.len «open»
-  circogen.blockpath.reference_scan_loop0 { start := 0#usize, «end» := i }
-    order head tail «open» edge_order n crossings
+  let i ← core.slice.Slice.iter «open»
+  let iter ←
+    core.iter.traits.iterator.Iterator.enumerate.trait_default
+      (core.iter.traits.iterator.IteratorSliceIter Std.U64) i
+  circogen.blockpath.reference_scan_loop0 iter order head tail edge_order n
+    crossings
 
 /-- [graphviz_pure_layout::circogen::blockpath::reference_close]: loop body 0:
     Source: 'crates/graphviz-pure-layout/src/circogen/blockpath.rs', lines 736:4-746:5 -/

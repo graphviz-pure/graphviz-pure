@@ -50,7 +50,7 @@ def core.ops.range.Range.Insts.CoreCloneClone.clone
 /-- `<Option<T> as Try>::branch`, the first half of `?`: `Some(x)` continues with `x`, `None`
 breaks with `None`. Every `?` in this extraction is on an owned or shared value (the `get_mut`
 calls are `match`es, see `docs/research/lean-experiment/extraction.md`), so `branch` has no
-backward function here, unlike in `CircoFenwickUpdate`. -/
+backward function here, unlike in the older `CircoFenwickUpdate` extraction. -/
 @[rust_fun
   "core::option::{core::ops::try_trait::Try<core::option::Option<@T>>}::branch"]
 def core.option.Option.Insts.CoreOpsTry_traitTry.branch {T : Type _} :

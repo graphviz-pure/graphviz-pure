@@ -758,8 +758,8 @@ fn reference_scan(
     crossings: i32,
 ) -> i32 {
     let mut crossings = crossings;
-    for word_index in 0..open.len() {
-        let mut bits = open[word_index];
+    for (word_index, &word) in open.iter().enumerate() {
+        let mut bits = word;
         while bits != 0 {
             let half = (word_index << 6) | bits.trailing_zeros() as usize;
             let ep = half / 2;

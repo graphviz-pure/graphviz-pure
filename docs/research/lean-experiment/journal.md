@@ -792,3 +792,83 @@ reach (pool, stamps, `Result` early returns in loops), and this ticket is Lean a
 core theorem compiled in five rounds, the `Tree` part and the existence of a numbering in two, the
 re-hang in four, `par_unique` in two; a single-file check takes about 5 s); 0.4 h on the docs.
 Rust: 0 h.
+## 2026-11-03 #745: circo `count_indexed` and the reference scan extract; first theorem over shipped Rust
+
+Result: extracted. `proofs/GvpProofs/Extracted/CircoCount/` holds `count_indexed`, `count_all_crossings_reference`
+and their helpers (`scripts/proofs/extract.sh`, 1,151 lines of `Funs.lean`, 68 hand-written lines of
+`FunsExternal.lean`, no `axiom`). `proofs/GvpProofs/Circo/FenwickExtracted.lean` (398 lines, about 90
+of them the header; no `sorry`) restates the Fenwick lemmas and the `i32` accumulator over those
+generated definitions. The full simulation (`count_indexed` = reference over the extraction) is *not*
+proved: it is stated, with one placeholder proof, in `proofs/wip/FenwickExtractedMain.lean`, outside
+the `GvpProofs` glob, with the list of lemmas still owed.
+
+**Hours.** Rust and extraction about 0.45 h (the refactor, three extraction runs, one clippy round,
+oracle tests, the ratchet before and after); Lean about 0.45 h (a scratch file per step; the first
+theorem over generated code took most of it); docs and measurement about 0.2 h. Counting wall-clock
+from the first read of the issue; a person new to Aeneas would not match it.
+
+**What Aeneas rejected, and the refactor that fixed it** (details and the table are in
+`extraction.md`, "The #745 refactor"):
+- `?` in a nested loop (the issue's diagnosis) was right and one helper per edge loop fixed it.
+- It was not enough. With the helpers in place Aeneas still said `Early returns inside of loops`
+  about `count_indexed`'s whole body, until the first loop (`for &e in adjacency { … return None }`)
+  also became a function (`reset_orders`). I did not bisect the rule further: one early-exit loop
+  per function works, two in one function did not.
+- `zip(1..)` became a wrapping counter. `?` on `get_mut` became a `match`, which also removes the
+  second `Try::branch` model (so the two Fenwick modules of #727 are replaced by `CircoCount`);
+  clippy's `question_mark` objects, hence four local `#[allow]`s with a comment.
+- The kernels now take `order: &mut [i32]`, `head`, `tail` instead of `&mut Circ`, so the
+  signatures drag in no `f64`, `String` or `BTreeMap`. `count_with_policy` is not extracted.
+- The reference scan took 430–850 s to extract as one function of four nested loops. As four small
+  functions the whole extraction is 10 s. The nested loops were the cost, not the arithmetic.
+
+**Did any Rust behaviour change?** No, with one debug-build exception. Same integers, same order,
+same wrapping, and `circo-check` stays and passes on the whole workspace test run. The exception:
+`zip(1..)` panicked in a debug build when the list had more than `i32::MAX` elements (`Step::forward`
+checks); `wrapping_add` does not. Release builds wrapped in both, and the indexed path never sees such
+a list. Instructions on `circo_sparse_400`: 120,944,119 before, 120,964,565 after (+0.017%); on
+`badvoro`, +0.02%; allocations unchanged (ratchet case `wild_gv16_directed_sdh`: 25,864,074 →
+25,864,687 instructions, 16,175 allocations both). Output is byte-identical on those inputs.
+
+**How the extracted statements differ from the model's** (the header of `FenwickExtracted.lean`
+has the same list):
+- Every function is `Result`. The Fenwick operations are shown to be `ok` on any slice of length `N`;
+  `add_crossings` is not: Charon builds the dev profile, so `cfg!(debug_assertions)` is true in the
+  extraction and it *fails* past `i32::MAX` where the release build wraps. So the extracted totals
+  are statements about runs where no addition overflows. The model proved the wrapped total; the
+  extraction cannot say "wrapped" for the reference, because `crossings += 1` is a checked add there.
+- The model hard-wired 64-bit `usize`. The extraction's `usize` is `System.Platform.numBits`
+  (32 or 64), so each theorem takes `Is64`. The wasm build is 32-bit; nothing is claimed for it.
+  This is a hypothesis the model made silently and the extraction made visible.
+- Slices instead of functions `ℕ → _`: the statements carry `tree.length = N` and read through `tz`,
+  and equate the result with the model only on slots `1..N-1` (the model's function agrees with the
+  slice everywhere else, which no statement reads).
+- Mutable borrows come back as results: `index_update` returns `(Option Unit × Slice U64)`.
+- The model's fuel counters became `loop` fixpoints and `loop.spec_decr_nat` with a measure.
+- Axioms: the same as `Fenwick.lean`, `propext`, `Classical.choice`, `Quot.sound` and the three
+  `bv_decide` axioms behind `lowbit_*` and `prevIdx_eq` (`add_crossings_*` use only the standard three).
+
+**What Lean caught.** Nothing wrong in the Rust. In the theorems, it forced the pointer-width
+assumption above into the open (a gap in #728's statement, now explicit). Beyond that, one design
+choice: the update refinement (`index_update_refines`) holds for *any* slice of length `N`, not only a
+valid Fenwick tree (the loop invariant is "slot `j` plus the touch bit at the current index equals
+slot `j` plus the touch bit at the first index"), so the next layer can use it without carrying
+`Valid`; the prefix refinement does need `Valid`, because it is the tree's contents that make the
+sum meaningful.
+
+**Dead ends / friction.**
+- `simp only [bind_tc_ok]`, `ok_bind` and `Result.bind` do not reduce `let x ← ok v; k x` in a
+  goal; plain `simp` does (and also unfolds `lowbit`/`nextIdx` into `Usize.size` arithmetic, which
+  is then matched back to the model's by `rw [e1]; exact nextIdx_eq …`).
+- `show WP.spec (ok …) _` would not unify the postcondition; `simp` then `rw [WP.spec_ok]` did.
+- `subst` on `j = ↑i` eliminated `j` and broke the next lines; state the facts about `↑i`.
+- `UScalar.size_def` is unused for `Usize`/`U64` once `numBits_def` is given (linter noise;
+  the file turns off `unusedSimpArgs`).
+- `scripts/proofs/extract.sh --check` fails on `TwopiCircle` with an Aeneas internal error
+  (`translate_fun_sigs`), and does so on a clean checkout of master as well, so it is not from this
+  change; filed separately. `CircoCount` is current under `--check`.
+
+**Extraction verdict.** Extracted, with a refactor, and the Fenwick data structure plus the `i32`
+accumulator are now proved over the shipped definitions. The remaining distance to the full theorem
+is one refinement lemma per helper (list in the wip file); the slice-iterator loops and the
+`trailing_zeros` bit walk are the two kinds of step not yet exercised on generated code.

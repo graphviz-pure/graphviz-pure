@@ -76,8 +76,8 @@ Set `CHARON_CACHE_DIR` to a directory on a large disk: by default Charon writes 
 ### Re-extracting
 
 ```sh
-scripts/proofs/extract.sh crates/graphviz-pure-layout CircoFenwick \
-  --start-from crate::circogen::blockpath::index_prefix   # one module directory per extraction
+scripts/proofs/extract.sh crates/graphviz-pure-layout CircoCount \
+  --start-from crate::circogen::blockpath::count_indexed   # one module directory per extraction
 scripts/proofs/extract.sh --check                          # before a PR: committed files are current
 ```
 
@@ -119,3 +119,10 @@ Lean version policy: pinned to the toolchain Aeneas's Lean backend requires (`v4
 
 Follow-ups: #745 (refactor `count_indexed` so Aeneas accepts it), #750 (NS theorem for pivots with
 stale numbering).
+#745 (follow-up of #728): `count_indexed` and the reference scan refactored so Aeneas extracts them
+(`Extracted/CircoCount`); the Fenwick lemmas restated over the extraction in `Circo/FenwickExtracted.lean`;
+the full simulation over the extraction is stated in `proofs/wip/` (outside the library glob, may hold
+a placeholder proof) and not yet proved.
+
+Follow-ups: #750 (NS theorem for pivots with
+stale numbering), #751 (mincross no-NaN port invariant).
