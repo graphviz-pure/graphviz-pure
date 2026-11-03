@@ -8,12 +8,13 @@
 //! cgraph sequence order (`agfstnode`/`agfstout` iteration order). Virtual
 //! nodes and edges are appended behind them.
 
+use super::ix::LabelIx;
 use graphviz_pure_core::Point;
 
 pub type N = usize;
 pub type E = usize;
 pub type G = usize;
-pub type L = usize;
+pub type L = LabelIx;
 
 // node_type / edge_type (lib/common/const.h)
 pub const NORMAL: u8 = 0;

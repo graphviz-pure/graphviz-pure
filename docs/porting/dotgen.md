@@ -15,6 +15,7 @@ C file-scope statics live as fields on `Dot` (`cmark`, `min_quit`, `max_iter`,
 | Rust module | C source | Status |
 |---|---|---|
 | `types.rs` | `common/types.h`, `common/const.h` | `Agraphinfo_t`/`Agnodeinfo_t`/`Agedgeinfo_t`, `rank_t`, `port`, `textlabel_t`, `bezier` |
+| `ix.rs` | — (the port's own) | typed arena indices (`NodeIx`/`EdgeIx`/`GraphIx`/`LabelIx`, T5 #537) and `IndexVec` |
 | `cg.rs` | `lib/cgraph` (subset) | iteration order, `agdelete` (node, recursive into subgraphs), `agsubedge`, `agsubnode`, strict `agedge`, `agsubg`, `agdegree` |
 | `init.rs` | `dotinit.c` (`dot_init_subg`, `dot_init_node_edge`), `common/input.c` (`graph_init`, `do_graph_label`), `common/utils.c` (`common_init_edge`) | ported; node and label sizes come from `graphviz_pure_geom::node_geometry` / `edge_label_geometry` / `graph_label_geometry`; ports via the shared `common::ports::chk_port`; nodes carry a `common::shapes::NodeShape` for `insidefn` clipping |
 | `utils.rs` | `common/utils.c` (`late_int`, `late_double`, `mapBool`, `UF_*`, `is_a_cluster`), `class1.c` (`nonconstraint_edge`), `util/gv_math.h` (`scale_clamp`) | ported |

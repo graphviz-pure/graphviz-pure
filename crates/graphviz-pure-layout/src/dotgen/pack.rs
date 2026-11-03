@@ -194,8 +194,7 @@ impl<'a> Dot<'a> {
 
     fn copy_label(&mut self, from: &Dot<'_>, l: Option<L>) -> Option<L> {
         let l = l?;
-        self.labels.push(from.labels[l].clone());
-        Some(self.labels.len() - 1)
+        Some(self.labels.push(from.labels[l].clone()))
     }
 
     /// Copies a laid-out component's node and edge records into the root
