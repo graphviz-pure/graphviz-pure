@@ -413,6 +413,26 @@ Steps 1–3 are the risky part, and step 3 is the large PR. It could be split by
 (edges first: the largest share, and fewest read sites outside dot and the writers), with
 `AttrMap` and `Attrs` coexisting behind `AttrsRef` for one release.
 
+## Prototype: hybrid small-map storage (step 1, landed)
+
+Step 1 is implemented as a hybrid inside `AttrMap` itself, with no call-site
+changes beyond the closed API: up to 16 entries live in a sorted `Vec`, and
+the map promotes to a (boxed) `BTreeMap` on the first insertion past that.
+Both forms iterate in lexical byte order, so writer output order is
+identical whichever form a map is in, and `AttrMap` stays 48 bytes. A pure
+sorted-`Vec` prototype was faster on attribute-heavy engines but regressed
+about 39× on a reverse-ordered 10k-attribute input (quadratic shifting);
+the hybrid measures at parity or faster than the old `BTreeMap` on that
+same input (paired interleaved medians: 96.6 ms against 105.0 ms at 10k
+attributes, 13.9 ms against 13.8 ms at 1k, `-Tcanon`, musl, output
+byte-identical), because only the first 16 insertions touch the vector. On the perf ratchet
+the hybrid reduces instructions on 16 of 17 cases (up to −4.7%) and peak
+heap on every case (up to −20.7%), with no allocation increases; the one
+exception is `synth/twopi_tree_5000.gv -Tsvg` at +3.1% instructions, which
+the sorted-`Vec` prototype showed as well. Property tests in
+`graph::attr_map_tests` check both forms against a `BTreeMap` oracle,
+including promotion under reverse-ordered insertion.
+
 ## Expected gains
 
 - **Memory, parse:** the retained graph on big drops from 309 MB to about 153 MB (175.2 MB of maps
