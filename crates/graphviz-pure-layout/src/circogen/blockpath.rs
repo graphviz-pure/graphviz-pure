@@ -372,29 +372,72 @@ fn count_with_policy<const MUTATION: u8, const CHECK: bool>(
     scratch: &mut [u64],
 ) -> i32 {
     let (open, tree) = scratch.split_at_mut(c.arena.order.len().wrapping_shl(1).div_ceil(64));
+    let arena = &mut c.arena;
     // Index keys must be positive opening orders. Preserve even the reference's
     // order-counter overflow behavior by using its scan beyond that range.
     if list.len() > i32::MAX as usize || list.len() >= tree.len() || (!CHECK && list.len() <= 16) {
-        return count_all_crossings_reference(c, list, offsets, adjacency, open);
+        return count_all_crossings_reference(
+            &mut arena.order,
+            &arena.head,
+            &arena.tail,
+            list,
+            offsets,
+            adjacency,
+            open,
+        );
     }
-    let Some(result) = count_indexed::<MUTATION>(c, list, offsets, adjacency, open, tree) else {
-        return count_all_crossings_reference(c, list, offsets, adjacency, open);
+    let Some(result) = count_indexed::<MUTATION>(
+        &mut arena.order,
+        &arena.head,
+        &arena.tail,
+        list,
+        offsets,
+        adjacency,
+        open,
+        tree,
+    ) else {
+        return count_all_crossings_reference(
+            &mut arena.order,
+            &arena.head,
+            &arena.tail,
+            list,
+            offsets,
+            adjacency,
+            open,
+        );
     };
     #[cfg(any(test, feature = "circo-check"))]
     {
-        let orders = c.arena.order.clone();
+        let orders = arena.order.clone();
         let halves = open.to_vec();
-        let expected = count_all_crossings_reference(c, list, offsets, adjacency, open);
+        let expected = count_all_crossings_reference(
+            &mut arena.order,
+            &arena.head,
+            &arena.tail,
+            list,
+            offsets,
+            adjacency,
+            open,
+        );
         assert_eq!(result, expected, "circo indexed crossing count");
-        assert!(c.arena.order == orders, "circo edge orders differ");
+        assert!(arena.order == orders, "circo edge orders differ");
         assert!(open == halves, "circo half membership differs");
     }
     result
 }
 
 /// C: lib/circogen/blockpath.c:count_all_crossings
+///
+/// Aeneas (the Rust-to-Lean extractor) rejects an early return from a nested loop, and
+/// `docs/research/lean-experiment/extraction.md` lists what else it rejects. So each per-edge
+/// loop lives in its own helper (`exclude_edges`, `query_edges`, `restore_edges`, `open_edges`)
+/// that returns `Option`, the node loop here calls them with `?`, and the opening order is an
+/// explicit counter. The arena arrives as three slices rather than `&mut Circ`.
+#[cfg_attr(not(any(test, feature = "circo-check")), allow(unused_variables))]
 fn count_indexed<const MUTATION: u8>(
-    c: &mut Circ,
+    order: &mut [i32],
+    head: &[usize],
+    tail: &[usize],
     list: &[usize],
     offsets: &[std::ops::Range<usize>],
     adjacency: &[usize],
@@ -405,67 +448,25 @@ fn count_indexed<const MUTATION: u8>(
     assert_ne!(MUTATION, 6, "test fault: indexed path was reached");
     open.fill(0);
     tree.fill(0);
-    for &e in adjacency {
-        *c.arena.order.get_mut(e)? = 0;
-    }
+    reset_orders(order, adjacency)?;
     let mut crossings = 0i32;
-    for (&n, order) in list.iter().zip(1..) {
+    // The reference's `zip(1..)`: 1 at the first occurrence, wrapping like its release build.
+    let mut occurrence = 0i32;
+    for &n in list {
+        occurrence = occurrence.wrapping_add(1);
         // Fail after the first occurrence has changed orders, bits and tree.
         // The fallback must reset that partial state, not just return zero.
         #[cfg(test)]
-        if MUTATION == 5 && order == 2 {
+        if MUTATION == 5 && occurrence == 2 {
             return None;
         }
         let edges = adjacency.get(offsets.get(n)?.clone())?;
         // All incident edges occur once in a CGraph adjacency (loops included).
-        for &e in edges {
-            for half in e.wrapping_shl(1)..e.wrapping_shl(1).wrapping_add(2) {
-                if MUTATION != 1 && open.get(half / 64)? & (1 << (half % 64)) != 0 {
-                    index_update(tree, *c.arena.order.get(e)? as usize, false)?;
-                }
-            }
-        }
+        exclude_edges::<MUTATION>(order, open, tree, edges)?;
         let total = index_prefix(tree, list.len())?;
-        for &e in edges {
-            let edge_order = *c.arena.order.get(e)?;
-            if edge_order > 0 {
-                let count = total.checked_sub(index_prefix(tree, edge_order as usize)?)?;
-                #[cfg(any(test, feature = "circo-check"))]
-                {
-                    let expected = reference_query(c, open, edge_order, n);
-                    assert_eq!(count, expected, "circo indexed crossing count (edge query)");
-                }
-                crossings = add_crossings(crossings, count);
-            }
-        }
-        for &e in edges {
-            for half in e.wrapping_shl(1)..e.wrapping_shl(1).wrapping_add(2) {
-                if MUTATION != 1 && open.get(half / 64)? & (1 << (half % 64)) != 0 {
-                    index_update(tree, *c.arena.order.get(e)? as usize, true)?;
-                }
-            }
-            if *c.arena.order.get(e)? > 0 {
-                let half =
-                    e.wrapping_shl(1) | usize::from((*c.arena.tail.get(e)? != n) ^ (MUTATION == 2));
-                let mask = 1 << (half % 64);
-                if open.get(half / 64)? & mask != 0 {
-                    if MUTATION != 3 {
-                        *open.get_mut(half / 64)? &= !mask;
-                    }
-                    if MUTATION != 4 {
-                        index_update(tree, *c.arena.order.get(e)? as usize, false)?;
-                    }
-                }
-            }
-        }
-        for &e in edges {
-            if *c.arena.order.get(e)? == 0 {
-                *c.arena.order.get_mut(e)? = order;
-                let half = e.wrapping_shl(1) | usize::from(*c.arena.tail.get(e)? != n);
-                *open.get_mut(half / 64)? |= 1 << (half % 64);
-                index_update(tree, order as usize, true)?;
-            }
-        }
+        crossings = query_edges(order, head, tail, open, tree, edges, total, n, crossings)?;
+        restore_edges::<MUTATION>(order, tail, open, tree, edges, n)?;
+        open_edges(order, tail, open, tree, edges, n, occurrence)?;
         #[cfg(any(test, feature = "circo-check"))]
         assert_eq!(
             index_prefix(tree, list.len()),
@@ -476,9 +477,150 @@ fn count_indexed<const MUTATION: u8>(
     Some(crossings)
 }
 
+// `match` rather than `?` on `get_mut`: Aeneas cannot model `?` on a mutable borrow.
+#[allow(clippy::question_mark)]
+/// `order[e] = 0` for every edge in `adjacency`.
+fn reset_orders(order: &mut [i32], adjacency: &[usize]) -> Option<()> {
+    for &e in adjacency {
+        match order.get_mut(e) {
+            Some(slot) => *slot = 0,
+            None => return None,
+        }
+    }
+    Some(())
+}
+
+/// Apply `insert` (or its inverse) to the tree for each set half of edge `e`, at its order.
+fn tree_step<const MUTATION: u8>(
+    order: &[i32],
+    open: &[u64],
+    tree: &mut [u64],
+    e: usize,
+    insert: bool,
+) -> Option<()> {
+    for half in e.wrapping_shl(1)..e.wrapping_shl(1).wrapping_add(2) {
+        if MUTATION != 1 && open.get(half / 64)? & (1 << (half % 64)) != 0 {
+            index_update(tree, *order.get(e)? as usize, insert)?;
+        }
+    }
+    Some(())
+}
+
+/// Take every set half of every incident edge out of the tree.
+fn exclude_edges<const MUTATION: u8>(
+    order: &[i32],
+    open: &[u64],
+    tree: &mut [u64],
+    edges: &[usize],
+) -> Option<()> {
+    for &e in edges {
+        tree_step::<MUTATION>(order, open, tree, e, false)?;
+    }
+    Some(())
+}
+
+/// Add the strict suffix count of each incident edge with a positive order to `crossings`.
+#[cfg_attr(not(any(test, feature = "circo-check")), allow(unused_variables))]
+fn query_edges(
+    order: &[i32],
+    head: &[usize],
+    tail: &[usize],
+    open: &[u64],
+    tree: &[u64],
+    edges: &[usize],
+    total: u64,
+    n: usize,
+    crossings: i32,
+) -> Option<i32> {
+    let mut crossings = crossings;
+    for &e in edges {
+        let edge_order = *order.get(e)?;
+        if edge_order > 0 {
+            let count = total.checked_sub(index_prefix(tree, edge_order as usize)?)?;
+            #[cfg(any(test, feature = "circo-check"))]
+            {
+                let expected = reference_query(order, head, tail, open, edge_order, n);
+                assert_eq!(count, expected, "circo indexed crossing count (edge query)");
+            }
+            crossings = add_crossings(crossings, count);
+        }
+    }
+    Some(crossings)
+}
+
+// `match` rather than `?` on `get_mut`: Aeneas cannot model `?` on a mutable borrow.
+#[allow(clippy::question_mark)]
+/// Put the incident halves back, then apply the reference erasure of the closing half
+/// (its bit and tree unit, only when the bit is set).
+fn restore_edges<const MUTATION: u8>(
+    order: &[i32],
+    tail: &[usize],
+    open: &mut [u64],
+    tree: &mut [u64],
+    edges: &[usize],
+    n: usize,
+) -> Option<()> {
+    for &e in edges {
+        tree_step::<MUTATION>(order, open, tree, e, true)?;
+        if *order.get(e)? > 0 {
+            let half = e.wrapping_shl(1) | usize::from((*tail.get(e)? != n) ^ (MUTATION == 2));
+            let mask = 1 << (half % 64);
+            if open.get(half / 64)? & mask != 0 {
+                if MUTATION != 3 {
+                    match open.get_mut(half / 64) {
+                        Some(word) => *word &= !mask,
+                        None => return None,
+                    }
+                }
+                if MUTATION != 4 {
+                    index_update(tree, *order.get(e)? as usize, false)?;
+                }
+            }
+        }
+    }
+    Some(())
+}
+
+// `match` rather than `?` on `get_mut`: Aeneas cannot model `?` on a mutable borrow.
+#[allow(clippy::question_mark)]
+/// Give every incident edge of order zero this occurrence's order, set its opening half and
+/// add that half to the tree.
+fn open_edges(
+    order: &mut [i32],
+    tail: &[usize],
+    open: &mut [u64],
+    tree: &mut [u64],
+    edges: &[usize],
+    n: usize,
+    occurrence: i32,
+) -> Option<()> {
+    for &e in edges {
+        if *order.get(e)? == 0 {
+            match order.get_mut(e) {
+                Some(slot) => *slot = occurrence,
+                None => return None,
+            }
+            let half = e.wrapping_shl(1) | usize::from(*tail.get(e)? != n);
+            match open.get_mut(half / 64) {
+                Some(word) => *word |= 1 << (half % 64),
+                None => return None,
+            }
+            index_update(tree, occurrence as usize, true)?;
+        }
+    }
+    Some(())
+}
+
 #[cfg(any(test, feature = "circo-check"))]
 /// C: lib/circogen/blockpath.c:count_all_crossings (inner predicate)
-fn reference_query(c: &Circ, open: &[u64], edge_order: i32, n: usize) -> u64 {
+fn reference_query(
+    order: &[i32],
+    head: &[usize],
+    tail: &[usize],
+    open: &[u64],
+    edge_order: i32,
+    n: usize,
+) -> u64 {
     open.iter()
         .enumerate()
         .map(|(word_index, &word)| {
@@ -486,8 +628,7 @@ fn reference_query(c: &Circ, open: &[u64], edge_order: i32, n: usize) -> u64 {
             let mut count = 0;
             while bits != 0 {
                 let ep = ((word_index << 6) | bits.trailing_zeros() as usize) / 2;
-                if c.arena.order[ep] > edge_order && c.arena.head[ep] != n && c.arena.tail[ep] != n
-                {
+                if order[ep] > edge_order && head[ep] != n && tail[ep] != n {
                     count += 1;
                 }
                 bits &= bits.wrapping_sub(1);
@@ -497,6 +638,8 @@ fn reference_query(c: &Circ, open: &[u64], edge_order: i32, n: usize) -> u64 {
         .sum()
 }
 
+// `match` rather than `?` on `get_mut`: Aeneas cannot model `?` on a mutable borrow.
+#[allow(clippy::question_mark)]
 // Invalid keys must hand the entire recount back to the reference. In
 // particular zero has no Fenwick successor and must never enter the loop.
 fn index_update(tree: &mut [u64], mut i: usize, insert: bool) -> Option<()> {
@@ -504,12 +647,16 @@ fn index_update(tree: &mut [u64], mut i: usize, insert: bool) -> Option<()> {
         return None;
     }
     while i < tree.len() {
-        let value = tree.get_mut(i)?;
-        *value = if insert {
-            value.wrapping_add(1)
-        } else {
-            value.wrapping_sub(1)
-        };
+        match tree.get_mut(i) {
+            Some(value) => {
+                *value = if insert {
+                    value.wrapping_add(1)
+                } else {
+                    value.wrapping_sub(1)
+                };
+            }
+            None => return None,
+        }
         i = i.wrapping_add(i & i.wrapping_neg());
     }
     Some(())
@@ -547,8 +694,13 @@ fn wrap_crossings(value: i32, count: u64) -> i32 {
 }
 
 /// C: lib/circogen/blockpath.c:count_all_crossings
+///
+/// Split into `reference_scan`, `reference_close` and `reference_open` for Aeneas, as
+/// `count_indexed` is; the loops, their order and the arithmetic are unchanged.
 fn count_all_crossings_reference(
-    c: &mut Circ,
+    order: &mut [i32],
+    head: &[usize],
+    tail: &[usize],
     list: &[usize],
     offsets: &[std::ops::Range<usize>],
     adjacency: &[usize],
@@ -557,44 +709,86 @@ fn count_all_crossings_reference(
     open.fill(0);
     let mut crossings = 0;
     for &e in adjacency {
-        c.arena.order[e] = 0;
+        order[e] = 0;
     }
-    for (&n, order) in list.iter().zip(1..) {
+    // `zip(1..)`: 1 at the first occurrence.
+    let mut occurrence = 0i32;
+    for &n in list {
+        occurrence = occurrence.wrapping_add(1);
         let edges = &adjacency[offsets[n].clone()];
-        for &e in edges {
-            let edge_order = c.arena.order[e];
-            if edge_order > 0 {
-                // Ascending (edge id, half), exactly the old BTreeSet order.
-                for (word_index, &word) in open.iter().enumerate() {
-                    let mut bits = word;
-                    while bits != 0 {
-                        let half = (word_index << 6) | bits.trailing_zeros() as usize;
-                        let ep = half / 2;
-                        if c.arena.order[ep] > edge_order
-                            && c.arena.head[ep] != n
-                            && c.arena.tail[ep] != n
-                        {
-                            crossings += 1;
-                        }
-                        bits &= bits.wrapping_sub(1);
-                    }
-                }
-                // C's two edge halves are distinct keys: closing at the other
-                // end must not erase the half opened at the first endpoint.
-                let half = (e << 1) | usize::from(c.arena.tail[e] != n);
-                open[half / 64] &= !(1u64.wrapping_shl((half % 64) as u32));
-            }
-        }
-        for &e in edges {
-            let edge_order = &mut c.arena.order[e];
-            if *edge_order == 0 {
-                *edge_order = order;
-                let half = (e << 1) | usize::from(c.arena.tail[e] != n);
-                open[half / 64] |= 1u64.wrapping_shl((half % 64) as u32);
-            }
+        crossings = reference_close(order, head, tail, open, edges, n, crossings);
+        reference_open(order, tail, open, edges, n, occurrence);
+    }
+    crossings
+}
+
+/// The first reference loop over an occurrence's edges: scan, then close.
+fn reference_close(
+    order: &[i32],
+    head: &[usize],
+    tail: &[usize],
+    open: &mut [u64],
+    edges: &[usize],
+    n: usize,
+    crossings: i32,
+) -> i32 {
+    let mut crossings = crossings;
+    for &e in edges {
+        let edge_order = order[e];
+        if edge_order > 0 {
+            // Ascending (edge id, half), exactly the old BTreeSet order.
+            crossings = reference_scan(order, head, tail, open, edge_order, n, crossings);
+            // C's two edge halves are distinct keys: closing at the other
+            // end must not erase the half opened at the first endpoint.
+            let half = (e << 1) | usize::from(tail[e] != n);
+            open[half / 64] &= !(1u64.wrapping_shl((half % 64) as u32));
         }
     }
     crossings
+}
+
+/// Count the set halves whose edge has order above `edge_order` and touches neither end at `n`.
+fn reference_scan(
+    order: &[i32],
+    head: &[usize],
+    tail: &[usize],
+    open: &[u64],
+    edge_order: i32,
+    n: usize,
+    crossings: i32,
+) -> i32 {
+    let mut crossings = crossings;
+    for word_index in 0..open.len() {
+        let mut bits = open[word_index];
+        while bits != 0 {
+            let half = (word_index << 6) | bits.trailing_zeros() as usize;
+            let ep = half / 2;
+            if order[ep] > edge_order && head[ep] != n && tail[ep] != n {
+                crossings += 1;
+            }
+            bits &= bits.wrapping_sub(1);
+        }
+    }
+    crossings
+}
+
+/// The second reference loop: every incident edge of order zero opens at this occurrence.
+fn reference_open(
+    order: &mut [i32],
+    tail: &[usize],
+    open: &mut [u64],
+    edges: &[usize],
+    n: usize,
+    occurrence: i32,
+) {
+    for &e in edges {
+        let edge_order = &mut order[e];
+        if *edge_order == 0 {
+            *edge_order = occurrence;
+            let half = (e << 1) | usize::from(tail[e] != n);
+            open[half / 64] |= 1u64.wrapping_shl((half % 64) as u32);
+        }
+    }
 }
 
 const CROSS_ITER: i32 = 10;
@@ -1248,7 +1442,9 @@ mod tests {
         let list = [0, 1, 2, 3];
         let bit_words = c.arena.order.len().wrapping_shl(1).div_ceil(64);
         let expected = count_all_crossings_reference(
-            &mut c,
+            &mut c.arena.order,
+            &c.arena.head,
+            &c.arena.tail,
             &list,
             &s.offsets,
             &s.edges,
@@ -1272,7 +1468,9 @@ mod tests {
             let words = c.arena.order.len().wrapping_shl(1).div_ceil(64);
             s.open.resize(words + list.len() + 1, 0);
             let expected = count_all_crossings_reference(
-                &mut c,
+                &mut c.arena.order,
+                &c.arena.head,
+                &c.arena.tail,
                 &list,
                 &s.offsets,
                 &s.edges,
