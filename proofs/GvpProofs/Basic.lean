@@ -13,7 +13,7 @@ Conventions:
   the same rounding sequence) as the C-mirror path. Never "a better approximation".
 * Prefer stating theorems over the Aeneas-extracted Rust in `GvpProofs/Extracted/`; when
   extraction rejects a module, state them over a Lean model and name the gap in the PR.
-* No placeholder proofs on `master` (`grep -rn sorry proofs/GvpProofs` must print nothing). Work in
+* No placeholder proofs on `master`: the grep for the placeholder tactic over `proofs/GvpProofs` must print nothing. Work in
   progress stays on its branch.
 -/
 
