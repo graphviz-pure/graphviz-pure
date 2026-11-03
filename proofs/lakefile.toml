@@ -1,0 +1,15 @@
+# Lean 4 proofs for graphviz-pure: "Improvement through Math Proofs" (milestone 10).
+# Every theorem has the shape "fast path = C-mirror path". Build with scripts/proofs/lake.sh.
+name = "gvp-proofs"
+version = "0.1.0"
+defaultTargets = ["GvpProofs"]
+
+[[require]]
+name = "mathlib"
+scope = "leanprover-community"
+rev = "v4.35.0"
+
+[[lean_lib]]
+name = "GvpProofs"
+# Glob: a proof PR adds proofs/GvpProofs/<Engine>/<Name>.lean and nothing else.
+globs = ["GvpProofs.+"]
