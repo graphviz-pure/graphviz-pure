@@ -338,7 +338,8 @@ def cmd_check(a):
     with cf.ThreadPoolExecutor(a.jobs) as ex:
         for f, (oc, d) in ex.map(one, a.files):
             if not a.quiet or oc != "same":
-                print(f"{oc:12} {f} {d.get('panic', '')[-200:]!s}".rstrip())
+                tag = " stderr_diff" if d.get("stderr_diff") else ""
+                print(f"{oc:12} {f}{tag} {d.get('panic', '')[-200:]!s}".rstrip())
 
 
 def cmd_min(a):
