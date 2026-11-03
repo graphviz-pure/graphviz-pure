@@ -24,6 +24,7 @@ pub const FORMATS: &[&str] = &[
     "svg",
     "svg_inline",
     "cmapx",
+    "ps",
     "json",
     "json0",
     "xdot",

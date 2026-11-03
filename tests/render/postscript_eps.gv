@@ -1,0 +1,5 @@
+digraph postscript_eps {
+ a [shape=epsf, shapefile="tests/fixtures/postscript.eps", label="macro"];
+ b [shape=box, image="tests/fixtures/postscript.eps", label="inline"];
+ a -> b;
+}

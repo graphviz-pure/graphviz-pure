@@ -9,6 +9,7 @@ use graphviz_pure_core::strtod::{atof, sscanf};
 use graphviz_pure_core::usershape::UserShape;
 use graphviz_pure_core::{BoundingBox, Point};
 
+pub(crate) const GVDEVICE_DOES_PAGES: u32 = 1 << 5;
 pub(crate) const EMIT_SORTED: u32 = 1 << 0;
 pub(crate) const EMIT_CLUSTERS_LAST: u32 = 1 << 2;
 pub(crate) const EMIT_EDGE_SORTED: u32 = 1 << 4;
@@ -248,6 +249,7 @@ pub(crate) trait Engine {
         "svg"
     }
     fn begin_job(&mut self, j: &Job) {}
+    fn end_job(&mut self, j: &Job) {}
     fn begin_graph(&mut self, j: &Job) {}
     fn end_graph(&mut self, j: &Job) {}
     fn begin_layer(&mut self, j: &Job, name: &str) {}
@@ -275,6 +277,7 @@ pub(crate) trait Engine {
     fn polygon(&mut self, j: &Job, a: &[Point], filled: i32) {}
     fn bezier(&mut self, j: &Job, a: &[Point], filled: i32) {}
     fn polyline(&mut self, j: &Job, a: &[Point]) {}
+    fn library_shape(&mut self, j: &Job, name: &str, a: &[Point], filled: bool) {}
     fn comment(&mut self, j: &Job, s: &str) {}
     /// `job->render.type`, the second half of the loadimage plugin names the job looks up
     /// (`png:svg`): the renderer the `-T` device depends on.
@@ -304,6 +307,7 @@ pub(crate) enum LoadImage {
     /// `gvloadimage_pango.c`'s `png:cairo`. The raster formats draw no images (see
     /// `graphviz-pure-raster`), so it draws nothing; it keeps C's plugin choice and messages.
     Cairo,
+    Ps,
 }
 
 impl LoadImage {
@@ -313,6 +317,7 @@ impl LoadImage {
         let image = IMAGES.contains(&stringtype);
         let vector = matches!(stringtype, "ps" | "eps" | "svg");
         match render_type {
+            "ps" if matches!(stringtype, "ps" | "eps") => Some(LoadImage::Ps),
             "svg" if image || stringtype == "svg" => Some(LoadImage::Svg),
             "xdot" if image || vector => Some(LoadImage::Xdot),
             "dot" | "map" if image || vector => Some(LoadImage::Null),
@@ -353,6 +358,10 @@ pub(crate) struct Job<'a> {
     /// `job->dpi`.
     pub dpi: Point,
     pub pages: (i32, i32),
+    pub page_elem: (i32, i32),
+    page_size: Point,
+    focus: Point,
+    canvas_ll: Point,
     /// The active `colorscheme` (`setColorScheme`).
     pub color_scheme: Option<String>,
     /// Rust-only: the last name found in `features.knowncolors`, which a drawing repeats.
@@ -396,7 +405,14 @@ impl<'a> Job<'a> {
             Point::new(features.default_pad, features.default_pad),
             |(x, y)| Point::new(x, y),
         );
-        let margin = scan2("margin").map_or(Point::default(), |(x, y)| Point::new(x, y));
+        let margin = scan2("margin").map_or(
+            if features.flags & GVDEVICE_DOES_PAGES != 0 {
+                Point::new(36.0, 36.0)
+            } else {
+                Point::default()
+            },
+            |(x, y)| Point::new(x, y),
+        );
         let dpi = {
             let d = graphviz_pure_core::cnum::drawing_dpi(attrs.0);
             if d > 0.0 { d } else { features.default_dpi }
@@ -461,17 +477,44 @@ impl<'a> Job<'a> {
             z = nums[2];
             focus = Point::new(nums[3], nums[4]);
         }
-        // init_job_pagination (no page attribute, no paging device)
+        // C: lib/common/emit.c:init_job_pagination
         let mut image_size = view;
         if rotation != 0 {
             image_size = Point::new(image_size.y, image_size.x);
         }
-        let mut page_size = Point::new(
-            (0.0 - 2.0 * margin.x).max(0.0),
-            (0.0 - 2.0 * margin.y).max(0.0),
-        );
-        page_size.x = page_size.x.max(image_size.x);
-        page_size.y = page_size.y.max(image_size.y);
+        let paged = features.flags & GVDEVICE_DOES_PAGES != 0;
+        let mut pages = (1, 1);
+        let mut page_size;
+        if let Some((px, py)) = m
+            .drawing_page()
+            .filter(|(x, y)| paged && *x > 0.001 && *y > 0.001)
+        {
+            page_size = Point::new(px - 2.0 * margin.x, py - 2.0 * margin.y);
+            let count = |image: f64, page: f64| {
+                if page < 0.0001 {
+                    1
+                } else {
+                    let mut n = (image / page) as i32;
+                    if image - f64::from(n) * page > 0.0001 {
+                        n += 1;
+                    }
+                    n
+                }
+            };
+            pages = (
+                count(image_size.x, page_size.x),
+                count(image_size.y, page_size.y),
+            );
+            image_size.x = image_size.x.min(page_size.x);
+            image_size.y = image_size.y.min(page_size.y);
+        } else {
+            page_size = Point::new(
+                ((if paged { 612.0 } else { 0.0 }) - 2.0 * margin.x).max(0.0),
+                ((if paged { 792.0 } else { 0.0 }) - 2.0 * margin.y).max(0.0),
+            );
+            page_size.x = page_size.x.max(image_size.x);
+            page_size.y = page_size.y.max(image_size.y);
+        }
         let width = round((page_size.x + 2.0 * margin.x) * dpi / 72.0);
         let height = round((page_size.y + 2.0 * margin.y) * dpi / 72.0);
         let mut centering = Point::default();
@@ -572,7 +615,11 @@ impl<'a> Job<'a> {
             scale,
             devscale,
             dpi: Point::new(dpi, dpi),
-            pages: (1, 1),
+            pages,
+            page_elem: (0, 0),
+            page_size: job_page_size,
+            focus,
+            canvas_ll: cll,
             color_scheme: None,
             last_known_color: std::cell::RefCell::new(None),
             layer_num: 0,
@@ -583,6 +630,78 @@ impl<'a> Job<'a> {
             layer_list_delims: b",".to_vec(),
             layer_list: None,
         }
+    }
+
+    /// C: lib/common/emit.c:setup_page
+    pub fn setup_page(&mut self, elem: (i32, i32)) {
+        self.page_elem = elem;
+        let (e, n) = if self.rotation != 0 {
+            ((elem.1, elem.0), (self.pages.1, self.pages.0))
+        } else {
+            (elem, self.pages)
+        };
+        self.page_box.ll = Point::new(
+            f64::from(e.0) * self.page_size.x - self.pad.x,
+            f64::from(e.1) * self.page_size.y - self.pad.y,
+        );
+        self.page_box.ur = Point::new(
+            self.page_box.ll.x + self.page_size.x,
+            self.page_box.ll.y + self.page_size.y,
+        );
+        self.clip.ll = Point::new(
+            self.focus.x + self.page_size.x * (f64::from(e.0) - f64::from(n.0) / 2.0),
+            self.focus.y + self.page_size.y * (f64::from(e.1) - f64::from(n.1) / 2.0),
+        );
+        self.clip.ur = Point::new(
+            self.clip.ll.x + self.page_size.x,
+            self.clip.ll.y + self.page_size.y,
+        );
+        let down =
+            self.flags & GVRENDER_Y_GOES_DOWN != 0 || super::Y_INVERT.with(std::cell::Cell::get);
+        self.translation.x = if self.rotation != 0 && down {
+            -self.clip.ur.x - self.canvas_ll.x / self.zoom
+        } else {
+            -self.clip.ll.x + self.canvas_ll.x / self.zoom
+        };
+        self.translation.y = if self.rotation != 0 || down {
+            -self.clip.ur.y - self.canvas_ll.y / self.zoom
+        } else {
+            -self.clip.ll.y + self.canvas_ll.y / self.zoom
+        };
+    }
+
+    /// C: lib/common/emit.c:pagecode,firstpage,nextpage
+    pub fn page_order(&self) -> Vec<(i32, i32)> {
+        let dir = self.m.root_attrs().get("pagedir").unwrap_or("BL");
+        let b = dir.as_bytes();
+        let valid = b.len() >= 2
+            && matches!(b[0], b'T' | b'B' | b'L' | b'R')
+            && matches!(b[1], b'T' | b'B' | b'L' | b'R')
+            && matches!(b[0], b'T' | b'B') != matches!(b[1], b'T' | b'B');
+        let b = if valid { b } else { b"BL" };
+        let axis = |c| {
+            let n = if matches!(c, b'T' | b'B') {
+                self.pages.1
+            } else {
+                self.pages.0
+            };
+            let mut v: Vec<_> = (0..n).collect();
+            if matches!(c, b'T' | b'R') {
+                v.reverse();
+            }
+            v
+        };
+        let mut out = Vec::new();
+        for major in axis(b[0]) {
+            for minor in axis(b[1]) {
+                out.push(if matches!(b[0], b'T' | b'B') {
+                    (minor, major)
+                } else {
+                    (major, minor)
+                });
+            }
+        }
+        out
     }
 
     /// `gvrender_ptf`.

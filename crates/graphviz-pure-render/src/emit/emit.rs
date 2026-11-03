@@ -576,12 +576,20 @@ impl<'a, E: Engine> Emitter<'a, E> {
                     .unwrap_or_default();
                 self.eng.begin_layer(&self.job, &name);
             }
-            self.emit_page();
+            if self.job.flags & super::job::GVDEVICE_DOES_PAGES != 0 {
+                for elem in self.job.page_order() {
+                    self.job.setup_page(elem);
+                    self.emit_page();
+                }
+            } else {
+                self.emit_page();
+            }
             if physical > 1 {
                 self.eng.end_layer(&self.job);
             }
         }
         self.eng.end_graph(&self.job);
+        self.eng.end_job(&self.job);
         self.job.pop_obj();
     }
 

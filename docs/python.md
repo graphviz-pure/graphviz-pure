@@ -16,9 +16,8 @@ labelled with the version measured.
 - **Wheels are shipped.** [Option (a)](#a-a-wheel-that-puts-the-binary-on-path) describes the
   existing binary wheel channel.
 - **Compatibility depends on the formats and tools used.** `svg_inline` (including C's SVG
-  generator comment), `cmapx` and a C-shaped `-V` are implemented. `pdf`, `ps` and the separate
-  `unflatten` program are still missing. pydot defaults to `ps`; choose a supported format such
-  as `svg`. Sphinx's HTML `png` plus `cmapx` path is supported; its LaTeX `pdf` path is not.
+  generator comment), `cmapx`, `ps` and a C-shaped `-V` are implemented. `pdf` and the separate
+  `unflatten` program are still missing. pydot's default format `ps` is supported. Sphinx's HTML `png` plus `cmapx` path is supported; its LaTeX `pdf` path is not.
   Engine-named links already work: a link called `neato` lays out with `neato`, as in C.
 - **In-process (PyO3) and pyodide** remain future options, useful for notebooks in the browser
   (JupyterLite), where no subprocess exists.
@@ -49,9 +48,9 @@ not a measurement of today's port.
 
 The format and tool gaps that remain are:
 
-1. **`pdf`** (the default format of `graphviz` and Sphinx's LaTeX output) and **`ps`**
-   (pydot's default, and the check Keras runs). C's core PostScript renderer and a PDF backend
-   are planned for 1.x (#528).
+1. **`pdf`** (the default format of `graphviz` and Sphinx's LaTeX output). A PDF backend
+   remains planned for 1.x (#528). The core PostScript writer now supports `ps`, pydot's
+   default format and the format Keras uses for its availability check.
 2. **`unflatten`**: a separate Graphviz program that the `graphviz` package runs by name.
 
 The earlier `svg_inline` failures are addressed: the port writes SVG without the XML
@@ -127,7 +126,7 @@ pass the package's test suite. A hook in the package itself is unlikely to be ac
 
 - **pydot** needs nothing from upstream: `prog` accepts a path, so `Dot.create(prog="graphviz-pure",
   format="svg")` works today, and so does NetworkX's `nx_pydot` with its default
-  `prog="neato"` through a `neato` link. pydot's default format `ps` is still missing.
+  `prog="neato"` through a `neato` link. pydot's default format `ps` is supported.
 - **pygraphviz** links C Graphviz. Since 2.0 (2026-06) its wheels bundle Graphviz's libraries,
   plugins and helper programs, but not `dot`. Replacing them would take a C ABI shim of about 50
   cgraph functions (`agopen`, `agread`, `agnode`, `agedge`, `agattr`, `agsafeset`, `agnxtnode`,
@@ -169,7 +168,7 @@ Pyodide has no subprocesses, so neither the `graphviz` package nor pydot can ren
   that `gh attestation verify` checks.
 - **WebAssembly:** the same engines in the browser, so a pyodide route exists at all.
 
-And what it does not do yet: `pdf`, `ps`, `gif` and the other
+And what it does not do yet: `pdf`, `gif` and the other
 cairo and gd formats; the other Graphviz programs (`unflatten`, `tred`, `gvpr`, `ccomps`, ...);
 plugins; PNG pixels that match C's (layouts match, the rasterizer differs: resvg and bundled
 fonts, not cairo and Pango).
@@ -215,7 +214,7 @@ graphviz-pure is a port not affiliated with Graphviz.
 
 1. Re-run the Python executable suite against the shipped wheels, including `svg_inline`,
    `cmapx` and `-V`, and establish a CI ratchet.
-2. Add `ps` and `pdf` (#528); consider `unflatten` separately (#529).
+2. Add `pdf` (the remaining part of #528); consider `unflatten` separately (#529).
 3. After compatibility testing, consider the optional `dot` wheel and the upstream
    [xflr6/graphviz#246](https://github.com/xflr6/graphviz/issues/246) follow-up.
 4. Later: (b) and the pyodide wheel.

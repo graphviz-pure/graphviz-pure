@@ -301,7 +301,17 @@ impl<'g> Model<'g> {
     /// `GD_drawing(g)->size` in points and `filled` (a `!` right after the numbers), as
     /// `getdoubles2ptf` in `lib/common/input.c` reads them.
     pub fn drawing_size(&self) -> Option<(f64, f64, bool)> {
-        let p = self.root_attrs().get("size")?;
+        self.drawing_size_attr("size")
+    }
+
+    /// C: lib/common/input.c:getdoubles2ptf (GD_drawing(g)->page)
+    pub fn drawing_page(&self) -> Option<(f64, f64)> {
+        self.drawing_size_attr("page").map(|(x, y, _)| (x, y))
+    }
+
+    /// C: lib/common/input.c:getdoubles2ptf
+    fn drawing_size_attr(&self, name: &str) -> Option<(f64, f64, bool)> {
+        let p = self.root_attrs().get(name)?;
         // POINTS(a): ROUND(a * 72), with `a * 72 ± .5` fused by C (clang).
         let points = |a: f64| f64::from(graphviz_pure_core::cnum::c_round_mul(a, 72.0));
         let r = sscanf(p, "%lf,%lf%c");

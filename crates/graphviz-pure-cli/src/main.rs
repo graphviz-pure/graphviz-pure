@@ -84,6 +84,7 @@ struct Job {
     filename: Option<OsString>,
     /// `output_file` while the job's device is open.
     file: Option<Sink>,
+    ps: graphviz_pure_render::PostscriptJob,
 }
 
 enum Sink {
@@ -106,6 +107,7 @@ struct Options {
     engine: LayoutEngine,
     jobs: Vec<Job>,
     auto_output: bool,
+    libraries: Vec<String>,
     globals: GlobalAttrs,
     layout: LayoutOptions,
     y_invert: bool,
@@ -286,6 +288,7 @@ fn job_at(jobs: &mut Vec<Job>, n: usize) -> &mut Job {
             langname: None,
             filename: None,
             file: None,
+            ps: Default::default(),
         });
     }
     &mut jobs[n]
@@ -381,6 +384,7 @@ fn parse_args(argv0: &str, os_args: &[OsString]) -> Parsed {
         engine: LayoutEngine::Dot,
         jobs: Vec::new(),
         auto_output,
+        libraries: Vec::new(),
         globals: GlobalAttrs::default(),
         layout,
         y_invert: false,
@@ -465,11 +469,10 @@ fn parse_args(argv0: &str, os_args: &[OsString]) -> Parsed {
                 }
                 // `-P` renders the graph of the plugins instead of the inputs.
                 'P' => opts.plugin_graph = Some(opts.globals.clone()),
-                'l' => {
-                    if flag_value(os_args, &mut i).is_none() {
-                        return missing('l');
-                    }
-                }
+                'l' => match flag_value(os_args, &mut i) {
+                    Some(value) => opts.libraries.push(value),
+                    None => return missing('l'),
+                },
                 'o' => {
                     let at = i;
                     let name = match flag_value(os_args, &mut i) {
@@ -680,6 +683,10 @@ impl Run<'_> {
     /// then writes to stdout (`gvdevice_close` forgets its file name).
     fn end_job(&mut self, n: usize) -> io::Result<()> {
         let job = &mut self.opts.jobs[n];
+        let trailer = job.ps.finish();
+        if let Some(sink) = job.file.as_mut() {
+            sink.write_all(&graphviz_pure_core::charset::encode(&trailer))?;
+        }
         match job.file.take() {
             Some(Sink::File(mut f)) => {
                 job.filename = None;
@@ -733,15 +740,24 @@ impl Run<'_> {
                 graphviz_pure_core::diag::start_timer();
                 render_jobs_finish(graph, 4323);
             }
-            // Every job's device writes its own output (no format of the port does pages),
-            // so the device open before it is finalized.
-            if let Some(active) = self.active.take() {
-                self.end_job(active)?;
-            }
+            // A paging device keeps its file and document across consecutive graphs.
+            // Other devices finalize the output opened before them.
+            let sink_job = if let Some(active) = self.active.take() {
+                let keep = langname.split(':').next() == Some("ps")
+                    && self.opts.jobs[active].langname.as_deref() == Some(langname);
+                if keep {
+                    active
+                } else {
+                    self.end_job(active)?;
+                    n
+                }
+            } else {
+                n
+            };
             // `gvrender_begin_job` → `gvdevice_initialize`: open the job's file unless
             // it still is.
-            let job = &mut self.opts.jobs[n];
-            let langname = job.langname.clone().unwrap_or_default();
+            let langname = self.opts.jobs[n].langname.clone().unwrap_or_default();
+            let job = &mut self.opts.jobs[sink_job];
             if job.file.is_none() {
                 if self.opts.auto_output {
                     job.filename = Some(auto_output_filename(input, graph_index, &langname));
@@ -761,8 +777,18 @@ impl Run<'_> {
                     None => Sink::Stdout,
                 });
             }
-            self.active = Some(n);
-            let rendered = render_job(&mut graph_jobs, n, graph, &langname);
+            self.active = Some(sink_job);
+            let rendered = if langname.split(':').next() == Some("ps") {
+                self.opts.jobs[sink_job]
+                    .ps
+                    .set_libraries(&self.opts.libraries);
+                self.opts.jobs[sink_job]
+                    .ps
+                    .render(graph, n)
+                    .map(|s| graphviz_pure_core::charset::encode(&s).into_owned())
+            } else {
+                render_job(&mut graph_jobs, n, graph, &langname)
+            };
             // what the job wrote to the standard output (`-Tjson`'s xdot job) came first
             let stdout = graph_jobs.take_stdout();
             if !stdout.is_empty() {
@@ -772,7 +798,10 @@ impl Run<'_> {
             }
             match rendered {
                 Ok(bytes) => {
-                    let sink = self.opts.jobs[n].file.as_mut().expect("opened above");
+                    let sink = self.opts.jobs[sink_job]
+                        .file
+                        .as_mut()
+                        .expect("opened above");
                     sink.write_all(&bytes)?;
                 }
                 Err(e) => report_error(name, &e),

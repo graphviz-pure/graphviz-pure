@@ -1,0 +1,14 @@
+digraph postscript_pages {
+  graph [page="2,2", margin="0.2,0.3", pagedir=TR, center=true, layers="one:two", bgcolor="#abcdef"];
+  a [layer=one, label="café (a) \\ b", style="filled,dashed", fillcolor=".3,.4,.5,.7", color="#a3b7c9", URL="https://example.org/(a)"];
+  b [layer=two, shape=box, style="filled,bold", fillcolor=red, label=<<B>bold</B><BR/><I>italic</I>>];
+  c [shape=diamond, style=dotted, color=transparent];
+  a -> b [style=dashed, label="edge", URL="https://example.org/edge"];
+  b -> c [style=bold];
+}
+digraph fractional_page {
+ graph [page="2.7,2.9", margin=".123,.234", viewport="210,230,1.2345,50.1234,70.5678", center=true, pagedir=RT, rotate=90, dpi=96];
+ a -> b -> c;
+ a -> c [label="edge"];
+ a [URL="https://example.org/a"];
+}

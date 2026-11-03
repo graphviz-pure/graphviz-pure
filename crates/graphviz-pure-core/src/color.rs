@@ -413,6 +413,41 @@ fn lookup_named_color(name: &str) -> Option<RgbaColor> {
     Some(RgbaColor::rgba(r, g, b, a))
 }
 
+/// C: lib/common/colxlate.c:colorxlate (HSVA_DOUBLE).
+/// Resolves directly to HSV, retaining the table's HSV bytes and numeric HSV precision.
+pub fn resolve_hsva_with_scheme(spec: &str, scheme: Option<&str>) -> Option<[f64; 4]> {
+    let p = spec.trim_start_matches(' ');
+    if let Some(c) = parse_hex_color(p) {
+        let (h, s, v, a) = c.to_hsva();
+        return Some([h, s, v, a]);
+    }
+    if p.as_bytes()
+        .first()
+        .is_some_and(|b| *b == b'.' || b.is_ascii_digit())
+    {
+        let canonical = p.replace(',', " ");
+        let r = crate::strtod::sscanf(&canonical, "%lf%lf%lf%lf");
+        if r.count >= 3 {
+            let mut a = [
+                r.values[0],
+                r.values[1],
+                r.values[2],
+                if r.count >= 4 { r.values[3] } else { 1.0 },
+            ];
+            for v in &mut a {
+                *v = if v.is_nan() { 1.0 } else { v.clamp(0.0, 1.0) };
+            }
+            return Some(a);
+        }
+    }
+    let name = normalize_color_scheme_name(p, scheme);
+    let table = crate::color_table::HSVA_LIB;
+    let i = table
+        .binary_search_by(|(n, _)| n.cmp(&name.as_str()))
+        .ok()?;
+    Some(table[i].1.map(|v| f64::from(v) / 255.0))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -482,6 +517,22 @@ mod tests {
         assert_eq!(
             resolve_color("#12345"),
             Some(RgbaColor::rgba(0x12, 0x34, 0x5, 255))
+        );
+    }
+
+    #[test]
+    fn postscript_hsva_uses_c_table_and_numeric_precision() {
+        assert_eq!(
+            resolve_hsva_with_scheme("/accent3/2", None),
+            Some([187.0 / 255.0, 45.0 / 255.0, 212.0 / 255.0, 1.0])
+        );
+        assert_eq!(
+            resolve_hsva_with_scheme(".123456,.234567,.345678,.456789", None),
+            Some([0.123456, 0.234567, 0.345678, 0.456789])
+        );
+        assert_eq!(
+            resolve_hsva_with_scheme("#ff000080", None),
+            Some([0.0, 1.0, 1.0, 128.0 / 255.0])
         );
     }
 

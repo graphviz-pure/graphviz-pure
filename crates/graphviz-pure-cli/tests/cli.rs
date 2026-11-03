@@ -77,6 +77,56 @@ fn scratch(name: &str) -> PathBuf {
     dir
 }
 
+// C: plugin/core/gvrender_core_ps.c; lib/common/emit.c pagination and job lifecycle.
+#[test]
+fn postscript_documents_match_c_bytes() {
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    for name in ["postscript_document", "postscript_pages", "postscript_eps"] {
+        let input = root.join("tests/render").join(format!("{name}.gv"));
+        let output = Command::new(env!("CARGO_BIN_EXE_graphviz-pure"))
+            .current_dir(&root)
+            .arg("-Tps")
+            .arg(input)
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert_eq!(
+            output.stdout,
+            std::fs::read(root.join("tests/golden/ps").join(format!("{name}.ps"))).unwrap(),
+            "{name}"
+        );
+    }
+}
+
+// C: lib/common/emit.c:gvRenderJobs (paging devices retain the active output).
+#[test]
+fn postscript_same_format_jobs_share_the_document() {
+    let (out, err, ok) = run(&["-Tps", "-Tps"], "digraph first {a->b} digraph second {c}");
+    assert!(ok, "{err}");
+    assert_eq!(
+        out.as_bytes(),
+        include_bytes!("../../../tests/golden/ps/postscript_jobs.ps")
+    );
+    let dir = scratch("postscript-auto-output");
+    std::fs::write(
+        dir.join("input.gv"),
+        include_bytes!("../../../tests/render/postscript_document.gv"),
+    )
+    .unwrap();
+    let (out, err, status) = run_in(&dir, &["-Tps", "-O", "input.gv"], "");
+    assert_eq!(status, 0, "{err}");
+    assert!(out.is_empty());
+    assert_eq!(
+        std::fs::read(dir.join("input.gv.ps")).unwrap(),
+        include_bytes!("../../../tests/golden/ps/postscript_document.ps")
+    );
+    assert!(!dir.join("input.gv.2.ps").exists());
+}
+
 // Issue #158: one job per `-T`, each through `emit_graph`.
 #[test]
 fn every_format_flag_renders_its_own_job() {
@@ -330,11 +380,11 @@ fn issue298_verbose_reports_the_plugins_it_uses() {
     let svg = using(&[("render", "svg:core"), ("device", "svg:svg:core")]);
     let json = using(&[("render", "json:core"), ("device", "json:json:core")]);
     let xdot = using(&[("render", "xdot:core"), ("device", "xdot:xdot:core")]).repeat(3);
-    let status = "Demand loading of plugins is disabled.\n    render\t:  cairo dot dot_json json json0 map svg svg_inline xdot xdot_json\n    \
+    let status = "Demand loading of plugins is disabled.\n    render\t:  cairo dot dot_json json json0 map ps svg svg_inline xdot xdot_json\n    \
                   layout\t:  circo dot fdp neato nop nop1 nop2 osage patchwork sfdp twopi\n    \
                   textlayout\t: \n    \
                   device\t:  canon cmapx cmapx_np dot dot_json gv jpe jpeg jpg json json0 plain \
-                  plain-ext png svg svg_inline xdot xdot1.2 xdot1.4 xdot_json\n    \
+                  plain-ext png ps svg svg_inline xdot xdot1.2 xdot1.4 xdot_json\n    \
                   loadimage\t:  eps gif jpe jpeg jpg png ps svg\n";
     let version = format!(
         "graphviz-pure - graphviz version 16.1.0 (graphviz-pure {})\n",
@@ -367,7 +417,7 @@ fn issue298_verbose_reports_the_plugins_it_uses() {
     let err = plugin_lines(&err);
     assert!(
         err.contains(
-            "\n    render\t:  cairo:cairo dot:core dot_json:core json:core json0:core map:core \
+            "\n    render\t:  cairo:cairo dot:core dot_json:core json:core json0:core map:core ps:core \
              svg:core svg_inline:core xdot:core xdot_json:core\n"
         ),
         "{err}"
