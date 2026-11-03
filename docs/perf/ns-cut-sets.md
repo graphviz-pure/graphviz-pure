@@ -211,9 +211,11 @@ it visits all of S, and above 1 its `rerank` visits S again. So each query on co
 The allowance starts at `BALANCE_SPARE_WALKS` (8) nodes per node of the run. When it is gone, §5's
 hand-over gives the rest of `LR_balance` to C's functions, with no failure involved.
 
-So the computed path never walks more than 8n nodes beyond what C's functions must visit on the same
-queries, and after the hand-over its work is C's. Since |W| ≤ |S|, only slack-0 queries can spend the
-allowance. The allowance changes who does the work and nothing else: every query gives C's answer on
+The allowance is checked before each query, and the query that runs it out can overspend it by its
+own walk, which is at most n/2 nodes, since W is the smaller side. So the computed path never walks
+more than 8.5n nodes beyond what C's functions must visit on the same queries: the 8n of the allowance
+and that last query. After the hand-over its work is C's. Since |W| ≤ |S|, only slack-0 queries can
+spend the allowance. The allowance changes who does the work and nothing else: every query gives C's answer on
 either side of the hand-over.
 
 ## 5. Ranks at the end, and the fallback
@@ -508,8 +510,8 @@ out-edges, which makes the query about 7C + 1,024 steps. It is not a fixed facto
 since a node's two lists can be of very different lengths.
 
 That is not a bound on every query. When a slack is 0, C's scan stops at the first such candidate,
-and its query can be far cheaper than D. In `LR_balance`, §4.3 bounds the whole phase: at most 8n
-nodes beyond what C must visit. A pivot has no such limit. It also renumbers below the LCA, which
+and its query can be far cheaper than D. In `LR_balance`, §4.3 bounds the whole phase: at most
+8.5n nodes beyond what C must visit. A pivot has no such limit. It also renumbers below the LCA, which
 the computed path never does, but that work is pruned and can be small, so a run of many slack-0
 pivots on a tree whose cuts have large smaller sides is the shape where the computed path could
 lose to C.
