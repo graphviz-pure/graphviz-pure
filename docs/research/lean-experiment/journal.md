@@ -499,3 +499,55 @@ ever retries, so for them the change is neutral (+0.006 % instructions on twopi 
 cost of the loop bounds). Where it does retry the gain is real but small in absolute terms:
 b57 -14.6 % instructions, b51 -4.9 %, b106 -0.3 %. The ticket's measurement target was wrong; the
 proof and the saving stand regardless. Details in `docs/perf/limit-boxes-reuse.md`.
+## 2026-11-03 #735: pathplan triangle adjacency and dot `canreach`
+
+Stacked on #706 (`perf/704-pathplan-shortcuts`). Extraction verdict: not tried. The Aeneas binary
+was not installed yet when the Lean step began (`/jobs/work/gvp-lean/aeneas` held a source checkout
+and no `bin/`), so both statements are over Lean models and the PR has a "Model vs Rust" section.
+
+**Hours.** About 0.7 h of Rust (reading, design, `reach.rs` and its tests, gates), about 1.3 h of
+Lean (`TriAdjacency.lean` 221 lines, `CanReach.lean` 207 lines, no `sorry`; about ten failed compiles
+in all), and about 0.6 h waiting: every `cargo-slot.sh` build refused to start because `/cache`
+had 11 GB free against its 20 GB guard (`MIN_FREE_CACHE_GB`), with the biggest item there a Go
+build cache that is not this project's. The owner chose to lower the guard to 8 GB for this task's
+builds, with every other cap kept (slot queue, nice 15, cgroup, `ulimit -v`) and `SCCACHE_DIR` on
+`/jobs`, and said not to delete the Go cache.
+
+**What the ticket got wrong.** (a) The O(T^2 * 9) adjacency loop was already gone from the shipped
+path: #706's `clip::triangulate` links triangles by remembering which clip made each side, and
+the all-pairs loop survives only as `triangulate_c`, the oracle under `cfg(test)` and
+`pathplan-check`. So there was no Rust to change for (a). `TriAdjacency.lean` therefore proves the
+edge-keyed pairing the ticket describes against the loop the oracle runs, which justifies the
+oracle's meaning and any later replacement of it; it does not describe `clip::triangulate`, whose
+agreement with the oracle stays differential-tested (4,000 x 3 random polygons in `clip.rs`).
+(b) "Memoise reachability across the pairs" is wrong as written: `make_lr_constraints` adds
+auxiliary edges between queries, so a cached "no" can turn into "yes". Writing the statement in
+Lean forced the hypothesis `Extends` (edges are only appended) and the shape `resume_exact`: a
+cached set stays exact once closed under the new edges. A cache that kept answers without
+resuming would have been wrong, and nothing in the corpus would have shown it (see below).
+
+**What Lean caught.** `AtMostTwo` is a real premise, not a formality: with three triangles on one
+undirected edge the all-pairs loop leaves asymmetric links (the last pair written wins) where the
+keyed map links none (a `decide` example in `TriAdjacency.lean`). Simple polygons satisfy it; the random "wild" closed
+walks in `clip.rs` need not, which is why those tests compare against the oracle rather than
+assume it. For `canreach` Lean caught nothing in the code; it caught the cache design above
+before the code existed.
+
+**Result.** No speedup, and none expected: across the 590 dot-layout inputs of `tests/fixtures`
+and `tests/wild`, `canreach` is called zero times (it runs only for flat edges that carry a label);
+on three generated graphs of 200, 800 and 2,000 labelled flat edges it is called 110, 438 and
+1,162 times and finds 152, 626 and 1,638 nodes in all, 2.0 s either way at 2,000. Callgrind on
+`unix.gv` -Tsvg: 17,373,478 instructions on #706's tip, 17,373,075 here. The change is kept because
+the proof and the check mode now exist; the survey's "small absolute time" was right.
+
+**Dead ends.** `induction stk` on the stack instead of the function's own induction principle
+(`dfs.induct`) lost the "already seen" case; `Fintype` in `termination_by` needs the instance
+named in the signature, a `variable` is not enough; a `def` that matches on a list must be
+`show`n to its unfolded form before `simp` sees it; `if_pos` and friends are deprecated in this
+Mathlib. A first plan to cache only positive answers was dropped: it is correct but saves nothing
+the resume does not.
+
+**Not proved.** The per-node `scanned` counters, the early exit when the target joins the set, and
+the memory cap are in `reach.rs` and not in the Lean model; the tests in `reach.rs` and the
+`position-check` feature (an answer from scratch beside every answer) stand for them. The
+`position-check` run is the runtime check this proof does not retire.

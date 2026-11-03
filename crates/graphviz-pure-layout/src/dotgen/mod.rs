@@ -28,6 +28,7 @@ pub mod position;
 pub mod postproc;
 pub mod qsort;
 pub mod rank;
+pub mod reach;
 pub mod sameport;
 pub mod splinegraph;
 pub mod types;

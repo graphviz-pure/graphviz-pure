@@ -46,7 +46,7 @@ layout/dotgen/mod.rs	0	0	18	9
 layout/dotgen/ns.rs	0	0	29	0
 layout/dotgen/output.rs	0	0	50	0
 layout/dotgen/pack.rs	0	2	74	1
-layout/dotgen/position.rs	33	0	300	31
+layout/dotgen/position.rs	33	0	298	31
 layout/dotgen/postproc.rs	1	0	56	6
 layout/dotgen/rank.rs	11	0	243	14
 layout/dotgen/sameport.rs	0	0	34	0
