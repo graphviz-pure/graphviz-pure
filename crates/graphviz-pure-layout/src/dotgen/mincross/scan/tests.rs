@@ -409,9 +409,16 @@ fn the_cross_check_sees_a_stale_order_tie() {
     }
 }
 
-/// The ranks of #682: 40 parallel edges of penalty 1,000 merge into one of 40,000 when i + j is
-/// even, and a single edge has 1,000. Two such products add up past `out_cross`'s `i32`.
-fn issue_682_ranks<'a>(input: &'a Graph, top: [usize; 4], bottom: [usize; 4]) -> Dot<'a> {
+/// The ranks of #682: 40 parallel edges of `CL_CROSS = 1,000` when `i + j` is even and a single
+/// edge of `1,000` otherwise. `merge_oneway` sums `ED_xpenalty` in `short`, wrapping `40,000` to
+/// `-25,536`; both `-25,536` (four `(-25,536)^2` products) and an unwrapped `40,000` (two
+/// `40,000^2` products) exceed `out_cross`'s `i32`.
+fn issue_682_ranks<'a>(
+    input: &'a Graph,
+    top: [usize; 4],
+    bottom: [usize; 4],
+    even_penalty: i32,
+) -> Dot<'a> {
     let mut d = Dot::empty(input);
     d.nodes.resize_with(8, NodeInfo::default);
     for (order, (&a, &b)) in top.iter().zip(&bottom).enumerate() {
@@ -440,7 +447,11 @@ fn issue_682_ranks<'a>(input: &'a Graph, top: [usize; 4], bottom: [usize; 4]) ->
             d.edges.push(EdgeInfo {
                 tail: a,
                 head: 4 + b,
-                xpenalty: if (a + b) % 2 == 0 { 40_000 } else { 1_000 },
+                xpenalty: if (a + b) % 2 == 0 {
+                    even_penalty
+                } else {
+                    1_000
+                },
                 ..EdgeInfo::default()
             });
             d.nodes[a].out.push(e);
@@ -450,8 +461,44 @@ fn issue_682_ranks<'a>(input: &'a Graph, top: [usize; 4], bottom: [usize; 4]) ->
     d
 }
 
+/// Snapshot of the mutable state `transpose` reads and writes across rounds.
+#[derive(Debug, PartialEq, Eq)]
+struct TransposeRoundState {
+    r0: [usize; 4],
+    r1: [usize; 4],
+    orders: [i32; 8],
+    candidate: [bool; 2],
+    valid: [bool; 2],
+}
+
+fn transpose_round_state(d: &Dot<'_>) -> TransposeRoundState {
+    let r0 = std::array::from_fn(|i| d.rv(0, 0, i as i32).unwrap());
+    let r1 = std::array::from_fn(|i| d.rv(0, 1, i as i32).unwrap());
+    let orders = std::array::from_fn(|v| d.nodes[v].order);
+    let candidate = [d.rk(0, 0).candidate, d.rk(0, 1).candidate];
+    let valid = [d.rk(0, 0).valid, d.rk(0, 1).valid];
+    TransposeRoundState {
+        r0,
+        r1,
+        orders,
+        candidate,
+        valid,
+    }
+}
+
+/// Run one `do { ... } while (delta >= 1)` body of C's `transpose(g, false)`.
+fn step_transpose_round(d: &mut Dot<'_>) -> Result<i64, &'static str> {
+    let mut delta = 0;
+    for r in 0..=1 {
+        if d.rk(0, r).candidate {
+            delta += d.transpose_step::<false>(0, r, false)?;
+        }
+    }
+    Ok(delta)
+}
+
 /// Some start of #682's ranks that C's loop does not leave within the read limit.
-fn issue_682_endless<'a>(input: &'a Graph) -> Option<(Dot<'a>, bool)> {
+fn issue_682_endless<'a>(input: &'a Graph, even_penalty: i32) -> Option<(Dot<'a>, bool)> {
     const ORDERS: [[usize; 4]; 6] = [
         [0, 1, 2, 3],
         [0, 2, 1, 3],
@@ -463,9 +510,9 @@ fn issue_682_endless<'a>(input: &'a Graph) -> Option<(Dot<'a>, bool)> {
     for top in ORDERS {
         for bottom in ORDERS {
             for reverse in [false, true] {
-                let mut d = issue_682_ranks(input, top, bottom);
+                let mut d = issue_682_ranks(input, top, bottom, even_penalty);
                 if d.transpose(0, reverse) == Err(check::NOT_CONVERGED) {
-                    return Some((issue_682_ranks(input, top, bottom), reverse));
+                    return Some((issue_682_ranks(input, top, bottom, even_penalty), reverse));
                 }
             }
         }
@@ -477,17 +524,81 @@ fn issue_682_endless<'a>(input: &'a Graph) -> Option<(Dot<'a>, bool)> {
 #[test]
 fn the_ranks_of_issue_682_do_not_converge() {
     let input = Graph::new("G", GraphKind::Directed, false);
-    assert!(issue_682_endless(&input).is_some());
+    let merged = crate::dotgen::fastgr::short(40 * CL_CROSS);
+    assert_eq!(merged, -25_536);
+    assert!(issue_682_endless(&input, merged).is_some());
+    assert!(issue_682_endless(&input, 40_000).is_some());
+}
+
+/// Tracing C's `transpose(g, false)` from `build_ranks(g, 0)`'s initial order `[0, 1, 2, 3]` on
+/// both ranks shows that the loop repeats an earlier state with `delta >= 1` on every round, so it
+/// truly never ends in C.
+#[test]
+fn the_ranks_of_issue_682_repeat_their_state() -> Result<(), &'static str> {
+    let input = Graph::new("G", GraphKind::Directed, false);
+    let merged = crate::dotgen::fastgr::short(40 * CL_CROSS);
+    assert_eq!(merged, -25_536);
+
+    // #682's DOT graph: merged `short` penalty -25,536 enters a 6-round cycle at round 1.
+    let mut d = issue_682_ranks(&input, [0, 1, 2, 3], [0, 1, 2, 3], merged);
+    d.prepare_mincross(0)?;
+    for r in 0..=1 {
+        d.rk_mut(0, r).candidate = true;
+    }
+    let mut states = Vec::new();
+    let mut deltas = Vec::new();
+    for _ in 0..7 {
+        states.push(transpose_round_state(&d));
+        let delta = step_transpose_round(&mut d)?;
+        assert!(delta >= 1, "delta must stay positive: {delta}");
+        deltas.push(delta);
+    }
+    let round_7 = transpose_round_state(&d);
+    assert_eq!(
+        deltas,
+        [
+            3_906_523_776,
+            3_381_236_224,
+            8_589_934_592,
+            5_208_698_368,
+            3_381_236_224,
+            8_589_934_592,
+            5_208_698_368,
+        ]
+    );
+    assert_eq!(round_7.r0, [0, 2, 1, 3]);
+    assert_eq!(round_7.r1, [4, 6, 5, 7]);
+    assert_eq!(round_7.candidate, [true, true]);
+    assert_eq!(round_7.valid, [false, false]);
+    assert_eq!(round_7, states[1]);
+
+    // Unwrapped 40,000 penalty: round 2 repeats round 0 directly (period 2).
+    let mut d_unwrapped = issue_682_ranks(&input, [0, 1, 2, 3], [0, 1, 2, 3], 40_000);
+    d_unwrapped.prepare_mincross(0)?;
+    for r in 0..=1 {
+        d_unwrapped.rk_mut(0, r).candidate = true;
+    }
+    let round_0 = transpose_round_state(&d_unwrapped);
+    assert_eq!(step_transpose_round(&mut d_unwrapped)?, 8_589_934_592);
+    let round_1 = transpose_round_state(&d_unwrapped);
+    assert_eq!(round_1.r0, [1, 0, 3, 2]);
+    assert_eq!(round_1.r1, [5, 4, 7, 6]);
+    assert_eq!(step_transpose_round(&mut d_unwrapped)?, 8_589_934_592);
+    assert_eq!(transpose_round_state(&d_unwrapped), round_0);
+    Ok(())
 }
 
 /// C's loop as the fallback gets the read limit too, or check mode would spin forever here.
 #[test]
 fn a_fallback_stops_at_the_read_limit() -> Result<(), &'static str> {
     let input = Graph::new("G", GraphKind::Directed, false);
-    let (mut d, reverse) = issue_682_endless(&input).ok_or("mincross: no endless start")?;
-    d.prepare_mincross(0)?;
-    d.rk_mut(0, 0).mincross_position = Some(false);
-    assert_eq!(d.transpose(0, reverse), Err(check::NOT_CONVERGED));
+    for penalty in [crate::dotgen::fastgr::short(40 * CL_CROSS), 40_000] {
+        let (mut d, reverse) =
+            issue_682_endless(&input, penalty).ok_or("mincross: no endless start")?;
+        d.prepare_mincross(0)?;
+        d.rk_mut(0, 0).mincross_position = Some(false);
+        assert_eq!(d.transpose(0, reverse), Err(check::NOT_CONVERGED));
+    }
     Ok(())
 }
 
