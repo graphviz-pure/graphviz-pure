@@ -119,10 +119,6 @@ This is an internal packaging contract, not a supported configuration setting.
 
 A pull request with no entry: add one to its body (`Not user-visible.` when there is nothing to say). An entry marked breaking without the label: label it, or unmark the entry.
 
-### Before a minor or major release
-
-Decision D7 ([1.0 roadmap](roadmap/1.0.md#decisions)) requires a differential fuzz round against C before each minor release, as in #511 (round 5, before 1.0.0) and #660 (round 6, before 1.1.0): at least 6,000 new seeds over all eight engines, with every difference fixed or triaged into an accepted class and the round recorded in [fuzzing.md](porting/fuzzing.md). Patch releases, which change no output byte ([versioning policy](versioning.md)), need no new round. This check is manual: `release-check.sh` does not run it.
-
 `scripts/release-verify.sh X.Y.Z` checks, and prints pass or fail for, each channel: the GitHub
 release's assets against their attestations and `SHA256SUMS`; the eight publishable crates on
 crates.io (`graphviz-pure-wasm`, `-diff` and `-portable-libm` have `publish = false`), and the
@@ -153,6 +149,10 @@ A pull request that breaks the Rust or JavaScript API, the command line or a for
 requests bumps the minor version; from 1.0 it bumps the major version. Without the label a
 release bumps the patch version
 ([versioning policy](versioning.md)).
+
+### Before a minor release
+
+Decision D7 ([1.0 roadmap](roadmap/1.0.md#decisions)) requires a differential fuzz round against C before each minor, as in rounds 5 (#511, before 1.0.0) and 6 (#660, before 1.1.0): 6,000 new seeds over all eight engines, with every difference fixed or triaged into an accepted class and the round recorded in [fuzzing.md](porting/fuzzing.md). Run the differential fuzzer ([Running it](porting/fuzzing.md#running-it)), e.g. `python3 -I scripts/fuzz-run.py run --seed N --count 6000 --out ...` with unused seeds. The release workflow's `fuzz.yml` run does not satisfy this: it is coverage-guided robustness fuzzing with no C oracle. Patch releases need no new round: a patch does not change output for any input in the test corpora ([versioning policy](versioning.md)). This check is manual: `release-check.sh` does not run it.
 
 ## What the release workflow does
 
