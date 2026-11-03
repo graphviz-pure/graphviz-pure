@@ -939,8 +939,10 @@ accumulator's non-overflow, from the reference's). No model lemma was false or h
 
 **What this says about model-based proofs.** The model was right, and its per-node simulation was
 reusable unchanged, so the hours spent on it were not wasted. But its *statement* was not the one
-the shipped code needed: it proved the property in the arithmetic the model chose (wrapping), and
-the extraction is in the checked build's arithmetic, so the top theorem could not be transferred.
+the extraction has: it proved the property in the release build's arithmetic (wrapping, which is
+what shipped move decisions read), while the extraction is in the checked build's arithmetic
+(Charon builds with `debug_assertions`), so the top theorem could not be transferred and the
+wrapped regime above `i32::MAX` stays with the model proof.
 The pieces that transferred were those that state semantic content (`query_count_eq_hits`: "this
 count is that number of halves"), not an equality of two model runs. And the parts the model
 abstracted (word packing, the bit walk, the frame of untouched slots) were a quarter of the new

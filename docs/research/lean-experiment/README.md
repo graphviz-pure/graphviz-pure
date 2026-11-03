@@ -125,7 +125,10 @@ Follow-ups from the first wave's reviews:
   (`Extracted/CircoCount`); the Fenwick and accumulator lemmas restated over the extraction in
   `Circo/FenwickExtracted.lean`.
 - #770 (done): indexed = reference proved over the extraction, `Circo/FenwickExtractedMain.lean`; the
-  experiment's first end-to-end theorem about shipped code. The wip placeholder is deleted.
+  experiment's first end-to-end theorem about the shipped kernel, within its qualifications: 64-bit
+  targets only (not wasm32), the checked build's arithmetic (silent above `i32::MAX`, where the model
+  proof `Fenwick.countIndexed_wrapped` remains the record), caller facts as hypotheses. The wip
+  placeholder is deleted.
 - #750 (done, PR #764): `Ns/CutSetsStale.lean` covers every production pivot, stale numbering included.
 - #751 (done, PR #762): the mincross port comparison is abstract; NaN ports are inside the theorem.
 - #765: make `ns-check` compare the cut-set search on the stale production state.
