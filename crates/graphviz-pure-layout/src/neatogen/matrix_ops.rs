@@ -52,9 +52,8 @@ pub fn orthog1f(vec: &mut [f32]) {
 /// `fma(A[j, k], vector[k], …)` from the diagonal through column `n - 1`,
 /// starting from `+0`.
 pub fn right_mult_with_vector_ff(packed: &[f32], n: usize, vector: &[f32], result: &mut [f32]) {
-    // One-shot callers stay here. The parallel gather needs a lower-triangle
-    // copy built once per solve; conjugate gradient and stress majorization
-    // own that copy and call `matvec_parallel` directly.
+    // One-shot callers stay here. The parallel path runs this same kernel on
+    // an output range (plus a prefix scatter) and lives in `matvec_parallel`.
     let mut vector = &vector[..n];
     let mut result = &mut result[..n];
     result.fill(0.0);
@@ -82,7 +81,7 @@ pub fn right_mult_with_vector_ff(packed: &[f32], n: usize, vector: &[f32], resul
 /// One left-to-right dot, starting at `+0`. The first step is `fma(a, v, +0)`,
 /// not a multiply.
 #[inline(always)]
-fn dot_from_zero(coeff: &[f32], vector: &[f32]) -> f32 {
+pub(super) fn dot_from_zero(coeff: &[f32], vector: &[f32]) -> f32 {
     let mut acc = 0.0f32;
     for (&a, &v) in coeff.iter().zip(vector) {
         acc = a.mul_add(v, acc);
@@ -92,7 +91,7 @@ fn dot_from_zero(coeff: &[f32], vector: &[f32]) -> f32 {
 
 /// Prefix coefficient. The split that built `row` already checked the index.
 #[inline(always)]
-fn lane_at(row: &[f32], index: usize) -> f32 {
+pub(super) fn lane_at(row: &[f32], index: usize) -> f32 {
     row.get(index).copied().unwrap_or(0.0)
 }
 
@@ -386,14 +385,14 @@ fn right_mult_ff_row<'p, 'r>(
 }
 
 /// First element. Callers pass a non-empty slice (`split_at` already checked).
-fn lane_f32(values: &[f32]) -> f32 {
+pub(super) fn lane_f32(values: &[f32]) -> f32 {
     // Unreachable: every caller splits a diagonal or vector head of length >= 1.
     debug_assert!(!values.is_empty());
     values.first().copied().unwrap_or(0.0)
 }
 
 /// `slot[0] = fma(factor, scale, slot[0])`.
-fn fma_slot(slot: &mut [f32], factor: f32, scale: f32) {
+pub(super) fn fma_slot(slot: &mut [f32], factor: f32, scale: f32) {
     // Unreachable: the slot is one element of a head `split_at_mut` just checked.
     debug_assert!(!slot.is_empty());
     if let Some(slot) = slot.first_mut() {
@@ -402,7 +401,7 @@ fn fma_slot(slot: &mut [f32], factor: f32, scale: f32) {
 }
 
 /// `slot[0] += term`, a plain add, not an FMA.
-fn add_slot(slot: &mut [f32], term: f32) {
+pub(super) fn add_slot(slot: &mut [f32], term: f32) {
     // Unreachable: the slot is one element of a head `split_at_mut` just checked.
     debug_assert!(!slot.is_empty());
     if let Some(slot) = slot.first_mut() {
@@ -413,7 +412,7 @@ fn add_slot(slot: &mut [f32], term: f32) {
 /// `dst[j] = fma(row[j], factor, dst[j])`. Each `j` is its own chain, so this
 /// loop may vectorize without reordering any sum.
 #[inline(always)]
-fn scatter_fma(dst: &mut [f32], row: &[f32], factor: f32) {
+pub(super) fn scatter_fma(dst: &mut [f32], row: &[f32], factor: f32) {
     debug_assert_eq!(dst.len(), row.len());
     for (dst, &coefficient) in dst.iter_mut().zip(row) {
         *dst = coefficient.mul_add(factor, *dst);
@@ -811,8 +810,8 @@ mod tests {
     #[test]
     fn parallel_right_mult_matches_scalar_chain_for_every_thread_count() {
         // Odd widths, and widths that are not a multiple of the thread count
-        // or of the 8-wide gather. `threads == 1` still runs the gather, not
-        // the sequential kernel.
+        // or of the 8-wide block. `threads == 1` still runs the owned kernel,
+        // not `right_mult_with_vector_ff`.
         let widths = [0, 1, 2, 3, 5, 7, 8, 9, 17, 37, 63, 64, 65, 127, 128];
         let threads = [1usize, 2, 3, 8];
         for &n in &widths {

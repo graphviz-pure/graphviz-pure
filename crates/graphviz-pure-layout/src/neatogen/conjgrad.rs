@@ -16,8 +16,7 @@ pub fn conjugate_gradient_mkernel(
 ) -> Result<(), super::SolverError> {
     #[cfg(all(feature = "parallel", not(target_family = "wasm")))]
     if super::matvec_parallel::use_parallel(n) {
-        let lower = super::matvec_parallel::pack_lower(a, n);
-        return conjugate_gradient_mkernel_prepared(a, &lower, x, b, n, tol, max_iterations);
+        return conjugate_gradient_mkernel_prepared(a, x, b, n, tol, max_iterations);
     }
     let mut r = vec![0.0f32; n];
     let mut p = vec![0.0f32; n];
@@ -65,21 +64,18 @@ pub fn conjugate_gradient_mkernel(
     Ok(())
 }
 
-/// Same solver as [`conjugate_gradient_mkernel`], reusing a lower triangle
-/// built once for this matrix. The workers stay up for the solve and wait
-/// between mat-vecs. The public function builds that copy itself when the
-/// caller does not have one.
+/// Same solver as [`conjugate_gradient_mkernel`]. The workers stay up for the
+/// solve and wait between mat-vecs.
 #[cfg(all(feature = "parallel", not(target_family = "wasm")))]
 pub(super) fn conjugate_gradient_mkernel_prepared(
     a: &[f32],
-    lower: &[f32],
     x: &mut [f32],
     b: &mut [f32],
     n: usize,
     tol: f64,
     max_iterations: usize,
 ) -> Result<(), super::SolverError> {
-    super::matvec_parallel::with_team(a, lower, n, |team| {
+    super::matvec_parallel::with_team(a, n, |team| {
         conjugate_gradient_mkernel_on_team(team, x, b, n, tol, max_iterations)
     })
 }

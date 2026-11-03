@@ -377,15 +377,9 @@ pub fn stress_majorization_kd_mkernel(
         }
     }
     // `lap2` is not written again. The outer loop rebuilds `lap1` from the
-    // current coordinates; `sqrt_vecf` reads `lap2`. One lower triangle serves
-    // every `lap2` mat-vec in this solve, including the ones inside CG.
-    #[cfg(all(feature = "parallel", not(target_family = "wasm")))]
-    let lap2_lower = if super::matvec_parallel::use_parallel(n) {
-        Some(super::matvec_parallel::pack_lower(&lap2, n))
-    } else {
-        None
-    };
-
+    // current coordinates; `sqrt_vecf` reads `lap2`. Parallel mat-vec uses
+    // that packed upper triangle directly; conjugate gradient keeps one
+    // worker set for each solve.
     let mut b: Vec<Vec<f32>> = vec![vec![0.0f32; n]; dim];
     let mut tmp_coords = vec![0.0f32; n];
     let mut dist_accumulator = vec![0.0f32; n];
@@ -464,14 +458,8 @@ pub fn stress_majorization_kd_mkernel(
         new_stress += f64::from(constant_term);
         for k in 0..dim {
             #[cfg(all(feature = "parallel", not(target_family = "wasm")))]
-            if let Some(lower) = lap2_lower.as_deref() {
-                super::matvec_parallel::right_mult_prepared(
-                    &lap2,
-                    lower,
-                    n,
-                    &coords[k],
-                    &mut tmp_coords,
-                );
+            if super::matvec_parallel::use_parallel(n) {
+                super::matvec_parallel::right_mult_prepared(&lap2, n, &coords[k], &mut tmp_coords);
                 new_stress -= vectors_inner_productf(n, &coords[k], &tmp_coords);
                 continue;
             }
@@ -488,10 +476,9 @@ pub fn stress_majorization_kd_mkernel(
             if have_pinned {
                 tmp_coords.copy_from_slice(&coords[k]);
                 #[cfg(all(feature = "parallel", not(target_family = "wasm")))]
-                if let Some(lower) = lap2_lower.as_deref() {
+                if super::matvec_parallel::use_parallel(n) {
                     super::conjgrad::conjugate_gradient_mkernel_prepared(
                         &lap2,
-                        lower,
                         &mut tmp_coords,
                         &mut b[k],
                         n,
@@ -518,10 +505,9 @@ pub fn stress_majorization_kd_mkernel(
             } else {
                 let (ck, bk) = (&mut coords[k], &mut b[k]);
                 #[cfg(all(feature = "parallel", not(target_family = "wasm")))]
-                if let Some(lower) = lap2_lower.as_deref() {
+                if super::matvec_parallel::use_parallel(n) {
                     super::conjgrad::conjugate_gradient_mkernel_prepared(
                         &lap2,
-                        lower,
                         ck,
                         bk,
                         n,
