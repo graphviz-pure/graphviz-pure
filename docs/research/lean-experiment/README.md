@@ -112,10 +112,10 @@ Lean version policy: pinned to the toolchain Aeneas's Lean backend requires (`v4
 | #729 | twopi multi-source BFS and postorder sizes | speedup + proof | shipped (#744): about 1.1–1.25× on `tree_20000` |
 | #730 | circo incremental crossing delta | speedup + proof | shipped (#753): up to 188× vs 1.0 on `circo_sparse_400`, exponent 3.1 → 1.9 |
 | #731 | dot NS leave-edge index | speedup + proof | shipped (#754, pending its base): 1–9% instructions; the ticket's premise was wrong |
-| #732 | NS cut-set and mincross-scan prose proofs | proof of shipped code | proved, 4,255 lines (#746); 12 prose gaps; scope narrowed by review (#750, #751) |
+| #732 | NS cut-set and mincross-scan prose proofs | proof of shipped code | proved, 4,255 lines (#746); 12 prose gaps; scope narrowed by review (#750); the NaN-port gap (#751) closed by making the port comparison abstract |
 | #733 | spline routing: reuse even samples after delta doubles | speedup + float lemma | shipped (#749): −14.5% instructions on one input; retries are rare |
 | #734 | neato: skip the stress mat-vec when `orthog1f` is a no-op | measure, then maybe speedup | measured 1.6% hit rate; no change (#741) |
 | #735 | pathplan triangle adjacency, dot `canreach` memo | speedup + trivial proofs | shipped (#743): no speedup possible; the proof caught a wrong design first |
 
 Follow-ups: #745 (refactor `count_indexed` so Aeneas accepts it), #750 (NS theorem for pivots with
-stale numbering), #751 (mincross no-NaN port invariant).
+stale numbering).
