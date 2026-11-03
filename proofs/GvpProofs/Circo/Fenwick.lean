@@ -848,4 +848,37 @@ theorem query_fold {len L : ℕ} (hN : len < 2 ^ 62) (hL : L < len) (g : Graph) 
     rw [ih]
     simp only [queryAcc, List.foldl_cons]
 
+/-- Loop 3 over all edges: every incident half is restored, the closing halves are erased
+from the set and the tree. -/
+theorem restoreClose_fold {len : ℕ} (hN : len < 2 ^ 62) (g : Graph) (n : ℕ) :
+    ∀ (es : List ℕ) (rest : Finset ℕ) (s : IdxState), es.Nodup → (∀ e ∈ es, e ∈ rest) →
+      Valid len s.tree (histZ s.ord (s.bits.filter (fun h => h / 2 ∉ rest))) →
+      (∀ h ∈ s.bits, 1 ≤ s.ord (h / 2) ∧ s.ord (h / 2) < len) →
+      ∃ s', es.foldlM (idxRestoreClose g n len) s = some s' ∧ s'.ord = s.ord ∧
+        s'.crossings = s.crossings ∧ s'.bits = s.bits \ erased g n s.ord es ∧
+        Valid len s'.tree (histZ s.ord (s'.bits.filter (fun h => h / 2 ∉ rest \ es.toFinset)))
+  | [], rest, s, _, _, hv, _ => ⟨s, rfl, rfl, rfl, by simp [erased], by simpa using hv⟩
+  | e :: es, rest, s, hnd, hmem, hv, hpos => by
+    have hnd' := List.nodup_cons.mp hnd
+    obtain ⟨s1, h1, o1, c1, b1, v1⟩ := idxRestoreClose_step hN g n (hmem e (by simp)) hv hpos
+    have hsub : s1.bits ⊆ s.bits := by
+      rw [b1]; split_ifs
+      · exact Finset.erase_subset _ _
+      · exact le_rfl
+    obtain ⟨s2, h2, o2, c2, b2, v2⟩ := restoreClose_fold hN g n es (rest.erase e) s1 hnd'.2
+      (fun x hx => Finset.mem_erase.mpr ⟨fun h => hnd'.1 (h ▸ hx), hmem x (by simp [hx])⟩)
+      (by rw [o1]; exact v1) (by rw [o1]; exact fun h hh => hpos h (hsub hh))
+    refine ⟨s2, ?_, by rw [o2, o1], by rw [c2, c1], ?_, ?_⟩
+    · rw [List.foldlM_cons, h1]; exact h2
+    · rw [b2, o1, b1, erased_cons]
+      ext h
+      by_cases h0 : 0 < s.ord e <;> simp [h0, Finset.mem_sdiff, Finset.mem_erase, Finset.mem_insert] <;> tauto
+    · rw [o1] at v2
+      have : ∀ h, (h / 2 ∉ (rest.erase e) \ es.toFinset) ↔ (h / 2 ∉ rest \ (e :: es).toFinset) := by
+        intro h
+        simp only [Finset.mem_sdiff, Finset.mem_erase, List.toFinset_cons, Finset.mem_insert]
+        tauto
+      rw [Finset.filter_congr (fun h _ => this h)] at v2
+      exact v2
+
 end GvpProofs.Circo.Fenwick
