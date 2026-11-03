@@ -13,8 +13,10 @@ multi-source breadth-first search and one pass over the BFS discovery order back
 
 * `Lists.bfs_nearest`, `Lists.relaxation_nearest`: on a connected component with a leaf, both the queue
   loop and the old relaxation label every node with the number of edges to its nearest leaf, in
-  Mathlib's `SimpleGraph.dist`. `Lists.bfs_eq_relaxation` is the equality. The queue loop is proved
-  for *any* pop order, so it does not rely on FIFO. `Lists.exists_terminal`: it terminates.
+  Mathlib's `SimpleGraph.dist`. `Lists.bfs_eq_relaxation` is the equality. The queue loop is modelled
+  as Rust runs it: pop the head, append relaxed nodes at the tail (FIFO). The proof's invariant does
+  not use the FIFO discipline, but the theorem as stated is about that transition relation only.
+  `Lists.exists_terminal`: it terminates.
   `Lists.noleaf`: with no leaf (a cycle) both leave every label at `inf`.
 * `sweep_eq_walks`: given the discovery order of `set_n_steps_to_center` (each parent before its
   children), the reverse sweep and the walk from every childless node give every node the same size.
@@ -25,7 +27,8 @@ The theorems are over a Lean model, not Aeneas-extracted Rust (the extraction to
 installed when this was written). Differences, all of them:
 
 1. Nodes are a finite type `V`; Rust uses `usize` indices into `RData::d`. Labels are `ℕ`, Rust uses
-   `u64`; `inf = nnodes²` and `+ 1` cannot overflow `u64` at any size that fits in memory.
+   `u64`; the model matches the Rust under the size assumption `nnodes < 2^32`, so that
+   `inf = nnodes²` (an unchecked multiplication that predates this change) and `inf + 1` fit in `u64`.
 2. The component is the adjacency lists `Lists.nbrs`: `other(g, e, n)` for `e` in `g.all_edges(sg, n)`,
    in order. Edges outside the component are already filtered out. The model assumes the lists are
    symmetric (`Lists.symm`), which holds because every edge is listed at both of its ends. The
