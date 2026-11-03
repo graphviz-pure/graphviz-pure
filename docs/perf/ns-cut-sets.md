@@ -496,13 +496,16 @@ fallback.
 
 | step | cost | what bounds it |
 | :-- | :-- | :-- |
-| compute the cut | D | W is at most S, so it is at most C's full scan |
+| compute the cut | D | W is at most S, so it covers no more nodes than C's full scan |
 | find the minimum | at most D | the cut has at most D entries |
 | climb between ties | at most 1,024 parent steps, plus the walk's list | `TIE_CLIMBS` |
 | settle a tie past that | at most D to mark, then at most C | Lemma 1a: the walk stays within C's visit |
 
-So a query costs at most 3D + C + 1,024 steps. When C's scan runs to the end (a minimum above 0),
-D ≤ C, which makes the whole query at most 4C + 1,024 steps.
+So a query costs at most 3D + C + 1,024 steps. When C's scan runs to the end (a minimum above 0), it
+visits all of S, and W is no larger. D then reads both edge lists of no more nodes than C's scan
+reads one list of, so D is a constant factor of C: about 2 where nodes have as many in-edges as
+out-edges, which makes the query about 7C + 1,024 steps. It is not a fixed factor on every graph,
+since a node's two lists can be of very different lengths.
 
 That is not a bound on every query. When a slack is 0, C's scan stops at the first such candidate,
 and its query can be far cheaper than D. In `LR_balance`, §4.3 bounds the whole phase: at most 8n
