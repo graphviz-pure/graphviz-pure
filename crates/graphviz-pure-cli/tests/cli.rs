@@ -11484,6 +11484,100 @@ fn issue291_attributes_declared_by_a_subgraph_are_declared_for_the_graph() {
     );
 }
 
+// Issue #692: reopening a named subgraph re-derives its node and edge defaults from the
+// current dict chain (`agmakeattrs` walks it at each creation), so declarations made in
+// the root or an enclosing subgraph while the subgraph was closed reach what it creates
+// now. Output is C 16.1.0's byte for byte.
+#[test]
+fn reopened_subgraph_defaults_follow_the_current_dict_chain() {
+    let (out, err, ok) = run(
+        &["-Tcanon"],
+        "digraph G { subgraph s { a; } node [color=red]; subgraph s { b; } subgraph u { c; } }",
+    );
+    assert!(ok, "{err}");
+    assert_eq!(
+        out,
+        "digraph G {\n\
+         \tnode [color=red,\n\
+         \t\tlabel=\"\\N\"\n\
+         \t];\n\
+         \tsubgraph s {\n\
+         \t\ta\t[color=\"\"];\n\
+         \t\tb;\n\
+         \t}\n\
+         \tsubgraph u {\n\
+         \t\tc;\n\
+         \t}\n\
+         }\n"
+    );
+
+    // An enclosing subgraph declared the default while the reopened one was closed, so
+    // the created edge takes it from the middle scope.
+    let (out, err, ok) = run(
+        &["-Tcanon"],
+        "digraph G { subgraph p { subgraph s { a; } } subgraph p { edge [color=blue]; subgraph s { a -> b; } } }",
+    );
+    assert!(ok, "{err}");
+    assert_eq!(
+        out,
+        "digraph G {\n\
+         \tnode [label=\"\\N\"];\n\
+         \tsubgraph p {\n\
+         \t\tedge [color=blue];\n\
+         \t\tsubgraph s {\n\
+         \t\t\ta -> b;\n\
+         \t\t}\n\
+         \t}\n\
+         }\n"
+    );
+
+    // A subgraph of the same name under a different parent is a new one, which takes its
+    // defaults from the chain it opens under (`agsubg` looks up the children only).
+    let (out, err, ok) = run(
+        &["-Tcanon"],
+        "digraph G { subgraph s { a; } subgraph p { edge [color=blue]; subgraph s { a -> b; } } }",
+    );
+    assert!(ok, "{err}");
+    assert_eq!(
+        out,
+        "digraph G {\n\
+         \tnode [label=\"\\N\"];\n\
+         \tsubgraph s {\n\
+         \t\ta;\n\
+         \t}\n\
+         \tsubgraph p {\n\
+         \t\tedge [color=blue];\n\
+         \t\tsubgraph s {\n\
+         \t\t\ta -> b;\n\
+         \t\t}\n\
+         \t}\n\
+         }\n"
+    );
+
+    // The root re-declared `color` while both subgraphs were closed: the reopened one
+    // sees the new default, and its node from the first open keeps the value it was
+    // created with.
+    let (out, err, ok) = run(
+        &["-Tcanon"],
+        "digraph G { subgraph p { subgraph s { a; } } node [color=red] subgraph p { subgraph s { b; } } }",
+    );
+    assert!(ok, "{err}");
+    assert_eq!(
+        out,
+        "digraph G {\n\
+         \tnode [color=red,\n\
+         \t\tlabel=\"\\N\"\n\
+         \t];\n\
+         \tsubgraph p {\n\
+         \t\tsubgraph s {\n\
+         \t\t\ta\t[color=\"\"];\n\
+         \t\t\tb;\n\
+         \t\t}\n\
+         \t}\n\
+         }\n"
+    );
+}
+
 // Issue #290: C's `drand48` state is process-wide, so the second graph of a run draws its
 // unseeded `user_pos` jitter (and `-n`'s, which never seeds) from where the first left it.
 // Values are C 16.1.0's.

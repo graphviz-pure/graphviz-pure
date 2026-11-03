@@ -900,6 +900,30 @@ impl<'a> Parser<'a> {
                 has_same_parent.then_some(s.id)
             })
         {
+            // Declarations made in the root or an enclosing subgraph while this one was
+            // closed still reach the nodes and edges it creates now: `agmakeattrs` walks
+            // the dict chain at each creation, so the defaults snapshotted when this
+            // subgraph opened are re-derived from the current chain, innermost scope
+            // last. Graph attributes keep their own inheritance.
+            let mut node_defaults = self.graph.node_defaults.clone();
+            let mut edge_defaults = self.graph.edge_defaults.clone();
+            for s in self
+                .scope_stack
+                .iter()
+                .copied()
+                .chain(std::iter::once(existing_id))
+            {
+                let dict = &self.graph.dicts[s.0 as usize + 1];
+                for (k, sym) in &dict.node {
+                    node_defaults.set(k, sym.defval.clone(), sym.html_defval);
+                }
+                for (k, sym) in &dict.edge {
+                    edge_defaults.set(k, sym.defval.clone(), sym.html_defval);
+                }
+            }
+            let subg = &mut self.graph.subgraphs[existing_id.0 as usize];
+            subg.node_defaults = node_defaults;
+            subg.edge_defaults = edge_defaults;
             return existing_id;
         }
 
