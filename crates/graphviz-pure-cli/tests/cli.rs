@@ -4916,6 +4916,124 @@ fn negative_mincross_abort_keeps_node_styles() {
     assert_eq!(out, expected);
 }
 
+// Issue #681, zero-weight class. `weight=0` on three of the eight parallel edges leaves n4 and
+// n3 on one rank, so the bundle is routed by `makeSimpleFlatLabels`, whose `edgelblcmpfn`
+// (`lib/dotgen/dotsplines.c:966`) returns 0 for every unlabelled pair. The order of those ties
+// is the libc `qsort`'s: glibc's mergesort keeps input order, Apple's quicksort does not. The
+// port sorts with `cutil::qsort_by`, its reproduction of Apple's. These bytes are C 16.1.0's with
+// a `qsort`-only preload of that same `qsort_by` (not macOS bytes: a `qsort_by` bug would move
+// C and the port together; `docs/porting/fuzzing.md`, "Libc qsort tie order"). With `weight=1`
+// the nodes take different ranks and every libc agrees.
+#[test]
+fn flat_labelled_bundle_tie_order_matches_port_qsort() {
+    let src = "digraph G { subgraph cluster_0 { subgraph cluster_0_in { n1; } n2; n4; } n2 -> n4; n3 -> n4 [weight=5]; n1 -> n3; n4 -> n3 [weight=0]; n4 -> n3; n4 -> n3; n4 -> n3; n4 -> n3 [weight=0]; n4 -> n3; n4 -> n3; n4 -> n3 [weight=0,label=\"p\"]; }";
+    let expected = "graph 1 3.0556 2.0694\n\
+         node n1 1.5972 1.4861 0.75 0.5 n1 solid ellipse black lightgrey\n\
+         node n2 0.59722 1.4861 0.75 0.5 n2 solid ellipse black lightgrey\n\
+         node n4 1.4306 0.47222 0.75 0.5 n4 solid ellipse black lightgrey\n\
+         node n3 2.6806 0.47222 0.75 0.5 n3 solid ellipse black lightgrey\n\
+         edge n1 n3 4 1.8113 1.2774 1.9656 1.1369 2.1767 0.94474 2.3523 0.78495 solid black\n\
+         edge n2 n4 4 0.77395 1.2631 0.88443 1.1324 1.0291 0.96121 1.1545 0.81283 solid black\n\
+         edge n4 n3 7 1.6391 0.68155 1.7675 0.78469 1.9386 0.87783 2.1042 0.83056 2.1723 0.81111 2.2402 0.78103 2.3043 0.74638 solid black\n\
+         edge n4 n3 7 1.8092 0.43938 1.8638 0.43572 1.9194 0.43258 1.9722 0.43056 2.0298 0.42835 2.0899 0.42833 2.1498 0.42979 solid black\n\
+         edge n4 n3 7 1.7146 0.63848 1.805 0.68286 1.9075 0.7247 2.0069 0.74722 2.0985 0.76794 2.1937 0.75346 2.2826 0.72247 solid black\n\
+         edge n4 n3 7 1.784 0.37855 1.8463 0.36552 1.9109 0.35421 1.9722 0.34722 2.0385 0.33967 2.108 0.34072 2.1765 0.34711 solid black\n\
+         edge n4 n3 7 1.7009 0.293 1.7844 0.24708 1.879 0.20406 1.9722 0.18056 2.0779 0.15391 2.1886 0.17422 2.2901 0.21417 solid black\n\
+         edge n4 n3 7 1.7457 0.3288 1.8186 0.30191 1.8969 0.27787 1.9722 0.26389 2.0565 0.24824 2.1451 0.25498 2.23 0.27349 solid black\n\
+         edge n4 n3 7 1.6402 0.68654 1.7417 0.77511 1.8708 0.86774 2.0069 0.91389 2.1451 0.96072 2.2824 0.89611 2.3967 0.80308 solid black\n\
+         edge n4 n3 4 1.8124 0.47222 1.9166 0.47222 2.0315 0.47222 2.1426 0.47222 p 2.0556 0.63056 solid black\n\
+         edge n3 n4 4 2.3003 0.47222 2.1895 0.47222 2.0788 0.47222 1.968 0.47222 solid black\n\
+         stop\n";
+    let (out, err, ok) = run(&["-Tplain"], src);
+    assert!(ok, "{err}");
+    assert!(err.is_empty(), "{err}");
+    assert_eq!(out, expected);
+}
+
+// Issue #681, zero-weight class, second mechanism. `weight=0` leaves n15 and n26 free to move
+// in `TB_balance`, which sorts the nodes with `increasingrankcmpf` (`lib/common/ns.c:810`, rank
+// only, at `:843`); the libc `qsort` decides which equal-rank node moves first, so n15 and n26
+// swap ranks between glibc and Apple. These bytes are C's with the port's `qsort` preloaded.
+#[test]
+fn zero_weight_rank_balance_tie_order_matches_port_qsort() {
+    let src = "digraph G { n4 -> n17; n11 -> n17; n11 -> n14 [minlen=0]; n14 -> n15 [weight=0]; n17 -> n29 [minlen=3]; n4 -> n26 [weight=0]; n4 -> n16; }";
+    let expected = "graph 1 2.8056 4.5\n\
+         node n4 2.4028 4.25 0.75 0.5 n4 solid ellipse black lightgrey\n\
+         node n17 0.375 3.25 0.75 0.5 n17 solid ellipse black lightgrey\n\
+         node n11 0.375 4.25 0.75 0.5 n11 solid ellipse black lightgrey\n\
+         node n14 1.375 4.25 0.75 0.5 n14 solid ellipse black lightgrey\n\
+         node n15 1.1389 1.25 0.75 0.5 n15 solid ellipse black lightgrey\n\
+         node n29 0.375 0.25 0.75 0.5 n29 solid ellipse black lightgrey\n\
+         node n26 1.7778 2.25 0.75 0.5 n26 solid ellipse black lightgrey\n\
+         node n16 2.4306 3.25 0.75 0.5 n16 solid ellipse black lightgrey\n\
+         edge n4 n17 4 2.1036 4.0927 1.7636 3.9297 1.2056 3.6621 0.81578 3.4752 solid black\n\
+         edge n4 n26 7 2.2304 4.0243 2.1258 3.8841 1.9997 3.6914 1.9306 3.5 1.8333 3.2307 1.7957 2.9092 1.7822 2.6616 solid black\n\
+         edge n4 n16 4 2.4096 3.9958 2.4125 3.8945 2.416 3.774 2.4192 3.6602 solid black\n\
+         edge n17 n29 4 0.375 2.9979 0.375 2.4881 0.375 1.2869 0.375 0.66016 solid black\n\
+         edge n11 n17 4 0.375 3.9958 0.375 3.8945 0.375 3.774 0.375 3.6602 solid black\n\
+         edge n11 n14 4 0.75391 4.25 0.78171 4.25 0.80951 4.25 0.83731 4.25 solid black\n\
+         edge n14 n15 4 1.3561 3.9979 1.3156 3.4881 1.2202 2.2869 1.1704 1.6602 solid black\n\
+         stop\n";
+    let (out, err, ok) = run(&["-Tplain"], src);
+    assert!(ok, "{err}");
+    assert!(err.is_empty(), "{err}");
+    assert_eq!(out, expected);
+}
+
+// Issue #681, one-spline-line class. With `concentrate=true` an edge is drawn as several
+// virtual pieces that share its sequence number (`lib/dotgen/fastgr.c:143`), so `edgecmp`
+// (`dotsplines.c:542`) returns 0 between them and the libc `qsort` decides the order of the
+// pieces in the edge's spline list. Only the `edge` lines of n0->n10 and n10->n9 move; nodes stay.
+// These bytes are C's with the port's `qsort` preloaded.
+#[test]
+fn concentrated_edge_piece_order_matches_port_qsort() {
+    let src = "digraph G { concentrate=true; n0 -> n10 [minlen=2]; n6 -> n9; n3 -> n9; n10 -> n9; n0 -> n9; n1 -> n9 [label=\"FL\"]; }";
+    let expected = "graph 1 4.2778 3.275\n\
+         node n0 1.1389 3.025 0.75 0.5 n0 solid ellipse black lightgrey\n\
+         node n10 0.375 1.4833 0.75 0.5 n10 solid ellipse black lightgrey\n\
+         node n6 1.9028 1.4833 0.75 0.5 n6 solid ellipse black lightgrey\n\
+         node n9 2.9028 0.25 0.75 0.5 n9 solid ellipse black lightgrey\n\
+         node n3 2.9028 1.4833 0.75 0.5 n3 solid ellipse black lightgrey\n\
+         node n1 3.9028 1.4833 0.75 0.5 n1 solid ellipse black lightgrey\n\
+         edge n0 n10 8 1.1389 1.9833 1.1117 1.902 0.96905 1.8018 0.81424 1.7135 1.1809 2.7707 1.2079 2.5608 1.2238 2.251 1.1389 1.9972 solid black\n\
+         edge n0 n9 7 1.1389 1.9833 0.99365 1.6612 1.1897 1.5152 1.4028 1.2333 1.5668 1.0164 1.7173 1.0795 1.9028 0.88056 solid black\n\
+         edge n10 n9 11 1.9028 0.85278 2.0535 0.69113 2.2586 0.5599 2.4438 0.4627 0.68737 1.3373 0.77063 1.3028 0.86072 1.2661 0.94444 1.2333 1.3671 1.068 1.5933 1.2126 1.9028 0.88056 solid black\n\
+         edge n6 n9 4 1.8338 1.2352 1.8136 1.1144 1.8163 0.97329 1.9028 0.88056 solid black\n\
+         edge n3 n9 4 2.6034 1.3277 2.2884 1.1739 1.8454 0.94209 1.9028 0.88056 solid black\n\
+         edge n1 n9 4 3.7286 1.2595 3.5761 1.0756 3.352 0.80543 3.1757 0.5929 FL 3.6058 0.86667 solid black\n\
+         stop\n";
+    let (out, err, ok) = run(&["-Tplain"], src);
+    assert!(ok, "{err}");
+    assert!(err.is_empty(), "{err}");
+    assert_eq!(out, expected);
+}
+
+// Issue #681, one-spline-line class under `splines=ortho`: `orthoEdges` sorts the edges by
+// length (`lib/ortho/ortho.c:1240`), and the two equal n2->n3 edges tie, so the libc `qsort`
+// decides which is routed, and printed, first. These bytes are C's with the port's `qsort`
+// preloaded.
+#[test]
+fn ortho_parallel_edge_order_matches_port_qsort() {
+    let src = "digraph G { splines=ortho; n0 -> n3; n2 -> n3; n1 -> n3; n2 -> n3; n0 -> n1; n0 -> n2; n1 -> n2; n1 -> n1; }";
+    let expected = "graph 1 1.7639 3.5\n\
+         node n0 0.375 3.25 0.75 0.5 n0 solid ellipse black lightgrey\n\
+         node n3 0.5 0.25 0.75 0.5 n3 solid ellipse black lightgrey\n\
+         node n2 0.5 1.25 0.75 0.5 n2 solid ellipse black lightgrey\n\
+         node n1 1.1389 2.25 0.75 0.5 n1 solid ellipse black lightgrey\n\
+         edge n0 n3 7 0.0625 3.1053 0.0625 2.506 0.0625 0.25 0.0625 0.25 0.0625 0.25 0.06822 0.25 0.06822 0.25 solid black\n\
+         edge n0 n2 4 0.28125 3.0048 0.28125 3.0048 0.28125 1.6148 0.28125 1.6148 solid black\n\
+         edge n0 n1 7 0.4375 2.9977 0.4375 2.7014 0.4375 2.25 0.4375 2.25 0.4375 2.25 0.59954 2.25 0.59954 2.25 solid black\n\
+         edge n2 n3 4 0.625 1.0079 0.625 1.0079 0.625 0.64975 0.625 0.64975 solid black\n\
+         edge n2 n3 4 0.375 1.0079 0.375 1.0079 0.375 0.64975 0.375 0.64975 solid black\n\
+         edge n1 n3 7 1.1944 1.9967 1.1944 1.4585 1.1944 0.25 1.1944 0.25 1.1944 0.25 1.0396 0.25 1.0396 0.25 solid black\n\
+         edge n1 n2 4 0.83796 2.0938 0.83796 2.0938 0.83796 1.5246 0.83796 1.5246 solid black\n\
+         edge n1 n1 16 1.1389 2.5059 1.1389 2.6289 1.1389 2.75 1.1389 2.75 1.1389 2.75 0.59375 2.75 0.59375 2.75 0.59375 2.75 0.59375 1.75 0.59375 1.75 0.59375 1.75 0.80093 1.75 0.80093 1.75 0.80093 1.75 0.80093 1.9741 0.80093 1.9741 solid black\n\
+         stop\n";
+    let (out, err, ok) = run(&["-Tplain"], src);
+    assert!(ok, "{err}");
+    assert!(err.is_empty(), "{err}");
+    assert_eq!(out, expected);
+}
 // The line router has already placed this label when a later aux graph aborts
 // (`dotsplines.c:341-345`), so it survives without a spline or GVSPLINES. These are C's bytes,
 // apart from SVG's intentionally different generator comment.
