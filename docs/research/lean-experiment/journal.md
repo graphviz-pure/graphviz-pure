@@ -755,10 +755,12 @@ them there (§6 of the page).
 
 **The oracle.** `ns-check` cannot see this class of bug. Check mode runs C's `dfs_range` after
 every pivot (`check::dfs_range`), so the cut-set path always runs on a current numbering there. A
-cut-set path that wrongly read `lim`/`low` would pass it. The runtime check for stale numbering is
-the shipped-mode test `a_fallback_renumbers_the_tree_it_hands_to_c`, which compares final
-results. The new theorem retires neither check. It covers, as a model, the stale case that
-check mode cannot reach.
+cut-set path that wrongly read `lim`/`low` would pass it. The runtime guards for stale numbering
+are the shipped-mode tests that turn the hooks off and compare final results against C
+(`a_fallback_renumbers_the_tree_it_hands_to_c`, `lr_balance_hands_over_when_its_walks_pass_the_allowance`).
+The new theorem retires neither check. It covers, as a model, the stale case that check mode
+cannot reach. Follow-up #765: make check mode compare the cut-set search on the stale production
+state against C's search on a separately renumbered copy.
 
 **What Lean caught.** Nothing wrong in the Rust. Three things the prose glossed over:
 - the climbs' fuel in the #732 model was `lim(v) + 1`. On a stale state that is a number of the
