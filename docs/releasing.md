@@ -150,6 +150,10 @@ requests bumps the minor version; from 1.0 it bumps the major version. Without t
 release bumps the patch version
 ([versioning policy](versioning.md)).
 
+### Before a minor release
+
+Decision D7 ([1.0 roadmap](roadmap/1.0.md#decisions)) requires a differential fuzz round against C before each minor, as in rounds 5 (#511, before 1.0.0) and 6 (#660, before 1.1.0): 6,000 new seeds over all eight engines, with every difference fixed or triaged into an accepted class and the round recorded in [fuzzing.md](porting/fuzzing.md). Run the differential fuzzer ([Running it](porting/fuzzing.md#running-it)), e.g. `python3 -I scripts/fuzz-run.py run --seed N --count 6000 --out ...` with unused seeds. The release workflow's `fuzz.yml` run does not satisfy this: it is coverage-guided robustness fuzzing with no C oracle. Patch releases need no new round: a patch does not change output for any input in the test corpora ([versioning policy](versioning.md)). This check is manual: `release-check.sh` does not run it.
+
 ## What the release workflow does
 
 `.github/workflows/release.yml` runs on GitHub-hosted runners, with no caches, the pinned Rust
