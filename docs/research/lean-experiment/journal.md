@@ -79,8 +79,8 @@ reusable product, dominates).
 
 **Why it rarely fires.** The test needs the f32 sum of all n coordinates to divide to exactly
 zero. After the first iteration `x` is the output of `x += alpha p`, so its f32 sum is a rounding
-residue, not zero, and the chance of landing on exactly 0 falls roughly like 1/√n. That matches the
-table: a few percent at n of about 70 to 250, and about zero at n of 1,000 and above.
+residue, not zero, and the chance of landing on exactly 0 falls as n grows (not derived, only observed). The
+table shows it: a few percent at n of about 70 to 250, and about zero at n of 1,000 and above.
 
 **Decision.** Under the ticket's 10% gate: no Rust change, no Lean file. The Lean statement
 ("`orthog1f` leaves every element unchanged, so `A · orthog1f x = A · x`") would be a one-line
