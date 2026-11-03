@@ -40,6 +40,9 @@ the same state once it publishes. Rounds are counted because `transpose` need no
 * `buildScan` starts the arena orders equal to the compact orders, which `prepare_mincross` and
   `write_crossing_orders` maintain; `positioned_rank`'s cached verdict is recomputed (`rowOk`).
 * The memo is a function of `(rank, position)`; `RankPair::slot` is `slot`.
+* Ports are `ℤ` compared with `>`; Rust's are `f64` compared with `>`. Any finite set of non-NaN
+  port values embeds order-preservingly, so the theorems transfer under the caller invariant "no
+  port is NaN", which `build_scan` does not check and this file does not prove (issue #751).
 -/
 
 set_option linter.unusedSectionVars false

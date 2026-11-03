@@ -12,6 +12,13 @@ The Rust fast path is `common/ns/cut.rs` (`CutStore::enter_edge`, `scanned_befor
 `Net.Valid.enterEdge_eq`: on a valid tree with (I1) for `e`, the cut-set `enter_edge(e)`, with its
 fallback, returns what C's `enter_edge(e)` returns once its loop has run to the end, ties included.
 
+Scope of `Valid`: it requires the `lim`/`low` numbering to be current. The production cut-set path
+renumbers only at init and on fallback (`cut.rs` re-hangs `par` after a pivot; its `dfs_range` hook
+is a no-op), so the theorem applies as stated to the first pivot after `feasible_tree` and to any
+pivot from a renumbered state. Later production pivots, whose `lim`/`low` are stale, need a
+separately numbered reference tree and a relation to the production `par`/lists/slacks; that is
+not done here (issue #750). `pivot_against` assumes, not establishes, `Valid` for the new tree.
+
 | prose | here |
 | :-- | :-- |
 | §2 notation: `w ∈ subtree(u)` iff `low(u) ≤ lim(w) ≤ lim(u)` | `Net.Valid.inSub_iff`, `Net.Valid.lim_inj` |
@@ -32,7 +39,8 @@ fallback, returns what C's `enter_edge(e)` returns once its loop has run to the 
 Not formalised here: that C's two `treeupdate` walks and the cut sets' LCA climb visit exactly
 the edges with σ(t) ≠ 0 (the cut-value theorem is stated per edge, with σ); the re-hanging of
 parent pointers (I3); that `rerank` reaches exactly the subtree under its start; §4.3 beyond its
-`enter_edge` (which `enterEdge_eq` covers with `pivot = false`); §5–§8.
+`enter_edge` (which `enterEdge_eq` covers with `pivot = false`); the validity of the production
+tree after a pivot (issue #750); the fallback's rank reconstruction and renumbering (§5); §5–§8.
 
 ## Model vs Rust
 
@@ -45,8 +53,11 @@ parent pointers (I3); that `rerank` reaches exactly the subtree under its start;
 * `push_rank`'s `position(..).unwrap_or(0)` is `List.idxOf` (the list's length when absent). On a
   valid tree the edge is always present.
 * `CutStore`'s pool, stamps, generations and `prepare` checks are not modelled: `cutEnter` reads
-  e's cut set as a list of `(edge, against)`. Every extra check falls back to C, which
-  `enterEdge_eq` covers whatever the check is.
+  e's cut set as a list of `(edge, against)`. Every extra check falls back to C. The model's
+  fallback runs C's search on the same `Net` and slacks; Rust's fallback (`cut.rs` `fall_back`)
+  first reconstructs ranks and renumbers the tree, then searches. That reconstruction is §5 and is
+  not modelled, so "fallback included" means: whichever branch is taken, the search that runs is
+  C's search on a validly numbered tree.
 * `i32` wrapping: §4.2's algebra (`CutBasis.cutValue`, `slack`) holds in any commutative ring,
   `ℤ/2³²` included. Comparisons of slacks are on `ℤ`, as `i32` compares.
 -/

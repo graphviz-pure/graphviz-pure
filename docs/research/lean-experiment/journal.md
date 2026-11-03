@@ -217,7 +217,8 @@ shipped code. No Rust change. Both files build with no `sorry` and only the stan
 - `proofs/GvpProofs/Ns/CutSets.lean`, 2,482 lines, 171 definitions and theorems.
   `Net.Valid.enterEdge_eq`: on a valid tree with (I1) for `e`, the cut-set `enter_edge(e)` with its
   fallback returns what C's stack-based `enter_edge(e)` returns once its loop ends, ties
-  included. Around it: the interval characterisation of subtrees, the candidate set as a
+  included. "Valid" means the `lim`/`low` numbering is current, which in production holds at the
+  first pivot and after every renumbering, not at later pivots (see the review note below). Around it: the interval characterisation of subtrees, the candidate set as a
   root-free cut, Lemma 1 over the pruned stack machine, `scanned_before` as C's scan order, and
   §4.2's algebra. That algebra is a cut basis, the pivot's new basis, the four cut-set bullets,
   `cutvalue(t) −= σ(t)·cutvalue(e)`, the slack shift, and (I1) for the new tree however it is
@@ -252,9 +253,11 @@ places the formalisation had to add a step or correct a word:
    between equal slacks. That equals C's first minimum only if `scanned_before` is a transitive,
    total order. It is, since it is position in one list, but the page does not say it is needed
    (`foldl_cutStep_spec`).
-8. NS §2 and §4.1: "the first candidate of minimum slack" needs each candidate to appear once in
-   C's scan. The page does not argue this; `nodup_scanList` proves it from the tree (one parent
-   per node, disjoint sibling subtrees, duplicate-free edge lists).
+8. NS §2 and §4.1: the proof's representation of C's scan order as a list needs each candidate
+   to appear once in that list; `nodup_scanList` proves it from the tree (one parent per node,
+   disjoint sibling subtrees, duplicate-free edge lists). The selection rule itself (strict
+   replacement, `ns.rs` `enter_edge`) would still pick the first minimum with repeats; the page
+   does not mention the duplicate-freeness the list view relies on.
 9. NS Lemma 1 uses, without saying so, that `Enter` is set whenever `Slack ≤ 0`. That holds
    because `Slack` starts at `INT_MAX`; pruning would be unsafe from any start of `Slack ≤ 0`
    (`Ok`).
@@ -285,6 +288,20 @@ that are defeq but not syntactically equal fails, and `exact` is needed instead.
 the edges with σ(t) ≠ 0 (the cut-value theorem is stated per edge); the re-hanging of parent
 pointers (I3); that `rerank` reaches exactly the subtree under its start; §5–§8. Mincross: §2
 (`reorder_settled`), and §2.1's claim that an unconstrained view's `left2right` is false.
+
+**Review (a second model, Rust against the Lean statements).** Two applicability gaps and two
+overclaims, no error in the proofs:
+- The production cut-set path does not renumber `lim`/`low` after a pivot (`cut.rs` re-hangs `par`;
+  its `dfs_range` hook is a no-op). Reproduced through `rank2`: after one pivot a child had a
+  larger `lim` than its parent. So `Valid` holds at the first pivot and after each renumbering,
+  and `enterEdge_eq` is not yet a theorem about the later production pivots. Filed as #750. This is
+  the experiment's first case of a review narrowing a proof's claimed scope: the proof was right,
+  its applicability statement was wrong, and `ns-check` stays as the oracle for what it misses.
+- The model's fallback runs C's search on the unchanged `Net`; Rust's fallback reconstructs ranks
+  and renumbers first (§5, excluded). "Fallback included" was an overclaim; reworded.
+- Mincross ports are `ℤ` in the model and `f64` in Rust; NaN ports cannot be embedded. Filed as
+  #751; the theorem now states the no-NaN invariant it needs.
+- Finding 8 above overstated what the selection rule needs; corrected in place.
 
 **Extraction verdict.** Not attempted: the Aeneas binary was not installed when the Lean work
 started. Both theorems are stated over models that follow the Rust functions' shape. Each file's
