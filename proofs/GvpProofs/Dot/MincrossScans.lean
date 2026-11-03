@@ -1726,17 +1726,21 @@ end Build
 The Rust comparison is `e1.port_x > e2.port_x` on `f64`. Nothing above looks inside it: `portGt` is
 used once, in `View.crosses`, and `crosses_congr` (the only lemma about `crosses`) rewrites the
 order part of the test and leaves the port part alone, because the two sides of every congruence
-are the same edges with the same ports. So `transpose_same` holds for **every** `portGt`: it does
-not need irreflexivity, asymmetry, transitivity, totality or even that equal ports compare
-alike. A NaN port, `±∞`, `-0.0` against `0.0`, or a comparison that is not a function of the
-value at all, are all inside the theorem. What the theorem does need is that C's loop and the
-scan evaluate the same `portGt` on the same pair of port values, which holds because both call
-`in_cross`/`out_cross`.
+are the same edges with the same ports. So `transpose_same` holds for **every** fixed comparison
+function `portGt`: no ordering law is needed (not irreflexivity, asymmetry, transitivity or
+totality). A NaN port, `±∞`, `-0.0` against `0.0` are all inside the theorem. What the theorem
+does need is that the comparison is a function of its two operands (`portGt` is a `P → P → Bool`,
+so equal operands give equal results; the Rust scan reuses counts across rounds, which is only
+sound for a deterministic comparison, and IEEE `>` is one) and that C's loop and the scan evaluate
+it on the same pair of port values, which holds because both call `in_cross`/`out_cross`.
 
-`F64 α` is a port as IEEE `>` sees it: a non-NaN value in a linear order `α` (so `±∞` and the
-signed zeros live in `α`) or NaN (`none`). `F64.gt` is `>` with the IEEE rule that an ordered
-comparison with a NaN operand is false. Its failures, below, are the properties a proof about
-`ℤ` ports could have used and this one does not. -/
+`F64 α` is an abstract model of a port as IEEE `>` sees it, not a bit-exact binary64: a non-NaN
+value in some type `α` with a `<`, or NaN (`none`). `F64.gt` is `>` with the IEEE rule that an
+ordered comparison with a NaN operand is false. Reading `transpose_same_f64` as a statement about
+Rust's `f64` needs an interpretation of the non-NaN values into `α` that preserves `>`; one exists
+(the non-NaN doubles with `-0.0` and `+0.0` identified form a linear order with `±∞` at the ends,
+and IEEE `>` on them is that order's `>`), and it is the only step not written in Lean here. The
+lemmas below record what NaN keeps and breaks of the old `ℤ` model's assumptions. -/
 
 section Ports
 
