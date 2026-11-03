@@ -81,6 +81,69 @@ edge and before/after iteration orders, strict `<` acceptance, equal-count
 rejection, restore, zero exit and ten-pass limit are unchanged. Induction on
 these counts gives the same tentative moves, accepted moves and final list.
 
+## Incremental delta per tentative move (#730)
+
+`reduce` tries two slots next to every neighbour of every node and, until #730, recounted
+the whole list after each try. For a list that is a permutation of a strict loop-free block
+(every production block except the duplicate-list case above) the reference count has a closed
+form. With `d(z)` the neighbours of `z` earlier in the list, `fd(z)` the later ones, and `span(z)`
+the edges with one end before and one after `z`:
+
+    count = sum_z fd(z) * span(z) - sum_z C(d(z), 2)
+
+Equivalently it is the number of ordered edge pairs `(a,b)`, `(a',b')` (positions, `a < b`,
+`a' < b'`) with `a < a' < b` and `b' != b`. Nested chords count as well as crossing ones: this is
+what C's loop counts, not a chord-crossing number. `span(z)` is a difference of two prefix sums
+of `fd` and `d` over positions, so the count is a function of the degree sequence of the list.
+
+Cut `x` out of the list. Let `fd`, `d` be the degrees in the graph without `x`, over the ranks of
+the list without `x`, and `FP`, `DP` their prefix sums. Putting `x` back before the nodes of rank
+`c` adds `phi(c)` to the count of the list without `x`, a constant independent of `c`:
+
+    phi(c) = (q - below) * (FP[c] - DP[c]) - C(below, 2) + sum over neighbours y of x of T(y)
+    T(y)   = FP[r] - FP[c] - (DP[r+1] - DP[r])                       if r >= c
+           = FP[c] - FP[r+1] + (FP[r] - DP[r+1]) + (index of y)      if r < c      (r = rank of y)
+
+`q` is `x`'s degree, `below` the number of its neighbours of rank `< c`, and the index of `y` the
+number of neighbours of lower rank. A tentative move of `x` before or after neighbour `n` is the
+cut `c = rank(n) + j`, so its delta is `phi(c_new) - phi(c_old)`: `O(deg x)` from the neighbour
+ranks and the prefix arrays. The arrays are built once per node, `O(n + m)`, because they do not
+depend on where `x` sits; an accepted move changes only `x`'s own cut. The list is touched only
+when a move is accepted.
+
+The issue text expected the delta to depend on the moved node's edges alone. It does not: the
+delta of an edge `(x, y)` counts every other edge that starts between the old and the new slot,
+which is a range sum over the whole list. The prefix arrays carry that sum.
+
+Exactness and wrapping. `reduce` compares counts as `i32`. The recount adds queries with
+`wrap_crossings`, so its result is the true count modulo 2^32. `apply_delta` returns
+`old.wrapping_add(delta as i32)`, and `Z/2^32` is a group, so it is the same `i32` whenever `old`
+is. Checked builds also assert that the mathematical total stays in `[0, i32::MAX]`, which is
+exactly where the recount's `add_crossings` panics. The decisions in `reduce` (strict `<`,
+restore, zero exit, ten passes) therefore see the same integers.
+
+When the delta does not apply. `Delta::new` declines unless the list is a permutation of the
+block's nodes and the block is strict and loop-free, with every edge endpoint in the list. Then
+`reduce` runs the unchanged recount loop. Lists of 16 or fewer keep the recount scan in
+production, as above. Any failed lookup inside a move (a `get` that returns `None`) falls back to
+the recount for that move and for the rest of that node.
+
+Oracle. `cfg(test)` and `circo-check` run the recount on every tentative move and assert it equals
+the delta-derived count (`circo incremental crossing delta`), on lists of every length. The
+recount's own indexed-versus-scan check still runs inside it. The recount also leaves
+`EDGEORDER` and the half bitset as the scan does; the delta path does not touch them after the
+initial count. Nothing reads them after `reduce_edge_crossings`: `blocktree` sets them earlier and
+`count_all_crossings` resets them on entry.
+
+Proof. `proofs/GvpProofs/Circo/CrossingDelta.lean` proves, over a model of the list as a position
+function and the block as a symmetric irreflexive relation: the pair count equals the formula
+above (`crossings_formula`); moving `x` gives `Kc + phi(c)` with `phi` as written here
+(`crossings_move`); and the wrapped `i32` sum of old total and delta equals the wrapped recount
+(`fast_eq_recount`, `wrap_foldl`). What the model leaves to tests: that C's loop on a
+permutation computes the pair count (checked against the scan on every move in check mode, and by
+the randomized tests), that `insert_nodelist` is the cut `rank(n) + j`, and that the prefix loops
+in `Delta::prepare` compute `FP`, `DP`.
+
 ## Check mode and tests
 
 `cfg(test)` and the `circo-check` layout feature run the retained bitset scan
