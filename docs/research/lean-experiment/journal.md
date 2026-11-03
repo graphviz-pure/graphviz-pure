@@ -95,3 +95,54 @@ ends: running `gen_rnd2000.gv` with `-Kneato` first ran sfdp, because the file s
 **What this says for the experiment.** A measurement can retire a proof ticket. The gate looked free
 and exact on paper, and it costs nothing to state, but its hit rate is a property of f32 rounding,
 and only a run showed it. Worth a line in the write-up: measure the gate before formalising it.
+
+## 2026-11-03 #728: circo Fenwick count = bitset count
+
+Result: proved, no `sorry`. `proofs/GvpProofs/Circo/Fenwick.lean`, 1,285 lines (about 260
+definitions and docs, about 1,030 proof), builds with `scripts/proofs/lake.sh build`. Main theorem
+`countIndexed_eq_reference`: on a well-formed block graph the indexed counter never takes an early
+return and returns the reference's `i32` total, final `order` array and half set. Also
+`countWithPolicy_eq_reference` (the dispatch), `query_count_eq_hits` (each query's `u64` count
+is the reference's natural-number count), and `countIndexed_wrapped` (the `i32` is the exact count
+modulo 2^32).
+
+Time (wall clock of the agent session): about 0.7 h, all Lean. No Rust changed; reading the Rust and
+the prose took about 0.1 h of that. The previous attempt at this ticket stopped without writing
+anything because the Fenwick-versus-set tracking looked hard; modelling the passes as a state
+machine and proving a per-occurrence simulation made it routine.
+
+How it went:
+- Definitions first, mirroring the Rust one function per function. They compiled on the first try.
+- Fenwick lemmas (about 130 lines). The only non-routine step was the update lemma: slot `j` is
+  touched by an update from `i` iff `j - lowbit j < i <= j`. Proved by strong induction on `i`
+  splitting on the parities of `i` and `j`, with `lowbit (2a) = 2 * lowbit a` and
+  `lowbit (2a+1) = 1`; `omega` closes every case. The bit tricks on `usize`
+  (`i & i.wrapping_neg()`, `i & (i - 1)`) were the one place Lean needed a SAT call: three
+  64-bit identities by `bv_decide`. Those add three `bv_decide` axioms to the theorem's axiom
+  list (`propext`, `Classical.choice`, `Quot.sound` otherwise). Replacing them by kernel proofs
+  is possible and was not done.
+- Invariant: after `k` occurrences, every set half has an edge order in `1..k`, belongs to a
+  block edge, and the tree is the Fenwick tree of the order histogram of the set. One occurrence is
+  four loops (exclude, query, restore-and-close, open); each is proved against a closed form, and
+  the reference's first loop is proved equal to "count against the unchanged set, then erase",
+  because it only erases halves the predicate excludes. The "repeated node occurrences" worry of
+  the first attempt never needed a case split: erasing an absent key is a no-op in both
+  counters, and reopening is blocked because an erased edge keeps a positive order.
+- Dead ends: none that cost time. The `#eval` of the indexed model on a small graph does not
+  terminate in the interpreter (closures of `Function.update` pile up); the reference and the
+  natural-number count evaluate (23 crossings on the test graph). Not investigated further; the
+  theorem makes the evaluation redundant.
+
+What Lean caught: nothing wrong with the code. About the prose: its argument holds, but it relies
+on two facts it states only for production graphs or not at all, and the proof needed both:
+(1) a node's adjacency slice has no repeated edge id (the first loop would take a unit out of the
+tree twice), (2) every set half belongs to a block edge whose incident-ness to the current node is
+exactly "head or tail equals the node" (the prose says "exactly the halves whose head or tail
+equals the current node" without saying the set is restricted to block edges). Both hold for
+`CGraph::edges`. They are now hypotheses of the theorem and mentioned in
+`docs/perf/circo-crossings.md`.
+
+Extraction verdict: not attempted. The shared Lean install has an `aeneas` directory but no `bin/aeneas`
+binary, so the theorem is over a hand-written model; the PR lists every difference ("Model vs
+Rust" in the file header). The risk that remains is that the model and the Rust drift apart, which
+extraction would remove.

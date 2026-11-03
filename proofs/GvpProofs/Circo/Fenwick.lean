@@ -9,11 +9,51 @@ Subject: `crates/graphviz-pure-layout/src/circogen/blockpath.rs`,
 `lib/circogen/blockpath.c:count_all_crossings`). Prose argument being replaced:
 `docs/perf/circo-crossings.md`.
 
-Aeneas extraction was not available when this file was written, so the theorems are stated over
-a Lean model that mirrors the Rust control flow. "Model vs Rust" is listed in the PR.
+Aeneas extraction was not available when this file was written (no `aeneas` binary on the
+machine), so the theorems are stated over a Lean model that mirrors the Rust control flow, one Lean
+function per Rust function and one branch per `if`/`match`.
 
-This section holds the definitions only. Each Rust function has one Lean function with the same
-branches, in the same order.
+## Theorems
+
+* `countIndexed_eq_reference`: on a well-formed block graph `count_indexed` never takes a `?`
+  early return and returns the reference's final `order` array, `open` bitset and `i32` total.
+* `countWithPolicy_eq_reference`: so does the dispatch `count_with_policy` (CHECK off).
+* `query_count_eq_hits`: the `u64` number `total - prefix(edge_order)` of every single query is
+  the number of halves the reference scan counts for that edge (the natural-number statement).
+* `countIndexed_wrapped`: the returned `i32` is the exact crossing count reduced modulo `2 ^ 32`.
+* `updateGo_eq`, `prefixGo_eq`, `indexUpdate_valid`, `indexPrefix_eq`: the Fenwick tree itself.
+
+## Model vs Rust
+
+* `?` on `get()`/`get_mut()` of the arena, adjacency, offsets and `open` is dropped: arrays are
+  total functions `ℕ → _`. In Rust those paths hand the recount to the reference. The `none`s that
+  remain are the semantic guards of `index_update` (zero or out-of-range key), `index_prefix`
+  (absent top slot) and `checked_sub`; the theorem shows none of them fires.
+* The `open: &mut [u64]` bitset is a `Finset ℕ` of set half indices (`half = 2 * e + b`; bit
+  `half % 64` of word `half / 64`). Word packing and `bits &= bits - 1` iteration are not modelled;
+  the scan visits the set bits in ascending order (`Finset.sort`) as the Rust does.
+* `arena.order` entries are `i32` in Rust, `ℕ` here (all stored orders are `1..=list.len()`; the
+  indexed path is only entered when `list.len() <= i32::MAX`).
+* The tree is `ℕ → ZMod (2 ^ 64)` plus its length; `wrapping_add(1)`/`wrapping_sub(1)` on `u64` are
+  exactly `+ 1`/`+ -1` there. `i & i.wrapping_neg()`, `wrapping_add` and `i &= i - 1` are modelled
+  bit-exactly on 64-bit `usize` (`lowbit`, `nextIdx`, `prevIdx`); the three bit identities they need
+  are proved by `bv_decide` (axioms `bv_*._native.bv_decide.ax_*`).
+* The `while` loops of `index_update`/`index_prefix` carry a fuel counter so the Lean functions are
+  total; the fuel (`len`, resp. `i`) is never exhausted (`updateGo_eq`, `prefixGo_eq`).
+* The `i32` total uses release (wrapping) arithmetic: `wrap_crossings` is `+ BitVec.ofNat 32 count`
+  and the reference adds `+ 1`. The checked-build assertion in `add_crossings` (panic when the
+  mathematical total would exceed `i32::MAX`) and the `circo-check` assertions are not modelled.
+* `count_with_policy`: the clauses `list.len() > i32::MAX` and `!CHECK && list.len() <= 16` only
+  select the reference, which is trivially equal to itself, and are not modelled. The `MUTATION`
+  const generic is fixed at 0.
+* Hypotheses (`NodeWf`, plus `E`, `len` bounds) are facts about the caller, not proved here:
+  for every list node the adjacency slice has no repeated edge id, is exactly the block edges
+  with an endpoint at the node, and lies inside `adjacency`; edge ids are `< E = arena.order.len()`
+  with `E, len < 2 ^ 62`; `list.len() < len`. `CGraph::edges` provides the first two (out-edges are
+  keyed by head, in-edges by tail and exclude loops, so ids are distinct).
+
+This section holds the definitions first (each Rust function has one Lean function with the same
+branches, in the same order), then the Fenwick lemmas, then the simulation proof.
 -/
 
 namespace GvpProofs.Circo.Fenwick
