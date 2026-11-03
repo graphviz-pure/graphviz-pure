@@ -230,7 +230,6 @@ impl<'a> Dot<'a> {
 
     /// [`Self::push_label`] keeping `lp->text` (`text`), which `addXLabels` reports.
     fn push_label_text(&mut self, lg: &graphviz_pure_geom::LabelGeometry, text: String) -> L {
-        let l = self.labels.len();
         self.labels.push(TextLabel {
             text,
             fontname: lg.font_name.clone(),
@@ -239,8 +238,7 @@ impl<'a> Dot<'a> {
             space: lg.space,
             html: lg.html,
             ..TextLabel::default()
-        });
-        l
+        })
     }
 
     /// `dot_init_subg(g, g)`: every subgraph gets an Agraphinfo_t record.

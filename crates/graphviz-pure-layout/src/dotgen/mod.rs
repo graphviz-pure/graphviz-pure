@@ -20,6 +20,7 @@ pub mod dotsplines;
 pub mod fastgr;
 pub mod flat;
 pub mod init;
+pub mod ix;
 pub mod mincross;
 pub mod ns;
 pub mod output;
@@ -98,7 +99,7 @@ pub struct Dot<'a> {
     pub edges: Vec<EdgeInfo>,
     pub graphs: Vec<GraphInfo>,
     ns_scratch: ns::NsScratch,
-    pub labels: Vec<TextLabel>,
+    pub labels: ix::IndexVec<L, TextLabel>,
     /// Backing storage of `rank_t.v`/`av` arrays.
     pub bufs: Vec<Vec<Option<N>>>,
     pub n_real_nodes: usize,
@@ -166,7 +167,7 @@ impl<'a> Dot<'a> {
             edges: Vec::new(),
             graphs: Vec::new(),
             ns_scratch: ns::NsScratch::default(),
-            labels: Vec::new(),
+            labels: ix::IndexVec::new(),
             bufs: Vec::new(),
             n_real_nodes: 0,
             edge_seq: 0,
