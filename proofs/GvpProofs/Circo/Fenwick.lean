@@ -494,20 +494,25 @@ theorem idxHalf_erase {len : ℕ} (hN : len < 2 ^ 62) {s : IdxState} {e x : ℕ}
     refine ⟨s, by simp [idxHalf, hx], rfl, ?_⟩
     rw [Finset.erase_eq_of_notMem this]; exact hv
 
-theorem idxHalf_insert {len : ℕ} (hN : len < 2 ^ 62) {s : IdxState} {e x : ℕ} {U : Finset ℕ}
+theorem idxHalf_insert {len : ℕ} (hN : len < 2 ^ 62) {s : IdxState} {e x : ℕ} {U U' : Finset ℕ}
     (hv : Valid len s.tree (histZ s.ord U)) (hxe : x / 2 = e) (hxU : x ∉ U)
+    (hU' : ∀ h, h ∈ U' ↔ h ∈ U ∨ (h = x ∧ x ∈ s.bits))
     (hpos : ∀ h ∈ s.bits, 1 ≤ s.ord (h / 2) ∧ s.ord (h / 2) < len) :
     ∃ s', idxHalf len 1 e s x = some s' ∧ s'.toRefState = s.toRefState ∧
-      Valid len s'.tree (histZ s.ord (if x ∈ s.bits then insert x U else U)) := by
+      Valid len s'.tree (histZ s.ord U') := by
   by_cases hx : x ∈ s.bits
   · obtain ⟨t', ht', hv'⟩ := valid_insert hN hv hxU (by have := hpos x hx; omega)
       (hpos x hx).2
     rw [hxe] at ht'
+    have hU'e : U' = insert x U := by
+      ext h; rw [hU' h, Finset.mem_insert]; simp [hx, or_comm]
     refine ⟨{ s with tree := t' }, ?_, rfl, ?_⟩
     · simp [idxHalf, hx, ht']
-    · simpa [hx] using hv'
-  · refine ⟨s, by simp [idxHalf, hx], rfl, ?_⟩
-    simpa [hx] using hv
+    · rw [hU'e]; exact hv'
+  · have hU'e : U' = U := by
+      ext h; rw [hU' h]; simp [hx]
+    refine ⟨s, by simp [idxHalf, hx], rfl, ?_⟩
+    rw [hU'e]; exact hv
 
 theorem idxExclude_step {len : ℕ} (hN : len < 2 ^ 62) {s : IdxState} {e : ℕ} {ps : Finset ℕ}
     (he : e ∉ ps)
@@ -542,6 +547,70 @@ theorem idxExclude_step {len : ℕ} (hN : len < 2 ^ 62) {s : IdxState} {e : ℕ}
       · rintro ⟨h3, h4⟩
         refine ⟨by intro hh; apply h4; left; omega, by intro hh; apply h4; left; omega, h3, ?_⟩
         intro hh; exact h4 (Or.inr hh)
+    rw [hset, ho] at v2
+    exact v2
+
+theorem idxRestore_step {len : ℕ} (hN : len < 2 ^ 62) {s : IdxState} {e : ℕ} {rest : Finset ℕ}
+    (he : e ∈ rest)
+    (hv : Valid len s.tree (histZ s.ord (s.bits.filter (fun h => h / 2 ∉ rest))))
+    (hpos : ∀ h ∈ s.bits, 1 ≤ s.ord (h / 2) ∧ s.ord (h / 2) < len) :
+    ∃ s', idxHalves len 1 e s = some s' ∧ s'.toRefState = s.toRefState ∧
+      Valid len s'.tree (histZ s.ord (s.bits.filter (fun h => h / 2 ∉ rest.erase e))) := by
+  obtain ⟨s1, h1, c1, v1⟩ := idxHalf_insert hN hv (e := e) (x := 2 * e) (by omega)
+    (by simp [he]) (U' := s.bits.filter (fun h => h / 2 ∉ rest ∨ h = 2 * e))
+    (fun h => by
+      simp only [Finset.mem_filter]
+      constructor
+      · rintro ⟨hb, hh | hh⟩
+        · exact Or.inl ⟨hb, hh⟩
+        · exact Or.inr ⟨hh, hh ▸ hb⟩
+      · rintro (⟨hb, hh⟩ | ⟨hh, hb⟩)
+        · exact ⟨hb, Or.inl hh⟩
+        · exact ⟨hh ▸ hb, Or.inr hh⟩) hpos
+  have hb : s1.bits = s.bits := by rw [show s1.bits = s1.toRefState.bits from rfl, c1]
+  have ho : s1.ord = s.ord := by rw [show s1.ord = s1.toRefState.ord from rfl, c1]
+  obtain ⟨s2, h2, c2, v2⟩ := idxHalf_insert hN (s := s1) (e := e) (x := 2 * e + 1)
+    (U := s.bits.filter (fun h => h / 2 ∉ rest ∨ h = 2 * e))
+    (U' := s.bits.filter (fun h => h / 2 ∉ rest ∨ h = 2 * e ∨ h = 2 * e + 1))
+    (by rw [ho]; exact v1) (by omega)
+    (by
+      simp only [Finset.mem_filter]
+      rintro ⟨_, h3 | h3⟩
+      · exact h3 (by rwa [show (2 * e + 1) / 2 = e by omega])
+      · omega)
+    (fun h => by
+      simp only [Finset.mem_filter, hb]
+      constructor
+      · rintro ⟨hb, hh | hh | hh⟩
+        · exact Or.inl ⟨hb, Or.inl hh⟩
+        · exact Or.inl ⟨hb, Or.inr hh⟩
+        · exact Or.inr ⟨hh, hh ▸ hb⟩
+      · rintro (⟨hb, hh | hh⟩ | ⟨hh, hb⟩)
+        · exact ⟨hb, Or.inl hh⟩
+        · exact ⟨hb, Or.inr (Or.inl hh)⟩
+        · exact ⟨hh ▸ hb, Or.inr (Or.inr hh)⟩)
+    (by rw [hb, ho]; exact hpos)
+  refine ⟨s2, ?_, by rw [c2, c1], ?_⟩
+  · rw [idxHalves_eq, h1]; exact h2
+  · have hset : s.bits.filter (fun h => h / 2 ∉ rest ∨ h = 2 * e ∨ h = 2 * e + 1)
+        = s.bits.filter (fun h => h / 2 ∉ rest.erase e) := by
+      apply Finset.filter_congr
+      intro h _
+      have : h / 2 = e ↔ h = 2 * e ∨ h = 2 * e + 1 := by omega
+      simp only [Finset.mem_erase]
+      constructor
+      · rintro (hh | hh | hh)
+        · exact fun h2 => hh h2.2
+        · exact fun h2 => h2.1 (by omega)
+        · exact fun h2 => h2.1 (by omega)
+      · intro hh
+        by_cases h3 : h / 2 ∈ rest
+        · right
+          have : h / 2 = e := by
+            by_contra hne
+            exact hh ⟨hne, h3⟩
+          omega
+        · left; exact h3
     rw [hset, ho] at v2
     exact v2
 
