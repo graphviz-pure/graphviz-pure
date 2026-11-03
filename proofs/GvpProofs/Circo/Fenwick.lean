@@ -472,4 +472,77 @@ theorem valid_insert {len : ℕ} (hN : len < 2 ^ 62) {t : ℕ → ZMod (2 ^ 64)}
   refine ⟨t', ht', valid_congr (fun k => ?_) hv'⟩
   rw [histZ_insert ord S x hx]
 
+/-! ## Edge-level steps of the two tree-maintenance loops -/
+
+theorem idxHalves_eq (len : ℕ) (d : ZMod (2 ^ 64)) (e : ℕ) (s : IdxState) :
+    idxHalves len d e s = (idxHalf len d e s (2 * e)).bind (fun s => idxHalf len d e s (2 * e + 1)) := by
+  simp [idxHalves, List.range', List.foldlM]
+
+theorem idxHalf_erase {len : ℕ} (hN : len < 2 ^ 62) {s : IdxState} {e x : ℕ} {U : Finset ℕ}
+    (hv : Valid len s.tree (histZ s.ord U)) (hxe : x / 2 = e) (hU : ∀ h ∈ U, h ∈ s.bits)
+    (hxU : x ∈ s.bits → x ∈ U)
+    (hpos : ∀ h ∈ s.bits, 1 ≤ s.ord (h / 2) ∧ s.ord (h / 2) < len) :
+    ∃ s', idxHalf len (-1) e s x = some s' ∧ s'.toRefState = s.toRefState ∧
+      Valid len s'.tree (histZ s.ord (U.erase x)) := by
+  by_cases hx : x ∈ s.bits
+  · obtain ⟨t', ht', hv'⟩ := valid_erase hN hv (hxU hx) (by have := hpos x hx; omega)
+      (hpos x hx).2
+    rw [hxe] at ht'
+    refine ⟨{ s with tree := t' }, ?_, rfl, hv'⟩
+    simp [idxHalf, hx, ht']
+  · have : x ∉ U := fun h => hx (hU x h)
+    refine ⟨s, by simp [idxHalf, hx], rfl, ?_⟩
+    rw [Finset.erase_eq_of_notMem this]; exact hv
+
+theorem idxHalf_insert {len : ℕ} (hN : len < 2 ^ 62) {s : IdxState} {e x : ℕ} {U : Finset ℕ}
+    (hv : Valid len s.tree (histZ s.ord U)) (hxe : x / 2 = e) (hxU : x ∉ U)
+    (hpos : ∀ h ∈ s.bits, 1 ≤ s.ord (h / 2) ∧ s.ord (h / 2) < len) :
+    ∃ s', idxHalf len 1 e s x = some s' ∧ s'.toRefState = s.toRefState ∧
+      Valid len s'.tree (histZ s.ord (if x ∈ s.bits then insert x U else U)) := by
+  by_cases hx : x ∈ s.bits
+  · obtain ⟨t', ht', hv'⟩ := valid_insert hN hv hxU (by have := hpos x hx; omega)
+      (hpos x hx).2
+    rw [hxe] at ht'
+    refine ⟨{ s with tree := t' }, ?_, rfl, ?_⟩
+    · simp [idxHalf, hx, ht']
+    · simpa [hx] using hv'
+  · refine ⟨s, by simp [idxHalf, hx], rfl, ?_⟩
+    simpa [hx] using hv
+
+theorem idxExclude_step {len : ℕ} (hN : len < 2 ^ 62) {s : IdxState} {e : ℕ} {ps : Finset ℕ}
+    (he : e ∉ ps)
+    (hv : Valid len s.tree (histZ s.ord (s.bits.filter (fun h => h / 2 ∉ ps))))
+    (hpos : ∀ h ∈ s.bits, 1 ≤ s.ord (h / 2) ∧ s.ord (h / 2) < len) :
+    ∃ s', idxExclude len s e = some s' ∧ s'.toRefState = s.toRefState ∧
+      Valid len s'.tree (histZ s.ord (s.bits.filter (fun h => h / 2 ∉ insert e ps))) := by
+  obtain ⟨s1, h1, c1, v1⟩ := idxHalf_erase hN hv (e := e) (x := 2 * e) (by omega)
+    (fun h hh => (Finset.mem_filter.mp hh).1)
+    (fun hx => Finset.mem_filter.mpr ⟨hx, by simpa using he⟩) hpos
+  have hb : s1.bits = s.bits := by rw [show s1.bits = s1.toRefState.bits from rfl, c1]
+  have ho : s1.ord = s.ord := by rw [show s1.ord = s1.toRefState.ord from rfl, c1]
+  obtain ⟨s2, h2, c2, v2⟩ := idxHalf_erase hN (s := s1) (e := e) (x := 2 * e + 1)
+    (U := (s.bits.filter (fun h => h / 2 ∉ ps)).erase (2 * e)) (by rw [ho]; exact v1) (by omega)
+    (fun h hh => by rw [hb]; exact (Finset.mem_filter.mp (Finset.mem_of_mem_erase hh)).1)
+    (fun hx => by
+      rw [hb] at hx
+      exact Finset.mem_erase.mpr ⟨by omega, Finset.mem_filter.mpr ⟨hx, by rwa [show (2 * e + 1) / 2 = e by omega]⟩⟩)
+    (by rw [hb, ho]; exact hpos)
+  refine ⟨s2, ?_, by rw [c2, c1], ?_⟩
+  · rw [idxExclude, idxHalves_eq, h1]; exact h2
+  · have ho2 : s2.ord = s.ord := by
+      rw [show s2.ord = s2.toRefState.ord from rfl, c2]; exact ho
+    have hset : ((s.bits.filter (fun h => h / 2 ∉ ps)).erase (2 * e)).erase (2 * e + 1)
+        = s.bits.filter (fun h => h / 2 ∉ insert e ps) := by
+      ext h
+      simp only [Finset.mem_erase, Finset.mem_filter, Finset.mem_insert]
+      have : h / 2 = e ↔ h = 2 * e ∨ h = 2 * e + 1 := by omega
+      constructor
+      · rintro ⟨h1, h2, h3, h4⟩
+        exact ⟨h3, fun hh => hh.elim (fun hh => by omega) h4⟩
+      · rintro ⟨h3, h4⟩
+        refine ⟨by intro hh; apply h4; left; omega, by intro hh; apply h4; left; omega, h3, ?_⟩
+        intro hh; exact h4 (Or.inr hh)
+    rw [hset, ho] at v2
+    exact v2
+
 end GvpProofs.Circo.Fenwick
