@@ -19,6 +19,7 @@ the same state once it publishes. Rounds are counted because `transpose` need no
 | §3.2 bullets | the cases of `exchange_m` |
 | §3.3 | `stepS_sim`, `loop_sim`, `transpose_same` |
 | §3.3, the three deferred items | `Rel` (`cand`, `valid`, `buf`, `arena`), `publish_eq` |
+| ports, NaN (#751) | `View.portGt`, `crosses_congr`, `F64.gt`, `transpose_same_f64`, `transpose_same_float` |
 
 §2 (`reorder_settled`) is not formalised here.
 
@@ -40,9 +41,14 @@ the same state once it publishes. Rounds are counted because `transpose` need no
 * `buildScan` starts the arena orders equal to the compact orders, which `prepare_mincross` and
   `write_crossing_orders` maintain; `positioned_rank`'s cached verdict is recomputed (`rowOk`).
 * The memo is a function of `(rank, position)`; `RankPair::slot` is `slot`.
-* Ports are `ℤ` compared with `>`; Rust's are `f64` compared with `>`. Any finite set of non-NaN
-  port values embeds order-preservingly, so the theorems transfer under the caller invariant "no
-  port is NaN", which `build_scan` does not check and this file does not prove (issue #751).
+* Ports are an abstract type `P` with a comparison `View.portGt : P → P → Bool`, standing for
+  Rust's `e1.port_x > e2.port_x` on `f64`. The theorems assume nothing of it (issue #751; see
+  "Ports"): not irreflexivity, not transitivity, not totality. So a NaN port, which makes `>` false
+  both ways, is inside them, and no caller invariant "ports are finite" is needed. `F64` and
+  `transpose_same_f64` instantiate `P` with IEEE `>` (`F64.gt`, false if either side is NaN);
+  `transpose_same_float` does it with Lean's `Float`. What is still assumed is that C's loop and
+  the scan evaluate the same comparison on the same port values, which holds because both call
+  `in_cross`/`out_cross` on the same `f64`s.
 -/
 
 set_option linter.unusedSectionVars false
@@ -51,15 +57,15 @@ namespace GvpProofs.Dot.MincrossScans
 
 open Function
 
-variable {N : Type} [DecidableEq N]
+variable {N P : Type} [DecidableEq N]
 
 /-! ## The model -/
 
 /-- One edge seen from a node: `ResolvedCrossing` without its order, which is read live. -/
-structure EdgeEnd (N : Type) where
+structure EdgeEnd (N P : Type) where
   other : N
   penalty : ℤ
-  port : ℤ
+  port : P
 
 /-- The arithmetic of the counting loops. The theorems hold for any of it, which is §4's point:
 wrapped or not, the same inputs give the same integer. `Arith.rust` below is the shipped one. -/
@@ -75,10 +81,10 @@ structure Arith where
 
 /-- What does not change during a `transpose`: edge lists, penalties, ports, window sizes,
 `left2right` (read from `low`, clusters and the flat matrix, never from orders). -/
-structure View (N : Type) where
+structure View (N P : Type) where
   rankOf : N → ℕ
-  inE : N → List (EdgeEnd N)
-  outE : N → List (EdgeEnd N)
+  inE : N → List (EdgeEnd N P)
+  outE : N → List (EdgeEnd N P)
   minr : ℕ
   maxr : ℕ
   /-- Where the view's window of rank `r` starts in the root's rank (`ScanRank::base`). -/
@@ -91,12 +97,15 @@ structure View (N : Type) where
   constrained : Bool
   reverse : Bool
   arith : Arith
+  /-- Rust's `e1.port_x > e2.port_x`. The proof asks nothing of it (no irreflexivity, no
+  transitivity, no totality): see "Ports" below. -/
+  portGt : P → P → Bool
   /-- `store.meta`: every compact slot. -/
   slots : List N
 
 namespace View
 
-variable (V : View N)
+variable (V : View N P)
 
 /-- `minr ≤ r ≤ maxr`. -/
 def InView (r : ℕ) : Prop := V.minr ≤ r ∧ r ≤ V.maxr
@@ -109,23 +118,25 @@ def ranks : List ℕ := List.range' V.minr (V.maxr + 1 - V.minr)
 theorem mem_ranks {r : ℕ} : r ∈ V.ranks ↔ V.InView r := by
   simp only [ranks, List.mem_range'_1, InView]; omega
 
-/-- C's comparison in `in_cross` and `out_cross`: `t > 0 || (t == 0 && port > port)`. -/
-def crosses (ord : N → ℤ) (e1 e2 : EdgeEnd N) : Prop :=
-  ord e1.other - ord e2.other > 0 ∨ (ord e1.other - ord e2.other = 0 ∧ e1.port > e2.port)
+/-- C's comparison in `in_cross` and `out_cross`: `t > 0 || (t == 0 && port > port)`, with the
+port comparison `gt` left abstract (`View.portGt`). -/
+def crosses (gt : P → P → Bool) (ord : N → ℤ) (e1 e2 : EdgeEnd N P) : Prop :=
+  ord e1.other - ord e2.other > 0 ∨ (ord e1.other - ord e2.other = 0 ∧ gt e1.port e2.port = true)
 
-instance (ord : N → ℤ) (e1 e2 : EdgeEnd N) : Decidable (crosses ord e1 e2) := by
+instance (gt : P → P → Bool) (ord : N → ℤ) (e1 e2 : EdgeEnd N P) :
+    Decidable (crosses gt ord e1 e2) := by
   unfold crosses; infer_instance
 
 /-- The two nested loops of `in_cross` and `out_cross`: the outer over `w`'s edges. -/
-def crossLoop (add : ℤ → ℤ → ℤ → ℤ) (ord : N → ℤ) (vs ws : List (EdgeEnd N)) : ℤ :=
+def crossLoop (gt : P → P → Bool) (add : ℤ → ℤ → ℤ → ℤ) (ord : N → ℤ) (vs ws : List (EdgeEnd N P)) : ℤ :=
   ws.foldl (fun acc e2 => vs.foldl
-    (fun acc e1 => if crosses ord e1 e2 then add acc e1.penalty e2.penalty else acc) acc) 0
+    (fun acc e1 => if crosses gt ord e1 e2 then add acc e1.penalty e2.penalty else acc) acc) 0
 
 /-- `c0` for the pair `(v, w)` of rank `r`, and `c1` when called with `w, v`: `in_cross` only if
 `r > 0`, `out_cross` only if rank `r + 1` is not empty. -/
 def count (ord : N → ℤ) (r : ℕ) (v w : N) : ℤ :=
-  let c := if r > 0 then V.arith.add 0 (crossLoop V.arith.inAdd ord (V.inE v) (V.inE w)) else 0
-  if V.hasOut r then V.arith.add c (crossLoop V.arith.outAdd ord (V.outE v) (V.outE w)) else c
+  let c := if r > 0 then V.arith.add 0 (crossLoop V.portGt V.arith.inAdd ord (V.inE v) (V.inE w)) else 0
+  if V.hasOut r then V.arith.add c (crossLoop V.portGt V.arith.outAdd ord (V.outE v) (V.outE w)) else c
 
 /-- `(c0, c1)`. -/
 def pair (ord : N → ℤ) (r : ℕ) (v w : N) : ℤ × ℤ := (V.count ord r v w, V.count ord r w v)
@@ -178,7 +189,7 @@ structure CState (N : Type) where
 
 section C
 
-variable (V : View N)
+variable (V : View N P)
 
 /-- C's `exchange(v, w)`, reading the two orders and writing through them. -/
 def exchangeC (c : CState N) (v w : N) : CState N :=
@@ -251,7 +262,7 @@ structure SState (N : Type) where
 
 section Scan
 
-variable (V : View N)
+variable (V : View N P)
 
 /-- `cell.known = false` for the pair starting at `first`, if the window of `rk` has one there. -/
 def clearAt (rk : ℕ) (first : ℤ) (m : Memo) : Memo :=
@@ -261,7 +272,7 @@ def clearAt (rk : ℕ) (first : ℤ) (m : Memo) : Memo :=
 
 /-- `forget_pairs`: for every edge `x` of `v` and `y` of `w` on one side, forgets the pair of
 rank `rk` that `x.other` and `y.other` form, when their orders are adjacent. -/
-def forget (ord : N → ℤ) (rk : ℕ) (xs ys : List (EdgeEnd N)) (m : Memo) : Memo :=
+def forget (ord : N → ℤ) (rk : ℕ) (xs ys : List (EdgeEnd N P)) (m : Memo) : Memo :=
   xs.foldl (fun m x => ys.foldl (fun m y =>
     let ox := ord x.other
     let oy := ord y.other
@@ -382,7 +393,7 @@ end Scan
 
 section Invariants
 
-variable (V : View N)
+variable (V : View N P)
 
 /-- Both ends of every edge list it: `forget_pairs` walks v's and w's edges to find a pair that
 has edges to v and w. `prepare_mincross` reads both from `ND_in` and `ND_out`, one edge each. -/
@@ -411,7 +422,7 @@ end Invariants
 
 section F
 
-variable (V : View N)
+variable (V : View N P)
 
 /-- Two order functions that agree on the sign of `a - b`. -/
 def SameSign (ord ord' : N → ℤ) (a b : N) : Prop :=
@@ -422,36 +433,37 @@ theorem sameSign_of_eq {ord ord' : N → ℤ} {a b : N} (ha : ord' a = ord a) (h
   simp [SameSign, ha, hb]
 
 /-- The loops use an order only through the sign of a difference (first sentence of (E)). -/
-theorem crosses_congr {ord ord' : N → ℤ} {e1 e2 : EdgeEnd N}
+theorem crosses_congr (gt : P → P → Bool) {ord ord' : N → ℤ} {e1 e2 : EdgeEnd N P}
     (h : SameSign ord ord' e1.other e2.other) :
-    View.crosses ord e1 e2 ↔ View.crosses ord' e1 e2 := by
+    View.crosses gt ord e1 e2 ↔ View.crosses gt ord' e1 e2 := by
   unfold View.crosses; rw [h.1, h.2]
 
-theorem crossLoop_congr (add : ℤ → ℤ → ℤ → ℤ) {ord ord' : N → ℤ} {vs ws : List (EdgeEnd N)}
+theorem crossLoop_congr (gt : P → P → Bool) (add : ℤ → ℤ → ℤ → ℤ) {ord ord' : N → ℤ}
+    {vs ws : List (EdgeEnd N P)}
     (h : ∀ e1 ∈ vs, ∀ e2 ∈ ws, SameSign ord ord' e1.other e2.other) :
-    View.crossLoop add ord vs ws = View.crossLoop add ord' vs ws := by
+    View.crossLoop gt add ord vs ws = View.crossLoop gt add ord' vs ws := by
   unfold View.crossLoop
-  have inner : ∀ (e2 : EdgeEnd N) (xs : List (EdgeEnd N)),
+  have inner : ∀ (e2 : EdgeEnd N P) (xs : List (EdgeEnd N P)),
       (∀ e1 ∈ xs, SameSign ord ord' e1.other e2.other) → ∀ a : ℤ,
-      xs.foldl (fun acc e1 => if View.crosses ord e1 e2
+      xs.foldl (fun acc e1 => if View.crosses gt ord e1 e2
           then add acc e1.penalty e2.penalty else acc) a =
-        xs.foldl (fun acc e1 => if View.crosses ord' e1 e2
+        xs.foldl (fun acc e1 => if View.crosses gt ord' e1 e2
           then add acc e1.penalty e2.penalty else acc) a := by
     intro e2 xs
     induction xs with
     | nil => intro _ a; rfl
     | cons x xs ih =>
       intro hx a
-      have hc := crosses_congr (hx x (by simp))
+      have hc := crosses_congr gt (hx x (by simp))
       simp only [List.foldl_cons]
-      rw [show (if View.crosses ord x e2 then add a x.penalty e2.penalty else a) =
-          (if View.crosses ord' x e2 then add a x.penalty e2.penalty else a) by
+      rw [show (if View.crosses gt ord x e2 then add a x.penalty e2.penalty else a) =
+          (if View.crosses gt ord' x e2 then add a x.penalty e2.penalty else a) by
         simp only [hc]]
       exact ih (fun e he => hx e (by simp [he])) _
-  have outer : ∀ (ys : List (EdgeEnd N)), (∀ e2 ∈ ys, e2 ∈ ws) → ∀ a : ℤ,
-      ys.foldl (fun acc e2 => vs.foldl (fun acc e1 => if View.crosses ord e1 e2
+  have outer : ∀ (ys : List (EdgeEnd N P)), (∀ e2 ∈ ys, e2 ∈ ws) → ∀ a : ℤ,
+      ys.foldl (fun acc e2 => vs.foldl (fun acc e1 => if View.crosses gt ord e1 e2
           then add acc e1.penalty e2.penalty else acc) acc) a =
-        ys.foldl (fun acc e2 => vs.foldl (fun acc e1 => if View.crosses ord' e1 e2
+        ys.foldl (fun acc e2 => vs.foldl (fun acc e1 => if View.crosses gt ord' e1 e2
           then add acc e1.penalty e2.penalty else acc) acc) a := by
     intro ys
     induction ys with
@@ -472,13 +484,13 @@ theorem count_congr {ord ord' : N → ℤ} {r : ℕ} {v w : N}
     V.count ord r v w = V.count ord' r v w := by
   unfold View.count
   by_cases h0 : r > 0
-  · rw [ite_eq_left h0, ite_eq_left h0, crossLoop_congr _ (hi h0)]
+  · rw [ite_eq_left h0, ite_eq_left h0, crossLoop_congr _ _ (hi h0)]
     by_cases h1 : V.hasOut r = true
-    · simp only [h1, ite_true]; rw [crossLoop_congr _ (ho h1)]
+    · simp only [h1, ite_true]; rw [crossLoop_congr _ _ (ho h1)]
     · simp [h1]
   · rw [ite_eq_right h0, ite_eq_right h0]
     by_cases h1 : V.hasOut r = true
-    · simp only [h1, ite_true]; rw [crossLoop_congr _ (ho h1)]
+    · simp only [h1, ite_true]; rw [crossLoop_congr _ _ (ho h1)]
     · simp [h1]
 
 /-- §3.2, position `i`: the exchanged pair reads the same two counts the other way round. -/
@@ -491,7 +503,7 @@ end F
 
 section E
 
-variable (V : View N)
+variable (V : View N P)
 
 /-- (E): swapping two adjacent orders `p`, `p + 1` keeps the sign of every comparison between two
 nodes of their rank, except the comparison of `v` with `w`. `hv'` and `hw'` are what (W) and the
@@ -540,7 +552,7 @@ end E
 
 section Forget
 
-variable (V : View N)
+variable (V : View N P)
 
 /-- `m'` knows no more than `m`, and what it knows it got from `m`: over-forgetting is harmless. -/
 def MemoLe (m m' : Memo) : Prop := ∀ r i c, m' r i = some c → m r i = some c
@@ -575,12 +587,12 @@ theorem clearAt_hit {rk j : ℕ} (hj : j + 1 < V.n rk) (m : Memo) :
   simp [setMemo]
 
 /-- One step of `forget_pairs`' inner loop. -/
-def forgetStep (ord : N → ℤ) (rk : ℕ) (x : EdgeEnd N) (m : Memo) (y : EdgeEnd N) : Memo :=
+def forgetStep (ord : N → ℤ) (rk : ℕ) (x : EdgeEnd N P) (m : Memo) (y : EdgeEnd N P) : Memo :=
   if ord x.other - ord y.other = 1 then clearAt V rk (ord y.other) m
   else if ord x.other - ord y.other = -1 then clearAt V rk (ord x.other) m
   else m
 
-theorem forgetStep_le (ord : N → ℤ) (rk : ℕ) (x : EdgeEnd N) (m : Memo) (y : EdgeEnd N) :
+theorem forgetStep_le (ord : N → ℤ) (rk : ℕ) (x : EdgeEnd N P) (m : Memo) (y : EdgeEnd N P) :
     MemoLe m (forgetStep V ord rk x m y) := by
   unfold forgetStep
   split_ifs
@@ -588,24 +600,24 @@ theorem forgetStep_le (ord : N → ℤ) (rk : ℕ) (x : EdgeEnd N) (m : Memo) (y
   · exact clearAt_le _ _ _ _
   · exact MemoLe.refl _
 
-theorem forget_eq (ord : N → ℤ) (rk : ℕ) (xs ys : List (EdgeEnd N)) (m : Memo) :
+theorem forget_eq (ord : N → ℤ) (rk : ℕ) (xs ys : List (EdgeEnd N P)) (m : Memo) :
     forget V ord rk xs ys m = xs.foldl (fun m x => ys.foldl (forgetStep V ord rk x) m) m := rfl
 
-theorem inner_le (ord : N → ℤ) (rk : ℕ) (x : EdgeEnd N) (ys : List (EdgeEnd N)) (m : Memo) :
+theorem inner_le (ord : N → ℤ) (rk : ℕ) (x : EdgeEnd N P) (ys : List (EdgeEnd N P)) (m : Memo) :
     MemoLe m (ys.foldl (forgetStep V ord rk x) m) := by
   induction ys generalizing m with
   | nil => exact MemoLe.refl _
   | cons y ys ih => exact (forgetStep_le V ord rk x m y).trans (ih _)
 
 /-- `forget_pairs` only forgets. -/
-theorem forget_le (ord : N → ℤ) (rk : ℕ) (xs ys : List (EdgeEnd N)) (m : Memo) :
+theorem forget_le (ord : N → ℤ) (rk : ℕ) (xs ys : List (EdgeEnd N P)) (m : Memo) :
     MemoLe m (forget V ord rk xs ys m) := by
   rw [forget_eq]
   induction xs generalizing m with
   | nil => exact MemoLe.refl _
   | cons x xs ih => exact (inner_le V ord rk x ys m).trans (ih _)
 
-theorem forgetStep_hit {ord : N → ℤ} {rk j : ℕ} {x y : EdgeEnd N} (hj : j + 1 < V.n rk)
+theorem forgetStep_hit {ord : N → ℤ} {rk j : ℕ} {x y : EdgeEnd N P} (hj : j + 1 < V.n rk)
     (h : (ord x.other = V.base rk + j ∧ ord y.other = V.base rk + j + 1) ∨
       (ord y.other = V.base rk + j ∧ ord x.other = V.base rk + j + 1)) (m : Memo) :
     forgetStep V ord rk x m y rk j = none := by
@@ -618,13 +630,13 @@ theorem forgetStep_hit {ord : N → ℤ} {rk j : ℕ} {x y : EdgeEnd N} (hj : j 
 
 /-- §3.2, ranks `r − 1` and `r + 1`: a pair at adjacent positions `j`, `j + 1` of `rk` with an edge
 to `v` on one side and to `w` on the other is forgotten, whichever way round. -/
-theorem forget_hits {ord : N → ℤ} {rk j : ℕ} {xs ys : List (EdgeEnd N)} {x y : EdgeEnd N}
+theorem forget_hits {ord : N → ℤ} {rk j : ℕ} {xs ys : List (EdgeEnd N P)} {x y : EdgeEnd N P}
     (hx : x ∈ xs) (hy : y ∈ ys) (hj : j + 1 < V.n rk)
     (h : (ord x.other = V.base rk + j ∧ ord y.other = V.base rk + j + 1) ∨
       (ord y.other = V.base rk + j ∧ ord x.other = V.base rk + j + 1)) (m : Memo) :
     forget V ord rk xs ys m rk j = none := by
   rw [forget_eq]
-  have inner : ∀ (ys : List (EdgeEnd N)), y ∈ ys → ∀ m : Memo,
+  have inner : ∀ (ys : List (EdgeEnd N P)), y ∈ ys → ∀ m : Memo,
       ys.foldl (forgetStep V ord rk x) m rk j = none := by
     intro ys
     induction ys with
@@ -635,7 +647,7 @@ theorem forget_hits {ord : N → ℤ} {rk j : ℕ} {xs ys : List (EdgeEnd N)} {x
       rcases List.mem_cons.mp hy with rfl | hy
       · exact (inner_le V ord rk x ys _).none (forgetStep_hit V hj h m)
       · exact ih hy _
-  have outer : ∀ (zs : List (EdgeEnd N)), x ∈ zs → ∀ m : Memo,
+  have outer : ∀ (zs : List (EdgeEnd N P)), x ∈ zs → ∀ m : Memo,
       zs.foldl (fun m x => ys.foldl (forgetStep V ord rk x) m) m rk j = none := by
     intro zs
     induction zs with
@@ -659,10 +671,10 @@ end Forget
 
 section Exchange
 
-variable (V : View N) {s : SState N} {r i : ℕ}
+variable (V : View N P) {s : SState N} {r i : ℕ}
 
 /-- The order function after the exchange at position `i` of rank `r`. -/
-def ordAfter (V : View N) (s : SState N) (r i : ℕ) : N → ℤ :=
+def ordAfter (V : View N P) (s : SState N) (r i : ℕ) : N → ℤ :=
   update (update s.order (s.slot r i) (V.base r + i + 1)) (s.slot r (i + 1)) (V.base r + i)
 
 theorem Inv.slot_inj (hs : Inv V s) {r j k : ℕ} (hr : V.InView r) (hj : j < V.n r) (hk : k < V.n r)
@@ -716,10 +728,10 @@ theorem exchange_sign (hs : Inv V s) (hr : V.InView r) (hi : i + 1 < V.n r) {a b
     rwa [hx] at this
 
 /-- No pair of neighbours of `xs` and `ys` is `{v, w}`. -/
-def NoCross (xs ys : List (EdgeEnd N)) (v w : N) : Prop :=
+def NoCross (xs ys : List (EdgeEnd N P)) (v w : N) : Prop :=
   ∀ e1 ∈ xs, ∀ e2 ∈ ys, ¬((e1.other = v ∧ e2.other = w) ∨ (e1.other = w ∧ e2.other = v))
 
-theorem NoCross.symm {xs ys : List (EdgeEnd N)} {v w : N} (h : NoCross xs ys v w) :
+theorem NoCross.symm {xs ys : List (EdgeEnd N P)} {v w : N} (h : NoCross xs ys v w) :
     NoCross ys xs v w := by
   intro e1 he1 e2 he2 hc
   refine h e2 he2 e1 he1 ?_
@@ -736,7 +748,7 @@ theorem pair_stable (hs : Inv V s) (hr : V.InView r) (hi : i + 1 < V.n r) {r' : 
     (hin : r' = r + 1 → NoCross (V.inE x) (V.inE y) (s.slot r i) (s.slot r (i + 1)))
     (hout : r' + 1 = r → NoCross (V.outE x) (V.outE y) (s.slot r i) (s.slot r (i + 1))) :
     V.pair (ordAfter V s r i) r' x y = V.pair s.order r' x y := by
-  have key : ∀ (xs ys : List (EdgeEnd N)) (d : ℕ),
+  have key : ∀ (xs ys : List (EdgeEnd N P)) (d : ℕ),
       (∀ e ∈ xs, V.rankOf e.other = d) → (∀ e ∈ ys, V.rankOf e.other = d) →
       (d = r → NoCross xs ys (s.slot r i) (s.slot r (i + 1))) →
       ∀ e1 ∈ xs, ∀ e2 ∈ ys, SameSign s.order (ordAfter V s r i) e1.other e2.other := by
@@ -939,7 +951,7 @@ end Exchange
 
 section Step
 
-variable (V : View N) {s : SState N} {r i : ℕ}
+variable (V : View N P) {s : SState N} {r i : ℕ}
 
 theorem Inv.congr {s s' : SState N} (hs : Inv V s) (ho : s'.order = s.order)
     (hl : s'.slot = s.slot) (hm : s'.memo = s.memo) : Inv V s' where
@@ -957,7 +969,7 @@ theorem read_eq (hs : Inv V s) (hr : V.InView r) (hi : i + 1 < V.n r) :
   | some p => exact hs.m r i p hr hi h
 
 /-- The exchange branch of `stepS`. -/
-def exchangeS (V : View N) (s : SState N) (r i : ℕ) (p : ℤ × ℤ) : SState N :=
+def exchangeS (V : View N P) (s : SState N) (r i : ℕ) (p : ℤ × ℤ) : SState N :=
   { s with
     order := ordAfter V s r i
     slot := swapSlot s.slot r i
@@ -1111,7 +1123,7 @@ end Step
 
 section Sim
 
-variable (V : View N)
+variable (V : View N P)
 
 /-- A rank whose window the state's `buf` no longer shows. -/
 def Dirty (cur : ℕ) (s : SState N) (r : ℕ) : Prop :=
@@ -1435,7 +1447,7 @@ end Sim
 
 section Publish
 
-variable (V : View N)
+variable (V : View N P)
 
 /-- One rank of `publish_scans`, position by position. -/
 theorem publishRow_spec {s : SState N} {r : ℕ}
@@ -1610,7 +1622,7 @@ end Publish
 
 section Build
 
-variable (V : View N)
+variable (V : View N P)
 
 /-- (W) as the page states it: a node of the view that is not in its rank's window has an order
 outside that window. -/
@@ -1709,6 +1721,93 @@ theorem transpose_same (sym : V.Sym) (hslots : ∀ x, x ∈ V.slots) {c : CState
 
 end Build
 
+/-! ## Ports
+
+The Rust comparison is `e1.port_x > e2.port_x` on `f64`. Nothing above looks inside it: `portGt` is
+used once, in `View.crosses`, and `crosses_congr` (the only lemma about `crosses`) rewrites the
+order part of the test and leaves the port part alone, because the two sides of every congruence
+are the same edges with the same ports. So `transpose_same` holds for **every** `portGt`: it does
+not need irreflexivity, asymmetry, transitivity, totality or even that equal ports compare
+alike. A NaN port, `±∞`, `-0.0` against `0.0`, or a comparison that is not a function of the
+value at all, are all inside the theorem. What the theorem does need is that C's loop and the
+scan evaluate the same `portGt` on the same pair of port values, which holds because both call
+`in_cross`/`out_cross`.
+
+`F64 α` is a port as IEEE `>` sees it: a non-NaN value in a linear order `α` (so `±∞` and the
+signed zeros live in `α`) or NaN (`none`). `F64.gt` is `>` with the IEEE rule that an ordered
+comparison with a NaN operand is false. Its failures, below, are the properties a proof about
+`ℤ` ports could have used and this one does not. -/
+
+section Ports
+
+/-- A binary64 port x: `some a` for any non-NaN value (including `±∞`), `none` for NaN. -/
+abbrev F64 (α : Type) := Option α
+
+/-- IEEE `>`: false when either operand is NaN. -/
+def F64.gt {α : Type} [LT α] [DecidableRel (α := α) (· < ·)] : F64 α → F64 α → Bool
+  | some a, some b => decide (b < a)
+  | _, _ => false
+
+variable {α : Type} [LinearOrder α]
+
+/-- On non-NaN values `F64.gt` is the `>` of `α`, which is the old model with `α := ℤ`. -/
+theorem F64.gt_some (a b : α) : F64.gt (some a) (some b) = decide (a > b) := rfl
+
+theorem F64.gt_nan_left (b : F64 α) : F64.gt none b = false := by cases b <;> rfl
+
+theorem F64.gt_nan_right (a : F64 α) : F64.gt a none = false := by cases a <;> rfl
+
+/-- Irreflexivity survives, NaN included: `NaN > NaN` is false. -/
+theorem F64.gt_irrefl (a : F64 α) : F64.gt a a = false := by
+  cases a with
+  | none => rfl
+  | some a => simp [F64.gt]
+
+/-- Asymmetry survives. -/
+theorem F64.gt_asymm (a b : F64 α) (h : F64.gt a b = true) : F64.gt b a = false := by
+  cases a <;> cases b <;> simp_all [F64.gt]
+  rename_i x y
+  exact le_of_lt h
+
+/-- What does not survive: totality. With a NaN, neither `a > b`, nor `b > a`, nor equality. The
+ℤ model's order embedding of the ports needs this, so a NaN port is outside that argument; the
+theorem for an abstract `portGt` does not use it. -/
+theorem F64.not_total (a : α) :
+    F64.gt none (some a) = false ∧ F64.gt (some a) none = false ∧ (none : F64 α) ≠ some a :=
+  ⟨rfl, rfl, by simp⟩
+
+/-- Also gone: "not greater" is not transitive, so `¬ (· > ·)` is not a preorder. With `c < a`:
+`a ≯ NaN` and `NaN ≯ c`, yet `a > c`. A proof that read `≯` as `≤` (to sort ports, say) would
+break at the first NaN. -/
+theorem F64.not_gt_not_trans (a c : α) (h : c < a) :
+    F64.gt (some a) none = false ∧ F64.gt none (some c) = false ∧ F64.gt (some a) (some c) = true := by
+  refine ⟨rfl, rfl, ?_⟩
+  simp [F64.gt, h]
+
+end Ports
+
+/-- **`transpose_same` for IEEE ports.** `V` is a view whose port comparison is `F64.gt`, NaN
+ports allowed. The conclusion is the one of `transpose_same`; the proof is that theorem. -/
+theorem transpose_same_f64 {α : Type} [LT α] [DecidableRel (α := α) (· < ·)] (V : View N (F64 α))
+    (_hgt : V.portGt = F64.gt) (sym : V.Sym) (hslots : ∀ x, x ∈ V.slots) {c : CState N}
+    {s : SState N} (hb : buildScan V c = some s) (k : ℕ) :
+    let a := loopC V k c
+    let b := loopS V k s
+    a.2 = b.2 ∧ a.1.log = b.1.log ∧ a.1.order = b.1.order ∧ a.1.cand = b.1.cand ∧
+      a.1.valid = b.1.valid ∧ (publish V b.1).buf = a.1.buf ∧ (publish V b.1).arena = a.1.order :=
+  transpose_same V sym hslots hb k
+
+/-- The same for Lean's own `Float`, whose `<` is the machine `<` (false with a NaN operand). Rust's
+`a > b` is `b < a`. -/
+theorem transpose_same_float (V : View N Float) (_hgt : V.portGt = fun a b => decide (b < a))
+    (sym : V.Sym) (hslots : ∀ x, x ∈ V.slots) {c : CState N} {s : SState N}
+    (hb : buildScan V c = some s) (k : ℕ) :
+    let a := loopC V k c
+    let b := loopS V k s
+    a.2 = b.2 ∧ a.1.log = b.1.log ∧ a.1.order = b.1.order ∧ a.1.cand = b.1.cand ∧
+      a.1.valid = b.1.valid ∧ (publish V b.1).buf = a.1.buf ∧ (publish V b.1).arena = a.1.order :=
+  transpose_same V sym hslots hb k
+
 /-! ## The shipped arithmetic -/
 
 /-- Two's-complement wrapping to `bits` bits. -/
@@ -1732,7 +1831,7 @@ first round exchanges `0` and `1`, the second finds nothing, and the scan reads 
 section Example
 
 /-- The view. -/
-def exV : View (Fin 4) where
+def exV : View (Fin 4) ℤ where
   rankOf x := if x.val < 2 then 0 else 1
   inE x := match x.val with
     | 2 => [⟨1, 1, 0⟩]
@@ -1751,6 +1850,7 @@ def exV : View (Fin 4) where
   constrained := false
   reverse := false
   arith := Arith.rust
+  portGt a b := decide (a > b)
   slots := [0, 1, 2, 3]
 
 /-- C's state before `transpose`. -/

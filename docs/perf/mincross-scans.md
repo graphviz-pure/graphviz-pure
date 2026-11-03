@@ -9,8 +9,9 @@ hand over to them when a condition below does not hold (§5), and in check mode 
 Measurements are in the pull request that added this page.
 
 Proof of record: `proofs/GvpProofs/Dot/MincrossScans.lean` (Lean 4, #732). It covers §3: (W),
-(F), (E), (M) and the §3.3 induction, for any number of rounds, under the invariant that no port
-value is NaN (#751). §2 (`reorder`) is not covered.
+(F), (E), (M) and the §3.3 induction, for any number of rounds. It holds for any port comparison, so
+a NaN or infinite port x is inside it: the proof never inspects `e1.port_x > e2.port_x` (#751).
+§2 (`reorder`) is not covered.
 
 ## 1. Where the work goes
 

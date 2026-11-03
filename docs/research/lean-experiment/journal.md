@@ -664,3 +664,47 @@ compile was the whole file; 404 lines of which 282 are code, 28 declarations, st
 only), 1.0 h on Rust (index, three edit sites, check-mode oracle, differential and randomised unit
 tests, two clippy rounds), 1.2 h measuring and profiling (ratchet before and after, perf, interleaved
 timings), and about 0.6 h stalled on the machine's disk guard and a server restart.
+
+## 2026-11-03 #751: mincross scans, NaN ports
+
+Lean and docs only; no Rust change (the one Rust edit, a temporary probe, was reverted).
+
+**The gap.** `MincrossScans.lean` (#732) compared ports as `ℤ`; Rust compares `f64` with `>`. The
+header handed the difference to the caller ("no port is NaN", not checked, not proved).
+
+**Route.** The ticket offered (a) show NaN ports are unreachable and assert it, or (b) make the
+port comparison abstract. Took (b). For (a), a probe in the two places that copy `port.p.x` into the
+crossing store (`mincross.rs`, then fuzzing) showed the premise "ports come from finite node
+geometry" is false: `width=inf` on a polygon gives ports of `±inf`, because `strtod` accepts `inf`
+and `nan` and `late_double` only clamps from below. NaN did not appear in about 500 hostile graphs
+(`width`, `height`, `skew`, `distortion`, `orientation`, `margin`, `fontsize`, `penwidth` set to
+`inf`, `nan`, `1e308`, over seven shapes, both rank directions, compass and record ports, loops and
+back edges). From the outputs, `nan` sizes fall back to the label size and record sizes saturate; I did not trace why in the source.
+That is evidence, not a proof; proving it would be an audit of the whole `graphviz-pure-geom` crate,
+and (b) makes it unnecessary.
+
+**What was built.** `View` and `EdgeEnd` take a port type `P`; `View.portGt : P → P → Bool` is
+Rust's `e1.port_x > e2.port_x`. `crosses` and `crossLoop` take the comparison; `crosses_congr`,
+`crossLoop_congr` follow. About 100 lines added to a 1,776-line file, and every existing theorem
+compiled unchanged apart from the extra argument. A "Ports" section models IEEE `>` (`F64.gt`: false
+when either side is NaN) and instantiates `transpose_same` for it (`transpose_same_f64`) and for
+Lean's `Float` (`transpose_same_float`), with the lemmas for what a NaN breaks.
+
+**What the generic version revealed.** The proof needed *nothing* of the comparison: no
+irreflexivity, asymmetry, transitivity or totality, and not even that it is a function of the
+values' order. Port comparisons occur only inside `crosses`, and the only lemma about `crosses`
+(`crosses_congr`) rewrites its order half; the port half is identical on both sides because C's loop
+and the scan evaluate the same edges. So the ℤ model's stated route (embed the ports
+order-preservingly) was a stronger argument than the theorem needed. What a NaN does break, shown in
+`F64`: totality (`NaN` is neither above, below nor equal), and transitivity of "not greater"
+(`a ≯ NaN`, `NaN ≯ c`, `a > c`). Irreflexivity and asymmetry survive. A future proof that sorts ports
+or reads `≯` as `≤` (e.g. one about `reorder`, whose own NaN condition is the *median*, not the port)
+would need the no-NaN hypothesis after all.
+
+**Dead ends / friction.** Lean's `Float` is opaque to the kernel, so nothing about NaN can be proved
+there; the NaN facts live in the `F64` model and `Float` only gets the instantiation. Build: the
+whole generalisation compiled on the second run (the first failed only on the worked example's
+missing field).
+
+**Cost.** About 0.5 h on Rust (probe, fuzz script, reverting), 0.4 h on Lean, 0.2 h on docs. Extraction
+verdict: not applicable (statement over a Lean model, as in #732).
