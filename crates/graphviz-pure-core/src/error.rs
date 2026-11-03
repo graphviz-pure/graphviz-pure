@@ -82,18 +82,18 @@ pub enum GraphvizErrorKind {
 pub enum DiagnosticLevel {
     /// `AGERR`. The message text starts with `Error: `.
     Error,
-    /// `AGWARN`. The message text starts with `Warning: `.
+    /// `AGWARN`, or an uncounted renderer warning.
     Warning,
     /// `AGMAX`. Counted as an error. The message text starts with `Warning: `.
     CountedAsError,
 }
 
-/// One `agerr` / `agwarningf` message, in the order C wrote it.
+/// One `agerr` / `agwarningf` message or renderer warning, in the order C wrote it.
 ///
-/// [`Self::message`] is the exact text of that write, including the `Error: `
-/// or `Warning: ` prefix (none for a continuation) and the trailing newline,
-/// after C's escaping of control characters. It is not a whole stderr log:
-/// `-v` progress is not a diagnostic.
+/// [`Self::message`] is the exact text of that write, including any `Error: `
+/// or `Warning: ` prefix (none for a continuation or renderer warning) and the
+/// trailing newline. `agerr` applies C's escaping of control characters. This is
+/// not a whole stderr log: `-v` progress is not a diagnostic.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Diagnostic {
     level: DiagnosticLevel,
@@ -105,13 +105,13 @@ impl Diagnostic {
         Self { level, message }
     }
 
-    /// `AGERR`, `AGWARN` or `AGMAX`. A continuation uses the level it extends.
+    /// `AGERR`, `AGWARN`, `AGMAX`, or the level of a renderer warning.
     #[must_use]
     pub fn level(&self) -> DiagnosticLevel {
         self.level
     }
 
-    /// The exact text of this one `agerr` write.
+    /// The exact text of this one diagnostic write.
     #[must_use]
     pub fn message(&self) -> &str {
         &self.message
@@ -131,8 +131,8 @@ impl Diagnostic {
 /// one call renders every graph. A parsed graph and a layout use the graph type
 /// and `()`. Raster bytes are `Rendered<Vec<u8>>`.
 ///
-/// The diagnostics are the `agerr` messages of that call, in order. Dropping
-/// the value drops them. [`Self::into_output`] keeps only the value, and
+/// The diagnostics are the `agerr` and renderer messages of that call, in order.
+/// Dropping the value drops them. [`Self::into_output`] keeps only the value, and
 /// [`Self::into_parts`] keeps both.
 #[must_use]
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -175,7 +175,7 @@ impl<T> Rendered<T> {
         (self.output, self.diagnostics)
     }
 
-    /// `agerr` messages from the call, in order.
+    /// `agerr` and renderer messages from the call, in order.
     #[must_use]
     pub fn diagnostics(&self) -> &[Diagnostic] {
         &self.diagnostics

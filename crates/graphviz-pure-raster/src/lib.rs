@@ -168,11 +168,33 @@ fn encode_png(pixels: &[u8], width: u32, height: u32) -> Result<Vec<u8>, png::En
     Ok(data)
 }
 
+const CAIRO_XMAX: f64 = 32767.0;
+const CAIRO_YMAX: f64 = 32767.0;
+
+/// C: plugin/pango/gvrender_pango.c:cairogen_begin_page
+fn fit_cairo_bitmap(format: RasterFormat, w: u32, h: u32) -> (u32, u32, f64) {
+    if format != RasterFormat::Png || (f64::from(w) < CAIRO_XMAX && f64::from(h) < CAIRO_YMAX) {
+        return (w, h, 1.0);
+    }
+    let scale = (CAIRO_XMAX / f64::from(w)).min(CAIRO_YMAX / f64::from(h));
+    let w = (f64::from(w) * scale) as u32;
+    let h = (f64::from(h) * scale) as u32;
+    graphviz_pure_core::diag::render_warning(&format!(
+        "graph is too large for cairo-renderer bitmaps. Scaling by {} to fit\n",
+        graphviz_pure_core::cnum::fmt_g(scale, 6)
+    ));
+    (w, h, scale)
+}
+
 /// Draws the SVG and returns the picture.
 ///
 /// `explicit_dpi` says whether the graph set `dpi` or `resolution` (then the SVG is
 /// already scaled and is drawn at one pixel per point).
-fn render_pixmap(svg: &str, explicit_dpi: bool) -> Result<tiny_skia::Pixmap, GraphvizError> {
+fn render_pixmap(
+    svg: &str,
+    format: RasterFormat,
+    explicit_dpi: bool,
+) -> Result<Option<tiny_skia::Pixmap>, GraphvizError> {
     let opt = usvg::Options {
         fontdb: fontdb(),
         font_family: "Tinos".to_string(),
@@ -193,14 +215,20 @@ fn render_pixmap(svg: &str, explicit_dpi: bool) -> Result<tiny_skia::Pixmap, Gra
         (size.width() * scale).round().max(1.0) as u32,
         (size.height() * scale).round().max(1.0) as u32,
     );
+    let (w, h, fit) = fit_cairo_bitmap(format, w, h);
+    if w == 0 || h == 0 {
+        // cairo accepts the zero-sized surface but writes no PNG bytes.
+        return Ok(None);
+    }
+    let scale = f64::from(scale) * fit;
     let mut pixmap = tiny_skia::Pixmap::new(w, h)
         .ok_or_else(|| GraphvizError::render("the drawing is too large to rasterize"))?;
     resvg::render(
         &tree,
-        tiny_skia::Transform::from_scale(scale, scale),
+        tiny_skia::Transform::from_scale(scale as f32, scale as f32),
         &mut pixmap.as_mut(),
     );
-    Ok(pixmap)
+    Ok(Some(pixmap))
 }
 
 fn rasterize_inner(
@@ -208,7 +236,9 @@ fn rasterize_inner(
     format: RasterFormat,
     explicit_dpi: bool,
 ) -> Result<Vec<u8>, GraphvizError> {
-    let pixmap = render_pixmap(svg, explicit_dpi)?;
+    let Some(pixmap) = render_pixmap(svg, format, explicit_dpi)? else {
+        return Ok(Vec::new());
+    };
     let (w, h) = (pixmap.width(), pixmap.height());
     match format {
         // `Pixmap::encode_png` copies the whole pixmap into a second buffer before it
@@ -271,6 +301,72 @@ mod tests {
         );
     }
 
+    #[test]
+    fn png_scales_to_the_cairo_bitmap_limit() {
+        for (w, expected_w, expected_h, warning) in [
+            (32766, 32766, 100, None),
+            (
+                32767,
+                32767,
+                100,
+                Some("graph is too large for cairo-renderer bitmaps. Scaling by 1 to fit\n"),
+            ),
+            (
+                32768,
+                32767,
+                99,
+                Some("graph is too large for cairo-renderer bitmaps. Scaling by 0.999969 to fit\n"),
+            ),
+            (
+                100000,
+                32767,
+                32,
+                Some("graph is too large for cairo-renderer bitmaps. Scaling by 0.32767 to fit\n"),
+            ),
+        ] {
+            let svg = format!(
+                r#"<svg xmlns="http://www.w3.org/2000/svg" width="{w}pt" height="100pt" viewBox="0 0 {w} 100"><rect width="{w}" height="100" fill="white"/></svg>"#
+            );
+            let png = rasterize(&svg, RasterFormat::Png, true).unwrap();
+            assert_eq!(
+                u32::from_be_bytes(png.output()[16..20].try_into().unwrap()),
+                expected_w
+            );
+            assert_eq!(
+                u32::from_be_bytes(png.output()[20..24].try_into().unwrap()),
+                expected_h
+            );
+            assert_eq!(png.diagnostics().len(), usize::from(warning.is_some()));
+            if let Some(warning) = warning {
+                assert_eq!(png.diagnostics()[0].message(), warning);
+            }
+        }
+    }
+
+    #[test]
+    fn zero_after_cairo_scaling_returns_no_bytes() {
+        for (w, h) in [(100000, 1), (1, 100000)] {
+            let svg = format!(
+                r#"<svg xmlns="http://www.w3.org/2000/svg" width="{w}pt" height="{h}pt" viewBox="0 0 {w} {h}"/>"#
+            );
+            let png = rasterize(&svg, RasterFormat::Png, true).unwrap();
+            assert!(png.output().is_empty());
+            assert_eq!(png.diagnostics().len(), 1);
+            assert_eq!(
+                png.diagnostics()[0].message(),
+                "graph is too large for cairo-renderer bitmaps. Scaling by 0.32767 to fit\n"
+            );
+        }
+    }
+
+    #[test]
+    fn cairo_limit_does_not_apply_to_jpeg() {
+        let ((w, h, scale), diagnostics) =
+            graphviz_pure_core::diag::capture(|| fit_cairo_bitmap(RasterFormat::Jpeg, 100000, 100));
+        assert_eq!((w, h, scale), (100000, 100, 1.0));
+        assert!(diagnostics.is_empty());
+    }
+
     // The PNG the raster path writes is the one `tiny_skia`'s `Pixmap::encode_png`
     // writes for the same drawing: the pixels are encoded where they are drawn,
     // without a copy of the whole pixmap first. Both sides demultiply the pixels
@@ -285,7 +381,8 @@ mod tests {
 <text text-anchor="middle" x="27" y="-85.8" font-family="Times,serif" font-size="14.00">a</text></g></svg>"#;
         for svg in [SVG, TRANSPARENT] {
             for explicit_dpi in [false, true] {
-                let reference = render_pixmap(svg, explicit_dpi)
+                let reference = render_pixmap(svg, RasterFormat::Png, explicit_dpi)
+                    .unwrap()
                     .unwrap()
                     .encode_png()
                     .unwrap();
