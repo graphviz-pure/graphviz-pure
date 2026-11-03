@@ -19,9 +19,11 @@ goldens). Outcomes (one JSON line per case in OUT/results.jsonl):
                field `stderr_diff`)
   c_timeout    C exceeded the timeout          c_crash    C died from a signal
   c_unstable   C's output differs between two runs
-  svg_diff     stdout differs                  exit_diff  exit status differs
+  svg_diff     stdout differs                  exit_diff  exit status differs (any exit change)
   port_crash   the port panicked or died       port_timeout  the port exceeded the timeout
   debug_diff   the debug build (overflow checks) panicked or disagreed with release
+               For `svg_diff` and `exit_diff`, `stderr_diff` is recorded when normalized
+               stderr differs.
 Cases with an actionable outcome are copied to OUT/diff/.
 """
 import argparse

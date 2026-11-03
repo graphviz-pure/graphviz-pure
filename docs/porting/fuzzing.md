@@ -247,9 +247,7 @@ The 3 `stderr_diff` notes on cases whose SVG and exit status match C are: `40126
 C, not an `endgraph` effect), `43065` (circo, port bug #582: the port fails edge routing with a 4th
 `destination point not in any triangle` warning where C is stable over 31 GTS face orders and
 allocators), and `43458` (neato, accepted #35: GTS triangle order changes which endpoint
-`Pshortestpath` reports outside the triangulation on a degenerate spline fallback). (Harness gaps
-where `fuzz-run.py` did not record `stderr_diff` on `svg_diff` cases and treated any two nonzero
-exits as equal are tracked in #586.)
+`Pshortestpath` reports outside the triangulation on a degenerate spline fallback).
 
 The crash and extreme-value campaigns were also re-run on the overflow-checked release build:
 
