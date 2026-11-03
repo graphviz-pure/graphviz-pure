@@ -1019,4 +1019,29 @@ mod tests {
             ["Warning: using box for unknown shape only_thread_b\n"]
         );
     }
+
+    #[test]
+    fn routes_past_the_coordinate_limit_still_go_around_obstacles() {
+        // `pathplan::visibility` trusts its bounding-box skip only up to 10^5 points. `pos` is in
+        // inches here, so these pinned nodes are past that, and take C's loop, in check mode too.
+        let src = r#"graph G { splines=true;
+            a [pos="0,0!"]; c [pos="1500,0!"]; b [pos="3000,0!"];
+            a -- b;
+        }"#;
+        let rendered = render_dot(src, "neato", "plain").expect("render");
+        let edge: Vec<f64> = rendered
+            .output()
+            .lines()
+            .find_map(|l| l.strip_prefix("edge a b "))
+            .expect("the edge")
+            .split_whitespace()
+            .filter_map(|x| x.parse().ok())
+            .collect();
+        let count = edge[0] as usize;
+        let ys: Vec<f64> = (0..count).map(|i| edge[2 + 2 * i]).collect();
+        assert!(
+            ys.iter().any(|y| y.abs() > 0.2),
+            "the route runs straight through c: {ys:?}"
+        );
+    }
 }
