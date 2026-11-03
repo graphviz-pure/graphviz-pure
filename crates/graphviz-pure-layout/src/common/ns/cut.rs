@@ -30,8 +30,9 @@
 //! wrapped arithmetic), where a pivot's check phase finds the cut sets inconsistent, or where a
 //! pivot could take the pool past its budget ([`CUT_SETS_MAX_WORDS`]), the rest of the run goes
 //! back to the functions that mirror `ns.c`, and C's search picks the entering edge.
-//! Under `cfg(test)` or the `ns-check` feature, every pivot also runs C's search, `rerank`,
-//! `treeupdate` and `dfs_range`, and asserts that both agree (`check.rs`).
+//! Under `cfg(test)` or the `ns-check` feature, every pivot also runs C's search and C's
+//! `update` (`rerank`, `treeupdate`, `dfs_range`) on a copy of the graph, and asserts that both
+//! agree. The graph itself keeps what production keeps, stale `lim`/`low` included (`check.rs`).
 //!
 //! Storage, all reused across calls through [`NsGraph::take_cut_store`]: the edges of the
 //! graph by a local index (their order in `GD_nlist`/`ND_out`), the tree edges by their
@@ -190,6 +191,9 @@ pub struct CutStore {
     /// By edge: the number of the last tie it was in. Grown when a run first has a tie.
     tie_mark: Vec<u32>,
     tie_gen: u32,
+    /// Check mode: the copy of the graph that C's functions run on beside the pivots.
+    #[cfg(any(test, feature = "ns-check"))]
+    reference: Option<Box<check::Reference>>,
 }
 
 /// A pivot whose cut sets, LCA, tree cycle and pool budget were checked.
@@ -309,10 +313,12 @@ pub(super) fn begin<G: NsGraph + ?Sized>(g: &mut G, ctx: &mut Ctx) -> Option<Cut
     let mut store = g.take_cut_store();
     store.kind = kind;
     if store.build(g, ctx) {
+        check::begin(g, ctx, &mut store);
         return Some(store);
     }
     store.kind = Kind::Computed;
     if kind == Kind::Pool && store.build(g, ctx) {
+        check::begin(g, ctx, &mut store);
         return Some(store);
     }
     g.keep_cut_store(store);
@@ -554,7 +560,8 @@ impl CutStore {
         let Some(s) = tree_slot(g, e) else {
             return Err(Fallback);
         };
-        let tail_is_child = g.par(g.tail(e)) == Some(e);
+        let tail_is_child =
+            check::reads_numbering(g, e).unwrap_or_else(|| g.par(g.tail(e)) == Some(e));
         let v = if tail_is_child { g.tail(e) } else { g.head(e) };
         if self.kind == Kind::Computed {
             check::corrupt(self, check::Corrupt::Links, v, 0);
@@ -1130,9 +1137,8 @@ impl CutStore {
                 // a node below e (a leaf is its own subtree): e's child side moves by -d
                 self.shift(se, tail_is_child, d.wrapping_neg());
             }
-            check::rerank(g, ctx, node, d);
         }
-        let lca_low = check::path(g, self, e, f, lca);
+        check::path(self, e, f, lca);
         // treeupdate: each edge of the cycle gains cutvalue(e) when the cycle runs it
         // backwards and loses it when forwards
         let cutvalue = g.cutvalue(e);
@@ -1181,9 +1187,9 @@ impl CutStore {
         g.set_cutvalue(f, cutvalue.wrapping_neg());
         g.set_cutvalue(e, 0);
         exchange_tree_edges(g, ctx, e, f);
-        check::dfs_range(g, ctx, lca, lca_low, &rehung);
+        check::pivot(g, ctx, self, e, f, &rehung);
         check::slacks(g, self, e, f);
-        check::links(g, self);
+        check::links(self);
         if self.garbage > self.pool.len().wrapping_div(2) {
             self.compact();
         }
@@ -1196,7 +1202,7 @@ impl CutStore {
             return;
         };
         let r = self.root_rank;
-        check::rank(g, root, r);
+        check::rank(self, root, r);
         g.set_rank(root, r);
         let mut stack = std::mem::take(&mut self.work);
         stack.clear();
@@ -1213,7 +1219,7 @@ impl CutStore {
                     let rc = ru
                         .wrapping_add(g.minlen(t))
                         .wrapping_add(self.tree_slack(g, t));
-                    check::rank(g, c, rc);
+                    check::rank(self, c, rc);
                     g.set_rank(c, rc);
                     stack.push(c as u32);
                 }
@@ -1227,7 +1233,7 @@ impl CutStore {
                     let rc = ru
                         .wrapping_sub(g.minlen(t))
                         .wrapping_sub(self.tree_slack(g, t));
-                    check::rank(g, c, rc);
+                    check::rank(self, c, rc);
                     g.set_rank(c, rc);
                     stack.push(c as u32);
                 }
@@ -1275,7 +1281,7 @@ pub(super) fn enter_edge<G: NsGraph + ?Sized>(
     };
     match store.enter_edge(g, e, pivot) {
         Ok(f) => {
-            check::enter_edge(g, ctx, store, e, f);
+            check::enter_edge(g, store, e, f);
             f
         }
         Err(Fallback) => {
@@ -1398,7 +1404,7 @@ pub(super) fn lr_balance<G: NsGraph + ?Sized>(
             match (cut.as_mut(), known) {
                 (Some(store), Some((_, s))) => {
                     store.shift(s, tail_is_child, d.wrapping_neg());
-                    check::rerank(g, ctx, node, d);
+                    check::rerank(store, node, d);
                 }
                 _ => super::rerank(g, ctx, node, d),
             }
@@ -1412,6 +1418,7 @@ pub(super) fn lr_balance<G: NsGraph + ?Sized>(
 pub(super) fn end<G: NsGraph + ?Sized>(g: &mut G, cut: &mut Option<CutStore>) {
     if let Some(mut store) = cut.take() {
         store.write_ranks(g);
+        check::finish(&mut store);
         store.trim();
         g.keep_cut_store(store);
     }
@@ -1447,7 +1454,15 @@ mod check {
         Kind::Pool
     }
     #[inline(always)]
-    pub(super) fn links<G: NsGraph + ?Sized>(_: &G, _: &CutStore) {}
+    pub(super) fn links(_: &CutStore) {}
+    #[inline(always)]
+    pub(super) fn begin<G: NsGraph + ?Sized>(_: &G, _: &Ctx, _: &mut CutStore) {}
+    #[inline(always)]
+    pub(super) fn finish(_: &mut CutStore) {}
+    #[inline(always)]
+    pub(super) fn reads_numbering<G: NsGraph + ?Sized>(_: &G, _: usize) -> Option<bool> {
+        None
+    }
     pub(super) struct Rehung;
     pub(super) struct Counter;
     pub(super) static WHOLE_TREE: Counter = Counter;
@@ -1488,24 +1503,15 @@ mod check {
     #[inline(always)]
     pub(super) fn enter_edge<G: NsGraph + ?Sized>(
         _: &mut G,
-        _: &mut Ctx,
-        _: &CutStore,
+        _: &mut CutStore,
         _: usize,
         _: Option<usize>,
     ) {
     }
     #[inline(always)]
-    pub(super) fn rerank<G: NsGraph + ?Sized>(_: &mut G, _: &mut Ctx, _: usize, _: i32) {}
+    pub(super) fn rerank(_: &mut CutStore, _: usize, _: i32) {}
     #[inline(always)]
-    pub(super) fn path<G: NsGraph + ?Sized>(
-        _: &mut G,
-        _: &CutStore,
-        _: usize,
-        _: usize,
-        _: usize,
-    ) -> i32 {
-        0
-    }
+    pub(super) fn path(_: &CutStore, _: usize, _: usize, _: usize) {}
     #[inline(always)]
     pub(super) fn rehung_start() -> Rehung {
         Rehung
@@ -1513,18 +1519,19 @@ mod check {
     #[inline(always)]
     pub(super) fn rehung_push(_: &mut Rehung, _: usize, _: usize) {}
     #[inline(always)]
-    pub(super) fn dfs_range<G: NsGraph + ?Sized>(
+    pub(super) fn pivot<G: NsGraph + ?Sized>(
         _: &mut G,
-        _: &mut Ctx,
+        _: &Ctx,
+        _: &mut CutStore,
         _: usize,
-        _: i32,
+        _: usize,
         _: &Rehung,
     ) {
     }
     #[inline(always)]
     pub(super) fn slacks<G: NsGraph + ?Sized>(_: &G, _: &CutStore, _: usize, _: usize) {}
     #[inline(always)]
-    pub(super) fn rank<G: NsGraph + ?Sized>(_: &G, _: usize, _: i32) {}
+    pub(super) fn rank(_: &CutStore, _: usize, _: i32) {}
 }
 
 #[cfg(test)]

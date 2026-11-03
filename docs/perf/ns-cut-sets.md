@@ -238,8 +238,10 @@ If `enter_edge` finds a negative candidate slack, Lemma 1 no longer applies. The
 written, `lim`/`low` are renumbered from the root (non-incremental `dfs_range`), and the rest of
 the run, this pivot included, uses C's functions. That is exact by Lemma 2. Those numbers are stale
 until then, because the cut-set path does not maintain them, so the renumbering has to reach every
-node. Check mode keeps them current itself and cannot see a mistake here, which is why
-`a_fallback_renumbers_the_tree_it_hands_to_c` turns the check hooks off and runs as shipped.
+node. Check mode leaves them stale on the graph too (§8; before #765 it kept them current and could
+not see a mistake here), and drops its copy of the graph at a hand-over, so C's functions then run
+on the graph alone, as shipped. `a_fallback_renumbers_the_tree_it_hands_to_c` still runs with the
+check off, so that the run's final state is the only thing it looks at.
 
 The same hand-over happens in a pivot's **check phase**, which runs in `enter_edge` right after
 the cut sets pick `f` and before that edge is used or anything changes. It fails if:
@@ -410,19 +412,31 @@ C's. The output is the same on any path.
 
 - **Check mode** (`cfg(test)` in the layout crate, or `--features graphviz-pure-layout/ns-check`
   anywhere): the cut-set path runs on every graph that has a pivot, whatever the selector says,
-  stored and computed in turn, and without the pool budget unless a test sets one. Next to it, C's
-  `rerank`, `invalidate_path` and `dfs_range` keep the real ranks and `lim`/`low` current. At
-  every pivot and every `LR_balance` query it asserts:
-  - that `cover[e]` is exactly the set of non-tree edges crossing e's cut, with the right bits;
+  stored and computed in turn, and without the pool budget unless a test sets one. The graph
+  itself is left as production leaves it: parent pointers re-hung at each pivot, and `lim`/`low`
+  and the ranks as they were when the pivots began, which is stale from the first pivot on.
+  Beside it, a copy of the graph taken at that point (`check::Reference`) runs C's whole
+  `update` (`rerank`, `treeupdate`, `invalidate_path`, `exchange_tree_edges`, `dfs_range`) at
+  every pivot, and C's `rerank` at every `LR_balance` shift, so that its ranks are real and its
+  `lim`/`low` current, and C's `enter_edge` runs on the copy. A cut-set search that read a stale
+  interval therefore answers differently from C's, and the comparison fails. (Until #765 the
+  check ran C's `dfs_range` on the graph itself after each pivot, so the cut-set search always
+  saw a current numbering and such a bug would have passed; see below.) At every pivot and every
+  `LR_balance` query it asserts:
+  - that `cover[e]` is exactly the set of non-tree edges crossing e's cut (taken on the copy's
+    numbering), with the right bits;
   - that its signed weights plus weight(e) are e's cut value;
-  - that every candidate slack is C's;
-  - that the entering edge is C's `enter_edge`;
-  - that the tree path and LCA are C's `treeupdate` walks (same edges, same signs);
-  - that the re-hung parent pointers are what `dfs_range` assigns;
+  - that every candidate slack is C's (the copy's);
+  - that the entering edge, found on the graph's stale numbering, is the one C's `enter_edge`
+    returns on the copy;
+  - that the tree path and LCA are C's `treeupdate` walks on the copy (same edges, same signs);
+  - that the re-hung parent pointers are what `dfs_range` assigns, and, after C's `update` on
+    the copy, that every node's parent and tree lists, every edge's cut value and tree index,
+    and the tree-edge list equal the graph's;
   - that after every pivot every slack is C's;
-  - that every rank written at the end is C's;
+  - that every rank written at the end, including at a hand-over, is C's;
   - on the computed path, after every pivot, that the links are the tree of the parent pointers,
-    that each size is C's `lim - low + 1`, and that the storage has not changed.
+    that each size is C's `lim - low + 1` (the copy's), and that the storage has not changed.
 
   CI runs the workspace tests in this mode.
 - **Property test** (`common/ns/cut/tests.rs`): thousands of random DAGs (random root, parallel
@@ -439,7 +453,8 @@ C's. The output is the same on any path.
   - `a_full_pool_hands_the_run_to_c` sets the pool budget to the build's own size, or slightly
     more.
 - **Hand-overs as shipped.** `a_fallback_renumbers_the_tree_it_hands_to_c` turns off the check
-  mode's hooks, so `lim`/`low` and the ranks go stale as they do in a release build, and compares
+  mode's copy and comparisons (`SHIPPED`), so that nothing but the run's own steps touches the
+  graph as in a release build, and compares
   with C's functions on broken cut sets, on clean runs and on wrapped slacks.
   `lr_balance_hands_over_when_its_walks_pass_the_allowance` does the same at allowances that run out
   at once, part way, or never, and counts the hand-overs, which output cannot show.
@@ -452,7 +467,12 @@ C's. The output is the same on any path.
   three change the output, so a run cut short or a merged group reaches the pivots. The corpus has
   no file with these attributes.
 - **The cross-check has teeth.** `the_cross_check_sees_a_computed_cut_that_misses_nodes` breaks
-  the links and asserts that check mode panics. Mutants of `computed.rs`, of the tie rule, of the
+  the links and asserts that check mode panics. `check_mode_sees_a_search_that_reads_a_stale_interval`
+  (#765) injects the bug that the old check could not see: the search takes e's child from `lim`,
+  as C's does, instead of from the parent pointers. On two five-node graphs, where `lim` is stale
+  by the second pivot, check mode panics with the injected bug (on the computed path in the
+  cut-set comparison, on the stored path in the tie scan), passes with the search as written, and
+  passes again when the old refresh is replayed (`RENUMBER_GRAPH`), which is the blind spot. Mutants of `computed.rs`, of the tie rule, of the
   hand-over, of the selector and of the adapter (reported in the pull request) are killed by these
   tests, but for three that cannot change the output.
 - The fidelity ratchets of `cargo test --workspace` run with the selector as shipped.
