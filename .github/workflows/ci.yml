@@ -514,6 +514,50 @@ jobs:
       - name: Sfdp corpus bytes match at 1 and 4 threads
         run: scripts/parallel-sfdp-bytes.sh target/release/graphviz-pure
 
+  # The Lean proofs of the "Improvement through Math Proofs" experiment (proofs/, see
+  # docs/research/lean-experiment/README.md): every GvpProofs/**.lean, including the files Aeneas
+  # extracted from Rust, must compile. Runs only when proofs/ or scripts/proofs/ differ from the
+  # base (the pull request's base, the merge queue's base or the previous master), and always when
+  # there is no base to compare. Extraction itself is not run here: its toolchain (OCaml, Charon,
+  # a pinned nightly) is too heavy, so `scripts/proofs/extract.sh --check` is a local step before
+  # a pull request.
+  proofs:
+    name: Lean proofs
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - id: changed
+        env:
+          BASE: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.event.before }}
+        run: |
+          run=true
+          if [ -n "${BASE//0/}" ] && git fetch -q --depth=1 origin "$BASE" \
+            && git diff --quiet "$BASE" HEAD -- proofs scripts/proofs; then
+            run=false
+          fi
+          echo "Build the proofs: $run"
+          echo "run=$run" >> "$GITHUB_OUTPUT"
+      # elan reads proofs/lean-toolchain and installs that Lean. The installer is the release
+      # binary, checked against its published SHA-256.
+      - name: Install elan 4.2.4
+        if: steps.changed.outputs.run == 'true'
+        run: |
+          curl -sSfL -o "$RUNNER_TEMP/elan.tar.gz" https://github.com/leanprover/elan/releases/download/v4.2.4/elan-x86_64-unknown-linux-gnu.tar.gz
+          echo "42b94d4244e8353142c456ec0e4ca6528fd898a6c604d4059f494e706e431f63  $RUNNER_TEMP/elan.tar.gz" | sha256sum -c
+          tar -xzf "$RUNNER_TEMP/elan.tar.gz" -C "$RUNNER_TEMP"
+          "$RUNNER_TEMP/elan-init" -y --default-toolchain none --no-modify-path
+      # Mathlib's and Aeneas's prebuilt oleans are downloaded, so only GvpProofs compiles here.
+      - name: Fetch the Mathlib cache
+        if: steps.changed.outputs.run == 'true'
+        working-directory: proofs
+        run: ~/.elan/bin/lake exe cache get
+      - name: lake build
+        if: steps.changed.outputs.run == 'true'
+        working-directory: proofs
+        run: ~/.elan/bin/lake build
+
   # Records that these inputs passed, so a later run with the same inputs skips verify,
   # ns-check, mincross-check, msrv, wasm-e2e, wasm-runtimes, cpu-fidelity, native-pgo and
   # parallel-neato.
