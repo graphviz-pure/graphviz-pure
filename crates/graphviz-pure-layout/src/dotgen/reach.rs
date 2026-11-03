@@ -253,10 +253,17 @@ mod tests {
             assert!(cache.canreach(&nodes, &edges, u, far));
         }
         let allocated: usize = cache.sets.iter().map(|s| s.bits.len()).sum();
-        assert!(allocated <= MAX_WORDS, "{allocated} words allocated, cap {MAX_WORDS}");
+        assert!(
+            allocated <= MAX_WORDS,
+            "{allocated} words allocated, cap {MAX_WORDS}"
+        );
         assert!(cache.words <= MAX_WORDS && allocated <= cache.words);
         let per_set = n / 64 + 1;
-        assert_eq!(cache.sets.len(), MAX_WORDS / per_set, "sources admitted up to the cap");
+        assert_eq!(
+            cache.sets.len(),
+            MAX_WORDS / per_set,
+            "sources admitted up to the cap"
+        );
     }
 
     /// Past the size cap, a source with no set of its own is searched in the scratch set.
