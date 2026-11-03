@@ -23,8 +23,9 @@
 # If Aeneas rejects any function, nothing under proofs/ changes and the script exits 1. The
 # partial output stays in the scratch directory, whose path is printed.
 #
-# --check re-extracts every proofs/GvpProofs/Extracted/*/extract.args into a scratch directory
-# and fails if a generated file differs from the committed one. CI does not run extraction (the
+# --check re-extracts every module directory under proofs/GvpProofs/Extracted/ (each must have an
+# extract.args; none at all is an error) into a scratch directory and fails if a generated file
+# differs from the committed one. CI does not run extraction (the
 # toolchain is too heavy), so run --check before opening a pull request that touches extracted
 # Rust or proofs/GvpProofs/Extracted/.
 #
@@ -33,6 +34,13 @@
 # must equal the `aeneas` rev in proofs/lakefile.toml. Cargo runs through cargo-slot.sh when it
 # exists (the shared machine), with its target directory under /jobs/cargo-targets.
 set -euo pipefail
+
+# The shared machine caps delegate work (cgroup gvp-delegates, nice 15), as cargo-slot.sh does for
+# cargo. Charon runs through cargo-slot.sh; Aeneas runs from this shell, so the shell joins the cap.
+if [ -d /sys/fs/cgroup/gvp-delegates ]; then
+  echo $$ | sudo -n tee /sys/fs/cgroup/gvp-delegates/cgroup.procs >/dev/null 2>&1 || true
+fi
+renice -n 15 -p $$ >/dev/null 2>&1 || true
 
 root=$(git rev-parse --show-toplevel)
 : "${GVP_LEAN_HOME:=/jobs/work/gvp-lean}"
@@ -117,9 +125,19 @@ if [ "${1:-}" = "--check" ]; then
   check_toolchain
   status=0
   shopt -s nullglob
-  for args in "$extracted"/*/extract.args; do
-    dir=$(dirname "$args")
+  # Enumerate generated module directories, not manifests: a module whose extract.args is missing
+  # must fail the check rather than be skipped, and an empty inventory is an error.
+  dirs=("$extracted"/*/)
+  [ "${#dirs[@]}" -gt 0 ] || { echo "extract.sh: no extracted modules under proofs/GvpProofs/Extracted/" >&2; exit 1; }
+  for dir in "${dirs[@]}"; do
+    dir=${dir%/}
     name=$(basename "$dir")
+    args="$dir/extract.args"
+    if [ ! -f "$args" ]; then
+      echo "extract.sh: $name has generated files but no extract.args; it cannot be checked" >&2
+      status=1
+      continue
+    fi
     mapfile -t line < "$args"
     tmp="$scratch_root/check/$name"
     rm -rf "$tmp"
