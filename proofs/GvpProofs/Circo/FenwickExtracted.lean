@@ -22,8 +22,8 @@ model of them.
   exactly when the model's `indexUpdate` does, and otherwise leaves the model's tree on slots
   `1..N-1` (`Fenwick.indexUpdate_valid`).
 * `wrap_crossings_spec`, `add_crossings_ok`, `add_crossings_fail`: the `i32` accumulator.
-* The main theorem (`count_indexed` equals `count_all_crossings_reference`) is stated, with
-  an unproved placeholder, in `proofs/wip/FenwickExtractedMain.lean`, together with the list of lemmas that remain.
+* The main theorem (`count_indexed` equals `count_all_crossings_reference`) is proved over the
+  extraction in `FenwickExtractedMain.lean` (#770), on top of these lemmas.
 
 ## What the extracted statements need that the model's did not
 

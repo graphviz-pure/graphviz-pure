@@ -872,3 +872,78 @@ sum meaningful.
 accumulator are now proved over the shipped definitions. The remaining distance to the full theorem
 is one refinement lemma per helper (list in the wip file); the slice-iterator loops and the
 `trailing_zeros` bit walk are the two kinds of step not yet exercised on generated code.
+
+## 2026-11-03 #770: circo indexed = reference, proved over the extracted Rust
+
+Result: proved. `proofs/GvpProofs/Circo/FenwickExtractedMain.lean` (2,608 lines, 75 of them the
+header; no `sorry`) proves `count_indexed_eq_reference` over the Aeneas-extracted `count_indexed` and
+`count_all_crossings_reference` (`Extracted/CircoCount/`): if the reference returns
+`ok (c, order', open')`, the indexed counter with `MUTATION = 0` returns `ok (some c, order', open',
+tree')`, and `c` is the exact crossing count. Axioms: the standard three and the three `bv_decide`
+axioms `Fenwick.lean` already used. The wip file is deleted. This is the experiment's first
+end-to-end theorem about shipped code rather than a model of it.
+
+**Hours.** Lean about 0.8 h, docs about 0.1 h, Rust none. Wall-clock from the first read of the
+issue; most of it was compile-and-fix cycles of 8 s each on one file.
+
+**Route.** Refinement, as the issue intended: one lemma per extracted helper saying "this helper, on
+a concrete state related to a model state, returns `ok` with the model step's result"
+(`tree_step` → `idxHalves`, `exclude_edges` → `foldlM idxExclude`, `restore_edges` →
+`foldlM idxRestoreClose`, `open_edges` → `foldlM idxOpen`, `reference_open` → `foldl refOpen`,
+`reference_close` → `refClose_fold`'s closed form), and the model's simulation reused at node
+granularity: each node step calls `Fenwick.lean`'s `idxOccurrence_step` for the next model state and
+its invariant. The model's top theorem was not reusable as is (next point), so the two node loops
+were re-inducted over the extraction; the per-node and per-loop model lemmas were used unchanged.
+
+**What the extracted statement needed that the model did not.**
+- *The exact count.* The model proved the wrapped `i32` total (`BitVec 32`). The extraction is the
+  checked build, where `add_crossings` fails past `i32::MAX`, so the indexed side must know each
+  query's count before adding it. The model's top theorem never exposes that; its lemma
+  `query_count_eq_hits` does, so the node step re-derives the post-exclusion facts (the set `T`, the
+  `Valid` tree) as `idxOccurrence_step` does internally, and `query_refines` tracks the total in `ℤ`.
+- *Partial correctness for the reference.* The hypothesis is that the reference returned `ok`, so the
+  reference lemmas are "if `ok y` then …" (`PC`): every failing read and the checked `crossings += 1`
+  are vacuous, and no reference read needed a bound. The reference's `i32` result equals the exact
+  count, which bounds it by `i32::MAX`; that bound is what the indexed side's assertion needs. So
+  "the reference did not overflow" implies "the indexed counter does not either", and is the only
+  overflow hypothesis.
+- *Words and the bit walk.* The model's `Finset` of halves became `u64` words: an abstraction
+  `bitsOf`, word set/clear lemmas, and for the reference scan `trailing_zeros` = lowest set bit and
+  `bits & (bits - 1)` clears it, then a word-by-word count. This was the largest new part (about 600
+  lines with the scan). The model's ascending `Finset.sort` turned out not to matter: only the count
+  is used.
+- *The frame of `arena.order`.* To conclude the two final order slices are *equal*, the relation
+  says the non-adjacency slots keep the caller's values; the model's `ℕ → ℕ` never had to.
+- *Slice lengths*: `tail.len() = E`, `2E ≤ 64 · open.len()`, offset ranges inside `adjacency`,
+  `order.len() = E`; and `Is64`. The wip statement's `head.len() = E` is unused (the indexed path
+  never reads `head`) and was dropped.
+
+**What Lean caught.** Nothing wrong in the Rust. One hypothesis in the target statement was
+unnecessary (`head.len() = E`), and one expected hypothesis turned out to be derivable (the indexed
+accumulator's non-overflow, from the reference's). No model lemma was false or had to change.
+
+**Dead ends / friction.**
+- `Result` is an interaction tree, not an inductive: `cases` gives `ret`/`vis`/`div`, and `ok`
+  injectivity is `Result.ok.injEq`. The "plain `simp` reduces `let x ← ok v` and `simp only` does
+  not" note under #745 has a cause: generated code binds with `Std.bind` (lemma `bind_ok`), while
+  library definitions such as `Slice.index_mut_usize` use the typeclass bind (`bind_tc_ok`).
+  `let (a, b) ← …` is Aeneas's `uncurry`; `simp` needs `uncurry_apply_pair`.
+- `simp only [h]` after `rw [loop]` also rewrote inside the remaining loop's body, so the loop was
+  no longer the named function and `rfl` failed. Fix: one `*_loop_unfold` lemma per generated loop,
+  then rewrite only the body applied to the current state. After that, plain induction on the
+  remaining slice length was simpler than `loop.spec_decr_nat` with a body metavariable (a `have`
+  elaborated the step proof before the body was known).
+- `set e := l[i]` does not reach occurrences introduced by later unfolding; `obtain ⟨e, he⟩ : ∃ e,
+  l[i] = e` and rewriting with `he` does.
+- `if_pos`/`if_neg` are deprecated in this Mathlib (`ite_eq_left`/`ite_eq_right`).
+
+**What this says about model-based proofs.** The model was right, and its per-node simulation was
+reusable unchanged, so the hours spent on it were not wasted. But its *statement* was not the one
+the extraction has: it proved the property in the release build's arithmetic (wrapping, which is
+what shipped move decisions read), while the extraction is in the checked build's arithmetic
+(Charon builds with `debug_assertions`), so the top theorem could not be transferred and the
+wrapped regime above `i32::MAX` stays with the model proof.
+The pieces that transferred were those that state semantic content (`query_count_eq_hits`: "this
+count is that number of halves"), not an equality of two model runs. And the parts the model
+abstracted (word packing, the bit walk, the frame of untouched slots) were a quarter of the new
+proof. A model proof is a good first draft of the invariant; it is not yet a proof of the code.

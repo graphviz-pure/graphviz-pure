@@ -195,7 +195,7 @@ the owner's call.
 
 | Ticket | Extraction route |
 |---|---|
-| #728 circo Fenwick = bitset | proved over a model (#742); #745 extracted the shipped functions and restated the Fenwick lemmas over them (`FenwickExtracted.lean`); the full simulation over the extraction is the next step (`proofs/wip/FenwickExtractedMain.lean`) |
+| #728 circo Fenwick = bitset | proved over a model (#742); #745 extracted the shipped functions and restated the Fenwick lemmas over them (`FenwickExtracted.lean`); #770 proved the full simulation over the extraction (`FenwickExtractedMain.lean`) |
 | #729 twopi BFS and postorder sizes | both current functions extracted; extract the new BFS the same way |
 | #730 circo incremental delta | write it with one-loop-deep `?`, one early-exit loop per function and no `zip`, then extract |
 | #731 dot NS leave-edge index | not measured; `ns.rs` has 57 signature errors at crate level, so try `--start-from` on a free function over slices |
