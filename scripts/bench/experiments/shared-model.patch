@@ -1,0 +1,70 @@
+diff --git a/crates/graphviz-pure-geom/src/node_size.rs b/crates/graphviz-pure-geom/src/node_size.rs
+index 1d89d076..aa00c60f 100644
+--- a/crates/graphviz-pure-geom/src/node_size.rs
++++ b/crates/graphviz-pure-geom/src/node_size.rs
+@@ -454,12 +454,41 @@ pub fn node_font(attrs: &AttrMap) -> (&str, f64) {
+ ///
+ /// The shape's `initfn` allocates the vertices of the node's peripheries, and C's
+ /// `gv_calloc` reports a failed allocation and exits; the port returns the error.
++// Diagnostic experiment only: single layout followed by one render, never shipped.
++thread_local! {
++    static EXPERIMENT: std::cell::RefCell<(u8, Vec<Option<NodeGeometry>>)> =
++        const { std::cell::RefCell::new((0, Vec::new())) };
++}
++
++pub fn experiment_begin(count: usize, enabled: bool) {
++    EXPERIMENT.with(|slot| {
++        *slot.borrow_mut() = if enabled { (1, vec![None; count]) } else { (0, Vec::new()) };
++    });
++}
++
++pub fn experiment_finish() {
++    EXPERIMENT.with(|slot| {
++        let mut slot = slot.borrow_mut();
++        if slot.0 == 1 { slot.0 = 2; }
++    });
++}
++
+ pub fn node_geometry(node: &NodeData, env: &NodeSizeEnv<'_>) -> Result<NodeGeometry> {
+-    // `<G>` and `G` are two nodes: the tag keeps the HTML flag, as the node lookup does
++    if let Some(geom) = EXPERIMENT.with(|slot| {
++        let mut slot = slot.borrow_mut();
++        if slot.0 == 2 { slot.1.get_mut(node.id.0 as usize).and_then(Option::take) } else { None }
++    }) { return Ok(geom); }
+     let key = graphviz_pure_core::Graph::node_key(&node.name, node.html_name);
+-    graphviz_pure_core::font::textfont_object(["node:", &key].concat(), || {
++    let geom = graphviz_pure_core::font::textfont_object(["node:", &key].concat(), || {
+         node_geometry_measured(node, env)
+-    })
++    })?;
++    EXPERIMENT.with(|slot| {
++        let mut slot = slot.borrow_mut();
++        if slot.0 == 1 {
++            if let Some(entry) = slot.1.get_mut(node.id.0 as usize) { *entry = Some(geom.clone()); }
++        }
++    });
++    Ok(geom)
+ }
+
+ fn node_geometry_measured(node: &NodeData, env: &NodeSizeEnv<'_>) -> Result<NodeGeometry> {
+diff --git a/crates/graphviz-pure-layout/src/lib.rs b/crates/graphviz-pure-layout/src/lib.rs
+index d4b8691b..a63e38c2 100644
+--- a/crates/graphviz-pure-layout/src/lib.rs
++++ b/crates/graphviz-pure-layout/src/lib.rs
+@@ -269,6 +269,8 @@ fn layout_in_run(graph: &mut Graph, engine: LayoutEngine, options: LayoutOptions
+     } else {
+         engine
+     };
++    graphviz_pure_geom::node_size::experiment_begin(graph.nodes.len(),
++        matches!(effective_engine, LayoutEngine::Osage | LayoutEngine::Patchwork));
+     let result = match effective_engine {
+         LayoutEngine::Dot => dotgen::layout_dot(graph),
+         LayoutEngine::Neato => neatogen::neatoinit::neato_layout(graph),
+@@ -281,6 +283,7 @@ fn layout_in_run(graph: &mut Graph, engine: LayoutEngine, options: LayoutOptions
+         LayoutEngine::Osage => osage::osage_layout(graph),
+         LayoutEngine::Patchwork => patchwork::patchwork_layout(graph),
+     };
++    graphviz_pure_geom::node_size::experiment_finish();
+     // what the renderers draw the images and epsf shapes from
+     graph.layout.usershapes = graphviz_pure_core::usershape::layout_result();
+     result
