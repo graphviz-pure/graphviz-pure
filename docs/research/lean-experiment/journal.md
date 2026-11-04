@@ -947,3 +947,61 @@ The pieces that transferred were those that state semantic content (`query_count
 count is that number of halves"), not an equality of two model runs. And the parts the model
 abstracted (word packing, the bit walk, the frame of untouched slots) were a quarter of the new
 proof. A model proof is a good first draft of the invariant; it is not yet a proof of the code.
+## 2026-11-03 #765: `ns-check` runs the cut-set search on the stale production state
+
+The #750 proof (`Ns/CutSetsStale.lean`) showed that the cut-set search reads no `lim`/`low`, and
+named a gap in the runtime oracle: `ns-check` renumbered the graph with C's `dfs_range` after every
+pivot, so the cut-set search always ran on a current numbering there. A search that wrongly read a
+stale interval would have passed the check and misbehaved only in a release build. No Lean change,
+no change to shipped code.
+
+**What the check could not see.** In check mode `check::rerank`, `check::path` (its
+`invalidate_path`) and `check::dfs_range` all ran C's functions on the production graph. Its ranks
+and its `lim`/`low` were therefore current at every pivot, which production's never are, and the
+cut-set search and C's search both read that one numbering. The only guards for the stale case were
+two shipped-mode tests that switch the hooks off and compare final results against C.
+
+**What it compares now.** The production graph is left as shipped: the cut-set path re-hangs the
+parent pointers and nothing else, so `lim`/`low` and the ranks stay at their values from the start
+of the pivots. A copy of the graph (`check::Reference`, an `NsData` plus a `Ctx`) is taken then,
+and C's whole `update` runs on it at every pivot, with `rerank`, `treeupdate`, `invalidate_path`,
+`exchange_tree_edges` and `dfs_range`; `LR_balance`'s `rerank` runs on it as well. Every comparison
+that used the graph's numbering uses the copy's instead: the cut set's crossing edges, the tree
+cycle and LCA, the slacks, the computed path's subtree sizes and the ranks written at the end. C's
+`enter_edge` runs on the copy and is compared with what the cut-set search found on the stale
+graph. After each pivot the graph's parent pointers and tree lists, the cut values, the tree
+indices and the tree-edge list are compared with the copy's in full, which the old check left to
+the next pivot's cut-value test. The copy is dropped when the ranks are written, so a fallback or a
+hand-over hands C's functions the graph alone, as in a release build. Cost: check mode only
+(`cfg(test)` or `ns-check`), one copy per run and a full comparison per pivot; the release binary
+has no new code but an inlined `None` in the search (the test hook below).
+
+**The injected-bug test** (`check_mode_sees_a_search_that_reads_a_stale_interval`). A thread-local
+flag makes the search take e's child from `lim` instead of from the parent pointers, which is what
+C's `enter_edge` does and what the proof says production does not. I found the graphs by running
+small random DAGs (five nodes, 20,000 per kind) through that bug under the new check, and kept the
+smallest failure for each cut-set kind (the stored one fails in the tie scan, the computed one in
+the cut-set comparison). For each: the search as written passes and ends where C ends; the bug
+panics in the check; and with the old refresh replayed (`RENUMBER_GRAPH` copies the copy's numbering
+onto the graph after each pivot) the bug passes, which is the blind spot, so the test fails if the
+check ever goes back to renumbering the graph. I ran it against exactly that: with the replay forced
+on for every run, the test fails with "a stale interval went unseen". The random search over 2,000
+graphs of up to 14 nodes found 6 (stored) and 33 (computed) runs the bug breaks; none with the
+search as written, which also ran clean through the existing 28 NS tests in both modes.
+
+**What it caught.** Nothing in the Rust: the search as written passed on first run, as the Lean
+theorem says it must. The check now agrees with the theorem at runtime, where before it could not.
+The #750 reproduction shape (three nodes plus 2,500 nodes of padding) was not rebuilt: the check
+mode picks the cut sets for every graph, so no padding is needed to reach them, and the five-node
+graphs fail the injected bug at the pivot where the numbering first goes stale.
+
+**Dead ends.** The three-node shape of the issue (edges 1→0, 2→1, 0→2, weights 1, 3, 2, zero minlens),
+in all six `nlist` orders and both cut-set kinds, gave no failure with the bug injected. The
+review explained why: zero ranks already satisfy every zero-minlen edge, so `init_rank` is skipped,
+and the shape takes at most one pivot (four orders take one, two take none), so no search ever runs
+after the numbering has gone stale. The issue's shape shows stale numbering; it cannot show a search
+reading it. The random search found five-node graphs that do at once. A plain "compare before renumbering" (the issue's other option) would hand
+C stale intervals, so the copy is the design.
+
+**Cost.** About 1.5 h on Rust and tests, 0.3 h on docs. No Lean, so no proof lines. Extraction
+verdict: not applicable.

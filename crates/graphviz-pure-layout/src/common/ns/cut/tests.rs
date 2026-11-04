@@ -717,3 +717,117 @@ fn the_selector_keeps_small_runs_on_c_and_computes_the_rest() {
     assert_eq!(super::choose(&small), None);
     assert_eq!(super::choose(&mid), Some(Kind::Computed));
 }
+
+/// Two five-node graphs (found by searching small random DAGs for runs on which the injected
+/// bug of [`reads_numbering`](super::check::reads_numbering) is wrong): at the second pivot or
+/// later, e's child by the stale `lim` is the wrong end of e. `(tail, head, minlen, weight)` for
+/// each edge, in order, and the `GD_nlist` order.
+type Shape = (&'static [usize], &'static [(usize, usize, i32, i32)]);
+const STALE_SHAPES: [(Kind, Shape); 2] = [
+    (
+        Kind::Computed,
+        (
+            &[2, 1, 0, 3, 4],
+            &[
+                (0, 1, 0, 2),
+                (1, 2, 0, 0),
+                (1, 3, 1, 1),
+                (2, 4, 1, 0),
+                (2, 3, 0, 3),
+                (3, 4, 0, 2),
+            ],
+        ),
+    ),
+    (
+        Kind::Pool,
+        (
+            &[1, 4, 2, 0, 3],
+            &[
+                (0, 1, 0, 1),
+                (1, 2, 0, 2),
+                (1, 3, 0, 3),
+                (1, 4, 1, 2),
+                (1, 4, 1, 3),
+                (3, 4, 1, 0),
+                (0, 4, 1, 0),
+                (0, 4, 0, 3),
+                (0, 2, 0, 3),
+            ],
+        ),
+    ),
+];
+
+fn shape((nlist, edges): Shape) -> NsData {
+    let mut g = NsData {
+        nodes: vec![NsNode::default(); nlist.len()],
+        nlist: nlist.to_vec(),
+        ..NsData::default()
+    };
+    for &(tail, head, minlen, weight) in edges {
+        let e = g.edges.len();
+        g.edges.push(NsEdge {
+            tail,
+            head,
+            minlen,
+            weight,
+            ..NsEdge::default()
+        });
+        g.nodes[tail].out.push(e);
+        g.nodes[head].in_.push(e);
+    }
+    g
+}
+
+/// Runs `rank2` in check mode with the test's flags set (and cleared again), reporting the
+/// panic message if the check fails.
+fn checked(kind: Kind, g: &NsData, reads_numbering: bool, renumbered: bool) -> Result<(), String> {
+    use super::check::{READS_NUMBERING, RENUMBER_GRAPH};
+    READS_NUMBERING.with(|b| b.set(reads_numbering));
+    RENUMBER_GRAPH.with(|b| b.set(renumbered));
+    let r = std::panic::catch_unwind(|| with_kind(kind, || run(g, 0, i32::MAX, 30, true)));
+    READS_NUMBERING.with(|b| b.set(false));
+    RENUMBER_GRAPH.with(|b| b.set(false));
+    r.map(|_| ()).map_err(|p| {
+        p.downcast_ref::<String>()
+            .cloned()
+            .or_else(|| p.downcast_ref::<&str>().map(|s| (*s).to_string()))
+            .unwrap_or_default()
+    })
+}
+
+/// #765: check mode used to renumber the graph after every pivot, so a cut-set search that read
+/// a stale `lim` passed it and misbehaved only as shipped. It now leaves the graph's numbering
+/// stale and compares with C's search on a renumbered copy. With the search as written the
+/// check passes; with a search that takes e's child from `lim`, it fails; and with the old
+/// refresh put back, it passes again, which is what it could not see.
+#[test]
+fn check_mode_sees_a_search_that_reads_a_stale_interval() {
+    for (kind, s) in STALE_SHAPES {
+        let g = shape(s);
+        assert_eq!(
+            checked(kind, &g, false, false),
+            Ok(()),
+            "{kind:?}: the search as written"
+        );
+        let failure = checked(kind, &g, true, false)
+            .expect_err(&format!("{kind:?}: a stale interval went unseen"));
+        if kind == Kind::Computed {
+            // the check itself, not an assertion of the search
+            assert!(
+                failure.contains("cut set of tree edge") || failure.contains("entering edge"),
+                "{failure}"
+            );
+        }
+        assert_eq!(
+            checked(kind, &g, true, true),
+            Ok(()),
+            "{kind:?}: with the old refresh, the bug is invisible"
+        );
+        // and the search as written leaves what C leaves
+        assert_eq!(
+            with_kind(kind, || run(&g, 0, i32::MAX, 30, true)),
+            run(&g, 0, i32::MAX, 30, false),
+            "{kind:?}: as written, the same as C"
+        );
+    }
+}
