@@ -202,6 +202,17 @@ impl AttrMap {
         None
     }
 
+    /// `agxset` / `agxset_html`, taking an already-owned key instead of copying it.
+    /// C: lib/cgraph/attr.c:agxset
+    pub fn set_owned(&mut self, key: String, value: String, html: bool) -> Option<String> {
+        if html {
+            self.html.insert(key.clone());
+        } else {
+            self.html.remove(&key);
+        }
+        self.insert_owned(key, value)
+    }
+
     /// Sets `key` to the plain string `value` (`agxset`), clearing its HTML flag.
     pub fn insert(&mut self, key: String, value: String) -> Option<String> {
         self.html.remove(&key);

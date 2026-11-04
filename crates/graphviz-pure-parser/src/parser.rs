@@ -35,6 +35,90 @@ enum EdgeItem {
     Subgraph(SubgraphId),
 }
 
+/// The parser's `attrlist` operations, shared by defaults and statement attributes.
+/// C: lib/cgraph/grammar.y:appendattr
+trait AttrSink {
+    fn contains_key(&self, key: &str) -> bool;
+    fn set(&mut self, key: &str, value: String, html: bool);
+}
+
+impl AttrSink for AttrMap {
+    fn contains_key(&self, key: &str) -> bool {
+        AttrMap::contains_key(self, key)
+    }
+
+    fn set(&mut self, key: &str, value: String, html: bool) {
+        AttrMap::set(self, key, value, html);
+    }
+}
+
+/// A one-attribute statement needs no temporary map. Wider lists retain AttrMap's
+/// normal ordering, replacement and growth; there is no retained parser scratch.
+/// C: lib/cgraph/grammar.y:optattr; appendattr; endnode
+#[derive(Default)]
+enum StatementAttrs {
+    #[default]
+    Empty,
+    One {
+        key: String,
+        value: String,
+        html: bool,
+    },
+    Map(AttrMap),
+}
+
+impl StatementAttrs {
+    fn into_map(self) -> AttrMap {
+        match self {
+            Self::Empty => AttrMap::new(),
+            Self::One { key, value, html } => {
+                let mut map = AttrMap::new();
+                map.set_owned(key, value, html);
+                map
+            }
+            Self::Map(map) => map,
+        }
+    }
+}
+
+impl AttrSink for StatementAttrs {
+    fn contains_key(&self, key: &str) -> bool {
+        match self {
+            Self::Empty => false,
+            Self::One { key: stored, .. } => stored == key,
+            Self::Map(map) => map.contains_key(key),
+        }
+    }
+
+    fn set(&mut self, key: &str, value: String, html: bool) {
+        match self {
+            Self::Empty => {
+                *self = Self::One {
+                    key: key.to_owned(),
+                    value,
+                    html,
+                }
+            }
+            Self::One {
+                key: stored,
+                value: old,
+                html: old_html,
+            } if stored == key => {
+                *old = value;
+                *old_html = html;
+            }
+            Self::One { .. } => {
+                let mut map = std::mem::take(self).into_map();
+                map.set(key, value, html);
+                *self = Self::Map(map);
+            }
+            Self::Map(map) => {
+                map.set(key, value, html);
+            }
+        }
+    }
+}
+
 /// A statement whose next `simple` is a subgraph, waiting while the subgraph's body is
 /// read.
 struct Suspended {
@@ -661,10 +745,10 @@ impl<'a> Parser<'a> {
     }
 
     /// `optattr : attrlist | /* empty */` after a node or edge statement.
-    fn optattr(&mut self) -> Result<AttrMap> {
+    fn optattr(&mut self) -> Result<StatementAttrs> {
         self.attr_order.clear();
         self.html_keys.clear();
-        let mut attrs = AttrMap::new();
+        let mut attrs = StatementAttrs::Empty;
         self.reduce(0)?;
         while self.peek().kind == TokenKind::LBracket {
             self.attr_brackets(&mut attrs, false)?;
@@ -679,7 +763,7 @@ impl<'a> Parser<'a> {
     ///
     /// `items`: keep every item in [`Parser::attr_items`], for an attribute statement; else
     /// the first occurrence of each key in [`Parser::attr_order`], for `endnode`/`endedge`.
-    fn attr_brackets(&mut self, attrs: &mut AttrMap, items: bool) -> Result<()> {
+    fn attr_brackets(&mut self, attrs: &mut impl AttrSink, items: bool) -> Result<()> {
         self.expect(&TokenKind::LBracket)?;
         self.reduce(0)?;
         while Self::is_atom_token(&self.peek().kind) {
@@ -744,10 +828,33 @@ impl<'a> Parser<'a> {
         }
         let attrs = self.optattr()?;
         self.reduce(3)?;
-        if items.len() > 1 {
-            self.endedge(&items, &attrs);
-        } else {
-            self.endnode(&items[0], &attrs);
+        match (attrs, items.as_slice()) {
+            (
+                StatementAttrs::One {
+                    key,
+                    mut value,
+                    html,
+                },
+                [item @ EdgeItem::Nodes(nodes)],
+            ) if nodes.len() == 1 => {
+                // Bind in the same source order before applying the attributes, as endnode
+                // does. The single node then takes the original key/value buffers.
+                self.endnode(item, &AttrMap::new());
+                // A quoted concatenation may have spare capacity. Match the compact
+                // value previously produced by endnode's clone before retaining it.
+                value.shrink_to_fit();
+                self.graph.nodes[nodes[0].0.0 as usize]
+                    .attrs
+                    .set_owned(key, value, html);
+            }
+            (attrs, _) => {
+                let attrs = attrs.into_map();
+                if items.len() > 1 {
+                    self.endedge(&items, &attrs);
+                } else {
+                    self.endnode(&items[0], &attrs);
+                }
+            }
         }
         Ok(Step::Done)
     }
