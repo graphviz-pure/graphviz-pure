@@ -25,9 +25,8 @@ name: Release
 #   After the commit exists, prepare checks it can land: merge-tree onto current master is
 #   clean, refs/tags/vX.Y.Z does not exist, and no GitHub release (including a draft) does
 #   either. A missing App secret or a ruleset bypass cannot be checked here.
-# - Fuzzing (fuzz.yml, on that same base commit) runs beside the builds. Its fuzzed-inputs
-#   cache makes it a cache lookup when the code has not changed. It has to pass before the
-#   publishing jobs can ask for approval.
+# - Fuzzing is not part of a release. fuzz.yml runs on its own schedule, and the differential
+#   rounds against C run out of band (docs/releasing.md).
 # - Everything is built on GitHub-hosted runners from the release commit, with no caches (a
 #   poisoned cache cannot reach a release), `cargo build --locked` and a pinned Rust toolchain.
 # - Every binary and the npm package, the container image on both platforms, and the Windows
@@ -76,7 +75,7 @@ on:
         required: false
         default: ""
       dry_run:
-        description: Build, fuzz and attest only; do not publish
+        description: Build, smoke-test and attest only; do not publish
         type: boolean
         required: false
         default: false
@@ -186,9 +185,8 @@ jobs:
 
   # Skipped on a dry run. Every publishing job needs this one and checks
   # `needs.publish.result == 'success'`, so a dry run never requests the release environment.
-  # Those jobs still wait until fuzzing finishes before they are marked skipped. On a real run
-  # this job succeeds as soon as prepare has, and the publishing jobs still wait for the builds
-  # and for fuzzing, then for the environment, together.
+  # On a real run this job succeeds as soon as prepare has, and the publishing jobs still wait
+  # for the builds and smoke tests, then for the environment, together.
   publish:
     name: Publishing is part of this run
     needs: prepare
@@ -196,21 +194,8 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
-      - name: The publishing jobs still wait for the builds, fuzzing and the release environment
+      - name: The publishing jobs still wait for the builds and the release environment
         run: echo "dry_run is false; the publishing jobs will wait together for the release environment."
-
-  fuzz:
-    name: Fuzz
-    needs: prepare
-    permissions:
-      contents: read
-      actions: read # fuzz.yml reads the fuzzed-inputs markers of earlier runs
-      # A called workflow may not ask for more than its caller grants, or the run fails at
-      # startup. The report job runs only on fuzz.yml's own schedule, so a release writes no issue.
-      issues: write # fuzz.yml's report job asks for it
-    uses: $/.github/workflows/fuzz.yml
-    with:
-      ref: ${{ needs.prepare.outputs.base_sha }}
 
   check:
     name: Check the release commit
@@ -784,12 +769,12 @@ jobs:
   github-release:
     name: Publish the GitHub release
     if: needs.publish.result == 'success'
-    # Every smoke test and fuzzing must pass before anything is published. This `needs:` list
+    # Every smoke test must pass before anything is published. This `needs:` list
     # is identical on all seven publishing jobs: GitHub asks for one approval per environment
     # for the jobs waiting on it at that moment, so a job that waited on fewer jobs would ask
     # for a second approval. `publish` is skipped on a dry run, which skips these jobs before
     # they can request the environment.
-    needs: [publish, check, attest, image-smoke, scoop-smoke, fuzz]
+    needs: [publish, check, attest, image-smoke, scoop-smoke]
     runs-on: ubuntu-latest
     timeout-minutes: 15
     environment: release
@@ -837,7 +822,7 @@ jobs:
   crates-io:
     name: Publish to crates.io
     if: needs.publish.result == 'success'
-    needs: [publish, check, attest, image-smoke, scoop-smoke, fuzz]
+    needs: [publish, check, attest, image-smoke, scoop-smoke]
     runs-on: ubuntu-latest
     timeout-minutes: 30
     environment: release
@@ -880,7 +865,7 @@ jobs:
   npm:
     name: Publish to npm
     if: needs.publish.result == 'success'
-    needs: [publish, check, attest, image-smoke, scoop-smoke, fuzz]
+    needs: [publish, check, attest, image-smoke, scoop-smoke]
     runs-on: ubuntu-latest
     timeout-minutes: 15
     environment: release
@@ -908,7 +893,7 @@ jobs:
   jsr:
     name: Publish to JSR
     if: needs.publish.result == 'success'
-    needs: [publish, check, attest, image-smoke, scoop-smoke, fuzz]
+    needs: [publish, check, attest, image-smoke, scoop-smoke]
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     environment: release
@@ -950,7 +935,7 @@ jobs:
   wasmer:
     name: Publish to Wasmer
     if: needs.publish.result == 'success'
-    needs: [publish, check, attest, image-smoke, scoop-smoke, fuzz]
+    needs: [publish, check, attest, image-smoke, scoop-smoke]
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     environment: release
@@ -1035,7 +1020,7 @@ jobs:
   pypi:
     name: Publish to PyPI
     if: needs.publish.result == 'success'
-    needs: [publish, check, attest, image-smoke, scoop-smoke, fuzz]
+    needs: [publish, check, attest, image-smoke, scoop-smoke]
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     environment: release
@@ -1095,7 +1080,7 @@ jobs:
   ghcr:
     name: Publish the container image
     if: needs.publish.result == 'success'
-    needs: [publish, check, attest, image-smoke, scoop-smoke, fuzz]
+    needs: [publish, check, attest, image-smoke, scoop-smoke]
     runs-on: ubuntu-24.04 # has skopeo
     timeout-minutes: 20
     environment: release

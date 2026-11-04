@@ -65,7 +65,7 @@ item() { # item PASS TEXT [DETAIL]
   item "$([ -z "$xp" ] && echo 1)" "No open \"Cross-platform fails on master\" issue" "$xp"
 
   # ci.yml and cross-platform.yml run on every master push. The newest run on this commit
-  # must have succeeded. Fuzzing runs in this same release workflow, so it is not a precondition.
+  # must have succeeded. Fuzzing does not gate a release (docs/releasing.md).
   for wf in ci.yml cross-platform.yml; do
     run=$(latest_run "$wf" "$target")
     if [ -z "$run" ]; then
