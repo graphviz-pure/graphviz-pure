@@ -305,6 +305,251 @@ pub struct LabelGeometry {
     pub font_size: f64,
 }
 
+/// Immutable polygon storage. Four- and eight-point arrays may share a bit-identical
+/// array; mutable access gives the caller its own copy. Other lengths keep Vec.
+/// C: lib/common/shapes.c:poly_init, point_init
+#[derive(Clone)]
+pub struct PolygonVertices(VertexStorage);
+
+impl std::fmt::Debug for PolygonVertices {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_list().entries(self.iter()).finish()
+    }
+}
+
+#[derive(Debug, Clone)]
+enum VertexStorage {
+    Owned(Vec<Point>),
+    Shared(std::sync::Arc<[Point]>),
+}
+
+thread_local! {
+    // Fixed-size FIFO, independent of graph size. Every geometry calculation and
+    // diagnostic still runs; only the completed point arrays are shared.
+    static SMALL_VERTEX_CACHE: std::cell::RefCell<[Option<std::sync::Arc<[Point]>>; 32]> =
+        const { std::cell::RefCell::new([const { None }; 32]) };
+}
+
+impl Default for PolygonVertices {
+    fn default() -> Self {
+        Self(VertexStorage::Owned(Vec::new()))
+    }
+}
+
+impl PartialEq for PolygonVertices {
+    fn eq(&self, other: &Self) -> bool {
+        self.iter().eq(other.iter())
+    }
+}
+
+impl PolygonVertices {
+    fn from_array<const N: usize>(points: [Point; N]) -> Self {
+        let shared = SMALL_VERTEX_CACHE.with(|cache| {
+            let mut cache = cache.borrow_mut();
+            if let Some(previous) = cache.iter().flatten().find(|previous| {
+                previous.len() == N
+                    && previous.iter().zip(&points).all(|(a, b)| {
+                        a.x.to_bits() == b.x.to_bits() && a.y.to_bits() == b.y.to_bits()
+                    })
+            }) {
+                return previous.clone();
+            }
+            let shared: std::sync::Arc<[Point]> = std::sync::Arc::<[Point; N]>::new(points);
+            cache.rotate_left(1);
+            if let Some(slot) = cache.last_mut() {
+                *slot = Some(shared.clone());
+            }
+            shared
+        });
+        Self(VertexStorage::Shared(shared))
+    }
+
+    pub fn resize(&mut self, len: usize, value: Point) {
+        match &mut self.0 {
+            VertexStorage::Owned(points) => points.resize(len, value),
+            VertexStorage::Shared(points) if len == points.len() => {}
+            VertexStorage::Shared(_) => {
+                let mut points = Vec::with_capacity(len);
+                points.extend(self.iter().copied().take(len));
+                points.resize(len, value);
+                self.0 = VertexStorage::Owned(points);
+            }
+        }
+    }
+}
+
+impl From<Vec<Point>> for PolygonVertices {
+    fn from(points: Vec<Point>) -> Self {
+        Self(VertexStorage::Owned(points))
+    }
+}
+
+impl std::ops::Deref for PolygonVertices {
+    type Target = [Point];
+    fn deref(&self) -> &[Point] {
+        match &self.0 {
+            VertexStorage::Owned(points) => points,
+            VertexStorage::Shared(points) => points.as_ref(),
+        }
+    }
+}
+
+impl std::ops::DerefMut for PolygonVertices {
+    fn deref_mut(&mut self) -> &mut [Point] {
+        match &mut self.0 {
+            VertexStorage::Owned(points) => points,
+            VertexStorage::Shared(points) => std::sync::Arc::<[Point]>::make_mut(points),
+        }
+    }
+}
+
+impl<'a> IntoIterator for &'a PolygonVertices {
+    type Item = &'a Point;
+    type IntoIter = std::slice::Iter<'a, Point>;
+    fn into_iter(self) -> Self::IntoIter {
+        self.iter()
+    }
+}
+
+impl<'a> IntoIterator for &'a mut PolygonVertices {
+    type Item = &'a mut Point;
+    type IntoIter = std::slice::IterMut<'a, Point>;
+    fn into_iter(self) -> Self::IntoIter {
+        self.iter_mut()
+    }
+}
+
+/// Build the common four/eight-point arrays on the stack before they are immutable.
+/// C: lib/common/shapes.c:poly_init, point_init (gv_calloc storage)
+enum VertexWork {
+    Four([Point; 4]),
+    Eight([Point; 8]),
+    Heap(Vec<Point>),
+}
+
+impl VertexWork {
+    fn zeroed(count: u64) -> std::result::Result<Self, graphviz_pure_core::alloc::AllocFailure> {
+        if count == 4 {
+            Ok(Self::Four([Point::default(); 4]))
+        } else if count == 8 {
+            Ok(Self::Eight([Point::default(); 8]))
+        } else {
+            gv_calloc_vec::<Point>(count).map(Self::Heap)
+        }
+    }
+
+    fn finish(self) -> PolygonVertices {
+        match self {
+            Self::Four(points) => PolygonVertices::from_array(points),
+            Self::Eight(points) => PolygonVertices::from_array(points),
+            Self::Heap(points) => points.into(),
+        }
+    }
+}
+
+impl std::ops::Deref for VertexWork {
+    type Target = [Point];
+    fn deref(&self) -> &[Point] {
+        match self {
+            Self::Four(points) => points,
+            Self::Eight(points) => points,
+            Self::Heap(points) => points,
+        }
+    }
+}
+
+impl std::ops::DerefMut for VertexWork {
+    fn deref_mut(&mut self) -> &mut [Point] {
+        match self {
+            Self::Four(points) => points,
+            Self::Eight(points) => points,
+            Self::Heap(points) => points,
+        }
+    }
+}
+
+#[cfg(test)]
+mod polygon_vertices_tests {
+    use super::*;
+
+    #[test]
+    fn exact_bits_are_shared_and_mutation_is_isolated() {
+        let mut points = [Point::default(); 8];
+        points[0] = Point::new(-0.0, f64::from_bits(0x7ff8_0000_0000_0042));
+        let original = PolygonVertices::from_array(points);
+        assert_eq!(format!("{original:?}"), format!("{points:?}"));
+        let same = PolygonVertices::from_array(points);
+        assert_eq!(original.as_ptr(), same.as_ptr());
+        let mut changed = same.clone();
+        changed[0].x = 1.0;
+        assert_ne!(changed.as_ptr(), original.as_ptr());
+        assert_eq!(original[0].x.to_bits(), (-0.0f64).to_bits());
+        assert_eq!(changed[0].y.to_bits(), original[0].y.to_bits());
+        points[0].x = 0.0;
+        let positive_zero = PolygonVertices::from_array(points);
+        assert_ne!(positive_zero.as_ptr(), original.as_ptr());
+        points[0].y = f64::from_bits(0x7ff8_0000_0000_0043);
+        let other_nan = PolygonVertices::from_array(points);
+        assert_ne!(other_nan.as_ptr(), positive_zero.as_ptr());
+    }
+
+    #[test]
+    fn cache_is_bounded_and_eviction_keeps_live_arrays_valid() {
+        SMALL_VERTEX_CACHE.with(|cache| *cache.borrow_mut() = [const { None }; 32]);
+        let points = [Point::default(); 8];
+        let first = PolygonVertices::from_array(points);
+        for i in 1..32 {
+            let mut points = points;
+            points[0].x = i as f64;
+            PolygonVertices::from_array(points);
+        }
+        assert_eq!(PolygonVertices::from_array(points).as_ptr(), first.as_ptr());
+        let mut next = points;
+        next[0].x = 32.0;
+        PolygonVertices::from_array(next);
+        assert_ne!(PolygonVertices::from_array(points).as_ptr(), first.as_ptr());
+        assert_eq!(first[0], Point::default());
+        SMALL_VERTEX_CACHE.with(|cache| assert_eq!(cache.borrow().iter().flatten().count(), 32));
+    }
+
+    #[test]
+    fn lengths_are_distinct_cache_keys_and_four_points_can_grow() {
+        let four = VertexWork::zeroed(4).unwrap();
+        assert!(matches!(four, VertexWork::Four(_)));
+        let four = four.finish();
+        let eight = PolygonVertices::from_array([Point::default(); 8]);
+        assert_eq!(four.len(), 4);
+        assert_eq!(eight.len(), 8);
+        assert_ne!(four.as_ptr(), eight.as_ptr());
+        let mut grown = four.clone();
+        grown.resize(8, Point::new(1.0, 2.0));
+        assert_eq!(grown.len(), 8);
+        assert_eq!(grown[4], Point::new(1.0, 2.0));
+        assert_eq!(four.len(), 4);
+        assert!(four.iter().all(|p| *p == Point::default()));
+    }
+
+    #[test]
+    fn work_boundary_resize_and_heap_transfer_preserve_points() {
+        let eight = VertexWork::zeroed(8).unwrap();
+        assert!(matches!(eight, VertexWork::Eight(_)));
+        let mut shared = eight.finish();
+        shared.resize(10, Point::new(1.0, 2.0));
+        assert_eq!(shared.len(), 10);
+        assert_eq!(shared[8], Point::new(1.0, 2.0));
+        shared.resize(2, Point::default());
+        assert_eq!(shared, vec![Point::default(); 2].into());
+        for len in [0, 7, 9] {
+            let heap = VertexWork::zeroed(len).unwrap();
+            assert!(matches!(heap, VertexWork::Heap(_)));
+            let before = heap.as_ptr();
+            let finished = heap.finish();
+            assert_eq!(finished.as_ptr(), before);
+            assert_eq!(finished.len(), len as usize);
+        }
+    }
+}
+
 /// Shape geometry produced by `poly_init`/`point_init` (`polygon_t`).
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct PolygonGeometry {
@@ -319,7 +564,7 @@ pub struct PolygonGeometry {
     /// `sides * outp` vertices in points relative to the node centre: periphery `j` occupies
     /// `vertices[j * sides .. (j + 1) * sides]`; the last ring (if present) is the outline at
     /// half the pen width.
-    pub vertices: Vec<Point>,
+    pub vertices: PolygonVertices,
 }
 
 /// Everything C computes for a node before layout.
@@ -1166,7 +1411,7 @@ fn poly_init(
         sides = 2;
         // `gv_calloc(outp * sides, sizeof(pointf))`
         gv_calloc_budget::<Point>(element_count(outp, sides), MAX_VERTICES)?;
-        vertices = gv_calloc_vec::<Point>(element_count(outp, sides))?;
+        vertices = VertexWork::zeroed(element_count(outp, sides))?;
         let mut p = Point::new(bb.x / 2.0, bb.y / 2.0);
         vertices[0] = Point::new(-p.x, -p.y);
         vertices[1] = p;
@@ -1193,7 +1438,7 @@ fn poly_init(
     } else {
         // `gv_calloc(outp * sides, sizeof(pointf))`
         gv_calloc_budget::<Point>(element_count(outp, sides), MAX_VERTICES)?;
-        vertices = gv_calloc_vec::<Point>(element_count(outp, sides))?;
+        vertices = VertexWork::zeroed(element_count(outp, sides))?;
         let (mut sinx, mut cosx) = (0.0_f64, 0.0_f64);
         let (mut xmax, mut ymax);
         if has_gen {
@@ -1332,7 +1577,7 @@ fn poly_init(
         distortion,
         skew,
         fixedshape,
-        vertices,
+        vertices: vertices.finish(),
     });
     Ok(())
 }
@@ -1363,7 +1608,7 @@ fn point_init(node: &NodeData, default_peripheries: usize, geom: &mut NodeGeomet
     }
     // `gv_calloc(outp * sides, sizeof(pointf))`
     gv_calloc_budget::<Point>(element_count(outp, sides), MAX_VERTICES)?;
-    let mut vertices = gv_calloc_vec::<Point>(element_count(outp, sides))?;
+    let mut vertices = VertexWork::zeroed(element_count(outp, sides))?;
     let mut p = Point::new(sz / 2.0, sz / 2.0);
     vertices[0] = Point::new(-p.x, -p.y);
     vertices[1] = p;
@@ -1400,7 +1645,7 @@ fn point_init(node: &NodeData, default_peripheries: usize, geom: &mut NodeGeomet
         distortion: 0.0,
         skew: 0.0,
         fixedshape: false,
-        vertices,
+        vertices: vertices.finish(),
     });
     Ok(())
 }
