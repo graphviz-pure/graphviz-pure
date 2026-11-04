@@ -499,6 +499,68 @@ mod tests {
         assert!(!g.dicts[0].node["label"].html);
     }
 
+    #[test]
+    fn single_attribute_statements_keep_flags_defaults_and_fallback_lists() {
+        let g = parse_dot(
+            r#"digraph {
+                node [same="default"];
+                a [same=<html>]; b [same="plain"];
+                c [other="before"][other="after"];
+                d,e [shared=<row>];
+                a->b [label=<edge>]; b->c [label="plain"];
+                subgraph { f [first=1 second=2 first=3]; }
+                z [];
+            }"#,
+        )
+        .unwrap();
+        assert_eq!(
+            g.nodes[0].attrs.get("same").map(String::as_str),
+            Some("html")
+        );
+        assert!(g.nodes[0].attrs.is_html("same"));
+        assert_eq!(
+            g.nodes[1].attrs.get("same").map(String::as_str),
+            Some("plain")
+        );
+        assert!(!g.nodes[1].attrs.is_html("same"));
+        assert_eq!(
+            g.nodes[2].attrs.get("other").map(String::as_str),
+            Some("after")
+        );
+        for node in &g.nodes[3..5] {
+            assert_eq!(node.attrs.get("shared").map(String::as_str), Some("row"));
+            assert!(node.attrs.is_html("shared"));
+        }
+        assert_eq!(g.nodes[5].attrs.get("first").map(String::as_str), Some("3"));
+        assert_eq!(
+            g.nodes[5].attrs.get("second").map(String::as_str),
+            Some("2")
+        );
+        assert_eq!(
+            g.nodes[6].attrs.get("same").map(String::as_str),
+            Some("default")
+        );
+        assert!(g.nodes[6].attrs.get("other").is_none_or(String::is_empty));
+        assert!(g.edges[0].attrs.is_html("label"));
+        assert_eq!(
+            g.edges[0].attrs.get("label").map(String::as_str),
+            Some("edge")
+        );
+        assert!(!g.edges[1].attrs.is_html("label"));
+        assert_eq!(
+            g.edges[1].attrs.get("label").map(String::as_str),
+            Some("plain")
+        );
+    }
+
+    #[test]
+    fn single_attribute_concatenation_retains_only_its_value_length() {
+        let g = parse_dot(r#"digraph { a [label="a"+"bc"]; }"#).unwrap();
+        let value = g.nodes[0].attrs.get("label").unwrap();
+        assert_eq!(value, "abc");
+        assert_eq!(value.capacity(), value.len());
+    }
+
     // #119: a node name keeps the flag; `<b>`, `b` and `"<b>"` are three nodes (`refstr_eq`).
     #[test]
     fn html_node_name_is_its_inner_text_and_a_flag() {
