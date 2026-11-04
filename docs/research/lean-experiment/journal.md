@@ -1005,3 +1005,56 @@ C stale intervals, so the copy is the design.
 
 **Cost.** About 1.5 h on Rust and tests, 0.3 h on docs. No Lean, so no proof lines. Extraction
 verdict: not applicable.
+## 2026-11-04 #766 (second attempt): a zero-copy BFS kernel that Aeneas extracts
+
+Result: shipped Rust changed, under a rule that was absolute: allocations exactly +0 on every ratchet
+case and instructions not up, otherwise shipped Rust stays as on master and `--check` gets a marker
+file for a known-unextractable module. The rule was met, so there is no marker file. `TwopiCircle`
+is extracted again from `leaf_bfs` and `set_subtree_size`, `extract.sh --check` ends "every
+extraction is current", and `lake.sh build` is green with no `sorry` or `axiom` under
+`Extracted/TwopiCircle`.
+
+**Why a second attempt.** The first (PR #771) made the BFS extractable by copying each component's
+adjacency into three scratch vectors. Review measured it: +8, +15 and +3 allocations per layout on
+the three twopi cases, and extra instructions on components without leaves, because the copy ran
+before the queue was known to be non-empty. Preallocation cannot reach zero. The review's design:
+a kernel over `LGraph`'s existing `out`, `inn` and `edges` as borrowed slices.
+
+**Hours.** About 4 on Rust and extraction (most of it bisecting Aeneas rejections, below), 0.5 on
+measuring, 0.3 on docs, 0 on proofs: no theorem changes, because `Twopi/LeafDist.lean` is over a model.
+
+**What Aeneas rejected, in order** (each by editing, extracting in 25 s, reading the error):
+1. Closures (`is_some_and`, `and_then`) in the kernel: `Could not match the contexts`.
+2. A seed loop holding `d.get_mut(n)` and `queue.push(n)` while `d: &mut [RNode]` is a parameter:
+   `Could not match the contexts`, and for the `match` form `Internal error`. Moved to a function
+   taking `d: &[RNode]`, which extracts.
+3. `while let Some(&n) = queue.get(head)`: `unsupported nested borrows` on the whole loop. A plain
+   `while head < queue.len()` with `let else { break }` is accepted.
+4. The neighbour loops. About a dozen variants were rejected with `unsupported nested borrows` or `Could
+   not match the contexts`; I suspected `&mut [RNode]` in a loop, a conditional write through
+   `get_mut`, `&Vec<usize>` coerced to `&[usize]`, and an argument evaluated between two `&mut`
+   reborrows, and each suspicion was wrong (a probe with each of them, and no `&[LEdge]`, extracted).
+   The probe that found it: the same loop with an unused `edges: &[LEdge]` parameter is rejected,
+   and without it is accepted. `LEdge` holds `Option<TextLabel>`, `Vec<Bezier>` and ports, and
+   Aeneas cannot carry that type through a loop next to a `&mut`. The fix is to declare `LEdge` and
+   a one-line accessor `edge_ends` opaque (`--opaque`, recorded in `extract.args`) and hand-write
+   the type as `{ tail, head }` and the accessor as `(e.tail, e.head)`. **That is a model of the
+   shipped struct, small and checkable by eye, but it is an assumption the theorems inherit.**
+5. `.rev()` and `and_then` with a `&mut` closure in `set_subtree_size`, as in #771.
+
+**Measurements** (ratchet, this branch against master's `circle.rs`, same build flags): allocations
++0 on all 19 cases (deterministic), peak heap +0.00%. Instruction counts are not deterministic on
+the pairs case: the same binary gave 618.6M to 623.6M on four runs (hash seeds), a 0.8% spread, so a
+single ratchet row cannot show "not up". Five to eight runs of each binary, in the ratchet's own
+invocation (a different path length moved fx_arrows by 4,300 instructions, which first looked like a
+regression): `fx_arrows` -640 (mean, 549,576,223 to 549,575,584), `twopi_tree_5000` -0.026% (-102k,
+every run lower), `twopi_pairs_1000` median 623.06M to 619.31M. The decision rule was applied to
+those numbers, not to one ratchet table.
+
+**What Lean caught.** Nothing: no theorem was touched. The extraction itself carries one new
+modelling choice (`LEdge`), and the hand models are `Try::branch`, `from_residual`, `Vec::clear`,
+`<&Vec as IntoIterator>::into_iter` and `edge_ends`.
+
+**Extraction verdict.** Extracted with one reshaping of the shipped code (the kernel's split into
+single-loop functions with plain helpers for the edge lookups) and one opaque type. The reshaping
+costs nothing measurable; `#[inline(always)]` on the helpers keeps the iterator version's code size.

@@ -2,7 +2,7 @@
 //!
 //! Per-node `rdata` lives in [`RData`], indexed by node like `ND_alg(n)`.
 
-use crate::common::types::{LGraph, Sub};
+use crate::common::types::{LEdge, LGraph, Sub};
 use graphviz_pure_core::cnum::is_exactly_zero;
 use graphviz_pure_core::math;
 use graphviz_pure_core::strtod::strtod_rest;
@@ -57,33 +57,147 @@ fn other(g: &LGraph<'_>, e: usize, n: usize) -> usize {
 /// as the oracle in this file's tests.
 fn set_n_steps_to_leaf(g: &LGraph<'_>, sg: &Sub, r: &mut RData) {
     let mut queue = std::mem::take(&mut r.order);
-    queue.clear();
-    queue.extend(
-        sg.nodes
-            .iter()
-            .copied()
-            .filter(|&n| r.d.get(n).is_some_and(|node| node.n_steps_to_leaf == 0)),
+    leaf_bfs(
+        &g.out, &g.inn, &g.edges, &sg.member, &sg.nodes, &mut r.d, &mut queue,
     );
+    r.order = queue;
+}
+
+/// The body of `set_n_steps_to_leaf` over borrowed slices of `LGraph`'s own `out`, `inn` and
+/// `edges` and of `Sub`'s `member` and `nodes`, with no copy, so that Aeneas can extract it
+/// (`LGraph::all_edges` is an `impl Iterator` of closures, which it cannot). For each node it
+/// visits the out-edges whose head is in the subgraph, then the in-edges whose tail is in it and
+/// that are not loops: `all_edges`'s order. The loops sit in `relax_out` and `relax_in`, one per
+/// function, and the edge lookups in plain helpers, because Aeneas rejects a loop whose function
+/// takes `&[LEdge]` together with `&mut` arguments (`edge_ends` is opaque to it for that reason).
+/// `#[inline(always)]` keeps the instruction count of the iterator version.
+#[inline(always)]
+fn leaf_bfs(
+    out: &[Vec<usize>],
+    inn: &[Vec<usize>],
+    edges: &[LEdge],
+    member: &[bool],
+    nodes: &[usize],
+    d: &mut [RNode],
+    queue: &mut Vec<usize>,
+) {
+    queue.clear();
+    seed_leaves(d, nodes, queue);
     let mut head = 0usize;
-    while let Some(&n) = queue.get(head) {
+    while head < queue.len() {
+        let Some(&n) = queue.get(head) else { break };
         head = head.saturating_add(1);
-        let Some(nsteps) =
-            r.d.get(n)
-                .and_then(|node| node.n_steps_to_leaf.checked_add(1))
-        else {
+        let Some(nsteps) = next_steps(d, n) else {
             continue;
         };
-        for ep in g.all_edges(sg, n) {
-            let next = other(g, ep, n);
-            if let Some(node) = r.d.get_mut(next)
-                && nsteps < node.n_steps_to_leaf
-            {
-                node.n_steps_to_leaf = nsteps;
-                queue.push(next);
-            }
+        relax_out(out, edges, member, d, queue, n, nsteps);
+        relax_in(inn, edges, member, d, queue, n, nsteps);
+    }
+}
+
+#[inline(always)]
+fn seed_leaves(d: &[RNode], nodes: &[usize], queue: &mut Vec<usize>) {
+    for &n in nodes {
+        if let Some(node) = d.get(n)
+            && node.n_steps_to_leaf == 0
+        {
+            queue.push(n);
         }
     }
-    r.order = queue;
+}
+
+#[inline(always)]
+fn next_steps(d: &[RNode], n: usize) -> Option<u64> {
+    let node = d.get(n)?;
+    node.n_steps_to_leaf.checked_add(1)
+}
+
+#[inline(always)]
+fn relax_out(
+    out: &[Vec<usize>],
+    edges: &[LEdge],
+    member: &[bool],
+    d: &mut [RNode],
+    queue: &mut Vec<usize>,
+    n: usize,
+    nsteps: u64,
+) {
+    let Some(outs) = out.get(n) else { return };
+    for &ep in outs {
+        if let Some(next) = out_neighbour(edges, member, ep, n)
+            && relax_leaf(d, next, nsteps)
+        {
+            queue.push(next);
+        }
+    }
+}
+
+#[inline(always)]
+fn relax_in(
+    inn: &[Vec<usize>],
+    edges: &[LEdge],
+    member: &[bool],
+    d: &mut [RNode],
+    queue: &mut Vec<usize>,
+    n: usize,
+    nsteps: u64,
+) {
+    let Some(ins) = inn.get(n) else { return };
+    for &ep in ins {
+        if let Some(next) = in_neighbour(edges, member, ep, n)
+            && relax_leaf(d, next, nsteps)
+        {
+            queue.push(next);
+        }
+    }
+}
+
+#[inline(always)]
+fn other_end(tail: usize, head: usize, n: usize) -> usize {
+    if tail == n { head } else { tail }
+}
+
+/// The `(tail, head)` of an edge. Kept opaque to Aeneas, which cannot take `LEdge`'s other
+/// fields (`Option<TextLabel>`, `Vec<Bezier>`, ...) into a loop's context.
+#[inline(always)]
+fn edge_ends(e: &LEdge) -> (usize, usize) {
+    (e.tail, e.head)
+}
+
+#[inline(always)]
+fn out_neighbour(edges: &[LEdge], member: &[bool], ep: usize, n: usize) -> Option<usize> {
+    let e = edges.get(ep)?;
+    let (tail, head) = edge_ends(e);
+    let inside = member.get(head)?;
+    if *inside {
+        Some(other_end(tail, head, n))
+    } else {
+        None
+    }
+}
+
+#[inline(always)]
+fn in_neighbour(edges: &[LEdge], member: &[bool], ep: usize, n: usize) -> Option<usize> {
+    let e = edges.get(ep)?;
+    let (tail, head) = edge_ends(e);
+    let inside = member.get(tail)?;
+    if *inside && tail != head {
+        Some(other_end(tail, head, n))
+    } else {
+        None
+    }
+}
+
+#[inline(always)]
+fn relax_leaf(d: &mut [RNode], next: usize, nsteps: u64) -> bool {
+    if let Some(node) = d.get_mut(next)
+        && nsteps < node.n_steps_to_leaf
+    {
+        node.n_steps_to_leaf = nsteps;
+        true
+    } else {
+        false
+    }
 }
 
 /// `isLeaf(g, n)`.
@@ -180,14 +294,20 @@ fn set_parent_nodes(g: &LGraph<'_>, sg: &Sub, r: &mut RData, center: usize) -> u
 /// every node of the component discovered, and `subtree_size` still 0 (each node
 /// belongs to one component and is laid out once).
 fn set_subtree_size(r: &mut RData) {
-    for i in (0..r.order.len()).rev() {
+    // A countdown, `(0..len).rev()` for Aeneas.
+    let mut i = r.order.len();
+    while i > 0 {
+        i = i.saturating_sub(1);
         let Some(&n) = r.order.get(i) else { continue };
         let Some(node) = r.d.get_mut(n) else { continue };
         node.subtree_size = node
             .subtree_size
             .saturating_add(u64::from(node.n_children == 0));
         let (size, parent) = (node.subtree_size, node.parent);
-        if let Some(p) = parent.and_then(|p| r.d.get_mut(p)) {
+        // `parent.and_then(|p| r.d.get_mut(p))`, without the closure.
+        if let Some(p) = parent
+            && let Some(p) = r.d.get_mut(p)
+        {
             p.subtree_size = p.subtree_size.saturating_add(size);
         }
     }

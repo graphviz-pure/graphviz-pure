@@ -132,4 +132,4 @@ Follow-ups from the first wave's reviews:
 - #750 (done, PR #764): `Ns/CutSetsStale.lean` covers every production pivot, stale numbering included.
 - #751 (done, PR #762): the mincross port comparison is abstract; NaN ports are inside the theorem.
 - #765: make `ns-check` compare the cut-set search on the stale production state.
-- #766: `extract.sh --check` fails on `TwopiCircle` with an Aeneas internal error.
+- #766 (done): `extract.sh --check` failed on `TwopiCircle`: the committed extraction was of the pre-#729 DFS and the BFS did not extract. `leaf_bfs` now takes borrowed slices of `LGraph` (no copy, ratchet allocations +0), with `LEdge` opaque to Aeneas; see `extraction.md`, "The #766 zero-copy kernel".

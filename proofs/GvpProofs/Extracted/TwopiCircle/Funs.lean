@@ -25,243 +25,421 @@ noncomputable section
 
 namespace GvpProofs.Extracted.TwopiCircle
 
-/-- [graphviz_pure_layout::twopigen::circle::set_n_steps_to_leaf]: loop body 0:
-    Source: 'crates/graphviz-pure-layout/src/twopigen/circle.rs', lines 81:4-108:5 -/
-@[rust_loop_body]
-def twopigen.circle.set_n_steps_to_leaf_loop.body
-  (adjacency : Slice Std.Usize)
-  (offsets : Slice (core.ops.range.Range Std.Usize))
-  (v : alloc.vec.Vec twopigen.circle.RNode)
-  (stack : alloc.vec.Vec twopigen.circle.LeafFrame) :
-  Result (ControlFlow ((alloc.vec.Vec twopigen.circle.RNode) × (alloc.vec.Vec
-    twopigen.circle.LeafFrame)) ((alloc.vec.Vec twopigen.circle.RNode) ×
-    (alloc.vec.Vec twopigen.circle.LeafFrame)))
+/-- [graphviz_pure_layout::twopigen::circle::relax_leaf]:
+    Source: 'crates/graphviz-pure-layout/src/twopigen/circle.rs', lines 192:0-201:1 -/
+def twopigen.circle.relax_leaf
+  (d : Slice twopigen.circle.RNode) (next : Std.Usize) (nsteps : Std.U64) :
+  Result (Bool × (Slice twopigen.circle.RNode))
   := do
-  let (s, deref_mut_back) ← lift (alloc.vec.Vec.deref_mut stack)
-  let (o, last_mut_back) ← core.slice.Slice.last_mut s
+  let (o, get_mut_back) ←
+    core.slice.Slice.get_mut (core.slice.index.SliceIndexUsizeSlice
+      twopigen.circle.RNode) d next
   match o with
-  | none => let s1 := last_mut_back none
-            ok (done (v, deref_mut_back s1))
-  | some frame =>
-    let (o1, r) ←
-      core.iter.range.IteratorRange.next core.iter.range.StepUsize frame.edges
-    match o1 with
-    | none =>
-      let s1 := last_mut_back (some { frame with edges := r })
-      let stack1 := deref_mut_back s1
-      let (_, stack2) ← alloc.vec.Vec.pop alloc.alloc.Global stack1
-      ok (cont (v, stack2))
-    | some ep =>
-      let o2 ←
-        core.slice.Slice.get (core.slice.index.SliceIndexUsizeSlice Std.Usize)
-          adjacency ep
-      match o2 with
-      | none =>
-        let s1 := last_mut_back (some { frame with edges := r })
-        let stack1 := deref_mut_back s1
-        ok (cont (v, stack1))
-      | some next =>
-        let b ←
-          core.option.Option.Insts.CoreCmpPartialEqOption.eq
-            core.cmp.PartialEqUsize frame.prev o2
-        if b
-        then
-          let s1 := last_mut_back (some { frame with edges := r })
-          let stack1 := deref_mut_back s1
-          ok (cont (v, stack1))
-        else
-          let (s1, deref_mut_back1) ← lift (alloc.vec.Vec.deref_mut v)
-          let (o3, get_mut_back) ←
-            core.slice.Slice.get_mut (core.slice.index.SliceIndexUsizeSlice
-              twopigen.circle.RNode) s1 next
-          match o3 with
-          | none =>
-            let s2 := get_mut_back none
-            let v1 := deref_mut_back1 s2
-            let s3 := last_mut_back (some { frame with edges := r })
-            let stack1 := deref_mut_back s3
-            ok (cont (v1, stack1))
-          | some node =>
-            if frame.nsteps < node.n_steps_to_leaf
-            then
-              let o4 ←
-                core.slice.Slice.get (core.slice.index.SliceIndexUsizeSlice
-                  (core.ops.range.Range Std.Usize)) offsets next
-              let o5 ← lift (U64.checked_add frame.nsteps 1#u64)
-              match o4 with
-              | none =>
-                let s2 :=
-                  get_mut_back (some
-                    { node with n_steps_to_leaf := frame.nsteps })
-                let v1 := deref_mut_back1 s2
-                let s3 := last_mut_back (some { frame with edges := r })
-                let stack1 := deref_mut_back s3
-                ok (cont (v1, stack1))
-              | some edges =>
-                match o5 with
-                | none =>
-                  let s2 :=
-                    get_mut_back (some
-                      { node with n_steps_to_leaf := frame.nsteps })
-                  let v1 := deref_mut_back1 s2
-                  let s3 := last_mut_back (some { frame with edges := r })
-                  let stack1 := deref_mut_back s3
-                  ok (cont (v1, stack1))
-                | some nsteps =>
-                  let r1 ←
-                    core.ops.range.Range.Insts.CoreCloneClone.clone
-                      core.clone.CloneUsize edges
-                  let s2 := last_mut_back (some { frame with edges := r })
-                  let stack1 := deref_mut_back s2
-                  let stack2 ←
-                    alloc.vec.Vec.push stack1
-                      ({ n := next, prev := (some frame.n), edges := r1, nsteps
-                       } : twopigen.circle.LeafFrame)
-                  let s3 :=
-                    get_mut_back (some
-                      { node with n_steps_to_leaf := frame.nsteps })
-                  let v1 := deref_mut_back1 s3
-                  ok (cont (v1, stack2))
-            else
-              let s2 := get_mut_back o3
-              let v1 := deref_mut_back1 s2
-              let s3 := last_mut_back (some { frame with edges := r })
-              let stack1 := deref_mut_back s3
-              ok (cont (v1, stack1))
+  | none => let d1 := get_mut_back none
+            ok (false, d1)
+  | some node =>
+    if nsteps < node.n_steps_to_leaf
+    then
+      let d1 := get_mut_back (some { node with n_steps_to_leaf := nsteps })
+      ok (true, d1)
+    else let d1 := get_mut_back o
+         ok (false, d1)
 
-/-- [graphviz_pure_layout::twopigen::circle::set_n_steps_to_leaf]: loop 0:
-    Source: 'crates/graphviz-pure-layout/src/twopigen/circle.rs', lines 81:4-108:5 -/
-@[rust_loop]
-def twopigen.circle.set_n_steps_to_leaf_loop
-  (v : alloc.vec.Vec twopigen.circle.RNode) (adjacency : Slice Std.Usize)
-  (offsets : Slice (core.ops.range.Range Std.Usize))
-  (stack : alloc.vec.Vec twopigen.circle.LeafFrame) :
-  Result ((alloc.vec.Vec twopigen.circle.RNode) × (alloc.vec.Vec
-    twopigen.circle.LeafFrame))
+/-- [graphviz_pure_layout::twopigen::circle::other_end]:
+    Source: 'crates/graphviz-pure-layout/src/twopigen/circle.rs', lines 156:0-158:1 -/
+def twopigen.circle.other_end
+  (tail : Std.Usize) (head : Std.Usize) (n : Std.Usize) :
+  Result Std.Usize
   := do
-  loop
-    (fun (v1, stack1) => twopigen.circle.set_n_steps_to_leaf_loop.body
-      adjacency offsets v1 stack1)
-    (v, stack)
+  if tail = n
+  then ok head
+  else ok tail
 
-/-- [graphviz_pure_layout::twopigen::circle::set_n_steps_to_leaf]:
-    Source: 'crates/graphviz-pure-layout/src/twopigen/circle.rs', lines 61:0-109:1 -/
-def twopigen.circle.set_n_steps_to_leaf
-  (r : twopigen.circle.RData) (n : Std.Usize) (adjacency : Slice Std.Usize)
-  (offsets : Slice (core.ops.range.Range Std.Usize))
-  (stack : alloc.vec.Vec twopigen.circle.LeafFrame) :
-  Result (twopigen.circle.RData × (alloc.vec.Vec twopigen.circle.LeafFrame))
+/-- [graphviz_pure_layout::twopigen::circle::in_neighbour]:
+    Source: 'crates/graphviz-pure-layout/src/twopigen/circle.rs', lines 180:0-189:1 -/
+def twopigen.circle.in_neighbour
+  (edges : Slice common.types.LEdge) (member : Slice Bool) (ep : Std.Usize)
+  (n : Std.Usize) :
+  Result (Option Std.Usize)
   := do
-  let stack1 ← alloc.vec.Vec.clear alloc.alloc.Global stack
-  let s := alloc.vec.Vec.deref r.d
   let o ←
     core.slice.Slice.get (core.slice.index.SliceIndexUsizeSlice
-      twopigen.circle.RNode) s n
-  let o1 ←
-    core.slice.Slice.get (core.slice.index.SliceIndexUsizeSlice
-      (core.ops.range.Range Std.Usize)) offsets n
-  match o with
-  | none => ok (r, stack1)
-  | some node =>
-    match o1 with
-    | none => ok (r, stack1)
-    | some edges =>
-      let o2 ← lift (U64.checked_add node.n_steps_to_leaf 1#u64)
-      match o2 with
-      | none => ok (r, stack1)
-      | some nsteps =>
-        let r1 ←
-          core.ops.range.Range.Insts.CoreCloneClone.clone core.clone.CloneUsize
-            edges
-        let stack2 ←
-          alloc.vec.Vec.push stack1 ({ n, prev := none, edges := r1, nsteps } :
-            twopigen.circle.LeafFrame)
-        let (v, back) ←
-          twopigen.circle.set_n_steps_to_leaf_loop r.d adjacency offsets stack2
-        ok ({ r with d := v }, back)
+      common.types.LEdge) edges ep
+  let cf ← core.option.Option.Insts.CoreOpsTry_traitTry.branch o
+  match cf with
+  | core.ops.control_flow.ControlFlow.Continue val =>
+    let (tail, head) ← twopigen.circle.edge_ends val
+    let o1 ←
+      core.slice.Slice.get (core.slice.index.SliceIndexUsizeSlice Bool) member
+        tail
+    let cf1 ← core.option.Option.Insts.CoreOpsTry_traitTry.branch o1
+    match cf1 with
+    | core.ops.control_flow.ControlFlow.Continue val1 =>
+      if val1
+      then
+        if tail != head
+        then let i ← twopigen.circle.other_end tail head n
+             ok (some i)
+        else ok none
+      else ok none
+    | core.ops.control_flow.ControlFlow.Break residual =>
+      core.option.Option.Insts.CoreOpsTry_traitFromResidualOptionNever.from_residual
+        Std.Usize residual
+  | core.ops.control_flow.ControlFlow.Break residual =>
+    core.option.Option.Insts.CoreOpsTry_traitFromResidualOptionNever.from_residual
+      Std.Usize residual
 
-/-- [graphviz_pure_layout::twopigen::circle::set_subtree_size]: loop body 1:
-    Source: 'crates/graphviz-pure-layout/src/twopigen/circle.rs', lines 226:8-229:9 -/
+/-- [graphviz_pure_layout::twopigen::circle::relax_in]: loop body 0:
+    Source: 'crates/graphviz-pure-layout/src/twopigen/circle.rs', lines 146:4-152:5 -/
 @[rust_loop_body]
-def twopigen.circle.set_subtree_size_loop0_loop0.body
-  (parent : Option Std.Usize) (v : alloc.vec.Vec twopigen.circle.RNode) :
-  Result (ControlFlow ((Option Std.Usize) × (alloc.vec.Vec
-    twopigen.circle.RNode)) (alloc.vec.Vec twopigen.circle.RNode))
-  := do
-  match parent with
-  | none => ok (done v)
-  | some p =>
-    let (r, index_mut_back) ←
-      alloc.vec.Vec.index_mut (core.slice.index.SliceIndexUsizeSlice
-        twopigen.circle.RNode) v p
-    let i ← r.subtree_size + 1#u64
-    let v1 := index_mut_back { r with subtree_size := i }
-    let r1 ←
-      alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice
-        twopigen.circle.RNode) v1 p
-    ok (cont (r1.parent, v1))
-
-/-- [graphviz_pure_layout::twopigen::circle::set_subtree_size]: loop 1:
-    Source: 'crates/graphviz-pure-layout/src/twopigen/circle.rs', lines 226:8-229:9 -/
-@[rust_loop]
-def twopigen.circle.set_subtree_size_loop0_loop0
-  (parent : Option Std.Usize) (v : alloc.vec.Vec twopigen.circle.RNode) :
-  Result (alloc.vec.Vec twopigen.circle.RNode)
-  := do
-  loop
-    (fun (parent1, v1) => twopigen.circle.set_subtree_size_loop0_loop0.body
-      parent1 v1)
-    (parent, v)
-
-/-- [graphviz_pure_layout::twopigen::circle::set_subtree_size]: loop body 0:
-    Source: 'crates/graphviz-pure-layout/src/twopigen/circle.rs', lines 220:4-230:5 -/
-@[rust_loop_body]
-def twopigen.circle.set_subtree_size_loop0.body
-  (iter : core.slice.iter.Iter Std.Usize) (r : twopigen.circle.RData) :
-  Result (ControlFlow ((core.slice.iter.Iter Std.Usize) ×
-    twopigen.circle.RData) twopigen.circle.RData)
+def twopigen.circle.relax_in_loop.body
+  (edges : Slice common.types.LEdge) (member : Slice Bool) (n : Std.Usize)
+  (nsteps : Std.U64) (iter : core.slice.iter.Iter Std.Usize)
+  (d : Slice twopigen.circle.RNode) (queue : alloc.vec.Vec Std.Usize) :
+  Result (ControlFlow ((core.slice.iter.Iter Std.Usize) × (Slice
+    twopigen.circle.RNode) × (alloc.vec.Vec Std.Usize)) ((Slice
+    twopigen.circle.RNode) × (alloc.vec.Vec Std.Usize)))
   := do
   let (o, iter1) ← core.slice.iter.IteratorSliceIter.next iter
   match o with
-  | none => ok (done r)
-  | some n =>
-    let r1 ←
-      alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice
-        twopigen.circle.RNode) r.d n
-    if r1.n_children > 0#u64
-    then ok (cont (iter1, r))
-    else
-      let (r2, index_mut_back) ←
-        alloc.vec.Vec.index_mut (core.slice.index.SliceIndexUsizeSlice
-          twopigen.circle.RNode) r.d n
-      let i ← r2.subtree_size + 1#u64
-      let v := index_mut_back { r2 with subtree_size := i }
-      let r3 ←
-        alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice
-          twopigen.circle.RNode) v n
-      let v1 ← twopigen.circle.set_subtree_size_loop0_loop0 r3.parent v
-      ok (cont (iter1, { r with d := v1 }))
+  | none => ok (done (d, queue))
+  | some ep =>
+    let o1 ← twopigen.circle.in_neighbour edges member ep n
+    match o1 with
+    | none => ok (cont (iter1, d, queue))
+    | some next =>
+      let (b, d1) ← twopigen.circle.relax_leaf d next nsteps
+      if b
+      then
+        let queue1 ← alloc.vec.Vec.push queue next
+        ok (cont (iter1, d1, queue1))
+      else ok (cont (iter1, d1, queue))
 
-/-- [graphviz_pure_layout::twopigen::circle::set_subtree_size]: loop 0:
-    Source: 'crates/graphviz-pure-layout/src/twopigen/circle.rs', lines 220:4-230:5 -/
+/-- [graphviz_pure_layout::twopigen::circle::relax_in]: loop 0:
+    Source: 'crates/graphviz-pure-layout/src/twopigen/circle.rs', lines 146:4-152:5 -/
 @[rust_loop]
-def twopigen.circle.set_subtree_size_loop0
-  (iter : core.slice.iter.Iter Std.Usize) (r : twopigen.circle.RData) :
-  Result twopigen.circle.RData
+def twopigen.circle.relax_in_loop
+  (iter : core.slice.iter.Iter Std.Usize) (edges : Slice common.types.LEdge)
+  (member : Slice Bool) (d : Slice twopigen.circle.RNode)
+  (queue : alloc.vec.Vec Std.Usize) (n : Std.Usize) (nsteps : Std.U64) :
+  Result ((Slice twopigen.circle.RNode) × (alloc.vec.Vec Std.Usize))
   := do
   loop
-    (fun (iter1, r1) => twopigen.circle.set_subtree_size_loop0.body iter1 r1)
-    (iter, r)
+    (fun (iter1, d1, queue1) => twopigen.circle.relax_in_loop.body edges member
+      n nsteps iter1 d1 queue1)
+    (iter, d, queue)
 
-/-- [graphviz_pure_layout::twopigen::circle::set_subtree_size]:
-    Source: 'crates/graphviz-pure-layout/src/twopigen/circle.rs', lines 219:0-231:1 -/
-def twopigen.circle.set_subtree_size
-  (sg : common.types.Sub) (r : twopigen.circle.RData) :
-  Result twopigen.circle.RData
+/-- [graphviz_pure_layout::twopigen::circle::relax_in]:
+    Source: 'crates/graphviz-pure-layout/src/twopigen/circle.rs', lines 136:0-153:1 -/
+def twopigen.circle.relax_in
+  (inn : Slice (alloc.vec.Vec Std.Usize)) (edges : Slice common.types.LEdge)
+  (member : Slice Bool) (d : Slice twopigen.circle.RNode)
+  (queue : alloc.vec.Vec Std.Usize) (n : Std.Usize) (nsteps : Std.U64) :
+  Result ((Slice twopigen.circle.RNode) × (alloc.vec.Vec Std.Usize))
+  := do
+  let o ←
+    core.slice.Slice.get (core.slice.index.SliceIndexUsizeSlice (alloc.vec.Vec
+      Std.Usize)) inn n
+  match o with
+  | none => ok (d, queue)
+  | some ins =>
+    let iter ←
+      SharedAVec.Insts.CoreIterTraitsCollectIntoIteratorSharedATIter.into_iter
+        alloc.alloc.Global ins
+    twopigen.circle.relax_in_loop iter edges member d queue n nsteps
+
+/-- [graphviz_pure_layout::twopigen::circle::out_neighbour]:
+    Source: 'crates/graphviz-pure-layout/src/twopigen/circle.rs', lines 168:0-177:1 -/
+def twopigen.circle.out_neighbour
+  (edges : Slice common.types.LEdge) (member : Slice Bool) (ep : Std.Usize)
+  (n : Std.Usize) :
+  Result (Option Std.Usize)
+  := do
+  let o ←
+    core.slice.Slice.get (core.slice.index.SliceIndexUsizeSlice
+      common.types.LEdge) edges ep
+  let cf ← core.option.Option.Insts.CoreOpsTry_traitTry.branch o
+  match cf with
+  | core.ops.control_flow.ControlFlow.Continue val =>
+    let (tail, head) ← twopigen.circle.edge_ends val
+    let o1 ←
+      core.slice.Slice.get (core.slice.index.SliceIndexUsizeSlice Bool) member
+        head
+    let cf1 ← core.option.Option.Insts.CoreOpsTry_traitTry.branch o1
+    match cf1 with
+    | core.ops.control_flow.ControlFlow.Continue val1 =>
+      if val1
+      then let i ← twopigen.circle.other_end tail head n
+           ok (some i)
+      else ok none
+    | core.ops.control_flow.ControlFlow.Break residual =>
+      core.option.Option.Insts.CoreOpsTry_traitFromResidualOptionNever.from_residual
+        Std.Usize residual
+  | core.ops.control_flow.ControlFlow.Break residual =>
+    core.option.Option.Insts.CoreOpsTry_traitFromResidualOptionNever.from_residual
+      Std.Usize residual
+
+/-- [graphviz_pure_layout::twopigen::circle::relax_out]: loop body 0:
+    Source: 'crates/graphviz-pure-layout/src/twopigen/circle.rs', lines 126:4-132:5 -/
+@[rust_loop_body]
+def twopigen.circle.relax_out_loop.body
+  (edges : Slice common.types.LEdge) (member : Slice Bool) (n : Std.Usize)
+  (nsteps : Std.U64) (iter : core.slice.iter.Iter Std.Usize)
+  (d : Slice twopigen.circle.RNode) (queue : alloc.vec.Vec Std.Usize) :
+  Result (ControlFlow ((core.slice.iter.Iter Std.Usize) × (Slice
+    twopigen.circle.RNode) × (alloc.vec.Vec Std.Usize)) ((Slice
+    twopigen.circle.RNode) × (alloc.vec.Vec Std.Usize)))
+  := do
+  let (o, iter1) ← core.slice.iter.IteratorSliceIter.next iter
+  match o with
+  | none => ok (done (d, queue))
+  | some ep =>
+    let o1 ← twopigen.circle.out_neighbour edges member ep n
+    match o1 with
+    | none => ok (cont (iter1, d, queue))
+    | some next =>
+      let (b, d1) ← twopigen.circle.relax_leaf d next nsteps
+      if b
+      then
+        let queue1 ← alloc.vec.Vec.push queue next
+        ok (cont (iter1, d1, queue1))
+      else ok (cont (iter1, d1, queue))
+
+/-- [graphviz_pure_layout::twopigen::circle::relax_out]: loop 0:
+    Source: 'crates/graphviz-pure-layout/src/twopigen/circle.rs', lines 126:4-132:5 -/
+@[rust_loop]
+def twopigen.circle.relax_out_loop
+  (iter : core.slice.iter.Iter Std.Usize) (edges : Slice common.types.LEdge)
+  (member : Slice Bool) (d : Slice twopigen.circle.RNode)
+  (queue : alloc.vec.Vec Std.Usize) (n : Std.Usize) (nsteps : Std.U64) :
+  Result ((Slice twopigen.circle.RNode) × (alloc.vec.Vec Std.Usize))
+  := do
+  loop
+    (fun (iter1, d1, queue1) => twopigen.circle.relax_out_loop.body edges
+      member n nsteps iter1 d1 queue1)
+    (iter, d, queue)
+
+/-- [graphviz_pure_layout::twopigen::circle::relax_out]:
+    Source: 'crates/graphviz-pure-layout/src/twopigen/circle.rs', lines 116:0-133:1 -/
+def twopigen.circle.relax_out
+  (out : Slice (alloc.vec.Vec Std.Usize)) (edges : Slice common.types.LEdge)
+  (member : Slice Bool) (d : Slice twopigen.circle.RNode)
+  (queue : alloc.vec.Vec Std.Usize) (n : Std.Usize) (nsteps : Std.U64) :
+  Result ((Slice twopigen.circle.RNode) × (alloc.vec.Vec Std.Usize))
+  := do
+  let o ←
+    core.slice.Slice.get (core.slice.index.SliceIndexUsizeSlice (alloc.vec.Vec
+      Std.Usize)) out n
+  match o with
+  | none => ok (d, queue)
+  | some outs =>
+    let iter ←
+      SharedAVec.Insts.CoreIterTraitsCollectIntoIteratorSharedATIter.into_iter
+        alloc.alloc.Global outs
+    twopigen.circle.relax_out_loop iter edges member d queue n nsteps
+
+/-- [graphviz_pure_layout::twopigen::circle::next_steps]:
+    Source: 'crates/graphviz-pure-layout/src/twopigen/circle.rs', lines 110:0-113:1 -/
+def twopigen.circle.next_steps
+  (d : Slice twopigen.circle.RNode) (n : Std.Usize) :
+  Result (Option Std.U64)
+  := do
+  let o ←
+    core.slice.Slice.get (core.slice.index.SliceIndexUsizeSlice
+      twopigen.circle.RNode) d n
+  let cf ← core.option.Option.Insts.CoreOpsTry_traitTry.branch o
+  match cf with
+  | core.ops.control_flow.ControlFlow.Continue val =>
+    ok (U64.checked_add val.n_steps_to_leaf 1#u64)
+  | core.ops.control_flow.ControlFlow.Break residual =>
+    core.option.Option.Insts.CoreOpsTry_traitFromResidualOptionNever.from_residual
+      Std.U64 residual
+
+/-- [graphviz_pure_layout::twopigen::circle::seed_leaves]: loop body 0:
+    Source: 'crates/graphviz-pure-layout/src/twopigen/circle.rs', lines 100:4-106:5 -/
+@[rust_loop_body]
+def twopigen.circle.seed_leaves_loop.body
+  (d : Slice twopigen.circle.RNode) (iter : core.slice.iter.Iter Std.Usize)
+  (queue : alloc.vec.Vec Std.Usize) :
+  Result (ControlFlow ((core.slice.iter.Iter Std.Usize) × (alloc.vec.Vec
+    Std.Usize)) (alloc.vec.Vec Std.Usize))
+  := do
+  let (o, iter1) ← core.slice.iter.IteratorSliceIter.next iter
+  match o with
+  | none => ok (done queue)
+  | some n =>
+    let o1 ←
+      core.slice.Slice.get (core.slice.index.SliceIndexUsizeSlice
+        twopigen.circle.RNode) d n
+    match o1 with
+    | none => ok (cont (iter1, queue))
+    | some node =>
+      if node.n_steps_to_leaf = 0#u64
+      then let queue1 ← alloc.vec.Vec.push queue n
+           ok (cont (iter1, queue1))
+      else ok (cont (iter1, queue))
+
+/-- [graphviz_pure_layout::twopigen::circle::seed_leaves]: loop 0:
+    Source: 'crates/graphviz-pure-layout/src/twopigen/circle.rs', lines 100:4-106:5 -/
+@[rust_loop]
+def twopigen.circle.seed_leaves_loop
+  (iter : core.slice.iter.Iter Std.Usize) (d : Slice twopigen.circle.RNode)
+  (queue : alloc.vec.Vec Std.Usize) :
+  Result (alloc.vec.Vec Std.Usize)
+  := do
+  loop
+    (fun (iter1, queue1) => twopigen.circle.seed_leaves_loop.body d iter1
+      queue1)
+    (iter, queue)
+
+/-- [graphviz_pure_layout::twopigen::circle::seed_leaves]:
+    Source: 'crates/graphviz-pure-layout/src/twopigen/circle.rs', lines 99:0-107:1 -/
+def twopigen.circle.seed_leaves
+  (d : Slice twopigen.circle.RNode) (nodes : Slice Std.Usize)
+  (queue : alloc.vec.Vec Std.Usize) :
+  Result (alloc.vec.Vec Std.Usize)
   := do
   let iter ←
-    SharedAVec.Insts.CoreIterTraitsCollectIntoIteratorSharedATIter.into_iter
-      alloc.alloc.Global sg.nodes
-  twopigen.circle.set_subtree_size_loop0 iter r
+    SharedSlice.Insts.CoreIterTraitsCollectIntoIteratorSharedIter.into_iter
+      nodes
+  twopigen.circle.seed_leaves_loop iter d queue
+
+/-- [graphviz_pure_layout::twopigen::circle::leaf_bfs]: loop body 0:
+    Source: 'crates/graphviz-pure-layout/src/twopigen/circle.rs', lines 87:4-96:1 -/
+@[rust_loop_body]
+def twopigen.circle.leaf_bfs_loop.body
+  (out : Slice (alloc.vec.Vec Std.Usize))
+  (inn : Slice (alloc.vec.Vec Std.Usize)) (edges : Slice common.types.LEdge)
+  (member : Slice Bool) (d : Slice twopigen.circle.RNode)
+  (queue : alloc.vec.Vec Std.Usize) (head : Std.Usize) :
+  Result (ControlFlow ((Slice twopigen.circle.RNode) × (alloc.vec.Vec
+    Std.Usize) × Std.Usize) ((Slice twopigen.circle.RNode) × (alloc.vec.Vec
+    Std.Usize)))
+  := do
+  let i := alloc.vec.Vec.len queue
+  if head < i
+  then
+    let s := alloc.vec.Vec.deref queue
+    let o ←
+      core.slice.Slice.get (core.slice.index.SliceIndexUsizeSlice Std.Usize) s
+        head
+    match o with
+    | none => ok (done (d, queue))
+    | some n =>
+      let head1 ← lift (core.num.Usize.saturating_add head 1#usize)
+      let o1 ← twopigen.circle.next_steps d n
+      match o1 with
+      | none => ok (cont (d, queue, head1))
+      | some nsteps =>
+        let (d1, queue1) ←
+          twopigen.circle.relax_out out edges member d queue n nsteps
+        let (d2, queue2) ←
+          twopigen.circle.relax_in inn edges member d1 queue1 n nsteps
+        ok (cont (d2, queue2, head1))
+  else ok (done (d, queue))
+
+/-- [graphviz_pure_layout::twopigen::circle::leaf_bfs]: loop 0:
+    Source: 'crates/graphviz-pure-layout/src/twopigen/circle.rs', lines 87:4-96:1 -/
+@[rust_loop]
+def twopigen.circle.leaf_bfs_loop
+  (out : Slice (alloc.vec.Vec Std.Usize))
+  (inn : Slice (alloc.vec.Vec Std.Usize)) (edges : Slice common.types.LEdge)
+  (member : Slice Bool) (d : Slice twopigen.circle.RNode)
+  (queue : alloc.vec.Vec Std.Usize) (head : Std.Usize) :
+  Result ((Slice twopigen.circle.RNode) × (alloc.vec.Vec Std.Usize))
+  := do
+  loop
+    (fun (d1, queue1, head1) => twopigen.circle.leaf_bfs_loop.body out inn
+      edges member d1 queue1 head1)
+    (d, queue, head)
+
+/-- [graphviz_pure_layout::twopigen::circle::leaf_bfs]:
+    Source: 'crates/graphviz-pure-layout/src/twopigen/circle.rs', lines 75:0-96:1 -/
+def twopigen.circle.leaf_bfs
+  (out : Slice (alloc.vec.Vec Std.Usize))
+  (inn : Slice (alloc.vec.Vec Std.Usize)) (edges : Slice common.types.LEdge)
+  (member : Slice Bool) (nodes : Slice Std.Usize)
+  (d : Slice twopigen.circle.RNode) (queue : alloc.vec.Vec Std.Usize) :
+  Result ((Slice twopigen.circle.RNode) × (alloc.vec.Vec Std.Usize))
+  := do
+  let queue1 ← alloc.vec.Vec.clear alloc.alloc.Global queue
+  let queue2 ← twopigen.circle.seed_leaves d nodes queue1
+  twopigen.circle.leaf_bfs_loop out inn edges member d queue2 0#usize
+
+/-- [graphviz_pure_layout::twopigen::circle::set_subtree_size]: loop body 0:
+    Source: 'crates/graphviz-pure-layout/src/twopigen/circle.rs', lines 299:4-313:5 -/
+@[rust_loop_body]
+def twopigen.circle.set_subtree_size_loop.body
+  (v : alloc.vec.Vec Std.Usize) (v1 : alloc.vec.Vec twopigen.circle.RNode)
+  (i : Std.Usize) :
+  Result (ControlFlow ((alloc.vec.Vec twopigen.circle.RNode) × Std.Usize)
+    (alloc.vec.Vec twopigen.circle.RNode))
+  := do
+  if i > 0#usize
+  then
+    let i1 ← lift (core.num.Usize.saturating_sub i 1#usize)
+    let s := alloc.vec.Vec.deref v
+    let o ←
+      core.slice.Slice.get (core.slice.index.SliceIndexUsizeSlice Std.Usize) s
+        i1
+    match o with
+    | none => ok (cont (v1, i1))
+    | some n =>
+      let (s1, deref_mut_back) ← lift (alloc.vec.Vec.deref_mut v1)
+      let (o1, get_mut_back) ←
+        core.slice.Slice.get_mut (core.slice.index.SliceIndexUsizeSlice
+          twopigen.circle.RNode) s1 n
+      match o1 with
+      | none =>
+        let s2 := get_mut_back none
+        let v2 := deref_mut_back s2
+        ok (cont (v2, i1))
+      | some node =>
+        let i2 ←
+          lift (core.convert.num.FromU64Bool.from (node.n_children = 0#u64))
+        let size ← lift (core.num.U64.saturating_add node.subtree_size i2)
+        match node.parent with
+        | none =>
+          let s2 := get_mut_back (some { node with subtree_size := size })
+          let v2 := deref_mut_back s2
+          ok (cont (v2, i1))
+        | some p =>
+          let s2 := get_mut_back (some { node with subtree_size := size })
+          let v2 := deref_mut_back s2
+          let (s3, deref_mut_back1) ← lift (alloc.vec.Vec.deref_mut v2)
+          let (o2, get_mut_back1) ←
+            core.slice.Slice.get_mut (core.slice.index.SliceIndexUsizeSlice
+              twopigen.circle.RNode) s3 p
+          match o2 with
+          | none =>
+            let s4 := get_mut_back1 none
+            let v3 := deref_mut_back1 s4
+            ok (cont (v3, i1))
+          | some p1 =>
+            let i3 ← lift (core.num.U64.saturating_add p1.subtree_size size)
+            let s4 := get_mut_back1 (some { p1 with subtree_size := i3 })
+            let v3 := deref_mut_back1 s4
+            ok (cont (v3, i1))
+  else ok (done v1)
+
+/-- [graphviz_pure_layout::twopigen::circle::set_subtree_size]: loop 0:
+    Source: 'crates/graphviz-pure-layout/src/twopigen/circle.rs', lines 299:4-313:5 -/
+@[rust_loop]
+def twopigen.circle.set_subtree_size_loop
+  (v : alloc.vec.Vec twopigen.circle.RNode) (v1 : alloc.vec.Vec Std.Usize)
+  (i : Std.Usize) :
+  Result (alloc.vec.Vec twopigen.circle.RNode)
+  := do
+  loop
+    (fun (v2, i1) => twopigen.circle.set_subtree_size_loop.body v1 v2 i1)
+    (v, i)
+
+/-- [graphviz_pure_layout::twopigen::circle::set_subtree_size]:
+    Source: 'crates/graphviz-pure-layout/src/twopigen/circle.rs', lines 296:0-314:1 -/
+def twopigen.circle.set_subtree_size
+  (r : twopigen.circle.RData) : Result twopigen.circle.RData := do
+  let i := alloc.vec.Vec.len r.order
+  let v ← twopigen.circle.set_subtree_size_loop r.d r.order i
+  ok { r with d := v }
 
 end GvpProofs.Extracted.TwopiCircle
