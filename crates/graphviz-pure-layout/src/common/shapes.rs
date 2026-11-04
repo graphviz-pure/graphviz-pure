@@ -44,7 +44,7 @@ pub struct NodeShape {
     pub skew: f64,
     pub regular: bool,
     /// `sides * (peripheries + outline)` vertices, periphery-major.
-    pub vertices: Vec<Point>,
+    pub vertices: graphviz_pure_geom::node_size::PolygonVertices,
     /// `ND_width`, `ND_height` in points.
     pub width: f64,
     pub height: f64,
@@ -444,7 +444,7 @@ impl NodeShape {
             distortion,
             skew,
             regular,
-            vertices: Vec::new(),
+            vertices: Default::default(),
             width,
             height,
             outline_width: width,
@@ -495,7 +495,7 @@ impl NodeShape {
                 shape.sides = 2;
                 shape.outline_width = 2.0 * p.x;
                 shape.outline_height = 2.0 * p.x;
-                shape.vertices = v;
+                shape.vertices = v.into();
                 return Ok(shape);
             }
             _ => {}
@@ -542,7 +542,7 @@ impl NodeShape {
                 oh = 2.0 * p.y;
             }
             shape.sides = 2;
-            shape.vertices = v;
+            shape.vertices = v.into();
             shape.outline_width = ow;
             shape.outline_height = oh;
         } else {
@@ -588,7 +588,7 @@ impl NodeShape {
                 iter += 1;
             }
             shape.sides = sides;
-            shape.vertices = v;
+            shape.vertices = v.into();
         }
         shape.peripheries = peripheries;
         shape.orientation = orientation;
