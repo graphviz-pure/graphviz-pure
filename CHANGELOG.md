@@ -6,6 +6,189 @@ All notable changes are listed here. The format follows
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-11-04
+
+62 changes: 1 added, 8 changed, 53 fixed.
+
+### Added
+
+- Added `-Tps` through the Graphviz 16.1.0 core PostScript writer, including pagination, layers,
+  links, styles, Latin-1 text, and embedded EPS content (#722).
+
+### Changed
+
+- Build x86-64 releases with AVX2/FMA (`x86-64-v3`), reducing executed instructions by about 7×
+  in fdp and 4.5× in neato on the perf ratchet; add baseline `-compat` archives and safe
+  CPU-selecting wheels, Homebrew/Scoop installations and containers (#605).
+- Reduced duplicate orientation tests and temporary allocations in dot spline routing while
+  preserving byte-identical output (#631).
+- Native release binaries use profile-guided optimisation (11% fewer instructions on eight
+  held-out musl x86-64-v3 inputs; 8.8% on the mostly trained 15-case ratchet), with a
+  full-corpus byte check on every release build. `cargo install` keeps plain builds (#618).
+- Network simplex is faster on large dot graphs through cache-local scratch state and reusable
+  DFS buffers; component-heavy layouts avoid whole-arena work per component (#613).
+- dot lays out large DAG-shaped graphs faster: network simplex no longer walks a subtree at
+  every pivot, so a 5,000-node DAG lays out 3.1× and a 20,000-node DAG 9.2× faster on x86-64
+  (5.1× and 23.7× faster than 1.0.0), with the same output (#653).
+- `-Tpng` encodes the picture without copying it first: a big drawing uses 43% less peak memory
+  (b143: 219 MB → 125 MB) and is slightly faster (#667).
+- Two-dimensional layouts keep node positions inline, removing 20,000 heap allocations on
+  20,000-node osage, patchwork and twopi graphs (#700).
+- Parallel mat-vec is off. Four threads were slower than one on musl PGO at 1300–2000 nodes, and
+  a `MIN_N` of 1,000,000 made the workers unreachable (packed ~2 TB). `MatvecTeam` and the
+  workers are gone. The sequential 8-wide `right_mult_with_vector_ff` stays. `--features
+  parallel` still splits sfdp repulsion. One-thread and four-thread neato plains match each
+  other and release 1.0. A 2000-node sparse graph is 67 s at 1.0 and 4.69 s here (14×) (#726).
+
+### Fixed
+
+- fdp avoids reconstructing unused default shapes in derived-graph adapters, removing 612–4,500
+  allocations on viewport, b69 and sparse 250/500 inputs. Peak heap is unchanged. This fixes an
+  allocation and unused-error path; no end-to-end CPU speedup is claimed (#632).
+- Performance: add an exact software FMA (Boldo–Melquiond fast path with rounding to odd)
+  inlined on `x86_64` musl without hardware FMA (`fdp` 1.44×, `twopi` with splines 2.2×, `sfdp`
+  1.36× wall time; up to −51.7% instructions) and out-of-line on `wasm` (about 1.1–1.4× user
+  cycles and −0.16% WASM module size), with byte-identical output (#549).
+- twopi finds its center node with less work: on a 5,000-node tree it executes 9.6% fewer
+  instructions and makes 148,715 fewer allocations than before this change (measured against
+  master just before it, not against 1.0), and graphs with many small components no longer
+  allocate per component. Output is byte-identical (#604).
+- Osage, patchwork and twopi avoid copying the input graph into layout, eliminating 143k–200k
+  allocations and 20.9–24.5 MB of cumulative allocations on 20,000-node SVG inputs. The matched
+  musl x86-64-v1 builds execute 0.8–3.0% fewer instructions; peak heap is unchanged because it
+  occurs later in the pipeline (#623).
+- Layout initialization reuses measured shape vertices and avoids temporary node copies,
+  removing 180k–260k allocations and 14.0–19.2 MB of cumulative allocations on 20,000-node
+  osage, patchwork and twopi SVG inputs. Matched musl x86-64-v1 builds execute 1.8–6.0% fewer
+  instructions; peak heap remains set by a later stage (#624).
+- Circo uses about 2.9× fewer instructions and 95.7% fewer allocations on the directed_sdh
+  crossing-count benchmark, with byte-identical output (#603).
+- Reduce total instructions by about 3–6% on osage/patchwork clustered 20,000-node SVG/plain
+  inputs by reusing label buffers, removing about 120,000/180,000 allocations and lowering peak
+  heap by about 4–5%, with unchanged output (#652).
+- DOT parsing uses 73% less peak heap and 70% fewer allocations on an 11.6 MB, 200,000-node
+  input; parse-heavy canon readback executes about 17% fewer instructions on musl x86-64-v1
+  builds vs 1.0. Output and diagnostics are unchanged (#620).
+- SVG rendering reuses measured label buffers, borrows spline points and shares drawing-state
+  colour names, removing 233k–440k allocations on 20,000-node osage, patchwork and twopi inputs.
+  Peak heap falls 16.5–23.3% and matched musl x86-64-v1 builds execute 2.8–4.0% fewer
+  instructions versus master (2.8–5.4% versus the supplied 1.0 artifact) (#627).
+- SFDP uses about 1% fewer instructions on x86-64-v3 builds by eliminating copy calls and buffer
+  growth in its Barnes–Hut supernode walk, with byte-identical output (#614).
+- Dot layout uses about 3–5% fewer cycles on b143/b29 through compact mincross data and reusable
+  buffers (Linux x86-64 measurements) (#629).
+- Reduce total instruction counts by about 2% on osage and 3–4% on patchwork clustered
+  20,000-node SVG/plain inputs, with about 140,000 and 200,000 fewer allocations respectively;
+  output is unchanged (#651).
+- neato is about 2× faster on x86-64-v3 (rnd2000: 20.8 s → 10.1 s; a 500-node sparse graph: 789
+  ms → 315 ms) and about 7–11× faster than the x86-64-v1 1.0 build on the same inputs. The
+  layout output is unchanged (#615).
+- fdp overlap removal uses flat working arrays and reuses ordered adjacency, reducing end-to-end
+  instructions by 17.6–19.9% on x86-64-v3 builds (viewport, b69, sparse 250/500) and removing
+  106k–948k allocations versus master. Peak heap is unchanged (#633).
+- sfdp uses about 15–16% fewer instructions on rnd2000 and sparse_5000 with x86-64-v3 musl
+  builds by specializing the 2D Barnes–Hut query (6.4–6.5% fewer instructions on v1), with
+  unchanged output and allocations (#645).
+- Dot spline routing skips proven barrier-side misses and reuses cubic-solver scratch, reducing
+  end-to-end SVG instructions by 0.5–2.6% on x86-64-v3 builds and 1.5–5.1% on v1 musl builds
+  (b29, b143, b106 and dot_dag_1000 versus master). Allocations and peak heap are unchanged
+  (#636).
+- sfdp uses about 5% fewer instructions on rnd2000 and sparse_5000 with x86-64-v3 musl builds by
+  specializing 2D quadtree construction (about 1.7–1.8% fewer on v1), with unchanged output and
+  allocations (#647).
+- up to 8% fewer instructions on render-heavy inputs (osage, patchwork); one `String` fewer per
+  number written (#617).
+- osage's layout is 1.28× faster on x86-64 (clustered graphs of 5,000 nodes: 22% fewer
+  instructions; the `-v` trace is no longer built when it is off) (#606).
+- Reduce dot layout cycles by about 8% on b143 and b106 (x86-64-v3) through a specialized
+  crossing-minimisation kernel, with identical output bytes (#643).
+- printing a number is 4× faster on x86-64 (the renderers: osage's SVG output on 20,000-node
+  clustered graphs is 17% fewer instructions, patchwork's 6%) (#622).
+- splines no longer panic when a spline passes through a point barrier three times. The root
+  buffer keeps the four roots C's buffer holds, where C writes past the end of its own array
+  (#635).
+- The `parallel` Cargo feature is opt-in, off by default, including the shipped command line,
+  and it does not build for wasm. With it on, and only for graphs of 1300 to 8192 nodes, neato
+  runs the symmetric mat-vec as eight interleaved chains on more than one thread. Unset, the
+  thread count is 4, or fewer when the machine has fewer; an explicit count is capped at
+  `available_parallelism`. On x86-64-v3, rnd2000 neato went from 5.77 s at one thread to 4.35 s
+  at four (median of three `-Tsvg` runs, 1.33×). Plain output stayed byte-identical to 1.0
+  (#621).
+- sfdp: the opt-in `parallel` feature precomputes quadtree repulsion on levels of at least 5000
+  nodes when at least four threads are used. Plain output is unchanged (#609).
+- printing a number is 6–13× faster on x86-64: the plain writer's `%.5g` coordinates now come
+  from the exact value of the double instead of formatting it twice (osage's plain output on
+  20,000-node clustered graphs is 10% fewer instructions, twopi's 11%) (#654).
+- Document all wasm TypeScript exports and members, and correct JSR's licence field to
+  `EPL-2.0`; the MIT licence texts still ship in both packages (#658).
+- dot now retains placed edge labels when pack-component spline routing fails, matching C
+  Graphviz 16.1.0 (#661).
+- Patchwork uses about 11% fewer instructions and 170,000 fewer allocations on a 20,000-node
+  clustered SVG graph, with unchanged peak heap (#674).
+- dot now reports missing spline points for lost edges with port labels and no longer emits
+  empty groups for lost edges, matching C Graphviz 16.1.0 (#676).
+- dot: crossing minimisation does less repeated work, for 1.08–1.39× fewer cycles on the graphs
+  measured, though deeply nested clusters take about 4% more instructions, with byte-identical
+  output (#673).
+- Rendering borrows node labels instead of copying their strings and spans before drawing,
+  removing 120,000 allocations on 20,000-node osage/patchwork inputs; the `shape=point` path is
+  unchanged (#690).
+- SVG rendering borrows XML text that needs no escaping, saving up to 87,000 allocations on
+  20,000-node inputs, with byte-identical output (#680).
+- Plain labels reuse bounded line scratch and avoid duplicate width storage, removing about
+  80,000 allocations on 20,000-node osage/patchwork/twopi SVG inputs with lower peak heap
+  (#684).
+- Parsing constructs node attributes once from the active scope, removing 60,000 temporary
+  allocations on 20,000-node osage/patchwork inputs and 100,000 on twopi (#689).
+- Labels share standard font names across sizing and rendering, removing 100,000 allocations on
+  20,000-node default-font twopi/osage/patchwork SVG inputs with lower peak heap; owned-font
+  spellings are preserved (#678).
+- dot now follows C's negative-mincross failure path for flat, nested-cluster, `remincross`, and
+  aborted aux layouts, abandoning position and splines rather than using a negative crossing
+  total (#681). Node-style and routed-edge output attributes after an aux abort remain open as
+  #694.
+- After an aborted dot aux layout, renderers ignore node styles while DOT writers keep the input
+  attributes, and edges routed before `GVSPLINES` no longer gain layout attributes (#694).
+- dot keeps edge labels already placed by the default flat-edge or line router when a later aux
+  layout aborts (#696).
+- neato's packed matrix-vector product runs eight independent rows. On x86-64-v3 with PGO, a
+  2000-node sparse graph went from 6.33 s to 5.27 s (median of five paired runs) (#705).
+- circo counts crossings with an index instead of recounting, with byte-identical output: on
+  shipped x86-64 builds, 2.5–18× faster on graphs where recounts dominate (18× on the `badvoro`
+  graph, 16× on a 400-node sparse graph), and about the same on the rest (#699).
+- A GitHub release of a pre-release version (`-alpha.N`, `-beta.N`, `-rc.N`) is marked as a
+  pre-release, so Homebrew and Scoop stay on the stable release (#579).
+- Fixed `scripts/fuzz-run.py` to classify any exit status difference as `exit_diff` (including
+  different non-zero exits) and to record `stderr_diff` for `svg_diff` and `exit_diff` cases
+  (#715).
+- twopi is about 1.2× faster on deep trees (`tree_20000`: 502 ms → 423–445 ms), with a Lean
+  proof that the new leaf-distance and subtree-size passes return the same integers (#736).
+- circo is up to 6× faster than the previous build on larger graphs and scales as n^1.9 instead
+  of n^3.1 (`circo_sparse_2000`: 25.9 s → 0.41 s) (#753).
+- Routing: visibility graphs, `Pshortestpath` and `limit_boxes` skip work they can prove cannot
+  matter, so graphs with spline routing around obstacles run up to 1.25× faster on x86-64-v3
+  builds, with byte-identical output (#706).
+- Accelerated exact default component packing for repeated shapes: twopi on 1,000 disconnected
+  pairs is 29.1× faster in paired x86-64-v3 musl PGO runs (3.13 s → 107 ms); 10,000 pairs
+  complete in 4.42 s (#725).
+- dot is up to 15% fewer instructions on inputs whose splines need the box-limit retry
+  (`gv16_graphs_b57`: 43.2M → 36.9M); other inputs are unchanged (#749).
+- twopi is 6–10% faster on large trees (tree_20000 -Tsvg: 435 ms → 405 ms on x86-64), because
+  rendering no longer repeats colour, font and unlabelled-edge lookups (#740).
+- dot: network simplex on mid-size graphs computes cut sets instead of walking subtrees, so
+  whole runs on x86-64-v3 builds are up to 2.25× faster on the graphs measured, with
+  byte-identical output (#703).
+- SVG output now writes an `id` attribute whose value substitutes to nothing, and the root
+  graph's `id` prefixes the other objects' ids as C Graphviz 16.1.0 does (#691).
+- dot's network simplex chooses the leaving edge from an index instead of scanning the spanning
+  tree: 6–9% fewer instructions (about 5% less time) on layouts of long parallel chains, about
+  1% on large layered graphs; output unchanged (#754).
+- Speed up named-subgraph parsing: 20k-node clustered osage SVG is about 9% faster in paired
+  x86-64-v3 musl PGO measurements (#752).
+- `-Tpng` now follows cairo's 32,767-pixel-per-axis scaling behavior with C's warning instead of
+  attempting unbounded pixmaps; the circo badvoro case drops from a 47.65 GB unscaled pixel
+  buffer to a 4.09 GB peak render (#721).
+
 ## [1.0.0] - 2026-10-29
 
 The first stable release. Every stable input in the corpus is byte-identical to C Graphviz 16.1.0, and a new differential fuzz round over 6,000 generated graphs on all eight engines found no remaining difference in the port. The public API is now stable: only the `graphviz-pure` facade and `graphviz-pure-raster` are covered by semver, the library returns diagnostics as values instead of writing to stderr, and the JavaScript package throws `GraphvizError` objects and ships checked TypeScript types. Rust and JavaScript users should read the Breaking section; docs/versioning.md is the contract from here on.
@@ -692,7 +875,8 @@ The first release.
   and the OFL licences of the bundled Tinos, Arimo and Cousine fonts.
 - A container image, `ghcr.io/graphviz-pure/graphviz-pure` (linux/amd64 and linux/arm64).
 
-[Unreleased]: https://github.com/graphviz-pure/graphviz-pure/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/graphviz-pure/graphviz-pure/compare/v1.1.0...HEAD
+[1.1.0]: https://github.com/graphviz-pure/graphviz-pure/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/graphviz-pure/graphviz-pure/compare/v0.2.3...v1.0.0
 [0.2.3]: https://github.com/graphviz-pure/graphviz-pure/compare/v0.2.2...v0.2.3
 [0.2.2]: https://github.com/graphviz-pure/graphviz-pure/compare/v0.2.1...v0.2.2
