@@ -1,0 +1,514 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>Lean-proven algorithms in graphviz-pure · a walkthrough</title>
+<style>
+:root {
+  --bg: #fbfaf7; --surface: #ffffff; --ink: #1d2230; --quiet: #5b6272; --rule: #e4e1da;
+  --stage: #4a5568;
+  --proof: #6d3fd1;    /* a Lean theorem: kernel-checked              */
+  --code: #2463d6;     /* shipped Rust                                */
+  --oracle: #0d8a7e;   /* a runtime check: tests, circo-check, CI     */
+  --extract: #b45309;  /* Rust as Aeneas extracts it into Lean        */
+  --review: #c2255c;   /* a second model family tries to break it     */
+  --measure: #1f8a3b;  /* a number we measured                        */
+  --right: #1f8a3b; --wrong: #c92a2a;
+  --tint: 12%;
+  --mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, monospace;
+  --sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #11141b; --surface: #181c25; --ink: #e8eaf0; --quiet: #9aa2b2; --rule: #2a303c;
+    --stage: #a0aec0; --proof: #a78bfa; --code: #7aa7ff; --oracle: #2dd4bf; --extract: #fbbf24;
+    --review: #f472b6; --measure: #4ade80; --tint: 18%; --right: #4ade80; --wrong: #ff6b6b;
+  }
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 17px/1.6 var(--sans); }
+a { color: inherit; }
+code, pre { font-family: var(--mono); }
+code { font-size: .9em; }
+
+.c-proof { --c: var(--proof); } .c-code { --c: var(--code); } .c-oracle { --c: var(--oracle); }
+.c-extract { --c: var(--extract); } .c-review { --c: var(--review); } .c-measure { --c: var(--measure); }
+.c-gap { --c: var(--quiet); } .c-stage { --c: var(--stage); }
+
+.k { background: color-mix(in srgb, var(--c) var(--tint), transparent);
+  box-shadow: inset 0 -2px 0 color-mix(in srgb, var(--c) 55%, transparent);
+  padding: 0 .25em; border-radius: 3px; white-space: nowrap; }
+.k svg { width: .9em; height: .9em; vertical-align: -0.1em; margin-right: .2em; color: var(--c); }
+.k.ghost { background: none; box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--c) 60%, transparent); }
+
+header.top { position: sticky; top: 0; z-index: 20; background: color-mix(in srgb, var(--bg) 92%, transparent);
+  backdrop-filter: blur(8px); border-bottom: 1px solid var(--rule); }
+.crumbs { max-width: 1180px; margin: 0 auto; padding: 10px 20px 4px; font-size: 13px; color: var(--quiet); }
+.crumbs a { text-decoration: none; } .crumbs a:hover { text-decoration: underline; }
+.legend { max-width: 1180px; margin: 0 auto; padding: 4px 20px 10px; display: flex; gap: 6px; flex-wrap: wrap; }
+.chip { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; line-height: 1; padding: 6px 10px 6px 8px;
+  border-radius: 999px; border: 1px solid color-mix(in srgb, var(--c) 45%, transparent);
+  background: color-mix(in srgb, var(--c) var(--tint), var(--surface)); color: var(--ink); cursor: pointer; font-family: inherit; }
+.chip svg { width: 14px; height: 14px; color: var(--c); }
+.chip.pattern { background: var(--surface); border-style: dashed; }
+.chip[aria-pressed="true"] { outline: 2px solid var(--c); outline-offset: 1px; }
+.legend .hint { font-size: 12px; color: var(--quiet); align-self: center; margin-left: 4px; }
+
+body[data-focus] .focusable { transition: filter .25s; }
+body[data-focus] .focusable:not(.is-focus),
+body[data-focus] pre.code .ln:not(.is-focus) { filter: opacity(.2); }
+
+main { max-width: 1180px; margin: 0 auto; padding: 0 20px 80px; }
+.hero { padding: 40px 0 8px; max-width: 760px; }
+.eyebrow { font-size: 14px; color: var(--quiet); margin: 0 0 6px; }
+h1 { font-size: clamp(30px, 4.4vw, 46px); line-height: 1.1; margin: 0 0 14px; letter-spacing: -0.02em; }
+.lede { font-size: 20px; margin: 0 0 18px; }
+h2 { font-size: 26px; letter-spacing: -0.01em; margin: 56px 0 10px; }
+p { max-width: 68ch; }
+.src { font-family: var(--mono); font-size: 12.5px; color: var(--quiet); }
+
+.stats { display: flex; flex-wrap: wrap; gap: 10px; margin: 18px 0 6px; }
+.stat { border: 1px solid var(--rule); background: var(--surface); border-radius: 12px; padding: 8px 14px; }
+.stat b { display: block; font-size: 24px; line-height: 1.15; font-family: var(--mono); }
+.stat span { font-size: 13px; color: var(--quiet); }
+
+.example { border: 1px solid var(--rule); background: var(--surface); border-radius: 12px; padding: 16px 18px; margin: 18px 0 8px; max-width: 760px; }
+.example .file { font-family: var(--mono); font-size: 14px; word-break: break-all; }
+.example .issue { font-family: var(--mono); font-size: 13px; margin-top: 8px; padding: 8px 10px; border-radius: 8px;
+  background: color-mix(in srgb, var(--code) var(--tint), var(--surface)); border-left: 3px solid var(--code); }
+.tag { font-size: 11.5px; color: var(--quiet); border: 1px solid var(--rule); border-radius: 999px; padding: 1px 8px; margin-left: 6px; }
+
+.scrolly { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 40px; margin-top: 24px; }
+.figure { position: sticky; top: calc(var(--hdr, 96px) + 8px); height: calc(100vh - var(--hdr, 96px) - 20px);
+  display: flex; align-items: flex-start; justify-content: center; }
+.figure svg { width: 100%; height: 100%; max-width: 500px; }
+.steps { padding: 10vh 0 30vh; }
+.step { min-height: 72vh; display: flex; align-items: center; }
+.step .card { background: var(--surface); border: 1px solid var(--rule); border-radius: 12px; padding: 18px 20px;
+  box-shadow: 0 1px 0 var(--rule); transition: border-color .3s; width: 100%; }
+.step.active .card { border-color: color-mix(in srgb, var(--c, var(--stage)) 60%, transparent); }
+.step h3 { margin: 0 0 6px; font-size: 19px; }
+.step p { margin: 0 0 8px; }
+.num { font-family: var(--mono); font-size: 12px; color: var(--quiet); }
+.why { margin: 10px 0; padding: 10px 12px; border-left: 3px solid var(--c, var(--stage));
+  background: color-mix(in srgb, var(--c, var(--stage)) 7%, transparent); border-radius: 0 8px 8px 0; }
+.why .wl { font-size: 11.5px; letter-spacing: .06em; text-transform: uppercase; color: var(--quiet); margin-bottom: 2px; font-weight: 650; }
+.why p { margin: 0 0 6px; }
+.chg { font-family: var(--mono); font-size: 12.5px; margin-top: 8px; color: var(--c, var(--stage)); }
+.chg::before { content: "+ "; font-weight: 700; }
+
+@media (max-width: 860px) {
+  .crumbs { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding-bottom: 2px; }
+  .legend { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch; padding-bottom: 8px; }
+  .legend::-webkit-scrollbar { display: none; }
+  .legend .chip { flex: 0 0 auto; }
+  .legend .hint { display: none; }
+  .scrolly { display: block; }
+  .figure { top: var(--hdr, 88px); height: 44vh; z-index: 5; background: var(--bg); border-bottom: 1px solid var(--rule); padding: 4px 0 6px; }
+  .steps { padding-top: 4vh; }
+  .step { min-height: 64vh; align-items: flex-start; padding-top: 3vh; }
+  body { font-size: 16px; }
+}
+
+/* diagram */
+.unit { opacity: 0; transition: opacity .4s; }
+.unit.f { opacity: .28; } .unit.done { opacity: .72; } .unit.on { opacity: 1; }
+.box { fill: var(--surface); stroke: color-mix(in srgb, var(--c) 55%, transparent); stroke-width: 1.5; transition: fill .35s, stroke-width .35s; }
+.unit.on .box { fill: color-mix(in srgb, var(--c) var(--tint), var(--surface)); stroke: var(--c); stroke-width: 2.25; }
+.title { font: 600 13.5px var(--sans); fill: var(--ink); }
+.sub { font: 11px var(--mono); fill: var(--quiet); }
+.ico { color: var(--c); }
+.tt { font: 600 12px var(--sans); fill: var(--ink); }
+.t2 { font: 10.5px var(--mono); fill: var(--ink); }
+.t3 { font: 10px var(--mono); fill: var(--quiet); }
+.rtitle { font: 650 13px var(--sans); fill: var(--ink); }
+.blabel { font: 11.5px var(--mono); fill: var(--quiet); }
+.edge { fill: none; stroke: var(--quiet); stroke-width: 1.4; }
+.edge.on { stroke-width: 2.2; stroke: var(--ink); }
+.token { fill: var(--ink); filter: drop-shadow(0 0 4px color-mix(in srgb, var(--ink) 40%, transparent)); }
+.bar { fill: var(--measure); transition: width .9s cubic-bezier(.2,.7,.2,1); }
+.bar.old { fill: color-mix(in srgb, var(--quiet) 70%, transparent); }
+.bval { font: 600 10.5px var(--mono); fill: var(--ink); }
+.strike { stroke: var(--wrong); stroke-width: 2; }
+.badge { font: 700 10.5px var(--mono); fill: #fff; }
+.pbadge { fill: var(--review); }
+.band-dash { stroke-dasharray: 6 4; }
+.band-hatch { fill: url(#hatch); }
+.lbl-red { font: 600 11px var(--sans); fill: var(--wrong); }
+
+/* quiz */
+.predict { margin-top: 10px; display: grid; gap: 8px; scroll-margin-top: calc(var(--hdr, 96px) + 24px); }
+.predict button { text-align: left; font: inherit; font-size: 15px; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--rule);
+  background: var(--surface); color: var(--ink); cursor: pointer; }
+.predict button:hover { border-color: var(--quiet); }
+.predict button.right { border-color: var(--right); background: color-mix(in srgb, var(--right) 16%, var(--surface)); }
+.predict button.picked:not(.right) { border-color: var(--wrong); background: color-mix(in srgb, var(--wrong) 14%, var(--surface)); }
+.predict button.right::before { content: "\2713  "; color: var(--right); font-weight: 700; }
+.predict button.picked:not(.right)::before { content: "\2715  "; color: var(--wrong); font-weight: 700; }
+.reveal { display: none; margin-top: 10px; padding: 12px 14px; border-radius: 10px;
+  background: color-mix(in srgb, var(--c) var(--tint), var(--surface)); border-left: 3px solid var(--c); }
+.reveal.show { display: block; animation: rise .4s ease-out; }
+@keyframes rise { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+
+.aside { margin: 20px 0; padding: 14px 16px; border-radius: 12px; max-width: 760px;
+  background: color-mix(in srgb, var(--c) var(--tint), var(--surface)); border: 1px solid color-mix(in srgb, var(--c) 35%, transparent); }
+.aside .ah { display: flex; gap: 8px; align-items: center; font-weight: 650; margin-bottom: 4px; }
+.aside .ah svg { width: 18px; height: 18px; color: var(--c); }
+
+.codewrap { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 24px; align-items: start; }
+@media (max-width: 860px) { .codewrap { grid-template-columns: minmax(0, 1fr); } }
+pre.code { margin: 0; background: var(--surface); border: 1px solid var(--rule); border-radius: 12px; padding: 12px 0; overflow-x: auto; font-size: 12.5px; line-height: 1.55; }
+pre.code .ln { display: block; padding: 0 14px 0 12px; border-left: 4px solid transparent; white-space: pre; }
+pre.code .ln[class*="c-"] { border-left-color: var(--c); background: color-mix(in srgb, var(--c) 7%, transparent); }
+pre.code .ln .n { display: inline-block; width: 3em; color: var(--quiet); opacity: .6; user-select: none; }
+pre.code .cm { color: var(--quiet); font-style: italic; }
+.struct { background: var(--surface); border: 1px solid var(--rule); border-radius: 12px; padding: 12px 14px; font-family: var(--mono); font-size: 13px; }
+.struct .f { display: flex; justify-content: space-between; gap: 8px; padding: 5px 8px; border-radius: 6px; margin: 3px 0;
+  background: color-mix(in srgb, var(--c) 9%, transparent); border-left: 3px solid var(--c); }
+.struct .f span:last-child { color: var(--quiet); }
+
+.choices { border: 1px dashed var(--quiet); border-radius: 12px; padding: 14px 18px; margin-top: 56px; max-width: 860px; }
+.choices h2 { margin-top: 4px; font-size: 20px; }
+.choices ol { padding-left: 20px; margin: 0; } .choices li { margin: 6px 0; }
+footer { max-width: 1180px; margin: 0 auto; padding: 24px 20px 60px; color: var(--quiet); font-size: 14px; border-top: 1px solid var(--rule); }
+
+@media (prefers-reduced-motion: reduce) {
+  * { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
+}
+</style>
+</head>
+<body>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-proof" viewBox="0 0 24 24"><path d="M6 4v16M6 12h12" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/><path d="M14 8l4 4-4 4" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-code" viewBox="0 0 24 24"><path d="M9 7l-5 5 5 5M15 7l5 5-5 5" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-oracle" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="4" fill="none" stroke="currentColor" stroke-width="2.2"/><path d="M7.5 12.5l3 3 6-7" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-extract" viewBox="0 0 24 24"><path d="M3 5h18l-7 8v6l-4 2v-8z" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round"/></symbol>
+  <symbol id="i-review" viewBox="0 0 24 24"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round"/><circle cx="12" cy="12" r="3.2" fill="none" stroke="currentColor" stroke-width="2.2"/></symbol>
+  <symbol id="i-measure" viewBox="0 0 24 24"><path d="M5 20V11M12 20V4M19 20v-6" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"/></symbol>
+  <symbol id="i-gap" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="3" fill="none" stroke="currentColor" stroke-width="2" stroke-dasharray="4 3"/><path d="M7 17L17 7M7 12l5-5M12 17l5-5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></symbol>
+  <symbol id="i-ticket" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="3" fill="none" stroke="currentColor" stroke-width="2.2"/><path d="M7 10h10M7 14h6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+</svg>
+
+<header class="top">
+  <div class="crumbs"><a href="README.md">Improvement through Math Proofs</a> › <b>Walkthrough</b> &nbsp;·&nbsp; state of master e584133e, 4 November 2026</div>
+  <div class="legend" role="toolbar" aria-label="Concept legend. Tap a concept to highlight it everywhere on the page.">
+    <button class="chip c-proof" data-f="proof"><svg><use href="#i-proof"/></svg>Lean theorem</button>
+    <button class="chip c-code" data-f="code"><svg><use href="#i-code"/></svg>Shipped Rust</button>
+    <button class="chip c-oracle" data-f="oracle"><svg><use href="#i-oracle"/></svg>Runtime check</button>
+    <button class="chip c-extract" data-f="extract"><svg><use href="#i-extract"/></svg>Extracted Rust</button>
+    <button class="chip c-review" data-f="review"><svg><use href="#i-review"/></svg>Second-model review</button>
+    <button class="chip c-measure" data-f="measure"><svg><use href="#i-measure"/></svg>Measured</button>
+    <button class="chip pattern c-gap" data-f="gap"><svg><use href="#i-gap"/></svg>Not proved, not built</button>
+    <span class="hint">Tap a concept to light it up everywhere.</span>
+  </div>
+</header>
+
+<main>
+  <section class="hero">
+    <p class="eyebrow">Milestone "Improvement through Math Proofs" · started 3 November 2026</p>
+    <h1>Faster algorithms, with the proof that nothing changed</h1>
+    <p class="lede">graphviz-pure has to produce the same bytes as C Graphviz. That makes every speedup an equation, and equations are what a theorem prover checks. This page follows one speedup through the whole process, then steps back to show the nine tickets, what the reviews found, how far the proofs reach, and what is still missing.</p>
+    <div class="stats">
+      <div class="stat"><b>9 + 6</b><span>tickets and follow-ups</span></div>
+      <div class="stat"><b>~13,000</b><span>lines of Lean on master</span></div>
+      <div class="stat"><b>15</b><span>second-model reviews</span></div>
+      <div class="stat"><b>1</b><span>theorem over extracted Rust</span></div>
+    </div>
+    <p class="src">crates/graphviz-pure-layout/src/circogen/blockpath.rs · proofs/GvpProofs · docs/research/lean-experiment/ · master e584133e</p>
+
+    <div class="example">
+      <div><b>Start with one change.</b> <span class="tag">real: issue #730, PR #753</span></div>
+      <div class="file" style="margin-top:6px">crates/graphviz-pure-layout/src/circogen/blockpath.rs</div>
+      <div class="issue">reduce_edge_crossings recounted every crossing after each tentative move: about 80% of circo's instructions</div>
+      <p style="margin:10px 0 0">Scroll to follow it. The diagram stays put and changes as you read.</p>
+    </div>
+  </section>
+
+  <section class="scrolly" aria-label="The walkthrough, step by step">
+    <div class="figure">
+<svg id="fig" viewBox="0 0 320 480" role="img" aria-labelledby="figt figd"><title id="figt">One verified speedup, then the whole experiment</title><desc id="figd">A pipeline of seven nodes follows one change, the circo incremental crossing delta, from a ticket whose premise is checked and found wrong, through a Lean statement, the Rust change with its old counter kept as a runtime oracle, a measurement, a review by a second model, and CI. Below it, nine tickets that went through the same pipeline, a ledger of what the reviews found, and four bands that show how far the proofs reach: over extracted Rust, over a hand model, only in prose, and not built.</desc><defs><pattern id="hatch" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="7" style="stroke:var(--quiet);stroke-width:1.1;opacity:.45"/></pattern></defs><text class="unit blabel" data-s="1" x="15" y="20" style="opacity:1">One change: #730 circo crossing delta</text><path class="unit edge" id="e1" data-s="2" d="M160 100 V120"/><path class="unit edge" id="e2" data-s="3" d="M160 186 V206"/><path class="unit edge" id="e3" data-s="4" d="M160 272 V292"/><path class="unit edge" id="e4" data-s="5" d="M160 358 V378"/><path class="unit edge" id="e5" data-s="6" d="M160 508 V528"/><path class="unit edge" id="e6" data-s="7" d="M160 594 V614"/><g class="unit node c-stage focusable" data-c="stage" data-s="1" data-faint="1" id="n1"><rect class="box" x="15" y="34" width="290" height="66" rx="10"/><use class="ico" href="#i-ticket" x="25" y="44" width="14" height="14"/><text class="title" x="47" y="56">Ticket #730: circo delta</text><text class="sub" x="25" y="75">update from the moved node's edges</text><text class="unit sub" data-s="2" x="25" y="91" style="fill:var(--wrong)">premise wrong: needs prefix sums</text><line class="unit strike" data-s="2" x1="25" y1="73" x2="285" y2="73"/></g><g class="unit node c-oracle focusable" data-c="oracle" data-s="2" data-faint="1" id="n2"><rect class="box" x="15" y="120" width="290" height="66" rx="10"/><use class="ico" href="#i-oracle" x="25" y="130" width="14" height="14"/><text class="title" x="47" y="142">Check the premise against C</text><text class="sub" x="25" y="161">Python port of C's loop</text><text class="sub" x="25" y="175">29,004 tentative moves, all exact</text></g><g class="unit node c-proof focusable" data-c="proof" data-s="3" data-faint="1" id="n3"><rect class="box" x="15" y="206" width="290" height="66" rx="10"/><use class="ico" href="#i-proof" x="25" y="216" width="14" height="14"/><text class="title" x="47" y="228">State it in Lean</text><text class="sub" x="25" y="247">CrossingDelta.lean · 620 lines</text><text class="sub" x="25" y="261">crossings_move · fast_eq_recount</text></g><g class="unit node c-code focusable" data-c="code" data-s="4" data-faint="1" id="n4"><rect class="box" x="15" y="292" width="290" height="66" rx="10"/><use class="ico" href="#i-code" x="25" y="302" width="14" height="14"/><text class="title" x="47" y="314">Ship the delta in Rust</text><text class="sub" x="25" y="333">blockpath.rs · Delta::phi :961</text><text class="sub" x="25" y="347">old counter kept as the oracle</text><use href="#i-oracle" x="281" y="300" width="13" height="13" style="color:var(--oracle)"/></g><g class="unit node c-measure focusable" data-c="measure" data-s="5" data-faint="1" id="n5"><rect class="box" x="15" y="378" width="290" height="130" rx="10"/><use class="ico" href="#i-measure" x="25" y="388" width="14" height="14"/><text class="title" x="47" y="400">Measure against 1.0 and C</text><text class="t3" x="25" y="420">circo_sparse_400, ms, log scale</text><text class="t2" x="25" y="438">v1.0.0</text><rect class="bar old" data-w="150" x="75" y="428" width="0" height="13" rx="3"/><text class="bval" id="bv1" x="75" y="438" opacity="0">5,466</text><text class="t2" x="25" y="458">before</text><rect class="bar old" data-w="91" x="75" y="448" width="0" height="13" rx="3"/><text class="bval" id="bv2" x="75" y="458" opacity="0">184</text><text class="t2" x="25" y="478">after</text><rect class="bar" data-w="58" x="75" y="468" width="0" height="13" rx="3"/><text class="bval" id="bv3" x="75" y="478" opacity="0">29</text><text class="t3" x="25" y="499">C Graphviz on the same input: 54,057 ms</text></g><g class="unit node c-review focusable" data-c="review" data-s="6" data-faint="1" id="n6"><rect class="box" x="15" y="528" width="290" height="66" rx="10"/><use class="ico" href="#i-review" x="25" y="538" width="14" height="14"/><text class="title" x="47" y="550">A second model reviews it</text><text class="sub" x="25" y="569">GPT-6.1 Sol, a different family</text><text class="sub" x="25" y="583">1.18M cuts · 7 DOT inputs vs C</text></g><g class="unit node c-oracle focusable" data-c="oracle" data-s="7" data-faint="1" id="n7"><rect class="box" x="15" y="614" width="290" height="66" rx="10"/><use class="ico" href="#i-oracle" x="25" y="624" width="14" height="14"/><text class="title" x="47" y="636">CI: same bytes, all platforms</text><text class="sub" x="25" y="655">36 checks · merged as fa500e4a</text><text class="sub" x="25" y="669">282 of 282 circo inputs match</text></g><circle class="token" id="token" r="5.5" cx="160" cy="100" opacity="0"/><text class="unit rtitle" data-s="8" x="15" y="716">Nine tickets, the same pipeline</text><g class="unit tile c-extract focusable" data-c="extract" data-s="8" id="t727" style="--i:0"><rect class="box" x="15" y="728" width="140" height="50" rx="8"/><text class="tt" x="23" y="744">#727 plumbing</text><text class="t2" x="23" y="759">Lean + Aeneas + CI</text><text class="t3" x="23" y="772">5 kernels extracted</text></g><g class="unit tile c-proof focusable" data-c="proof" data-s="8" id="t728" style="--i:1"><rect class="box" x="165" y="728" width="140" height="50" rx="8"/><text class="tt" x="173" y="744">#728 Fenwick</text><text class="t2" x="173" y="759">proved · 1,285 lines</text><text class="t3" x="173" y="772">2 hidden premises</text></g><g class="unit tile c-measure focusable" data-c="measure" data-s="8" id="t729" style="--i:2"><rect class="box" x="15" y="784" width="140" height="50" rx="8"/><text class="tt" x="23" y="800">#729 twopi BFS</text><text class="t2" x="23" y="815">~1.2x on deep trees</text><text class="t3" x="23" y="828">859-line proof</text></g><g class="unit tile c-measure focusable" data-c="measure" data-s="8" id="t730" style="--i:3"><rect class="box" x="165" y="784" width="140" height="50" rx="8"/><text class="tt" x="173" y="800">#730 circo delta</text><text class="t2" x="173" y="815">up to 188x vs 1.0</text><text class="t3" x="173" y="828">620-line proof</text></g><g class="unit tile c-measure focusable" data-c="measure" data-s="8" id="t731" style="--i:4"><rect class="box" x="15" y="840" width="140" height="50" rx="8"/><text class="tt" x="23" y="856">#731 NS index</text><text class="t2" x="23" y="871">1-9% fewer instr.</text><text class="t3" x="23" y="884">premise was wrong</text></g><g class="unit tile c-proof focusable" data-c="proof" data-s="8" id="t732" style="--i:5"><rect class="box" x="165" y="840" width="140" height="50" rx="8"/><text class="tt" x="173" y="856">#732 NS, mincross</text><text class="t2" x="173" y="871">12 prose gaps found</text><text class="t3" x="173" y="884">4,255 lines of Lean</text></g><g class="unit tile c-measure focusable" data-c="measure" data-s="8" id="t733" style="--i:6"><rect class="box" x="15" y="896" width="140" height="50" rx="8"/><text class="tt" x="23" y="912">#733 spline retry</text><text class="t2" x="23" y="927">-14.5% on 1 input</text><text class="t3" x="23" y="940">FloatLib lemma</text></g><g class="unit tile c-gap focusable" data-c="gap" data-s="8" id="t734" style="--i:7"><rect class="box" x="165" y="896" width="140" height="50" rx="8"/><text class="tt" x="173" y="912">#734 stress gate</text><text class="t2" x="173" y="927">gate fires on 1.6%</text><text class="t3" x="173" y="940">measured, no code</text></g><g class="unit tile c-proof focusable" data-c="proof" data-s="8" id="t735" style="--i:8"><rect class="box" x="15" y="952" width="290" height="50" rx="8"/><text class="tt" x="23" y="968">#735 canreach cache</text><text class="t2" x="23" y="983">no speedup: never called on real inputs</text><text class="t3" x="23" y="996">the Lean statement caught a bad memo</text></g><text class="unit rtitle" data-s="9" x="15" y="1036">What 15 reviews found</text><g class="unit lrow c-review focusable" data-c="review" data-s="9" style="--i:0"><rect class="box" x="15" y="1048" width="290" height="28" rx="6"/><rect class="pbadge" x="21" y="1053" width="26" height="18" rx="4"/><text class="badge" x="25.5" y="1066">P1</text><text class="tt" style="font-weight:500;font-size:11.5px" x="55" y="1066">NS theorem false after pivot 1</text><text class="t3" x="275" y="1066">#746</text></g><g class="unit lrow c-review focusable" data-c="review" data-s="9" style="--i:1"><rect class="box" x="15" y="1080" width="290" height="28" rx="6"/><rect class="pbadge" x="21" y="1085" width="26" height="18" rx="4"/><text class="badge" x="25.5" y="1098">P1</text><text class="tt" style="font-weight:500;font-size:11.5px" x="55" y="1098">twopi copy added allocations</text><text class="t3" x="275" y="1098">#771</text></g><g class="unit lrow c-review focusable" data-c="review" data-s="9" style="--i:2"><rect class="box" x="15" y="1112" width="290" height="28" rx="6"/><rect class="pbadge" x="21" y="1117" width="26" height="18" rx="4"/><text class="badge" x="25.5" y="1130">P2</text><text class="tt" style="font-weight:500;font-size:11.5px" x="55" y="1130">memory cap not enforced</text><text class="t3" x="275" y="1130">#743</text></g><g class="unit lrow c-review focusable" data-c="review" data-s="9" style="--i:3"><rect class="box" x="15" y="1144" width="290" height="28" rx="6"/><rect class="pbadge" x="21" y="1149" width="26" height="18" rx="4"/><text class="badge" x="25.5" y="1162">P2</text><text class="tt" style="font-weight:500;font-size:11.5px" x="55" y="1162">freshness check was vacuous</text><text class="t3" x="275" y="1162">#747</text></g><g class="unit lrow c-review focusable" data-c="review" data-s="9" style="--i:4"><rect class="box" x="15" y="1176" width="290" height="28" rx="6"/><rect class="pbadge" x="21" y="1181" width="26" height="18" rx="4"/><text class="badge" x="25.5" y="1194">P2</text><text class="tt" style="font-weight:500;font-size:11.5px" x="55" y="1194">proof hid the i32::MAX regime</text><text class="t3" x="275" y="1194">#774</text></g><g class="unit lrow c-review focusable" data-c="review" data-s="9" style="--i:5"><rect class="box" x="15" y="1208" width="290" height="28" rx="6"/><rect class="pbadge" x="21" y="1213" width="26" height="18" rx="4"/><text class="badge" x="25.5" y="1226">P2</text><text class="tt" style="font-weight:500;font-size:11.5px" x="55" y="1226">ratchet counts vary 1.5%</text><text class="t3" x="275" y="1226">#775</text></g><g class="unit lrow c-review focusable" data-c="review" data-s="9" style="--i:6"><rect class="box" x="15" y="1240" width="290" height="28" rx="6"/><rect class="pbadge" x="21" y="1245" width="26" height="18" rx="4"/><text class="badge" x="25.5" y="1258">P3</text><text class="tt" style="font-weight:500;font-size:11.5px" x="55" y="1258">wording, tests, off-by-ones</text><text class="t3" x="275" y="1258">many</text></g><text class="unit t2" data-s="9" x="15" y="1288" style="fill:var(--review)">0 false alarms in 15 reviews</text><text class="unit t2" data-s="9" x="15" y="1303" style="fill:var(--review)">0 bugs found in already-shipped code</text><text class="unit rtitle" data-s="10" x="15" y="1336">Where the trust stops</text><g class="unit band c-extract focusable" data-c="extract" data-s="10" id="b2"><rect class="box" x="15" y="1348" width="290" height="70" rx="10"/><use class="ico" href="#i-extract" x="25" y="1356" width="14" height="14"/><text class="title" x="47" y="1368">Lean over the extracted Rust</text><text class="t2" x="25" y="1387">circo: indexed = reference (#770)</text><text class="t2" x="25" y="1401">Fenwick lemmas over the code (#745)</text></g><g class="unit band c-proof focusable" data-c="proof" data-s="10" id="b1"><rect class="box" x="15" y="1428" width="290" height="132" rx="10"/><use class="ico" href="#i-proof" x="25" y="1436" width="14" height="14"/><text class="title" x="47" y="1448">Lean over a hand-written model</text><text class="t2" x="25" y="1467">twopi leaf distances (#729)</text><text class="t2" x="25" y="1481">circo delta, wrapped i32 (#730)</text><text class="t2" x="25" y="1495">NS cut sets + stale pivots (#732, #750)</text><text class="t2" x="25" y="1509">NS leave-edge index (#731)</text><text class="t2" x="25" y="1523">mincross scans, any port order (#751)</text><text class="t2" x="25" y="1537">limit_boxes + FloatLib (#733)</text><text class="t2" x="25" y="1551">canreach cache, adjacency (#735)</text></g><g class="unit band dash c-gap focusable" data-c="gap" data-s="11" id="b0"><rect class="box band-dash" x="15" y="1570" width="290" height="92" rx="10"/><use class="ico" href="#i-gap" x="25" y="1578" width="14" height="14"/><text class="title" x="47" y="1590">Argued in prose only</text><text class="t2" x="25" y="1609">limit_boxes zero guard, no-NaN limits</text><text class="t2" x="25" y="1623">NS TIE_CLIMBS budget, hand_over valid</text><text class="t2" x="25" y="1637">mincross reorder (section 2)</text><text class="t2" x="25" y="1651">caller-graph facts: audited, not proved</text></g><g class="unit band hatch c-gap focusable" data-c="gap" data-s="11" id="bn"><rect class="box band-dash" x="15" y="1672" width="290" height="92" rx="10"/><rect class="band-hatch" x="15" y="1672" width="290" height="92" rx="10" style="pointer-events:none"/><use class="ico" href="#i-gap" x="25" y="1680" width="14" height="14"/><text class="title" x="47" y="1692">Not built</text><text class="t2" x="25" y="1711">floats in Aeneas (draft PR #1073)</text><text class="t2" x="25" y="1725">wasm32 (the theorem is 64-bit)</text><text class="t2" x="25" y="1739">counts above i32::MAX, extracted</text><text class="t2" x="25" y="1753">a theorem over TwopiCircle</text></g><g class="unit band c-stage focusable" data-c="stage" data-s="12" id="bx"><rect class="box" x="15" y="1774" width="290" height="108" rx="10"/><use class="ico" href="#i-ticket" x="25" y="1782" width="14" height="14"/><text class="title" x="47" y="1794">What we do next</text><text class="t2" x="25" y="1813">NS move_cut_sets, compact: ~11%</text><text class="t2" x="25" y="1827">circo prefix build: O(n+m) per node</text><text class="t2" x="25" y="1841">make pack deterministic (#776)</text><text class="t2" x="25" y="1855">report Aeneas bugs: owner's call</text><text class="t2" x="25" y="1869">write the blog post</text></g></svg>
+    </div>
+    <div class="steps">
+      <article class="step" data-step="1" style="--c: var(--stage)"><div class="card">
+        <div class="num">01 · the claim</div>
+        <h3>A speedup, stated as an equation</h3>
+        <p>Ticket #730 asks circo to stop recounting every crossing after each tentative node move, and to update the count from the moved node's edges alone.</p>
+        <div class="why"><div class="wl">Why it works this way</div><p>graphviz-pure has to match C Graphviz 16.1.0 byte for byte. So a faster path may not be "close": it has to make the same keep-or-reject decision on every move, including the wrapping <code>i32</code> total it compares. A speedup becomes an equality between two computations. That is what a <span class="k c-proof focusable" data-c="proof"><svg><use href="#i-proof"/></svg>Lean theorem</span> is for.</p><p>circo was worth the effort. The recount was about 80% of its instructions on a 200-node graph, and its running time grew as n<sup>3.1</sup>.</p></div>
+        
+        <p class="src">blockpath.rs: reduce_edge_crossings :1077 · count_all_crossings :339</p>
+        <div class="chg">a claim with no evidence yet</div>
+      </div></article>
+      <article class="step" data-step="2" style="--c: var(--oracle)"><div class="card">
+        <div class="num">02 · check the claim</div>
+        <h3>Check the ticket's idea against C before writing any Rust</h3>
+        <p>The delegate derived a formula and ported C's own loop to Python. Over 29,004 tentative moves the formula matched <span class="k c-oracle focusable" data-c="oracle"><svg><use href="#i-oracle"/></svg>C</span> exactly. The ticket's premise did not hold: a moved node's own edges are not enough.</p>
+        <div class="why"><div class="wl">Why it works this way</div><p>Moving one node shifts the position of every node between its old and new place, so the change depends on prefix sums over the whole list plus the moved node's sorted neighbour ranks. A ticket is a plan, not a fact. The cheap test of a plan is a second implementation of the thing it must equal, written before the fast code exists.</p></div>
+        
+        <p class="src">blockpath.rs: Delta::new :872 · Delta::phi :961</p>
+        <div class="chg">premise replaced: prefix sums over the list</div>
+      </div></article>
+      <article class="step" data-step="3" style="--c: var(--proof)"><div class="card">
+        <div class="num">03 · state it in Lean</div>
+        <h3>Lean makes you state what the code must check</h3>
+        <p>Three <span class="k c-proof focusable" data-c="proof"><svg><use href="#i-proof"/></svg>theorems</span> say that the pair count is a closed formula, that moving a node changes it by a constant plus <code>phi(cut)</code>, and that old total plus the wrapped delta equals the wrapped recount.</p><p>They only go through under three conditions: no loops, symmetric adjacency, distinct positions.</p>
+        <div class="why"><div class="wl">Why it works this way</div><p>The kernel will not let you assume what the code does not check. Each condition the proof needed became a line in the code's eligibility test, instead of an unwritten assumption about "normal" graphs.</p></div>
+        <p><b>Predict:</b> a block contains a self-loop. What does the shipped code do?</p><div class="predict" data-q="1" id="q1">
+          <button data-a="0">Compute the delta anyway; it is only a loop</button>
+          <button data-a="1">Panic, so the bug is noticed</button>
+          <button data-a="2" data-right>Run the full recount, exactly as before</button>
+        </div>
+        <div class="reveal" id="rv1" style="--c: var(--proof)"><b>It runs the full recount.</b> <code>Delta::new</code> returns <code>None</code> for loops, parallel edges, repeated list entries, or a list that is not a permutation of the block, and the old loop runs. On the corpus the delta applied to all 37 non-trivial blocks in 282 circo inputs. The reviewer later found that no test actually built a parallel edge, because <code>CGraph::edge</code> merges them, so one was added.</div>
+        <p class="src">CrossingDelta.lean: crossings_formula :188 · crossings_move :499 · fast_eq_recount :608</p>
+        <div class="chg">three hypotheses made explicit</div>
+      </div></article>
+      <article class="step" data-step="4" style="--c: var(--code)"><div class="card">
+        <div class="num">04 · ship it</div>
+        <h3>The Rust, with the old counter kept as its judge</h3>
+        <p>A tentative move now costs O(degree). The list is touched only when a move is kept. <code>count_all_crossings</code> stays: under the <span class="k c-oracle focusable" data-c="oracle"><svg><use href="#i-oracle"/></svg>circo-check</span> feature it recounts every move and asserts the same integer, and lists of 16 or fewer still use it.</p>
+        <div class="why"><div class="wl">Why it works this way</div><p>A proof about a model is not a proof about the code. The kept counter is the bridge: if the Rust ever drifts from what Lean proved, the check fails on the first move where they differ. The arithmetic is the other bridge. In release the total wraps at 2<sup>32</sup> and the accept test reads the wrapped value, so the delta is added with the same wrapping, and debug builds panic exactly where the recount would.</p></div>
+        
+        <p class="src">blockpath.rs: reduce_delta :1013 · apply_delta :993 · wrap_delta :1005</p>
+        <div class="chg">shipped: O(deg) per move; the recount is now the oracle</div>
+      </div></article>
+      <article class="step" data-step="5" style="--c: var(--measure)"><div class="card">
+        <div class="num">05 · measure</div>
+        <h3>Measure on the same inputs, against 1.0 and against C</h3>
+        <p>On <code>circo_sparse_400</code> the run takes <span class="k c-measure focusable" data-c="measure"><svg><use href="#i-measure"/></svg>5,466 ms</span> in v1.0.0, 184 ms before this change, and 29 ms after. C Graphviz takes 54,057 ms. The exponent drops from about 3.1 to about 1.9.</p>
+        <div class="why"><div class="wl">Why it works this way</div><p>The comparison that counts is against 1.0, because the milestone is "10× faster than 1.0"; the gain over yesterday's master alone would hide the work before it. The exponent stops at 1.9 because one quadratic piece is left: each node still builds its prefix sums in O(n+m). Two circo inputs did not move, because their time is spline routing. The report says so.</p></div>
+        
+        <p class="src">docs/perf/circo-crossings.md · scripts/bench/bench.py</p>
+        <div class="chg">188× on this input, 243× on <code>badvoro</code>; instructions −86% on the ratchet case</div>
+      </div></article>
+      <article class="step" data-step="6" style="--c: var(--review)"><div class="card">
+        <div class="num">06 · review</div>
+        <h3>A model from another family tries to break it</h3>
+        <p>GPT-6.1 Sol read the Rust and the Lean side by side and ran 3,000 random seeds, 1,179,648 exhaustive cuts, 624 cuts across the signed <code>i32</code> boundary and seven adversarial DOT inputs against C's bytes. It found one gap: no parallel-edge test.</p>
+        <div class="why"><div class="wl">Why it works this way</div><p>Lean's kernel checks the proof. It cannot check that the model is the code, or that the hypotheses hold where the code is called. A reviewer from the author's own family tends to agree with the author, so this one comes from another. Its brief is the diff and the rules, not the author's conclusion. Across 15 reviews it raised <span class="k c-review focusable" data-c="review"><svg><use href="#i-review"/></svg>no false alarm</span> and found something in 14.</p></div>
+        
+        <p class="src">PR #753 review · test added in blockpath.rs tests</p>
+        <div class="chg">one test added; verdict: decisions unchanged</div>
+      </div></article>
+      <article class="step" data-step="7" style="--c: var(--oracle)"><div class="card">
+        <div class="num">07 · gate</div>
+        <h3>CI is the last gate, and it is everyone's gate</h3>
+        <p>36 <span class="k c-oracle focusable" data-c="oracle"><svg><use href="#i-oracle"/></svg>checks</span> passed, including byte-identical output across platforms, the circo check mode, the perf ratchet and the Lean build. It merged as <code>fa500e4a</code>.</p>
+        <div class="why"><div class="wl">Why it works this way</div><p>The proofs add checks. They do not replace the project's own. The Lean job builds against Mathlib in 7 to 15 minutes (about 9,000 build jobs); the byte-equality jobs are what say the output did not move. More than once, CI jobs were cancelled by something outside the project; they were re-run, never skipped.</p></div>
+        
+        <p class="src">.github/workflows/ci.yml · job "Lean proofs"</p>
+        <div class="chg">on master; #730 closed</div>
+      </div></article>
+      <article class="step" data-step="8" style="--c: var(--measure)"><div class="card">
+        <div class="num">08 · the other eight</div>
+        <h3>The same pipeline ran nine times</h3>
+        <p>Four tickets shipped a speedup. Two formalised arguments the code already relied on. One built the tooling. Two ended without a speedup, and that was the right outcome.</p>
+        <div class="why"><div class="wl">Why it works this way</div><p>The stress-mat-vec gate was <span class="k c-measure focusable" data-c="measure"><svg><use href="#i-measure"/></svg>measured first</span>: it fires on 1.6% of calls, so no code was written. The <code>canreach</code> cache has nothing to speed up, and writing its Lean statement showed the obvious design, memoising answers, would have been wrong, because edges are appended between queries. Two of the four speedups began with a ticket premise that turned out wrong. A pipeline that can only say yes is a rubber stamp.</p></div>
+        
+        <p class="src">docs/research/lean-experiment/README.md (tickets table)</p>
+        <div class="chg">about 13,000 lines of Lean on master</div>
+      </div></article>
+      <article class="step" data-step="9" style="--c: var(--review)"><div class="card">
+        <div class="num">09 · what the reviews found</div>
+        <h3>What 15 reviews found</h3>
+        <p>The worst: the network simplex theorem assumed the tree's numbering was current, which is true at the first pivot and false after it (<b>P1</b>, reproduced through <code>rank2</code>). Another <span class="k c-review focusable" data-c="review"><svg><use href="#i-review"/></svg>P1</span>: making a BFS extractable had added 8 to 15 allocations to shipped twopi code.</p>
+        <div class="why"><div class="wl">Why it works this way</div><p>Proofs fail in one way: they are true, about something slightly different from what runs. Every finding is of that kind: model against code, hypothesis against call site, claim against scope. All were fixed on the PR before merge. The first became a follow-up proof (#750) and a stronger runtime check (#765): the old check renumbered after every pivot, so it could never have seen a search that read stale numbers.</p></div>
+        
+        <p class="src">review comments on PRs #746, #771, #743, #747, #774</p>
+        <div class="chg">3 P1, about 10 P2, many P3; none in already-shipped code</div>
+      </div></article>
+      <article class="step" data-step="10" style="--c: var(--extract)"><div class="card">
+        <div class="num">10 · how far down</div>
+        <h3>How far down does the trust go?</h3>
+        <p>Three levels: a prose argument; a Lean theorem over a hand-written model; a Lean theorem over the Lean that Aeneas generates from the shipped Rust. Of the nine tickets' main theorems, how many are at the third level, over the <span class="k c-extract focusable" data-c="extract"><svg><use href="#i-extract"/></svg>extracted Rust</span>?</p>
+        <div class="why"><div class="wl">Why it works this way</div><p>Extraction only accepts code of a certain shape: one early-exit loop per function, no closures, no floats. Making circo's counters extractable took a refactor that cut Aeneas's time from 850 seconds to 10. Making twopi's BFS extractable first cost 8 to 15 allocations (rejected), then needed a zero-copy rewrite, and one accessor is still modelled by hand.</p></div>
+        <div class="predict" data-q="2" id="q2">
+          <button data-a="0">Most of them</button>
+          <button data-a="1">About half</button>
+          <button data-a="2" data-right>One: circo's indexed counter equals the reference</button>
+        </div>
+        <div class="reveal" id="rv2" style="--c: var(--extract)"><b>One end-to-end theorem</b> (2,608 lines, #770), plus the Fenwick lemmas. Everything else is over a model with a written list of differences. And it is silent above <code>i32::MAX</code>, because Charon compiles with debug assertions: the checked reference fails where release wraps, and a complete 403-node block already has about 2.17 billion crossings. The model proof keeps that regime. It is also 64-bit only, so wasm32 is outside it.</div>
+        <p class="src">FenwickExtractedMain.lean: count_indexed_eq_reference · docs/research/lean-experiment/extraction.md</p>
+        <div class="chg">the first theorem about shipped code, not a model of it</div>
+      </div></article>
+      <article class="step" data-step="11" style="--c: var(--gap)"><div class="card">
+        <div class="num">11 · not there</div>
+        <h3>What is only argued, and what is not built</h3>
+        <p><span class="k c-gap ghost focusable" data-c="gap"><svg><use href="#i-gap"/></svg>Prose only</span>: the zero-guard and no-NaN argument for the spline retry; the network simplex tie-climb budget and the assumption that the fallback's renumbering is valid; mincross reordering; the graph facts callers guarantee, audited by reading but not proved.</p><p><span class="k c-gap ghost focusable" data-c="gap"><svg><use href="#i-gap"/></svg>Not built</span>: floats cannot be extracted yet (Aeneas support is a draft upstream); wasm32; the overflow regime over extracted code; no theorem yet depends on the twopi extraction.</p>
+        <div class="why"><div class="wl">Why it works this way</div><p>The honest map matters more than the list of wins. A reader who sees "proved" should know which part of the claim is covered. Each gap has a named home in a file header or an issue, so none hides inside a hypothesis.</p></div>
+        
+        <p class="src">file headers (Model vs Rust) · issues #765, #766, #770</p>
+        <div class="chg">nothing new: this step marks what is missing</div>
+      </div></article>
+      <article class="step" data-step="12" style="--c: var(--stage)"><div class="card">
+        <div class="num">12 · next</div>
+        <h3>Where we go next</h3>
+        <p>Next speedups: the network simplex cut-set moves (about 11% of instructions on the 20,000-node DAG), and circo's per-node prefix build. Make the packing code deterministic so the ratchet's instruction gate is trustworthy. Decide whether to report the Aeneas and Charon bugs we found. Then write the account of how it went. PR #775, the twopi extraction, has merged.</p>
+        <div class="why"><div class="wl">Why it works this way</div><p>The nine tickets taught a pattern: measure before proving (the stress gate), derive before coding (circo), and expect the ticket to be wrong (two of four). The next targets come from profiles, not hope. The 11% is the ceiling for what is left in network simplex.</p></div>
+        
+        <p class="src">docs/research/lean-experiment/journal.md · issue #776</p>
+        <div class="chg">four decisions for the owner, one write-up</div>
+      </div></article>
+
+    </div>
+  </section>
+
+  <h2>The delta, in code</h2>
+  <p>The real <code>reduce_delta</code>, trimmed. Each line is colored by the idea it carries: Lean's formula, the shipped logic, the oracle that checks it. Tap a chip in the legend to isolate one.</p>
+  <div class="codewrap">
+<pre class="code" aria-label="reduce_delta, trimmed"><span class="ln c-proof focusable" data-c="proof"><span class="n">1033</span>    base = delta</span><span class="ln c-proof focusable" data-c="proof"><span class="n">1034</span>        .prepare(curnode, &amp;list, offsets)</span><span class="ln c-proof focusable" data-c="proof"><span class="n">1035</span>        .and_then(|cut| delta.phi(cut));</span><span class="ln"><span class="n">   </span><span class="cm">  …</span></span><span class="ln c-proof focusable" data-c="proof"><span class="n">1040</span>        let fast = base.and_then(|old| {</span><span class="ln c-proof focusable" data-c="proof"><span class="n">1041</span>            let cut = delta.rank.get(neighbor)?.wrapping_add(j);</span><span class="ln c-proof focusable" data-c="proof"><span class="n">1042</span>            let new = delta.phi(cut)?;</span><span class="ln c-code focusable" data-c="code"><span class="n">1043</span>            Some((new, apply_delta(crossings, new.wrapping_sub(old))))</span><span class="ln c-code focusable" data-c="code"><span class="n">1044</span>        });</span><span class="ln c-oracle focusable" data-c="oracle"><span class="n">1045</span>        let recount = CHECK || fast.is_none();</span><span class="ln c-oracle focusable" data-c="oracle"><span class="n">1050</span>            let full = count_all_crossings(c, &amp;list, offsets, edges, open);</span><span class="ln c-oracle focusable" data-c="oracle"><span class="n">1051</span>            if fast.is_some() {</span><span class="ln c-oracle focusable" data-c="oracle"><span class="n">1052</span>                assert_eq!(full, new_crossings, &quot;circo incremental crossing delta&quot;);</span><span class="ln c-oracle focusable" data-c="oracle"><span class="n">1053</span>            }</span><span class="ln"><span class="n">   </span><span class="cm">  …</span></span><span class="ln c-code focusable" data-c="code"><span class="n">1056</span>        if new_crossings &lt; crossings {</span><span class="ln c-code focusable" data-c="code"><span class="n">1060</span>            crossings = new_crossings;</span></pre>
+    <div>
+      <div class="struct" aria-label="Delta">
+        <div style="margin-bottom:6px;color:var(--quiet)">struct Delta (blockpath.rs:859)</div>
+        <div class="f c-code focusable" data-c="code"><span>adj_nodes</span><span>Vec&lt;usize&gt;</span></div>
+        <div class="f c-code focusable" data-c="code"><span>rank</span><span>Vec&lt;usize&gt;</span></div>
+        <div class="f c-proof focusable" data-c="proof"><span>fd_pre</span><span>Vec&lt;i64&gt;</span></div>
+        <div class="f c-proof focusable" data-c="proof"><span>d_pre</span><span>Vec&lt;i64&gt;</span></div>
+        <div class="f c-proof focusable" data-c="proof"><span>nbr</span><span>Vec&lt;usize&gt;</span></div>
+      </div>
+      <div class="aside c-oracle" style="margin-top:14px">
+        <div class="ah"><svg><use href="#i-oracle"/></svg>What the code does not tell you</div>
+        <code>CHECK</code> is a compile-time constant, true in tests and under the <code>circo-check</code> feature. In a release build the recount branch is only reached when the delta declines, so the oracle costs nothing where it does not run, and the proof is what stands in for it there.
+      </div>
+    </div>
+  </div>
+
+  <div class="choices">
+    <h2>Decisions that are not ours to make</h2>
+    <ol>
+      <li>Report the Aeneas and Charon bugs we hit (two in Aeneas, one panic in Charon) to the upstream projects, or keep them in our notes.</li>
+      <li>Whether the end-to-end theorem should become a merge requirement for future circo changes, or stay a one-off.</li>
+      <li>Whether to pursue floats: wait for Aeneas's float support, or model float code by hand as we did for the spline retry.</li>
+    </ol>
+  </div>
+</main>
+
+<footer>Built from docs/research/lean-experiment/ at master e584133e on 4 November 2026. Pull request #775 (the twopi extraction) merged afterwards, which closed the last open ticket of the first three waves. Legend colors were chosen for this page; the code and numbers are real.</footer>
+
+<script>
+(() => {
+  const reduce = matchMedia('(prefers-reduced-motion: reduce)');
+  const narrow = matchMedia('(max-width: 860px)');
+  const $ = (s) => document.querySelector(s);
+  const svg = document.getElementById('fig');
+  const W = 320, H = 1894, STEPS = 12;
+  // camera: [centre y on a laptop, centre y on a phone]; the window is always 320 wide
+  const cam = { 1:[150,100], 2:[190,153], 3:[270,239], 4:[355,325], 5:[450,443], 6:[560,561], 7:[600,647],
+                8:[868,860], 9:[1170,1170], 10:[1455,1455], 11:[1667,1667], 12:[1830,1830] };
+
+  const setHdr = () => document.documentElement.style.setProperty('--hdr', document.querySelector('header.top').offsetHeight + 'px');
+  setHdr(); addEventListener('resize', setHdr);
+
+  let view = [0, 0, W, 480], current = 0;
+  function windowFor(step) {
+    const r = svg.getBoundingClientRect();
+    const w = W, h = w * (r.height / Math.max(1, r.width));
+    const cy = cam[step][narrow.matches ? 1 : 0];
+    const y = Math.max(0, Math.min(Math.max(0, H - h), cy - h / 2));
+    return [0, y, w, h];
+  }
+  function camera(step) {
+    const to = windowFor(step), from = view.slice();
+    if (reduce.matches) { view = to; svg.setAttribute('viewBox', to.join(' ')); return; }
+    const t0 = performance.now(), dur = 700;
+    const tick = (t) => {
+      const k = Math.min(1, (t - t0) / dur), e = 1 - Math.pow(1 - k, 3);
+      view = from.map((v, i) => v + (to[i] - v) * e);
+      svg.setAttribute('viewBox', view.map((v) => v.toFixed(1)).join(' '));
+      if (k < 1) requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  }
+  const rewind = () => { view = windowFor(current || 1); svg.setAttribute('viewBox', view.join(' ')); };
+  addEventListener('resize', rewind);
+
+  function states(step) {
+    const groups = {};
+    document.querySelectorAll('.unit').forEach((el) => {
+      const s = Number(el.dataset.s);
+      const was = el.dataset.st || '';
+      let st;
+      if (step < s) st = el.dataset.faint ? 'f' : '';
+      else st = step === s ? 'on' : 'done';
+      (groups[s] = groups[s] || []).push(el);
+      const showing = (was === '' || was === 'f') && (st === 'on' || st === 'done') && !el.dataset.faint;
+      const i = Number(getComputedStyle(el).getPropertyValue('--i')) || (groups[s].length - 1);
+      el.style.transitionDelay = (showing && !reduce.matches) ? Math.min(i * 60, 600) + 'ms' : '0ms';
+      el.dataset.st = st;
+      el.classList.remove('f', 'on', 'done');
+      if (st) el.classList.add(st);
+    });
+  }
+
+  function bars(step) {
+    const on = step >= 5;
+    document.querySelectorAll('.bar').forEach((b) => {
+      const w = on ? Number(b.dataset.w) : 0;
+      b.setAttribute('width', w);
+    });
+    ['bv1', 'bv2', 'bv3'].forEach((id, i) => {
+      const t = document.getElementById(id), b = document.querySelectorAll('.bar')[i];
+      t.setAttribute('x', 75 + Number(b.dataset.w) + 6); t.setAttribute('opacity', on ? 1 : 0);
+    });
+  }
+
+  function travel(step) {
+    const tok = $('#token'), path = document.getElementById('e' + (step - 1));
+    if (!path || step < 2 || step > 7) { tok.setAttribute('opacity', 0); return; }
+    const len = path.getTotalLength();
+    tok.setAttribute('opacity', 1);
+    const put = (f) => { const p = path.getPointAtLength(len * f); tok.setAttribute('cx', p.x); tok.setAttribute('cy', p.y); };
+    if (reduce.matches) { put(1); return; }
+    const t0 = performance.now(), dur = 800;
+    const tick = (t) => { const k = Math.min(1, (t - t0) / dur); put(1 - Math.pow(1 - k, 3)); if (k < 1) requestAnimationFrame(tick); };
+    requestAnimationFrame(tick);
+  }
+
+  function go(step) {
+    if (step === current) return;
+    current = step;
+    states(step); bars(step); camera(step); travel(step);
+    document.querySelectorAll('.step').forEach((a) => a.classList.toggle('active', Number(a.dataset.step) === step));
+  }
+
+  const io = new IntersectionObserver((entries) => {
+    entries.forEach((en) => { if (en.isIntersecting) go(Number(en.target.dataset.step)); });
+  }, { rootMargin: '-45% 0px -45% 0px', threshold: 0 });
+  document.querySelectorAll('.step').forEach((s) => io.observe(s));
+
+  const params = new URLSearchParams(location.search);
+  const q = Number(params.get('step'));
+  if (q >= 1 && q <= STEPS) {
+    document.querySelector('.step[data-step="' + q + '"]').scrollIntoView({ block: 'center' });
+    go(q);
+  } else {
+    states(0); bars(0);
+    svg.setAttribute('viewBox', windowFor(1).join(' '));
+  }
+
+  // Predictions: pick, then see the right one and the reason
+  document.querySelectorAll('.predict').forEach((box) => box.querySelectorAll('button').forEach((b) => b.addEventListener('click', () => {
+    box.querySelectorAll('button').forEach((x) => x.classList.remove('picked', 'right'));
+    b.classList.add('picked');
+    box.querySelector('[data-right]').classList.add('right');
+    document.getElementById('rv' + box.dataset.q).classList.add('show');
+  })));
+
+  // Legend focus: one concept lit everywhere (diagram, prose, code, data structure)
+  document.querySelectorAll('.legend .chip').forEach((chip) => chip.addEventListener('click', () => {
+    const f = chip.dataset.f;
+    const on = document.body.dataset.focus !== f;
+    document.querySelectorAll('.legend .chip').forEach((c) => c.setAttribute('aria-pressed', 'false'));
+    if (!on) { delete document.body.dataset.focus; document.querySelectorAll('.is-focus').forEach((e) => e.classList.remove('is-focus')); return; }
+    chip.setAttribute('aria-pressed', 'true');
+    document.body.dataset.focus = f;
+    document.querySelectorAll('.focusable').forEach((el) => {
+      el.classList.toggle('is-focus', (el.dataset.c || '').split(' ').includes(f));
+    });
+  }));
+})();
+</script>
+</body>
+</html>

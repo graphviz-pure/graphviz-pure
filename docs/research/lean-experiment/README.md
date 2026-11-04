@@ -3,6 +3,8 @@
 Milestone: [Improvement through Math Proofs](https://github.com/graphviz-pure/graphviz-pure/milestone/10).
 Started 2026-11-03. Survey that motivated it: [`../lean-bend-survey.md`](../lean-bend-survey.md).
 
+An animated, illustrated walkthrough of the experiment so far is in [`walkthrough.html`](walkthrough.html) (open it in a browser; no build step, no network).
+
 ## The bet
 
 graphviz-pure must reproduce C Graphviz 16.1.0 byte for byte. That turns every speedup into an
