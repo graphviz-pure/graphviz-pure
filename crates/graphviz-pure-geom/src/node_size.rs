@@ -11,7 +11,7 @@
 //! `ND_ht`).
 
 use crate::html_label::HtmlLabel;
-use graphviz_pure_core::alloc::{element_count, gv_calloc_vec};
+use graphviz_pure_core::alloc::{MAX_VERTICES, element_count, gv_calloc_budget, gv_calloc_vec};
 use graphviz_pure_core::cnum::{is_exactly_equal, is_exactly_zero};
 use graphviz_pure_core::math;
 use graphviz_pure_core::strtod::{sscanf, strtod};
@@ -1165,6 +1165,7 @@ fn poly_init(
     if sides < 3 {
         sides = 2;
         // `gv_calloc(outp * sides, sizeof(pointf))`
+        gv_calloc_budget::<Point>(element_count(outp, sides), MAX_VERTICES)?;
         vertices = gv_calloc_vec::<Point>(element_count(outp, sides))?;
         let mut p = Point::new(bb.x / 2.0, bb.y / 2.0);
         vertices[0] = Point::new(-p.x, -p.y);
@@ -1191,6 +1192,7 @@ fn poly_init(
         }
     } else {
         // `gv_calloc(outp * sides, sizeof(pointf))`
+        gv_calloc_budget::<Point>(element_count(outp, sides), MAX_VERTICES)?;
         vertices = gv_calloc_vec::<Point>(element_count(outp, sides))?;
         let (mut sinx, mut cosx) = (0.0_f64, 0.0_f64);
         let (mut xmax, mut ymax);
@@ -1360,6 +1362,7 @@ fn point_init(node: &NodeData, default_peripheries: usize, geom: &mut NodeGeomet
         outp += 1;
     }
     // `gv_calloc(outp * sides, sizeof(pointf))`
+    gv_calloc_budget::<Point>(element_count(outp, sides), MAX_VERTICES)?;
     let mut vertices = gv_calloc_vec::<Point>(element_count(outp, sides))?;
     let mut p = Point::new(sz / 2.0, sz / 2.0);
     vertices[0] = Point::new(-p.x, -p.y);

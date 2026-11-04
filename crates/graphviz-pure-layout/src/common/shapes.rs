@@ -10,7 +10,9 @@
 //! measured vertices transfer directly into the clipping shape during initialization.
 //! The standalone constructor can also rebuild arrays from the final size.
 
-use graphviz_pure_core::alloc::{AllocFailure, element_count, gv_calloc_grow, gv_calloc_vec};
+use graphviz_pure_core::alloc::{
+    AllocFailure, MAX_VERTICES, element_count, gv_calloc_budget, gv_calloc_grow, gv_calloc_vec,
+};
 use graphviz_pure_core::cnum::{c_max, c_min, is_exactly_equal, is_exactly_zero};
 use graphviz_pure_core::math;
 use graphviz_pure_core::{NodeData, Point};
@@ -470,6 +472,7 @@ impl NodeShape {
                     outp_base
                 };
                 // `gv_calloc(outp * sides, sizeof(pointf))`
+                gv_calloc_budget::<Point>(element_count(outp, 2), MAX_VERTICES)?;
                 let mut v = gv_calloc_vec::<Point>(element_count(outp, 2))?;
                 let inner = width / 2.0 - GAP * peripheries.saturating_sub(1) as f64;
                 let mut p = Point::new(inner, inner);
@@ -513,6 +516,7 @@ impl NodeShape {
         if sides < 3 {
             // Ellipses: two vertices per periphery.
             // `gv_calloc(outp * sides, sizeof(pointf))`
+            gv_calloc_budget::<Point>(element_count(outp, 2), MAX_VERTICES)?;
             let mut v = gv_calloc_vec::<Point>(element_count(outp, 2))?;
             let inner_x = width / 2.0 - GAP * peripheries.saturating_sub(1) as f64;
             let inner_y = height / 2.0 - GAP * peripheries.saturating_sub(1) as f64;
@@ -542,6 +546,8 @@ impl NodeShape {
             shape.outline_width = ow;
             shape.outline_height = oh;
         } else {
+            // `gv_calloc(outp * sides, sizeof(pointf))`, before the port builds the unit polygon.
+            gv_calloc_budget::<Point>(element_count(outp, sides), MAX_VERTICES)?;
             let (unit, xmax, ymax) = match desc.vgen {
                 Gen::Star => {
                     let (v, sz) = star_vertices(Point::new(1.0, 1.0));

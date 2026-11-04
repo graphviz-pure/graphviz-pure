@@ -647,6 +647,18 @@ The port allocates the vertices of a node's peripheries with that check (`poly_i
 extreme `peripheries` or `sides` ends the run with C's message and exit status 1, where the
 port aborted the process (#583).
 
+**A budget on those vertices (#591).** `peripheries=2147483647`, or `sides=2147483647` on a
+polygon, asks `gv_calloc` for 64 GiB. The reference machine has that memory, so C does not
+report a failure: it writes vertices until the OOM killer ends it. The port refuses an array
+of more than 2^31 vertices (a 32 GiB array; 2^24 vertices on 32-bit targets, which hold at most
+4 GiB) with the message C prints for the same request under a memory limit, and exits 1
+(`core/src/alloc.rs` `gv_calloc_budget`). The budget sits where C stops finishing on a normal
+machine: its memory is about the array's size per node and its time is linear in the vertices,
+so 2^31 vertices need about 64 GB and minutes. Everything below it is laid out as C does, with
+C's memory (2.1 GB for one node at 67108863 peripheries). The doc comment of `MAX_VERTICES`
+has the measurements on the reference build, which an 8 GB limit keeps from reaching the
+budget itself: the figure at the budget is extrapolated.
+
 **Where C has no check, the port wraps.** Everywhere else, C's `int` arithmetic has undefined
 behaviour on overflow, and the reference build wraps. That covers ns.c's arithmetic on
 weights, cut values, ranks and minimum lengths, and dotgen's weight sums (`group`'s ×100,

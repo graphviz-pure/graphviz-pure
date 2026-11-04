@@ -5373,6 +5373,74 @@ fn issue583_an_allocation_c_refuses_is_reported_as_cs_message() {
     }
 }
 
+/// Issue #591: `peripheries=2147483647` makes C's `poly_init` ask `gv_calloc` for 64 GiB
+/// (2^31 peripheries of 2 vertices of 16 bytes). The reference machine has that memory, so C
+/// allocates it, writes vertices until the machine runs out of memory and is killed; under
+/// a memory limit C prints the message below and exits 1. The port adds a budget (2^31
+/// vertices, `core/src/alloc.rs`), so it reports the same message without trying the
+/// allocation. `sides=2147483647` on a polygon (2 peripheries of 2^31 sides) and
+/// `shape=point` ask for the same 64 GiB.
+///
+/// `patchwork` sets `shape=box` on every node, whose four sides make the array a different
+/// size, so it is not in the list.
+#[test]
+fn issue591_an_allocation_past_the_budget_is_reported_as_cs_message() {
+    // C's messages: 2^31 peripheries of 2 vertices, and 2 peripheries of 2^31 - 1 sides.
+    let cases = [
+        (
+            "digraph G {\n  node [peripheries=\"2147483647\"];\n  a -> b;\n}\n",
+            68719476736_u64,
+        ),
+        (
+            "digraph G {\n  node [shape=polygon, sides=\"2147483647\"];\n  a -> b;\n}\n",
+            68719476704,
+        ),
+        (
+            "digraph G {\n  node [shape=point, peripheries=\"2147483647\"];\n  a -> b;\n}\n",
+            68719476736,
+        ),
+    ];
+    for engine in ["dot", "neato", "fdp", "sfdp", "twopi", "circo", "osage"] {
+        for (src, bytes) in cases {
+            let dir = scratch("issue591");
+            let engine_arg = format!("-K{engine}");
+            let (out, err, code) = run_in(&dir, &[&engine_arg, "-Tsvg"], src);
+            assert_eq!(code, 1, "{engine}: {err}");
+            assert_eq!(
+                err,
+                format!("out of memory when trying to allocate {bytes} bytes\n"),
+                "{engine}: {src}"
+            );
+            assert!(out.is_empty(), "{engine}: {out}");
+        }
+    }
+}
+
+/// Issue #591: the budget (2^31 vertices, a 32 GiB array) sits where C stops finishing on a
+/// normal machine, so everything below it is laid out as C does: two million peripheries
+/// (64 MB of vertices) are drawn here, and `peripheries=67108864` (a 2 GiB array, too big
+/// for a test) matches C's `-Tdot` bytes when run by hand. One periphery more than the
+/// budget allows is refused, without trying the allocation: `outp` is `peripheries + 1`
+/// with the default pen width, so 2^30 peripheries are 2^30 + 1 of 2 vertices of 16 bytes.
+#[test]
+fn issue591_peripheries_under_the_budget_are_laid_out() {
+    let dir = scratch("issue591");
+    let src = "digraph G { node [peripheries=2000000]; a }";
+    let (out, err, code) = run_in(&dir, &["-Tdot"], src);
+    assert_eq!(code, 0, "{err}");
+    assert!(out.contains("peripheries=2000000"), "{out}");
+
+    let dir = scratch("issue591");
+    let src = "digraph G { node [peripheries=1073741824]; a }";
+    let (out, err, code) = run_in(&dir, &["-Tdot"], src);
+    assert_eq!(code, 1, "{err}");
+    assert_eq!(
+        err,
+        "out of memory when trying to allocate 34359738400 bytes\n"
+    );
+    assert!(out.is_empty(), "{out}");
+}
+
 // Issue #233: inside cluster2, `rank=sink` and the nested `rank=min` set contradict each
 // other, network simplex prints `trouble in init_rank` and leaves no node of the cluster on
 // rank 0. C fails `assert(leader != NULL)` in `cluster_leader` (rank.c:316, exit 134). The
