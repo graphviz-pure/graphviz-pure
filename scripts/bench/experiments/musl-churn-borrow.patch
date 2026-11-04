@@ -1,0 +1,248 @@
+diff --git a/crates/graphviz-pure-core/src/graph.rs b/crates/graphviz-pure-core/src/graph.rs
+index 4b5a0b03..304c8669 100644
+--- a/crates/graphviz-pure-core/src/graph.rs
++++ b/crates/graphviz-pure-core/src/graph.rs
+@@ -202,6 +202,17 @@ impl AttrMap {
+         None
+     }
+
++    /// `agxset` / `agxset_html`, taking an already-owned key instead of copying it.
++    /// C: lib/cgraph/attr.c:agxset
++    pub fn set_owned(&mut self, key: String, value: String, html: bool) -> Option<String> {
++        if html {
++            self.html.insert(key.clone());
++        } else {
++            self.html.remove(&key);
++        }
++        self.insert_owned(key, value)
++    }
++
+     /// Sets `key` to the plain string `value` (`agxset`), clearing its HTML flag.
+     pub fn insert(&mut self, key: String, value: String) -> Option<String> {
+         self.html.remove(&key);
+diff --git a/crates/graphviz-pure-parser/src/lib.rs b/crates/graphviz-pure-parser/src/lib.rs
+index fb256d8a..ff99af2b 100644
+--- a/crates/graphviz-pure-parser/src/lib.rs
++++ b/crates/graphviz-pure-parser/src/lib.rs
+@@ -499,6 +499,68 @@ mod tests {
+         assert!(!g.dicts[0].node["label"].html);
+     }
+
++    #[test]
++    fn single_attribute_statements_keep_flags_defaults_and_fallback_lists() {
++        let g = parse_dot(
++            r#"digraph {
++                node [same="default"];
++                a [same=<html>]; b [same="plain"];
++                c [other="before"][other="after"];
++                d,e [shared=<row>];
++                a->b [label=<edge>]; b->c [label="plain"];
++                subgraph { f [first=1 second=2 first=3]; }
++                z [];
++            }"#,
++        )
++        .unwrap();
++        assert_eq!(
++            g.nodes[0].attrs.get("same").map(String::as_str),
++            Some("html")
++        );
++        assert!(g.nodes[0].attrs.is_html("same"));
++        assert_eq!(
++            g.nodes[1].attrs.get("same").map(String::as_str),
++            Some("plain")
++        );
++        assert!(!g.nodes[1].attrs.is_html("same"));
++        assert_eq!(
++            g.nodes[2].attrs.get("other").map(String::as_str),
++            Some("after")
++        );
++        for node in &g.nodes[3..5] {
++            assert_eq!(node.attrs.get("shared").map(String::as_str), Some("row"));
++            assert!(node.attrs.is_html("shared"));
++        }
++        assert_eq!(g.nodes[5].attrs.get("first").map(String::as_str), Some("3"));
++        assert_eq!(
++            g.nodes[5].attrs.get("second").map(String::as_str),
++            Some("2")
++        );
++        assert_eq!(
++            g.nodes[6].attrs.get("same").map(String::as_str),
++            Some("default")
++        );
++        assert!(g.nodes[6].attrs.get("other").is_none_or(String::is_empty));
++        assert!(g.edges[0].attrs.is_html("label"));
++        assert_eq!(
++            g.edges[0].attrs.get("label").map(String::as_str),
++            Some("edge")
++        );
++        assert!(!g.edges[1].attrs.is_html("label"));
++        assert_eq!(
++            g.edges[1].attrs.get("label").map(String::as_str),
++            Some("plain")
++        );
++    }
++
++    #[test]
++    fn single_attribute_concatenation_retains_only_its_value_length() {
++        let g = parse_dot(r#"digraph { a [label="a"+"bc"]; }"#).unwrap();
++        let value = g.nodes[0].attrs.get("label").unwrap();
++        assert_eq!(value, "abc");
++        assert_eq!(value.capacity(), value.len());
++    }
++
+     // #119: a node name keeps the flag; `<b>`, `b` and `"<b>"` are three nodes (`refstr_eq`).
+     #[test]
+     fn html_node_name_is_its_inner_text_and_a_flag() {
+diff --git a/crates/graphviz-pure-parser/src/parser.rs b/crates/graphviz-pure-parser/src/parser.rs
+index 4eb258d2..68b1205c 100644
+--- a/crates/graphviz-pure-parser/src/parser.rs
++++ b/crates/graphviz-pure-parser/src/parser.rs
+@@ -35,6 +35,84 @@ enum EdgeItem {
+     Subgraph(SubgraphId),
+ }
+
++/// The parser's `attrlist` operations, shared by defaults and statement attributes.
++/// C: lib/cgraph/grammar.y:appendattr
++trait AttrSink<'a> {
++    fn contains_key(&self, key: &str) -> bool;
++    fn set(&mut self, key: Cow<'a, str>, value: Cow<'a, str>, html: bool);
++}
++
++impl<'a> AttrSink<'a> for AttrMap {
++    fn contains_key(&self, key: &str) -> bool {
++        AttrMap::contains_key(self, key)
++    }
++
++    fn set(&mut self, key: Cow<'a, str>, value: Cow<'a, str>, html: bool) {
++        AttrMap::set(self, &key, value.into_owned(), html);
++    }
++}
++
++/// A one-attribute statement needs no temporary map. Wider lists retain AttrMap's
++/// normal ordering, replacement and growth; there is no retained parser scratch.
++/// C: lib/cgraph/grammar.y:optattr; appendattr; endnode
++#[derive(Default)]
++enum StatementAttrs<'a> {
++    #[default]
++    Empty,
++    One {
++        key: Cow<'a, str>,
++        value: Cow<'a, str>,
++        html: bool,
++    },
++    Map(AttrMap),
++}
++
++impl StatementAttrs<'_> {
++    fn into_map(self) -> AttrMap {
++        match self {
++            Self::Empty => AttrMap::new(),
++            Self::One { key, value, html } => {
++                let mut map = AttrMap::new();
++                map.set_owned(key.into_owned(), value.into_owned(), html);
++                map
++            }
++            Self::Map(map) => map,
++        }
++    }
++}
++
++impl<'a> AttrSink<'a> for StatementAttrs<'a> {
++    fn contains_key(&self, key: &str) -> bool {
++        match self {
++            Self::Empty => false,
++            Self::One { key: stored, .. } => stored == key,
++            Self::Map(map) => map.contains_key(key),
++        }
++    }
++
++    fn set(&mut self, key: Cow<'a, str>, value: Cow<'a, str>, html: bool) {
++        match self {
++            Self::Empty => *self = Self::One { key, value, html },
++            Self::One {
++                key: stored,
++                value: old,
++                html: old_html,
++            } if stored == &key => {
++                *old = value;
++                *old_html = html;
++            }
++            Self::One { .. } => {
++                let mut map = std::mem::take(self).into_map();
++                map.set(&key, value.into_owned(), html);
++                *self = Self::Map(map);
++            }
++            Self::Map(map) => {
++                map.set(&key, value.into_owned(), html);
++            }
++        }
++    }
++}
++
+ /// A statement whose next `simple` is a subgraph, waiting while the subgraph's body is
+ /// read.
+ struct Suspended {
+@@ -661,10 +739,10 @@ impl<'a> Parser<'a> {
+     }
+
+     /// `optattr : attrlist | /* empty */` after a node or edge statement.
+-    fn optattr(&mut self) -> Result<AttrMap> {
++    fn optattr(&mut self) -> Result<StatementAttrs<'a>> {
+         self.attr_order.clear();
+         self.html_keys.clear();
+-        let mut attrs = AttrMap::new();
++        let mut attrs = StatementAttrs::Empty;
+         self.reduce(0)?;
+         while self.peek().kind == TokenKind::LBracket {
+             self.attr_brackets(&mut attrs, false)?;
+@@ -679,7 +757,7 @@ impl<'a> Parser<'a> {
+     ///
+     /// `items`: keep every item in [`Parser::attr_items`], for an attribute statement; else
+     /// the first occurrence of each key in [`Parser::attr_order`], for `endnode`/`endedge`.
+-    fn attr_brackets(&mut self, attrs: &mut AttrMap, items: bool) -> Result<()> {
++    fn attr_brackets(&mut self, attrs: &mut impl AttrSink<'a>, items: bool) -> Result<()> {
+         self.expect(&TokenKind::LBracket)?;
+         self.reduce(0)?;
+         while Self::is_atom_token(&self.peek().kind) {
+@@ -697,7 +775,7 @@ impl<'a> Parser<'a> {
+             } else if !attrs.contains_key(key.as_ref()) {
+                 self.attr_order.push(key.to_string());
+             }
+-            attrs.set(&key, val.text.into_owned(), val.html);
++            attrs.set(key, val.text, val.html);
+             if matches!(self.peek().kind, TokenKind::Comma | TokenKind::Semi) {
+                 self.shift()?;
+                 self.reduce(1)?;
+@@ -744,10 +822,28 @@ impl<'a> Parser<'a> {
+         }
+         let attrs = self.optattr()?;
+         self.reduce(3)?;
+-        if items.len() > 1 {
+-            self.endedge(&items, &attrs);
+-        } else {
+-            self.endnode(&items[0], &attrs);
++        match (attrs, items.as_slice()) {
++            (StatementAttrs::One { key, value, html }, [item @ EdgeItem::Nodes(nodes)])
++                if nodes.len() == 1 =>
++            {
++                // Bind in the same source order before applying the attributes, as endnode
++                // does. Copy the final value once, borrowing token text until then;
++                // quoted concatenations still produce a compact owned value.
++                self.endnode(item, &AttrMap::new());
++                let mut value = value.into_owned();
++                value.shrink_to_fit();
++                self.graph.nodes[nodes[0].0.0 as usize]
++                    .attrs
++                    .set(&key, value, html);
++            }
++            (attrs, _) => {
++                let attrs = attrs.into_map();
++                if items.len() > 1 {
++                    self.endedge(&items, &attrs);
++                } else {
++                    self.endnode(&items[0], &attrs);
++                }
++            }
+         }
+         Ok(Step::Done)
+     }

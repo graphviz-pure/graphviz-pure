@@ -1,0 +1,132 @@
+diff --git a/crates/graphviz-pure-core/src/graph.rs b/crates/graphviz-pure-core/src/graph.rs
+index 4b5a0b03..59c819c2 100644
+--- a/crates/graphviz-pure-core/src/graph.rs
++++ b/crates/graphviz-pure-core/src/graph.rs
+@@ -53,13 +53,25 @@ impl Default for Values {
+
+ impl Clone for AttrMap {
+     fn clone(&self) -> Self {
+-        // Clones are often extended (defaults, then pos/height/width):
+-        // keep three spare slots in the small form.
++        self.clone_with_spare(3)
++    }
++}
++
++impl AttrMap {
++    /// Copies a completed attribute set without spare vector slots. Use where further
++    /// attributes are uncommon; ordinary clones keep room for output/layout fields.
++    pub fn clone_compact(&self) -> Self {
++        self.clone_with_spare(0)
++    }
++
++    fn clone_with_spare(&self, spare: usize) -> Self {
++        // Ordinary clones often gain layout/output fields. Completed inherited sets
++        // can instead request only their existing length.
+         let values = match &self.values {
+             Values::Small(v) if v.is_empty() => Values::Small(Vec::new()),
+             Values::Small(v) => {
+                 let mut c =
+-                    Vec::with_capacity(v.len().saturating_add(3).min(SMALL_LIMIT.max(v.len())));
++                    Vec::with_capacity(v.len().saturating_add(spare).min(SMALL_LIMIT.max(v.len())));
+                 c.extend(v.iter().cloned());
+                 Values::Small(c)
+             }
+@@ -84,6 +96,14 @@ impl AttrMap {
+         Self::default()
+     }
+
++    /// Reserves scratch space in the small-vector form without its geometric growth.
++    /// Reservation stops at the promotion limit; a tree-backed map needs no vector.
++    pub fn reserve_small_exact(&mut self, additional: usize) {
++        if let Values::Small(values) = &mut self.values {
++            values.reserve_exact(additional.min(SMALL_LIMIT.saturating_sub(values.len())));
++        }
++    }
++
+     /// A map of plain (not HTML) values, keeping the last of each duplicate key.
+     pub fn from_plain(values: impl IntoIterator<Item = (String, String)>) -> Self {
+         let mut v: Vec<_> = values.into_iter().collect();
+diff --git a/crates/graphviz-pure-parser/src/parser.rs b/crates/graphviz-pure-parser/src/parser.rs
+index 4eb258d2..1d5f7ddd 100644
+--- a/crates/graphviz-pure-parser/src/parser.rs
++++ b/crates/graphviz-pure-parser/src/parser.rs
+@@ -15,6 +15,10 @@ use graphviz_pure_core::{
+ /// bison's `YYMAXDEPTH` (grammar.c): the most states its parser stack holds.
+ const YYMAXDEPTH: usize = 10000;
+
++/// Bound retained statement scratch to ordinary small attribute lists. Keys, values and
++/// HTML flags are cleared; unusually wide statements release their map normally.
++const MAX_CACHED_STATEMENT_ATTRS: usize = 16;
++
+ /// An atom as grammar.y's semantic values carry it: its text, and whether cgraph's
+ /// `aghtmlstr` is set on it (an HTML string, `<...>`, whose text is the inner part).
+ #[derive(Debug, Clone)]
+@@ -88,6 +92,9 @@ pub struct Parser<'a> {
+     /// Keys of a node or edge statement's attribute list in source order: cgraph declares
+     /// them in this order, which fixes their `sym->id`.
+     attr_order: Vec<String>,
++    /// C: lib/cgraph/grammar.y:optattr; endnode; endedge
++    /// Empty storage reused after applying one statement's attributes.
++    statement_attrs: AttrMap,
+     /// Every item of the last attribute list, repeats included, with its value and HTML
+     /// flag: `attrstmt` sets each one (`S->attrlist`).
+     attr_items: Vec<(String, String, bool)>,
+@@ -170,6 +177,7 @@ impl<'a> Parser<'a> {
+             globals: globals.clone(),
+             rbrace_line: 0,
+             attr_order: Vec::new(),
++            statement_attrs: AttrMap::new(),
+             attr_items: Vec::new(),
+             html_keys: std::collections::BTreeSet::new(),
+             anon_ctr: 1,
+@@ -664,7 +672,8 @@ impl<'a> Parser<'a> {
+     fn optattr(&mut self) -> Result<AttrMap> {
+         self.attr_order.clear();
+         self.html_keys.clear();
+-        let mut attrs = AttrMap::new();
++        let mut attrs = std::mem::take(&mut self.statement_attrs);
++        debug_assert!(attrs.is_empty());
+         self.reduce(0)?;
+         while self.peek().kind == TokenKind::LBracket {
+             self.attr_brackets(&mut attrs, false)?;
+@@ -697,6 +706,10 @@ impl<'a> Parser<'a> {
+             } else if !attrs.contains_key(key.as_ref()) {
+                 self.attr_order.push(key.to_string());
+             }
++            if !items && attrs.is_empty() {
++                // The first attribute is known now; an empty [] still allocates nothing.
++                attrs.reserve_small_exact(1);
++            }
+             attrs.set(&key, val.text.into_owned(), val.html);
+             if matches!(self.peek().kind, TokenKind::Comma | TokenKind::Semi) {
+                 self.shift()?;
+@@ -742,13 +755,18 @@ impl<'a> Parser<'a> {
+         for _ in 1..items.len() {
+             self.reduce(5)?;
+         }
+-        let attrs = self.optattr()?;
++        let mut attrs = self.optattr()?;
+         self.reduce(3)?;
+         if items.len() > 1 {
+             self.endedge(&items, &attrs);
+         } else {
+             self.endnode(&items[0], &attrs);
+         }
++        if attrs.len() <= MAX_CACHED_STATEMENT_ATTRS {
++            // retain clears values and HTML flags without releasing a small map's vector.
++            attrs.retain(|_, _| false);
++            self.statement_attrs = attrs;
++        }
+         Ok(Step::Done)
+     }
+
+@@ -940,6 +958,8 @@ impl<'a> Parser<'a> {
+             self.graph.anon_subgraph_ids.insert(id.0, local);
+         }
+         let is_cluster = name.to_ascii_lowercase().starts_with("cluster");
+-        let graph_attrs = self.current_graph_attrs().clone();
++        // Inherited graph attributes usually stay unchanged. Copy their known size;
++        // reserve output-field slack only on the writer's later ordinary clone.
++        let graph_attrs = self.current_graph_attrs().clone_compact();
+         let node_defaults = self.current_node_defaults().clone();
+         let edge_defaults = self.current_edge_defaults().clone();
