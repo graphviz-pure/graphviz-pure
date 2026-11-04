@@ -150,9 +150,9 @@ requests bumps the minor version; from 1.0 it bumps the major version. Without t
 release bumps the patch version
 ([versioning policy](versioning.md)).
 
-### Before a minor release
+### Fuzzing is out of band
 
-Decision D7 ([1.0 roadmap](roadmap/1.0.md#decisions)) requires a differential fuzz round against C before each minor, as in rounds 5 (#511, before 1.0.0) and 6 (#660, before 1.1.0): 6,000 new seeds over all eight engines, with every difference fixed or triaged into an accepted class and the round recorded in [fuzzing.md](porting/fuzzing.md). Run the differential fuzzer ([Running it](porting/fuzzing.md#running-it)), e.g. `python3 -I scripts/fuzz-run.py run --seed N --count 6000 --out ...` with unused seeds. The release workflow's `fuzz.yml` run does not satisfy this: it is coverage-guided robustness fuzzing with no C oracle. Patch releases need no new round: a patch does not change output for any input in the test corpora ([versioning policy](versioning.md)). This check is manual: `release-check.sh` does not run it.
+Owner's decision of 2026-11-04: fuzzing does not gate a release. Publishing needs the lint, test, build and smoke-test jobs only. `fuzz.yml` keeps running on its own schedule, and the differential rounds against C ([fuzzing.md](porting/fuzzing.md), e.g. `python3 -I scripts/fuzz-run.py run --seed N --count 6000 --out ...`) run separately, ideally before a minor release; a difference a round finds is fixed in a later release like any other bug. This replaces decision D7's per-minor round ([1.0 roadmap](roadmap/1.0.md#decisions)) as a release gate.
 
 ## What the release workflow does
 
@@ -237,14 +237,14 @@ digest).
 repository holds a long-lived credential for another: the dispatch uses a GitHub App token minted
 in the `github-release` job and discarded with it.
 
-`gh workflow run release.yml -f dry_run=true` builds, fuzzes, smoke-tests and attests everything,
+`gh workflow run release.yml -f dry_run=true` builds, smoke-tests and attests everything,
 the container image included, without publishing anything.
 
 ### One approval
 
 Through 0.1.2, the registries' jobs waited for the GitHub release, so a release took two approvals.
 One approval now starts all seven publishing jobs at once. The checks that used to sit between
-those approvals run first: the readiness checklist, fuzzing, and every smoke test. npm stages
+those approvals run first: the readiness checklist and every smoke test. npm stages
 in that same approval and waits separately for the owner's passkey approval on npmjs.com.
 A registry can publish even if the GitHub release fails,
 and nothing is left to stop between the GitHub release and the registries. Keep

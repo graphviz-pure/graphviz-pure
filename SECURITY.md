@@ -49,10 +49,10 @@ patch releases of the latest 1.x minor only; earlier minors are unsupported. Aft
 - CI runs on pull requests, merge-queue groups and pushes to `master` and some other branches;
   build and test jobs can reuse a successful result for identical inputs, but the supply-chain
   job always runs.
-- ClusterFuzzLite runs weekly on Monday at 04:41 UTC, on manual dispatch and as a release
-  gate, not on pull requests. Weekly runs always fuzz and refresh the retained corpus;
-  dispatches and releases can reuse a successful fuzzed-inputs marker. Fuzzing failures fail
-  the run; corpus-pruning failures warn and prevent a new marker, but do not fail the gate.
+- ClusterFuzzLite runs weekly on Monday at 04:41 UTC and on manual dispatch, not on pull
+  requests or as a release gate. Weekly runs always fuzz and refresh the retained corpus;
+  dispatches can reuse a successful fuzzed-inputs marker. Fuzzing failures fail the run;
+  corpus-pruning failures warn and prevent a new marker.
   A failed weekly run opens or updates an issue.
 
 ## Releases
@@ -61,7 +61,7 @@ A real release starts from the owner's workflow dispatch on `master`. `prepare` 
 `JSR_PUBLISH_ACTOR`, a mismatched actor or a bot before any publishing approval. The workflow
 prepares the version and changelog commit locally, then builds from it on GitHub-hosted runners without build
 caches, using a pinned Rust toolchain and locked Rust dependencies. Readiness checks, smoke
-tests, the `attest` job and the fuzzing gate must pass before the seven publishing jobs wait
+tests and the `attest` job must pass before the seven publishing jobs wait
 together for one approval of the `release` environment. A dry run builds and runs `attest`
 without requesting that environment or publishing. Publishing jobs run independently after
 approval; a registry can publish even if the GitHub release job fails. npm stages the tarball

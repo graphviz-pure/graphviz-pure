@@ -4,11 +4,10 @@ name: Fuzzing
 # (.clusterfuzzlite/): panics, hangs and running out of memory on crafted DOT. No C oracle; the
 # differential fuzzer against C Graphviz is separate (docs/porting/fuzzing.md).
 #
-# Fuzzing runs weekly, on a schedule, and before every release. The schedule keeps the corpus
-# alive (D7 in docs/roadmap/1.0.md): the corpus is an artifact of this workflow, kept for 90
-# days, so a gap of more than 90 days between releases loses it. release.yml calls this workflow
-# on the base commit (master at dispatch), and that call stays the release's gate; a person can
-# also dispatch it. It does not run on pull requests: a run takes over an hour, and the tests,
+# Fuzzing runs weekly, on a schedule. The schedule keeps the corpus alive (D7 in
+# docs/roadmap/1.0.md): the corpus is an artifact of this workflow, kept for 90 days. It does not
+# gate a release (owner's decision of 2026-11-04, docs/releasing.md); a person can also dispatch
+# it. It does not run on pull requests: a run takes over an hour, and the tests,
 # the C differential corpora and the compiler already gate every change, so fuzzing each pull
 # request (25 minutes a push, one crash in 141 runs) only slowed the agents fixing bugs.
 #
@@ -54,9 +53,8 @@ permissions:
 # Every run reads and writes the one corpus, so runs must never overlap: a run that wrote its
 # corpus while another pruned would undo the pruning. The group name is fixed (not derived from
 # ${{ github.workflow }}): in a called reusable workflow that name is the caller's, so the
-# release's fuzz run and this workflow's own runs would land in different groups and overlap
-# (#559). A fixed name serialises every fuzz run against the one corpus; a release's gate
-# therefore waits for a running weekly run.
+# caller's runs and this workflow's own runs would land in different groups and overlap (#559).
+# A fixed name serialises every fuzz run against the one corpus.
 concurrency:
   group: fuzz-corpus
   cancel-in-progress: false
