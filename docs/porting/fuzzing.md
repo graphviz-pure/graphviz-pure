@@ -196,6 +196,7 @@ Identity is the share of comparable cases (excluding `c_unstable`, `c_timeout` a
 | 4 | 30001–36000 | 6000 | 98.5 | 98.8 | 96.1 | 99.8 | 99.5 | 99.5 | 99.8 | 100 | 98.8 |
 | 5 | 40001–46000 | 6000 | 99.8 | 99.2 | 92.4 | 99.8 | 99.8 | 100 | 98.5 | 100 | 98.9 |
 | 6 | 46001–52000 | 6000 | 99.5 | 99.4 | 93.2 | 99.8 | 100 | 100 | 99.6 | 100 | 99.0 |
+| 7 | 52001–58000 | 6000 | 99.8 | 99.4 | 89.5 | 99.8 | 99.5 | 100 | 99.1 | 100 | 98.6 |
 
 Each round ran on the fixes from the rounds before it. Rounds 3, 4 and 5 also hit inputs
 that C crashes on (61, 55 and 82 cases), mostly `SIGSEGV` in dot with nodes in two
@@ -433,6 +434,74 @@ The port's bytes are unchanged by that declaration reordering, while C's polygon
 the aux abort, the small `p->p` graph matches C. This confirms the abort and declaration-order
 dependence. It does not confirm which aux attribute C's stale id reads, and other C builds were not
 checked.
+
+### Round 7 (before 1.1.0, #769)
+
+Round 7 ran 6,000 new seeds (`52001–58000`) on `origin/master` (`7908e787`) against the same
+Linux x86-64 C 16.1.0 setup as rounds 5 and 6 (`clang -O2 -mfma`, libc++, GTS, pango-free plugins
+and `graphviz-pure-portable-libm --features apple-libc`). The port used an x86-64-v3 release build
+and an overflow-checked v3 release build. The run used at most four workers, with C timeouts of 30
+seconds:
+
+| Engine | Cases | Comparable | Same | Same % | Same % (`-nan` → `nan`) | `svg_diff` | `exit_diff` | `c_unstable` | `c_timeout` | `c_crash` |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| dot | 1,785 | 1,749 | 1,745 | 99.77% | 99.89% | 4 | 0 | 0 | 7 | 29 |
+| neato | 809 | 800 | 795 | 99.38% | 99.62% | 5 | 0 | 0 | 1 | 8 |
+| fdp | 606 | 593 | 531 | 89.54% | 94.44% | 62 | 0 | 4 | 1 | 8 |
+| sfdp | 483 | 473 | 472 | 99.79% | 99.79% | 1 | 0 | 0 | 0 | 10 |
+| twopi | 601 | 598 | 595 | 99.50% | 99.67% | 3 | 0 | 2 | 0 | 1 |
+| circo | 574 | 562 | 562 | 100.00% | 100.00% | 0 | 0 | 6 | 6 | 0 |
+| osage | 555 | 551 | 546 | 99.09% | 99.82% | 5 | 0 | 0 | 0 | 4 |
+| patchwork | 587 | 587 | 587 | 100.00% | 100.00% | 0 | 0 | 0 | 0 | 0 |
+| **all** | **6,000** | **5,913** | **5,833** | **98.65%** | **99.29%** | **80** | **0** | **6** | **15** | **66** |
+
+There were **0** `exit_diff`, **0** `port_crash`, **0** `port_timeout` and **0** `debug_diff` cases.
+All 80 main-run `svg_diff` cases, all 6 initial `c_unstable` cases and the 7 `stderr_diff` notes
+(all attached to those cases) were triaged: **port bugs: 0**. Seed `53417` was C-unstable on repeated
+runs, leaving 79 accepted `svg_diff` cases and 7 C-unstable cases after triage:
+
+| Class | Cause | Cases | Seeds / notes |
+|---|---|---:|---|
+| Platform / libc | Linux x86-64 negative quiet NaN sign only; byte-identical after `-nan` → `nan` | 38 | dot (2): `57503`, `57793`; neato (2): `52314`, `54548`; fdp (29): `52964`, `53352`, `53687`, `53705`, `53956`, `54011`, `54199`, `54211`, `54449`, `54459`, `54781`, `54862`, `54880`, `55386`, `55681`, `55828`, `55867`, `56255`, `56372`, `56748`, `56775`, `56873`, `56892`, `56898`, `57076`, `57133`, `57474`, `57776`, `57959`; twopi (1): `54638`; osage (4): `52486`, `54196`, `56923`, `57677` |
+| C nondeterminism | fdp orders work by `Agnode_t *` heap address (`025-fdp-cluster-address-dependent-layout`, #34), as in round 6; 11 matched after changing glibc allocator settings. None of the other 21 matched under `libnodeheap` as generated, but every one matched SVG and stderr after minimisation, with clusters retained in all 21 | 32 | fdp: `52810`, `53049`, `53121`, `53127`, `53198`, `53231`, `53310`, `53466`, `53737`, `53739`, `53910`, `53970`, `54827`, `55107`, `55258`, `55272`, `55639`, `55853`, `55874`, `56009`, `56388`, `56494`, `56874`, `56910`, `56918`, `56980`, `57052`, `57323`, `57353`, `57897`, `57899`, `57941` |
+| C nondeterminism | Multispline routing depends on GTS's pointer-hash face order (#35), including which endpoint `Pshortestpath` reports outside the triangulation | 2 | twopi `52034`; sfdp `53596` |
+| C nondeterminism | VPSC pointer-address ties (#225); each case matches C with at least one allocator setting | 4 | neato `54054`, `55040`, `56810`; twopi `57554` (`overlap=vpsc` or `mode=ipsep`) |
+| C error path | dot's conflicting rank sets and nested clusters make C abandon `install_in_rank`; allocator changes lead C to segfault, while the port reports `build_skeleton: no rank leader` | 1 | dot `52370` |
+| C error path | dot `pack` with a node in two non-nested clusters lays components out on shared records (`036-dot-pack-node-in-two-clusters`, #101) | 1 | dot `56344`, minimised to 9 lines |
+| C undefined behaviour | `emit_background` frees the first background colour that a `style=wedged` node later reads (`037-dot-wedged-bgcolor-freed-fillcolor`, #584); the same C path occurs in osage | 1 | osage `55286`, minimised to `bgcolor="crimson:salmon:lightblue"` and one wedged node; a bump allocator makes C match the port |
+
+The 7 C-unstable cases after triage are fdp `52470`, `52666`, `53417`, `55346`, `55686` (#34),
+twopi `55622` (#35) and twopi `56847` (address-dependent arrows, #41). Seed `53417` was `svg_diff`
+in the main run, but one of C's two outputs matched the port, so it belongs here rather than in the
+NaN class. The 7 `stderr_diff` notes on seeds `52034`, `52370`, `52470`, `53417`, `53596`, `55622`
+and `56874` have the same accepted classes; there is no separate stderr-only port bug. Seed `53596`
+minimised to 9 lines: 50 C runs produced two SVG/stderr variants, and the port matched one variant
+exactly 7 times, with the triangulation warning appearing only in the other C variant. Seeds `53596`
+and `52034` also reproduce the 1.0.0 port's bytes, so these are not regressions from #706's pathplan
+shortcuts.
+
+The raw rate fell from 99.04% in round 6 to 98.65% mainly because fdp's differences rose from 41 to
+62: in the main-run grouping, NaN-sign cases rose from 16 to 30 and address-order cases from 25 to
+32. Triage then moved `53417` from that NaN group to C-unstable, leaving 29 final NaN-only fdp cases
+and excluding it from the normalized-match total.
+
+A separate large-graph campaign generated 92 cases aimed at this round's exact shortcuts: 40 dot
+mid-size network-simplex cases (#703: grids with large `minlen`, parallel chains, ladders, clusters,
+`nslimit`, `searchsize` and `group`), 12 circo repeated-node block-list cases (#699), 16 twopi
+packing cases (#725, including repeated pairs and all four packing modes), 12 `splines=true`
+visibility cases around node obstacles on both sides of the coordinate limit (#706), and 12 large
+named-subgraph parser cases (#752). With a 120-second C timeout, **all 86 / 86 comparable cases were
+byte-identical**, with no port timeouts, crashes or overflow-check differences. Three large-`minlen`
+dot grids timed out only in C. Three circo duplicate-list cases crashed C with allocator heap
+corruption (`malloc(): unaligned tcache chunk detected`), the known C `circpos.c` allocation defect
+documented in #699; they are not comparable.
+
+The random and targeted campaigns compare `-Tsvg` only. They do not cover #721's PNG scaling or
+#722's `-Tps`, and they cover #723's id changes only in SVG, not the other eight formats checked by
+that PR.
+
+As in round 6, these rates describe this run rather than a stable property across allocators. Every
+difference is in an accepted class, no new port issue was filed, and this round does not block 1.1.0.
 
 ### After all fixes
 
