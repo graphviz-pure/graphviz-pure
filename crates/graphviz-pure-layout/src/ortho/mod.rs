@@ -1102,6 +1102,7 @@ pub fn ortho_edges_of<S: OrthoGraph + ?Sized>(
                 clip_and_install_info(g, e, h, &ispline, sinfo);
             }
         }
+        Err(Fail::Stopped) => {}
         Err(fail) => {
             dump_fail("route", fail);
             let msg = match fail {
@@ -1121,6 +1122,7 @@ pub fn ortho_edges_of<S: OrthoGraph + ?Sized>(
                 | Fail::Trapezoidation { .. }
                 | Fail::NoFreeCell
                 | Fail::NoCell { .. }
+                | Fail::Stopped
                 | Fail::Broken(_) => "orthogonal routing failed",
             };
             // C crashes here (#186, #170 and the invariants it asserts or
@@ -1203,6 +1205,11 @@ fn route_edges<S: OrthoGraph + ?Sized>(
     let mut pq = Pq::new(o.mp.sg.nnodes + 2);
     let (sn, dn) = (gstart, gstart + 1);
     for &(_, e) in &es {
+        // Not in C: each shortest path counts the maze's nodes against the caller's
+        // `Limits::run`.
+        if graphviz_pure_core::limits::tick_by(o.mp.sg.nnodes as u64) {
+            return Err(Fail::Stopped);
+        }
         // `CELL(n)`: an end outside the maze has no cell (C reads garbage).
         let start = *node_cell.get(&g.tail(e)).need()?;
         let dest = *node_cell.get(&g.head(e)).need()?;

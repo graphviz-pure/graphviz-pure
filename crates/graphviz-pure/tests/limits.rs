@@ -291,3 +291,23 @@ fn a_long_minlen_chain_stops_while_it_is_built() {
     assert_eq!(err.limit(), Some(Limit::Steps));
     assert!(started.elapsed() < std::time::Duration::from_secs(20));
 }
+
+#[test]
+fn every_ortho_budget_ends_cleanly() {
+    let src = fixture("unix.gv").replacen('{', "{ splines=ortho;", 1);
+    let unlimited = graphviz_pure::render_dot(&src, "dot", "svg").unwrap();
+    let mut steps = 0u64;
+    loop {
+        match Limits::new()
+            .max_steps(steps)
+            .run(|| graphviz_pure::render_dot(&src, "dot", "svg"))
+        {
+            Ok(out) => {
+                assert_eq!(out.output(), unlimited.output(), "at {steps} steps");
+                break;
+            }
+            Err(e) => assert_eq!(e.limit(), Some(Limit::Steps), "at {steps}: {e}"),
+        }
+        steps += 1 + steps / 8;
+    }
+}

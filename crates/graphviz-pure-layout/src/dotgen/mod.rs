@@ -38,6 +38,13 @@ pub mod utils;
 use graphviz_pure_core::{Graph, GraphvizError, GraphvizErrorKind, Result};
 use types::*;
 
+/// Not in C: reads the limits of the caller's `Limits::run` now, at a phase boundary, and
+/// stops the layout with [`graphviz_pure_core::limits::STOPPED`] when one is reached (the
+/// library call returns the limit's own error).
+pub(crate) fn check_limits() -> std::result::Result<(), String> {
+    graphviz_pure_core::limits::check().map_err(|_| graphviz_pure_core::limits::STOPPED.to_string())
+}
+
 /// The prefix of a fatal error in the dotgen's message channel.
 ///
 /// The dotgen's errors are C's own messages, which the CLI reports as a layout error.
@@ -301,12 +308,15 @@ impl<'a> Dot<'a> {
         }
         self.dot_init_subg();
         self.dot_init_node_edge()?;
+        // Not in C: each phase starts with the limits of the caller's `Limits::run`.
+        check_limits()?;
         graphviz_pure_core::gv_info!("dotinit.c", 305, "Starting phase 1 [dot_rank]");
         self.dot_rank()?;
         self.gvdump("R");
         if maxphase == 1 {
             return Ok(());
         }
+        check_limits()?;
         graphviz_pure_core::gv_info!("dotinit.c", 311, "Starting phase 2 [dot_mincross]");
         if let Err(e) = self.dot_mincross() {
             if e == mincross::ABORT_LAYOUT {
@@ -319,6 +329,7 @@ impl<'a> Dot<'a> {
         if maxphase == 2 {
             return Ok(());
         }
+        check_limits()?;
         graphviz_pure_core::gv_info!("dotinit.c", 320, "Starting phase 3 [dot_position]");
         self.dot_position()?;
         if self.aborted {
@@ -332,6 +343,7 @@ impl<'a> Dot<'a> {
             self.remove_fill();
         }
         self.dot_sameports();
+        check_limits()?;
         if let Err(e) = self.dot_splines() {
             if e == mincross::ABORT_LAYOUT {
                 self.aborted = true;

@@ -109,6 +109,9 @@ impl Dot<'_> {
         if self.flat_edges(g)? {
             self.set_ycoords(g)?;
         }
+        // Not in C: the auxiliary graph and its network simplex start with the limits of
+        // the caller's `Limits::run`.
+        super::check_limits()?;
         self.create_aux_edges(g);
         if std::env::var_os("GVDUMP").is_some() {
             let nl = self.nlist_nodes(g);

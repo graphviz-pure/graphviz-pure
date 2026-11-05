@@ -51,6 +51,9 @@ pub enum Fail {
     NoChannel,
     /// Any other invariant C asserts or trusts: the port's source line.
     Broken(&'static Location<'static>),
+    /// Not in C: a limit of the caller's `Limits::run` stopped the routing. Nothing is
+    /// written; the library call returns the limit's error.
+    Stopped,
 }
 
 pub type OResult<T> = Result<T, Fail>;
