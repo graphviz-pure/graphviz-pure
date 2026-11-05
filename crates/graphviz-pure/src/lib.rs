@@ -19,6 +19,11 @@
 //! The command line prints that text itself. Read the drawing with [`Rendered::into_output`]
 //! or [`Rendered::output`], and lay a parsed graph out through [`Rendered::output_mut`].
 //!
+//! [`Limits::run`] caps the input size, graph size, time, work and memory of the calls inside
+//! it, and cancels them through a [`CancelToken`]. Outside it nothing is limited. A limited
+//! call returns its whole output, the bytes an unlimited call returns, or an error of kind
+//! [`GraphvizErrorKind::LimitExceeded`] or [`GraphvizErrorKind::Cancelled`].
+//!
 //! ```
 //! let mut parsed = graphviz_pure::parse_dot("digraph { a -> b }").unwrap();
 //! graphviz_pure::layout_graph(parsed.output_mut(), graphviz_pure::LayoutEngine::Dot).unwrap();
@@ -30,6 +35,7 @@
 
 use std::borrow::Cow;
 
+pub use graphviz_pure_core::limits::{CancelToken, Limit, Limits};
 pub use graphviz_pure_core::{
     Diagnostic, DiagnosticLevel, GraphvizError, GraphvizErrorKind, Rendered, Result, charset,
 };
@@ -39,6 +45,7 @@ pub use graphviz_pure_render::OutputFormat;
 
 use graphviz_pure_core::charset::Decoded;
 use graphviz_pure_core::diag;
+use graphviz_pure_core::limits;
 use graphviz_pure_render::decoded;
 
 /// A parsed graph. It has no public fields: parse it, lay it out and render it. Its
@@ -67,7 +74,7 @@ impl Graph {
 /// assert!(svg.contains("<svg"));
 /// ```
 pub fn render_dot(dot_source: &str, engine: &str, format: &str) -> Result<Rendered<String>> {
-    finish(diag::capture(|| {
+    call(Some(dot_source), || {
         decoded::render_dot(
             &Decoded::from_text(dot_source),
             &charset::from_text(engine),
@@ -75,7 +82,7 @@ pub fn render_dot(dot_source: &str, engine: &str, format: &str) -> Result<Render
         )
         .map(text)
         .map_err(error_text)
-    }))
+    })
 }
 
 /// Renders every graph in `dot_source`, applying `globals` (`-G`/`-N`/`-E`) before each graph body.
@@ -102,7 +109,7 @@ pub fn render_dot_all_with_options(
     globals: &GlobalAttrs,
     options: LayoutOptions,
 ) -> Result<Rendered<Vec<String>>> {
-    finish(diag::capture(|| {
+    call(Some(dot_source), || {
         decoded::render_dot_all_with_options(
             &Decoded::from_text(dot_source),
             &charset::from_text(engine),
@@ -112,7 +119,7 @@ pub fn render_dot_all_with_options(
         )
         .map(|outs| outs.into_iter().map(text).collect())
         .map_err(error_text)
-    }))
+    })
 }
 
 /// [`render_dot_all_with_options`] that renders the graphs read before a syntax error
@@ -125,6 +132,9 @@ pub fn render_dot_all_partial(
     options: LayoutOptions,
 ) -> (Rendered<Vec<String>>, Option<GraphvizError>) {
     let ((outs, err), diagnostics) = diag::capture(|| {
+        if let Err(e) = entry(Some(dot_source)) {
+            return (Vec::new(), Some(e));
+        }
         let (outs, err) = decoded::render_dot_all_partial(
             &Decoded::from_text(dot_source),
             &charset::from_text(engine),
@@ -134,7 +144,7 @@ pub fn render_dot_all_partial(
         );
         (outs.into_iter().map(text).collect(), err.map(error_text))
     });
-    partial(outs, err, diagnostics)
+    partial(outs, limits::error().or(err), diagnostics)
 }
 
 /// Lays out and renders every graph in `dot_source` as SVG, for raster output: each SVG comes
@@ -148,6 +158,9 @@ pub fn render_svg_all_partial(
     options: LayoutOptions,
 ) -> (Rendered<Vec<(String, bool)>>, Option<GraphvizError>) {
     let ((outs, err), diagnostics) = diag::capture(|| {
+        if let Err(e) = entry(Some(dot_source)) {
+            return (Vec::new(), Some(e));
+        }
         let (outs, err) = decoded::render_svg_all_partial(
             &Decoded::from_text(dot_source),
             &charset::from_text(engine),
@@ -160,32 +173,32 @@ pub fn render_svg_all_partial(
             .collect();
         (outs, err.map(error_text))
     });
-    partial(outs, err, diagnostics)
+    partial(outs, limits::error().or(err), diagnostics)
 }
 
 /// Parses the first graph in `dot_source`.
 pub fn parse_dot(dot_source: &str) -> Result<Rendered<Graph>> {
-    finish(diag::capture(|| {
+    call(Some(dot_source), || {
         decoded::parse_dot(&Decoded::from_text(dot_source))
             .map(Graph::from_inner)
             .map_err(error_text)
-    }))
+    })
 }
 
 /// Parses every graph in `dot_source`, applying `globals` before each graph body.
 pub fn parse_dot_all(dot_source: &str, globals: &GlobalAttrs) -> Result<Rendered<Vec<Graph>>> {
-    finish(diag::capture(|| {
+    call(Some(dot_source), || {
         decoded::parse_dot_all(&Decoded::from_text(dot_source), &globals_from_text(globals))
             .map(|graphs| graphs.into_iter().map(Graph::from_inner).collect())
             .map_err(error_text)
-    }))
+    })
 }
 
 /// Lays `graph` out with `engine`.
 pub fn layout_graph(graph: &mut Graph, engine: LayoutEngine) -> Result<Rendered<()>> {
-    finish(diag::capture(|| {
+    call(None, || {
         graphviz_pure_layout::layout_graph(&mut graph.inner, engine).map_err(error_text)
-    }))
+    })
 }
 
 /// [`layout_graph`] with engine options such as `-n` (keep input positions).
@@ -194,10 +207,10 @@ pub fn layout_graph_with_options(
     engine: LayoutEngine,
     options: LayoutOptions,
 ) -> Result<Rendered<()>> {
-    finish(diag::capture(|| {
+    call(None, || {
         graphviz_pure_layout::layout_graph_with_options(&mut graph.inner, engine, options)
             .map_err(error_text)
-    }))
+    })
 }
 
 /// [`layout_graph_with_options`] inside a run of several layouts, which share the generator
@@ -207,19 +220,19 @@ pub fn layout_graph_in_run(
     engine: LayoutEngine,
     options: &mut LayoutOptions,
 ) -> Result<Rendered<()>> {
-    finish(diag::capture(|| {
+    call(None, || {
         graphviz_pure_layout::layout_graph_in_run(&mut graph.inner, engine, options)
             .map_err(error_text)
-    }))
+    })
 }
 
 /// Renders a laid-out graph in `format`.
 pub fn render_graph(graph: &Graph, format: OutputFormat) -> Result<Rendered<String>> {
-    finish(diag::capture(|| {
+    call(None, || {
         graphviz_pure_render::render_graph(&graph.inner, format)
             .map(text)
             .map_err(error_text)
-    }))
+    })
 }
 
 /// [`render_graph`] for the format named `name` (an alias such as `gv` for `dot`), which the
@@ -229,11 +242,30 @@ pub fn render_graph_named(
     format: OutputFormat,
     name: &str,
 ) -> Result<Rendered<String>> {
-    finish(diag::capture(|| {
+    call(None, || {
         graphviz_pure_render::render_graph_named(&graph.inner, format, &charset::from_text(name))
             .map(text)
             .map_err(error_text)
+    })
+}
+
+/// One library call: its diagnostics captured, and the limits of the enclosing
+/// [`Limits::run`] applied to it.
+fn call<T>(input: Option<&str>, f: impl FnOnce() -> Result<T>) -> Result<Rendered<T>> {
+    finish(diag::capture(|| {
+        entry(input)?;
+        limits::settle(f())
     }))
+}
+
+/// The checks at the start of a limited call: a limit already reached in the
+/// [`Limits::run`], and the input's length.
+fn entry(input: Option<&str>) -> Result<()> {
+    limits::check()?;
+    if let Some(src) = input {
+        limits::check_input_bytes(src.len())?;
+    }
+    Ok(())
 }
 
 /// `globals` in decoded form.

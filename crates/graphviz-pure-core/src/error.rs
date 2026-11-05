@@ -1,11 +1,13 @@
 use std::fmt;
 
+use crate::limits::Limit;
+
 /// An error from parsing, laying out, or rendering a graph.
 ///
 /// The struct is opaque: it has no public fields, so a later release can attach
 /// diagnostics without a breaking change. Read it with [`Self::kind`],
-/// [`Self::message`], [`Self::line`], [`Self::column`], [`Self::file`] and
-/// [`Self::engine`]. [`GraphvizErrorKind`] is non-exhaustive, so a new kind is a
+/// [`Self::message`], [`Self::line`], [`Self::column`], [`Self::file`],
+/// [`Self::engine`] and [`Self::limit`]. [`GraphvizErrorKind`] is non-exhaustive, so a new kind is a
 /// minor change. Match it with a wildcard.
 ///
 /// [`Self::message`] is the detail. [`std::fmt::Display`] adds a category prefix
@@ -36,6 +38,8 @@ pub struct GraphvizError {
     column: Option<u32>,
     /// The file a `# N "file"` line directive named, for a syntax error.
     file: Option<String>,
+    /// The limit reached, only for [`GraphvizErrorKind::LimitExceeded`].
+    limit: Option<Limit>,
     /// `agerr` messages collected for the failed call. Absent until a call attaches
     /// some, so the error stays small enough to return.
     diagnostics: Option<Box<Diagnostics>>,
@@ -68,6 +72,12 @@ pub enum GraphvizErrorKind {
     /// message with `fprintf(stderr, ...)` and exits, and the port stops the run with
     /// it.
     Allocation,
+    /// A limit set with [`Limits`](crate::limits::Limits) was reached.
+    /// [`GraphvizError::limit`] says which. Not in C.
+    LimitExceeded,
+    /// The call was cancelled through a [`CancelToken`](crate::limits::CancelToken) or a
+    /// `cancel_when` closure of its [`Limits`](crate::limits::Limits). Not in C.
+    Cancelled,
 }
 
 /// How serious a [`Diagnostic`] is.
@@ -192,6 +202,7 @@ impl GraphvizError {
             line: None,
             column: None,
             file: None,
+            limit: None,
             diagnostics: None,
         }
     }
@@ -214,6 +225,7 @@ impl GraphvizError {
             line: Some(line),
             column: u32::try_from(column).ok(),
             file,
+            limit: None,
             diagnostics: None,
         }
     }
@@ -257,6 +269,22 @@ impl GraphvizError {
     /// C writes it.
     pub fn allocation(message: impl Into<String>) -> Self {
         Self::plain(GraphvizErrorKind::Allocation, message.into())
+    }
+
+    /// `Limit exceeded: {message}`: `limit` was reached. [`Self::limit`] is `limit`.
+    pub fn limit_exceeded(limit: Limit, message: impl Into<String>) -> Self {
+        let mut err = Self::plain(GraphvizErrorKind::LimitExceeded, message.into());
+        err.limit = Some(limit);
+        err
+    }
+
+    /// `Cancelled: the call was cancelled`.
+    #[must_use]
+    pub fn cancelled() -> Self {
+        Self::plain(
+            GraphvizErrorKind::Cancelled,
+            "the call was cancelled".into(),
+        )
     }
 
     /// The kind of failure.
@@ -303,6 +331,13 @@ impl GraphvizError {
     #[must_use]
     pub fn engine(&self) -> Option<&str> {
         self.engine
+    }
+
+    /// The limit that was reached, for a [`GraphvizErrorKind::LimitExceeded`] error. Any
+    /// other kind returns `None`.
+    #[must_use]
+    pub fn limit(&self) -> Option<Limit> {
+        self.limit
     }
 
     /// `agerr` messages emitted before and around this failure, in order.
@@ -367,6 +402,7 @@ impl PartialEq for GraphvizError {
             && self.line == other.line
             && self.column == other.column
             && self.file == other.file
+            && self.limit == other.limit
     }
 }
 
@@ -401,6 +437,8 @@ impl fmt::Display for GraphvizError {
             GraphvizErrorKind::Render => write!(f, "Rendering error: {}", self.detail),
             // C writes this message with `fprintf(stderr, ...)`, with no prefix.
             GraphvizErrorKind::Allocation => f.write_str(&self.detail),
+            GraphvizErrorKind::LimitExceeded => write!(f, "Limit exceeded: {}", self.detail),
+            GraphvizErrorKind::Cancelled => write!(f, "Cancelled: {}", self.detail),
         }
     }
 }
@@ -502,6 +540,24 @@ mod tests {
         assert_eq!(render.message(), "encoding the PNG: no");
         assert_eq!(render.to_string(), "Rendering error: encoding the PNG: no");
         assert!(std::error::Error::source(&render).is_none());
+
+        let limit = GraphvizError::limit_exceeded(Limit::Nodes, "the graph has more than 2 nodes");
+        assert_eq!(limit.kind(), GraphvizErrorKind::LimitExceeded);
+        assert_eq!(limit.limit(), Some(Limit::Nodes));
+        assert_eq!(limit.message(), "the graph has more than 2 nodes");
+        assert_eq!(
+            limit.to_string(),
+            "Limit exceeded: the graph has more than 2 nodes"
+        );
+        assert_ne!(
+            limit,
+            GraphvizError::limit_exceeded(Limit::Edges, "the graph has more than 2 nodes")
+        );
+
+        let cancelled = GraphvizError::cancelled();
+        assert_eq!(cancelled.kind(), GraphvizErrorKind::Cancelled);
+        assert_eq!(cancelled.limit(), None);
+        assert_eq!(cancelled.to_string(), "Cancelled: the call was cancelled");
 
         let plain = GraphvizError::syntax(1, 1, "syntax error in line 1 near ';'", None);
         assert!(plain.diagnostics().is_empty());
