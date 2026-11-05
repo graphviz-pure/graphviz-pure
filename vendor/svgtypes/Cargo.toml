@@ -14,9 +14,8 @@
 [package]
 edition = "2024"
 rust-version = "1.85"
-name = "svgtypes"
-version = "0.16.1"
-publish = false
+name = "graphviz-pure-svgtypes"
+version = "1.2.0"
 build = false
 exclude = [
     ".github",
@@ -32,7 +31,7 @@ autobins = false
 autoexamples = false
 autotests = false
 autobenches = false
-description = "SVG types parser."
+description = "Upstream svgtypes 0.16.1 with portable libm math for graphviz-pure."
 readme = "README.md"
 keywords = [
     "svg",
@@ -53,7 +52,9 @@ name = "svgtypes"
 path = "src/lib.rs"
 
 [dependencies.kurbo]
-version = "0.13"
+version = "=1.2.0"
+package = "graphviz-pure-kurbo"
+path = "../kurbo"
 default-features = false
 
 [dependencies.siphasher]

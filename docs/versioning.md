@@ -32,8 +32,8 @@ one release version, set in `[workspace.package]` in `Cargo.toml`, `web/package.
   `ps2`, `svgz`, `tk`) and the cairo, gd and terminal formats (`pdf`, `gif`, `vt`, `kitty`, …).
 - **Output.** Because the project exists to reproduce Graphviz's output exactly, every change
   to the bytes the port writes for an existing input is listed in the changelog, whatever its
-  size. Except for the [crates.io raster exception](#cratesio-raster-exception), every build
-  computes with the same math library, so the bytes are the same on every platform.
+  size. Every build, including a crates.io source build, computes with the same math library,
+  so the bytes are the same on every platform.
 
 ## Release channels
 
@@ -43,14 +43,14 @@ The [release workflow](../.github/workflows/release.yml) publishes the channels 
 | channel | what the version means |
 | :--- | :--- |
 | GitHub releases | `vX.Y.Z` identifies the release; its native and WASI archives carry `X.Y.Z` in their names. |
-| crates.io | `X.Y.Z` versions the stable Rust API of the facade (`graphviz-pure`) and `graphviz-pure-raster`, and the CLI in `graphviz-pure-cli`. The facade pins its implementation crates with exact `=` requirements; those crates have no semver promise. |
+| crates.io | `X.Y.Z` versions the stable Rust API of the facade (`graphviz-pure`) and `graphviz-pure-raster`, and the CLI in `graphviz-pure-cli`. The facade pins its implementation crates with exact `=` requirements; those crates have no semver promise. The eight prefixed rendering forks are implementation dependencies with no graphviz-pure API promise; they share the graphviz-pure release version, and each description names its upstream version. |
 | npm and JSR `@graphviz-pure/wasm` | `X.Y.Z` versions the JavaScript API and its output on both registries. JSR publishes the files from the npm tarball. |
 | PyPI `graphviz-pure` wheels | The bundled CLI's release version, mapped to PEP 440: stable `X.Y.Z` stays `X.Y.Z`; accepted pre-release suffixes `-alpha.N`, `-beta.N` and `-rc.N` become `aN`, `bN` and `rcN`, respectively (for example, `0.3.0-rc.1` becomes `0.3.0rc1`; [releasing.md](releasing.md)). |
 | Wasmer `graphviz-pure/graphviz-pure` and WASI archives | The release version of the WASI CLI module. Wasmer packages the module from the `wasm32-wasip1` release archive and publishes stable versions only. Publishing is skipped if `WASMER_TOKEN` is unset during initial setup; after setup, a missing token for a new version fails the job. Other WASI runtimes can use the archive directly. |
 | ghcr.io `graphviz-pure/graphviz-pure` | `X.Y.Z` identifies the CLI image for that release. `X.Y` follows the highest stable `X.Y.*` image version, and `latest` follows the highest stable image version across all majors. Pre-releases get only their full version tag. The workflow does not push an `X` tag (for example, `:1`). |
 | Homebrew tap `graphviz-pure/homebrew-tap` | The formula pins the CLI release version, archive URLs and SHA-256 checksums. Install with `brew install graphviz-pure/tap/graphviz-pure`. |
 | Scoop bucket `graphviz-pure/scoop-bucket` | The manifest pins the CLI release version, archive URLs and SHA-256 checksums. Run `scoop bucket add graphviz-pure https://github.com/graphviz-pure/scoop-bucket`, then `scoop install graphviz-pure/graphviz-pure`. |
-| cargo-binstall | The `graphviz-pure-cli` crate version selects the matching GitHub release archive; a source-build fallback has the crates.io raster exception below. |
+| cargo-binstall | The `graphviz-pure-cli` crate version selects the matching GitHub release archive; its source-build fallback uses the same portable raster math as the archive. |
 
 All CLI distributions above carry the same CLI and are covered by the command-line and output
 promises, including the `-V` line's shape. The Homebrew tap and Scoop bucket updates are
@@ -105,18 +105,11 @@ every platform (`graphviz_pure_core::math`), and is compared with C running thos
   C on macOS calls Apple's libm, and differs from the port on the inputs that
   `gv-diff e2e --stock` lists as libm-only.
 - SVG and layout outputs always use portable math, including in crates.io source builds.
-
-### crates.io raster exception
-
-Crates.io source builds (`cargo install graphviz-pure-cli`, or depending on
-`graphviz-pure-raster` from crates.io) do not inherit the workspace's `[patch.crates-io]`
-overrides for the vendored `kurbo`, `skrifa`, `svgtypes`, `tiny-skia` and `tiny-skia-path`.
-Their raster dependencies may therefore use the platform libm, so `-Tpng`/`-Tjpg` pixels can
-differ across platforms and from the release binaries. SVG and layout outputs are
-unaffected. Builds from this workspace, including the published binaries and WebAssembly,
-use the vendored overrides. This exception is accepted for 1.0 by
-[decision D11](roadmap/1.0.md#decisions); fixing it is planned for 1.x
-([#529](https://github.com/graphviz-pure/graphviz-pure/issues/529)).
+- PNG and JPEG output uses the same portable math in every build too. The five math-patched
+  raster crates and the resvg/usvg forwarding forks are published under `graphviz-pure-`
+  prefixes, so crates.io dependencies select them directly without workspace patches.
+  `graphviz-pure-svg2pdf` likewise gives crates.io source builds deterministic PDF resource
+  ordering; its older path-only usvg stack stays upstream ([vendor/README.md](../vendor/README.md), #712).
 
 ## Making a release
 

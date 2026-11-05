@@ -34,7 +34,6 @@ extern crate std;
 
 extern crate alloc;
 
-mod portable_math;
 mod alpha_runs;
 mod blend_mode;
 mod blitter;
@@ -51,6 +50,7 @@ mod path64;
 mod path_geometry;
 mod pipeline;
 mod pixmap;
+mod portable_math;
 mod scan;
 mod shaders;
 mod wide;

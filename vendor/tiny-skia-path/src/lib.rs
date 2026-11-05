@@ -35,7 +35,6 @@ extern crate std;
 
 extern crate alloc;
 
-mod portable_math;
 mod dash;
 mod f32x2_t;
 mod f32x4_t;
@@ -43,6 +42,7 @@ mod floating_point;
 mod path;
 mod path_builder;
 pub mod path_geometry;
+mod portable_math;
 mod rect;
 mod scalar;
 mod size;

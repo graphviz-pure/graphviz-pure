@@ -117,7 +117,6 @@ use libm as _;
 
 extern crate alloc;
 
-mod portable_math;
 mod affine;
 mod arc;
 mod axis;
@@ -135,6 +134,7 @@ mod moments;
 pub mod offset;
 mod param_curve;
 mod point;
+mod portable_math;
 mod quadbez;
 mod quadspline;
 mod rect;

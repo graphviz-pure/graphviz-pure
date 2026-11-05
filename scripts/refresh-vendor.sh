@@ -5,9 +5,10 @@
 #   scripts/refresh-vendor.sh --check         # fail if that result differs
 #   scripts/refresh-vendor.sh --save-patches  # write the patches from the current vendor/
 #
-# The pins are the versions below. A file trim (examples, benches, tests, docs,
-# lockfiles) is applied before the patch. Patches record portable math and PDF
-# resource ordering changes. Licences stay. vendor/README.md is not touched.
+# The pins are the upstream versions below. A file trim (examples, benches, tests,
+# docs, binaries, lockfiles) is applied before the patch. The patches contain portable
+# math, PDF resource ordering and graphviz-pure-prefixed packaging metadata. Upstream
+# licences stay. vendor/README.md and the nested vendor workspace files are not touched.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -19,14 +20,16 @@ crates=(
   "svgtypes 0.16.1"
   "skrifa 0.44.0"
   "svg2pdf 0.13.0"
+  "resvg 0.48.1"
+  "usvg 0.48.1"
 )
 
 trim_crate() {
   local dir=$1
-  rm -rf "$dir/examples" "$dir/benches" "$dir/tests" "$dir/.github" "$dir/.cargo" "$dir/scripts"
+  rm -rf "$dir/examples" "$dir/benches" "$dir/tests" "$dir/docs" "$dir/.github" "$dir/.cargo" "$dir/scripts"
   rm -f "$dir/Cargo.lock" "$dir/Cargo.toml.orig" "$dir/.cargo_vcs_info.json" "$dir/.cargo-ok" \
     "$dir/.gitignore" "$dir/.typos.toml" "$dir/.taplo.toml" "$dir/README.md" \
-    "$dir/CHANGELOG.md" "$dir/AUTHORS"
+    "$dir/CHANGELOG.md" "$dir/AUTHORS" "$dir/src/main.rs"
   python3 - "$dir/Cargo.toml" << 'PY'
 import sys
 path = sys.argv[1]
@@ -34,7 +37,8 @@ text = open(path, encoding="utf-8").read()
 
 def skip_header(line):
     return (
-        line.startswith("[[example]]")
+        line.startswith("[[bin]]")
+        or line.startswith("[[example]]")
         or line.startswith("[[bench]]")
         or line.startswith("[[test]]")
         or line.startswith("[dev-dependencies")

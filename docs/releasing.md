@@ -120,8 +120,9 @@ This is an internal packaging contract, not a supported configuration setting.
 A pull request with no entry: add one to its body (`Not user-visible.` when there is nothing to say). An entry marked breaking without the label: label it, or unmark the entry.
 
 `scripts/release-verify.sh X.Y.Z` checks, and prints pass or fail for, each channel: the GitHub
-release's assets against their attestations and `SHA256SUMS`; the eight publishable crates on
-crates.io (`graphviz-pure-wasm`, `-diff` and `-portable-libm` have `publish = false`), and the
+release's assets against their attestations and `SHA256SUMS`; the eight main crates and eight
+prefixed rendering forks, all at the release version, on crates.io
+(`graphviz-pure-wasm`, `-diff` and `-portable-libm` have `publish = false`), and the
 published `graphviz-pure-cli`'s cargo-binstall metadata against the release's archives (and, in
 the `verify` job, a pinned cargo-binstall's dry run of every target); JSR's
 `meta.json`; the Wasmer package, which must contain the module of the release's attested WASI
@@ -176,9 +177,10 @@ toolchain and `cargo build --locked`:
   attests the six wheels (they go to PyPI only, not to the GitHub release). The macOS wheels'
   tags carry the binaries' minimum OS version, read from their Mach-O headers;
 - it checks that every archive and the npm tarball (and so the JSR package) carry LICENSE,
-  NOTICE, THIRD-PARTY-LICENSES.md and LICENSES/, and every crate LICENSE and NOTICE
-  (`scripts/check-package-notices.py`, `scripts/check-crate-notices.sh`; CI runs the same
-  checks on every change; the crates' directories hold copies that must match the root files);
+  NOTICE, THIRD-PARTY-LICENSES.md and LICENSES/, and every crate its required licence and
+  attribution files (`scripts/check-package-notices.py`, `scripts/check-crate-notices.sh`;
+  CI runs the same checks on every change; main crates carry the root LICENSE and NOTICE,
+  while raster forks carry their upstream licences and attribution READMEs);
 - it builds the container image for linux/amd64 and linux/arm64 from the musl archives (both x86-64 variants and arm64)
   (`scripts/release-image.sh`, no second compile; with the same BuildKit, commit time and
   revision, the same archives give the same digest) and runs the version check and the gallery
@@ -195,8 +197,9 @@ environment, and each publishes on its own:
 - `github-release` creates the GitHub release with all files. A version with a pre-release
   suffix (`-alpha.N`, `-beta.N` or `-rc.N`) is marked as a GitHub pre-release, so it is not
   the repository's latest release;
-- `crates-io` publishes the eight crates to crates.io (trusted publishing,
-  `cargo publish --workspace`, leaving out any crate whose version is already there);
+- `crates-io` publishes the eight prefixed rendering forks from `vendor/Cargo.toml` before the
+  eight main crates (trusted publishing, two `cargo publish --workspace` invocations, leaving
+  out any name/version already there);
 - `npm` stages `@graphviz-pure/wasm` (`npm stage publish --access public`). The trusted
   publisher allows staging only. The owner reviews the Staged Packages tab on npmjs.com and
   approves with a passkey before the version goes live. OIDC automatically generates provenance;
@@ -360,10 +363,17 @@ once with placeholder releases:
 1. Log in to crates.io with GitHub; verify your email address.
 2. Account settings → API tokens → new token, scope **publish-new**, crates `graphviz-pure*`,
    expiry 1 day. Run `cargo login` and paste it there (not in chat).
-3. `scripts/reserve-crates.sh` publishes `0.0.0` placeholders of the eight crate names.
-4. For each crate: Settings → Trusted Publishing → add GitHub: owner `graphviz-pure`,
-   repository `graphviz-pure`, workflow `release.yml`, environment `release`. Then enable
-   **"Require trusted publishing"** for the crate.
+3. `scripts/reserve-crates.sh` publishes `0.0.0` placeholders of any missing crate names.
+   Existing names are skipped. In addition to the eight main names, reserve these eight rendering
+   forks: `graphviz-pure-tiny-skia`, `graphviz-pure-tiny-skia-path`, `graphviz-pure-kurbo`,
+   `graphviz-pure-svgtypes`, `graphviz-pure-skrifa`, `graphviz-pure-resvg`,
+   `graphviz-pure-usvg` and `graphviz-pure-svg2pdf`. resvg/usvg route dependency entries through
+   the five portable-math forks; svg2pdf carries the deterministic PDF resource-ordering patch.
+   Its older path-only usvg stack stays upstream and needs no fork.
+4. For each of those eight new names: open the crate's Settings → Trusted Publishing → add
+   GitHub with owner `graphviz-pure`, repository `graphviz-pure`, workflow `release.yml`,
+   environment `release`. Save, then enable **"Require trusted publishing"** for that crate.
+   Repeat for all eight. The eight main crates already use the same settings.
 5. Delete the API token; `cargo logout`.
 
 ### npm (organization `graphviz-pure`)

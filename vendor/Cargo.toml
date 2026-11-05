@@ -1,0 +1,12 @@
+[workspace]
+resolver = "2"
+members = [
+    "tiny-skia-path",
+    "kurbo",
+    "skrifa",
+    "svgtypes",
+    "tiny-skia",
+    "usvg",
+    "resvg",
+    "svg2pdf",
+]

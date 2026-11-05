@@ -34,13 +34,20 @@ Graphviz, the bundled fonts and the other third-party material in the repository
 | [float-cmp](https://crates.io/crates/float-cmp) | 0.9.0 | MIT |
 | [font-types](https://crates.io/crates/font-types) | 0.12.7 | MIT OR Apache-2.0 |
 | [fontdb](https://crates.io/crates/fontdb) | 0.24.0 | MIT |
+| [graphviz-pure-kurbo](https://crates.io/crates/graphviz-pure-kurbo) | 1.2.0 | Apache-2.0 OR MIT |
+| [graphviz-pure-resvg](https://crates.io/crates/graphviz-pure-resvg) | 1.2.0 | Apache-2.0 OR MIT |
+| [graphviz-pure-skrifa](https://crates.io/crates/graphviz-pure-skrifa) | 1.2.0 | MIT OR Apache-2.0 |
+| [graphviz-pure-svg2pdf](https://crates.io/crates/graphviz-pure-svg2pdf) | 1.2.0 | MIT OR Apache-2.0 |
+| [graphviz-pure-svgtypes](https://crates.io/crates/graphviz-pure-svgtypes) | 1.2.0 | Apache-2.0 OR MIT |
+| [graphviz-pure-tiny-skia](https://crates.io/crates/graphviz-pure-tiny-skia) | 1.2.0 | BSD-3-Clause |
+| [graphviz-pure-tiny-skia-path](https://crates.io/crates/graphviz-pure-tiny-skia-path) | 1.2.0 | BSD-3-Clause |
+| [graphviz-pure-usvg](https://crates.io/crates/graphviz-pure-usvg) | 1.2.0 | Apache-2.0 OR MIT |
 | [harfrust](https://crates.io/crates/harfrust) | 0.12.0 | MIT |
 | [imagesize](https://crates.io/crates/imagesize) | 0.13.0 | MIT |
 | [imagesize](https://crates.io/crates/imagesize) | 0.15.0 | MIT |
 | [itoa](https://crates.io/crates/itoa) | 1.0.18 | MIT OR Apache-2.0 |
 | [jpeg-encoder](https://crates.io/crates/jpeg-encoder) | 0.7.1 | (MIT OR Apache-2.0) AND IJG |
 | [kurbo](https://crates.io/crates/kurbo) | 0.11.3 | Apache-2.0 OR MIT |
-| [kurbo](https://crates.io/crates/kurbo) | 0.13.1 | Apache-2.0 OR MIT |
 | [libm](https://crates.io/crates/libm) | 0.2.16 | MIT |
 | [log](https://crates.io/crates/log) | 0.4.34 | MIT OR Apache-2.0 |
 | [memchr](https://crates.io/crates/memchr) | 2.8.3 | Unlicense OR MIT |
@@ -54,10 +61,9 @@ Graphviz, the bundled fonts and the other third-party material in the repository
 | [proc-macro2](https://crates.io/crates/proc-macro2) | 1.0.107 | MIT OR Apache-2.0 |
 | [quote](https://crates.io/crates/quote) | 1.0.47 | MIT OR Apache-2.0 |
 | [read-fonts](https://crates.io/crates/read-fonts) | 0.41.0 | MIT OR Apache-2.0 |
-| [resvg](https://crates.io/crates/resvg) | 0.49.0 | Apache-2.0 OR MIT |
 | [rgb](https://crates.io/crates/rgb) | 0.8.53 | MIT |
 | [roxmltree](https://crates.io/crates/roxmltree) | 0.20.0 | MIT OR Apache-2.0 |
-| [roxmltree](https://crates.io/crates/roxmltree) | 0.21.2 | MIT OR Apache-2.0 |
+| [roxmltree](https://crates.io/crates/roxmltree) | 0.21.1 | MIT OR Apache-2.0 |
 | [ryu](https://crates.io/crates/ryu) | 1.0.23 | Apache-2.0 OR BSL-1.0 |
 | [serde](https://crates.io/crates/serde) | 1.0.229 | MIT OR Apache-2.0 |
 | [serde_core](https://crates.io/crates/serde_core) | 1.0.229 | MIT OR Apache-2.0 |
@@ -66,24 +72,18 @@ Graphviz, the bundled fonts and the other third-party material in the repository
 | [simd-adler32](https://crates.io/crates/simd-adler32) | 0.3.10 | MIT |
 | [simplecss](https://crates.io/crates/simplecss) | 0.2.2 | Apache-2.0 OR MIT |
 | [siphasher](https://crates.io/crates/siphasher) | 1.0.4 | MIT OR Apache-2.0 |
-| [skrifa](https://crates.io/crates/skrifa) | 0.44.0 | MIT OR Apache-2.0 |
 | [slotmap](https://crates.io/crates/slotmap) | 1.1.1 | Zlib |
 | [smallvec](https://crates.io/crates/smallvec) | 1.16.3 | MIT OR Apache-2.0 |
 | [strict-num](https://crates.io/crates/strict-num) | 0.1.1 | MIT |
-| [svg2pdf](https://crates.io/crates/svg2pdf) | 0.13.0 | MIT OR Apache-2.0 |
 | [svgtypes](https://crates.io/crates/svgtypes) | 0.15.3 | Apache-2.0 OR MIT |
-| [svgtypes](https://crates.io/crates/svgtypes) | 0.16.1 | Apache-2.0 OR MIT |
 | [syn](https://crates.io/crates/syn) | 3.0.9 | MIT OR Apache-2.0 |
-| [tiny-skia](https://crates.io/crates/tiny-skia) | 0.12.0 | BSD-3-Clause |
 | [tiny-skia-path](https://crates.io/crates/tiny-skia-path) | 0.11.4 | BSD-3-Clause |
-| [tiny-skia-path](https://crates.io/crates/tiny-skia-path) | 0.12.0 | BSD-3-Clause |
 | [tinyvec](https://crates.io/crates/tinyvec) | 1.13.3 | Zlib OR Apache-2.0 OR MIT |
 | [unicode-bidi](https://crates.io/crates/unicode-bidi) | 0.3.18 | MIT OR Apache-2.0 |
 | [unicode-ident](https://crates.io/crates/unicode-ident) | 1.0.27 | (MIT OR Apache-2.0) AND Unicode-3.0 |
 | [unicode-script](https://crates.io/crates/unicode-script) | 0.5.8 | MIT OR Apache-2.0 |
 | [unicode-vo](https://crates.io/crates/unicode-vo) | 0.1.0 | MIT OR Apache-2.0 |
 | [usvg](https://crates.io/crates/usvg) | 0.45.1 | Apache-2.0 OR MIT |
-| [usvg](https://crates.io/crates/usvg) | 0.49.0 | Apache-2.0 OR MIT |
 | [wasm-bindgen](https://crates.io/crates/wasm-bindgen) | 0.2.129 | MIT OR Apache-2.0 |
 | [wasm-bindgen-macro](https://crates.io/crates/wasm-bindgen-macro) | 0.2.129 | MIT OR Apache-2.0 |
 | [wasm-bindgen-macro-support](https://crates.io/crates/wasm-bindgen-macro-support) | 0.2.129 | MIT OR Apache-2.0 |
@@ -216,8 +216,8 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 Used by:
 
-- tiny-skia 0.12.0 (Yevhenii Reizner <razrfalcon@gmail.com>)
-- tiny-skia-path 0.12.0 (Yevhenii Reizner <razrfalcon@gmail.com>)
+- graphviz-pure-tiny-skia 1.2.0 (Yevhenii Reizner <razrfalcon@gmail.com>)
+- graphviz-pure-tiny-skia-path 1.2.0 (Yevhenii Reizner <razrfalcon@gmail.com>)
 - tiny-skia-path 0.11.4 (Yevhenii Reizner <razrfalcon@gmail.com>)
 
 ```text
@@ -581,7 +581,7 @@ DEALINGS IN THE SOFTWARE.
 
 Used by:
 
-- kurbo 0.13.1
+- graphviz-pure-kurbo 1.2.0
 - kurbo 0.11.3 (Raph Levien <raph.levien@gmail.com>)
 - polycool 0.4.0
 
@@ -653,7 +653,7 @@ DEALINGS IN THE SOFTWARE.
 
 Used by:
 
-- svgtypes 0.16.1
+- graphviz-pure-svgtypes 1.2.0
 - svgtypes 0.15.3
 
 ```text
@@ -684,7 +684,7 @@ THE SOFTWARE.
 
 Used by:
 
-- skrifa 0.44.0
+- graphviz-pure-skrifa 1.2.0
 - font-types 0.12.7
 - read-fonts 0.41.0
 
@@ -884,9 +884,9 @@ DEALINGS IN THE SOFTWARE.
 
 Used by:
 
-- resvg 0.49.0
+- graphviz-pure-resvg 1.2.0
+- graphviz-pure-usvg 1.2.0
 - usvg 0.45.1
-- usvg 0.49.0
 
 ```text
 Copyright 2017 the Resvg Authors
@@ -1171,7 +1171,7 @@ DEALINGS IN THE SOFTWARE.
 
 Used by:
 
-- svg2pdf 0.13.0 (Laurenz Stampfl <laurenz.stampfl@gmail.com>, Martin Haug <mhaug@live.de>)
+- graphviz-pure-svg2pdf 1.2.0 (Laurenz Stampfl <laurenz.stampfl@gmail.com>, Martin Haug <mhaug@live.de>)
 - pdf-writer 0.12.1 (Laurenz <laurmaedje@gmail.com>)
 
 ```text
@@ -1450,7 +1450,7 @@ SOFTWARE.
 Used by:
 
 - roxmltree 0.20.0 (Yevhenii Reizner <razrfalcon@gmail.com>)
-- roxmltree 0.21.2 (Yevhenii Reizner <razrfalcon@gmail.com>)
+- roxmltree 0.21.1 (Yevhenii Reizner <razrfalcon@gmail.com>)
 
 ```text
 The MIT License (MIT)

@@ -1,0 +1,57 @@
+diff -ruN a/Cargo.toml b/Cargo.toml
+--- a/Cargo.toml
++++ b/Cargo.toml
+@@ -12,8 +12,8 @@
+ [package]
+ edition = "2024"
+ rust-version = "1.85.0"
+-name = "resvg"
+-version = "0.48.1"
++name = "graphviz-pure-resvg"
++version = "1.2.0"
+ build = false
+ exclude = ["tests"]
+ autolib = false
+@@ -21,7 +21,7 @@
+ autoexamples = false
+ autotests = false
+ autobenches = false
+-description = "An SVG rendering library."
++description = "Upstream resvg 0.48.1 using graphviz-pure's portable-math raster forks."
+ readme = "README.md"
+ keywords = [
+     "svg",
+@@ -76,13 +76,19 @@
+ version = "0.8"
+ 
+ [dependencies.svgtypes]
+-version = "0.16.1"
++version = "=1.2.0"
++package = "graphviz-pure-svgtypes"
++path = "../svgtypes"
+ 
+ [dependencies.tiny-skia]
+-version = "0.12.0"
++version = "=1.2.0"
++package = "graphviz-pure-tiny-skia"
++path = "../tiny-skia"
+ 
+ [dependencies.usvg]
+-version = "0.48.1"
++version = "=1.2.0"
++package = "graphviz-pure-usvg"
++path = "../usvg"
+ default-features = false
+ 
+ [dependencies.zune-jpeg]
+diff -ruN a/README.md b/README.md
+--- a/README.md
++++ b/README.md
+@@ -0,0 +1,7 @@
++# graphviz-pure-resvg
++
++Repackaged fork of upstream [resvg 0.48.1](https://crates.io/crates/resvg/0.48.1), from [linebender/resvg](https://github.com/linebender/resvg), for graphviz-pure. This is not an upstream release.
++
++The rendering source is unchanged. Its `svgtypes`, `tiny-skia` and `usvg` dependencies select the graphviz-pure-prefixed forks, so the complete raster path uses portable math. The Rust library target remains `resvg`.
++
++Upstream copyright notices and the Apache-2.0 and MIT licence texts in `LICENSE-APACHE` and `LICENSE-MIT` are retained.

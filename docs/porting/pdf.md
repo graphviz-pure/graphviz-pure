@@ -47,11 +47,10 @@ strict PDF parser also validates the page and its content stream during local
 verification. Cross-platform CI must pass before claiming verified bytes on
 those targets.
 
-As with the existing raster patches, the workspace patch applies to repository
-and release builds. Cargo does not propagate patches into a downstream
-crates.io source build: those installs use upstream svg2pdf and do not guarantee
-reproducible resource ordering until the vendored svg2pdf changes are published
-and adopted. See [the vendor notes](../../vendor/README.md).
+The patched crate is published as `graphviz-pure-svg2pdf`. Repository and
+crates.io source builds both select it directly by that name, so deterministic
+resource ordering is not limited to release archives. See [the vendor
+notes](../../vendor/README.md).
 
 To deliberately regenerate the port fixture after reviewing a converter change:
 
