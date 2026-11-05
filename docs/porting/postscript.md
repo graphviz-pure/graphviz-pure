@@ -45,6 +45,14 @@ With `ps` and `ps2` the strings are pages of one document, and the last one
 carries the trailer. With `eps` each string is a whole document. Joined, the strings are
 C's output in both cases.
 
+The same sweep (`scripts/check-postscript.py --format eps` and `--format ps2`,
+2,613 inputs, 2026-11-05) matched **2,596** inputs for `eps` and **2,595**
+for `ps2`. Every difference falls into one of the `-Tps` classes listed below:
+the NaN sign, the four C crashes, the four heap-dependent fdp layouts, and
+the eight twopi arrow inputs whose C output varies between runs. `ps2` also differs on
+sfdp's `wild_gv16_linux_x86_neatosplines_neato1_448ced.gv`, for which C gave
+two different outputs in five runs. Under `eps` the port matched C on that input.
+
 ## Oracle and fonts
 
 Verification uses the FMA-enabled C 16.1.0 oracle described in
