@@ -72,9 +72,21 @@ pub fn proutespline(
 ) -> Result<Vec<Ppoint>, super::PathplanError> {
     let ev0 = normv(endpoint_slopes[0]);
     let ev1 = normv(endpoint_slopes[1]);
-    let mut ops = vec![input_route[0]];
+    // Each fitted piece adds 3 points, and the pieces split the route at its interior
+    // points, so there are at most `len - 1` of them: one allocation holds the result.
+    let mut ops = Vec::with_capacity(input_route.len().saturating_mul(3).saturating_sub(2));
+    ops.push(input_route[0]);
     let mut tnas = Vec::new();
-    really_route_spline(barriers, input_route, ev0, ev1, &mut ops, &mut tnas)?;
+    let mut scratch = SplineScratch::default();
+    really_route_spline(
+        barriers,
+        input_route,
+        ev0,
+        ev1,
+        &mut ops,
+        &mut tnas,
+        &mut scratch,
+    )?;
     Ok(ops)
 }
 
@@ -85,6 +97,7 @@ fn really_route_spline(
     ev1: Ppoint,
     ops: &mut Vec<Ppoint>,
     tnas: &mut Vec<Tna>,
+    scratch: &mut SplineScratch,
 ) -> Result<(), super::PathplanError> {
     let inpn = inps.len();
     tnas.clear();
@@ -100,7 +113,7 @@ fn really_route_spline(
         t.a[1] = scale(ev1, b2(t.t));
     }
     let (p1, v1, p2, v2) = mkspline(inps, tnas, ev0, ev1);
-    if splinefits(edges, p1, v1, p2, v2, inps, ops) {
+    if splinefits(edges, p1, v1, p2, v2, inps, ops, scratch) {
         return Ok(());
     }
     let cp1 = add(p1, scale(v1, 1.0 / 3.0));
@@ -132,8 +145,8 @@ fn really_route_spline(
     let splitv1 = normv(sub(inps[spliti], inps[spliti - 1]));
     let splitv2 = normv(sub(inps[spliti + 1], inps[spliti]));
     let splitv = normv(add(splitv1, splitv2));
-    really_route_spline(edges, &inps[..=spliti], ev0, splitv, ops, tnas)?;
-    really_route_spline(edges, &inps[spliti..], splitv, ev1, ops, tnas)
+    really_route_spline(edges, &inps[..=spliti], ev0, splitv, ops, tnas, scratch)?;
+    really_route_spline(edges, &inps[spliti..], splitv, ev1, ops, tnas, scratch)
 }
 
 fn mkspline(
@@ -197,6 +210,7 @@ fn splinefits(
     vb: Ppoint,
     inps: &[Ppoint],
     ops: &mut Vec<Ppoint>,
+    scratch: &mut SplineScratch,
 ) -> bool {
     let forceflag = inps.len() == 2;
     let mut first = true;
@@ -212,7 +226,7 @@ fn splinefits(
             return false;
         }
         first = false;
-        if splineisinside(edges, &sps) {
+        if splineisinside(edges, &sps, scratch) {
             ops.extend_from_slice(&sps[1..]);
             return true;
         }
@@ -233,13 +247,99 @@ fn splinefits(
 }
 
 /// C: lib/pathplan/route.c:splineisinside, splineintersectsline
-/// The original local coefficient/root arrays, reused across barrier sides.
+/// The original local coefficient/root arrays, reused across barrier sides, and the
+/// `solve3` answers of one `Proutespline` call.
 #[derive(Default)]
 struct SplineScratch {
     roots: [f64; 4],
     xr: [f64; 3],
     yr: [f64; 3],
     coeff: [f64; 4],
+    memo: Solve3Memo,
+}
+
+/// Rust-only helper; no C counterpart. One `solve3` call: its coefficient bits, its result
+/// and the roots it wrote.
+#[derive(Clone, Copy)]
+struct Solved {
+    key: [u64; 4],
+    n: u8,
+    roots: [f64; 3],
+}
+
+/// `Solved::n` of a slot that holds nothing: `solve3` returns 0 to 4.
+const EMPTY: u8 = u8::MAX;
+const MEMO_SLOTS: usize = 64;
+
+/// Rust-only helper; no C counterpart. A direct-mapped cache of `solve3` for C's
+/// `splineintersectsline` (`lib/pathplan/route.c`). Barrier sides on one line (the boxes'
+/// shared left, right, top and bottom coordinates) give bit-identical coefficient arrays, and
+/// `solve3` is a pure function of them: it reads nothing else, writes `roots[..n]` from them
+/// alone (each before it reads it back), and returns `n`. So a hit returns what the call would
+/// have, bit for bit; callers read only `roots[..n]`. A miss calls `solve3` and replaces the
+/// slot, so the cache never changes a result, only whether `solve3` runs.
+/// `docs/perf/route-solve3-memo.md`.
+struct Solve3Memo {
+    slots: [Solved; MEMO_SLOTS],
+}
+
+impl Default for Solve3Memo {
+    fn default() -> Self {
+        Self {
+            slots: [Solved {
+                key: [0; 4],
+                n: EMPTY,
+                roots: [0.0; 3],
+            }; MEMO_SLOTS],
+        }
+    }
+}
+
+impl Solve3Memo {
+    /// `solve3(coeff, roots)`.
+    fn solve3(&mut self, coeff: &[f64; 4], roots: &mut [f64; 3]) -> usize {
+        let key = coeff.map(f64::to_bits);
+        let [k0, k1, k2, k3] = key;
+        let mixed = k0 ^ k1.rotate_left(16) ^ k2.rotate_left(32) ^ k3.rotate_left(48);
+        let at = (mixed.wrapping_mul(0x9e37_79b9_7f4a_7c15) >> 58) as usize;
+        let Some(slot) = self.slots.get_mut(at) else {
+            return solve3(coeff, roots);
+        };
+        if slot.n != EMPTY && slot.key == key {
+            *roots = slot.roots;
+            let n = usize::from(slot.n);
+            #[cfg(any(test, feature = "pathplan-check"))]
+            {
+                let mut fresh = [f64::NAN; 3];
+                let fresh_n = solve3(coeff, &mut fresh);
+                let read = if fresh_n == 4 { 0 } else { fresh_n };
+                assert_eq!(fresh_n, n, "solve3 memo: root count differs for {coeff:?}");
+                assert!(
+                    fresh
+                        .iter()
+                        .zip(roots.iter())
+                        .take(read)
+                        .all(|(a, b)| a.to_bits() == b.to_bits()),
+                    "solve3 memo: roots differ for {coeff:?}: {fresh:?} vs {roots:?}"
+                );
+                MEMO_HITS.with(|h| h.set(h.get() + 1));
+            }
+            return n;
+        }
+        let n = solve3(coeff, roots);
+        *slot = Solved {
+            key,
+            n: u8::try_from(n).unwrap_or(EMPTY),
+            roots: *roots,
+        };
+        n
+    }
+}
+
+#[cfg(any(test, feature = "pathplan-check"))]
+thread_local! {
+    /// Hits the check above compared: for the test that the memo is reached.
+    static MEMO_HITS: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
 }
 
 /// Rust-only helper; no C counterpart. Bounds C's `horner` side-parameter
@@ -329,15 +429,14 @@ impl SplineBounds {
 }
 
 /// C: lib/pathplan/route.c:splineisinside
-fn splineisinside(edges: &[Pedge], sps: &[Ppoint; 4]) -> bool {
-    let mut scratch = SplineScratch::default();
+fn splineisinside(edges: &[Pedge], sps: &[Ppoint; 4], scratch: &mut SplineScratch) -> bool {
     let bounds = SplineBounds::default();
     for e in edges {
         let lps = [e.a, e.b];
         if bounds.misses(sps, &lps) {
             continue;
         }
-        let rootn = splineintersectsline(sps, &lps, &mut scratch);
+        let rootn = splineintersectsline(sps, &lps, scratch);
         let roots = &scratch.roots;
         if rootn == 4 {
             continue;
@@ -401,6 +500,7 @@ fn splineintersectsline(
         xr,
         yr,
         coeff: s,
+        memo,
     } = scratch;
     let xc = [lps[0].x, lps[1].x - lps[0].x];
     let yc = [lps[0].y, lps[1].y - lps[0].y];
@@ -410,10 +510,10 @@ fn splineintersectsline(
         if yc[1] == 0.0 {
             *s = points2coeff(sps[0].x, sps[1].x, sps[2].x, sps[3].x);
             s[0] -= xc[0];
-            let xn = solve3(s, xr);
+            let xn = memo.solve3(s, xr);
             *s = points2coeff(sps[0].y, sps[1].y, sps[2].y, sps[3].y);
             s[0] -= yc[0];
-            let yn = solve3(s, yr);
+            let yn = memo.solve3(s, yr);
             if xn == 4 {
                 if yn == 4 {
                     return 4;
@@ -438,7 +538,7 @@ fn splineintersectsline(
         } else {
             *s = points2coeff(sps[0].x, sps[1].x, sps[2].x, sps[3].x);
             s[0] -= xc[0];
-            let xn = solve3(s, xr);
+            let xn = memo.solve3(s, xr);
             if xn == 4 {
                 return 4;
             }
@@ -458,7 +558,7 @@ fn splineintersectsline(
         let f = |p: Ppoint| math::fma(-rat, p.x, p.y);
         *s = points2coeff(f(sps[0]), f(sps[1]), f(sps[2]), f(sps[3]));
         s[0] += math::fma(rat, xc[0], -yc[0]);
-        let xn = solve3(s, xr);
+        let xn = memo.solve3(s, xr);
         if xn == 4 {
             return 4;
         }
@@ -657,7 +757,7 @@ mod tests {
             b: line[1],
         }];
         assert_eq!(
-            splineisinside(&edges, sps),
+            splineisinside(&edges, sps, scratch),
             reference::splineisinside(&edges, sps),
             "{sps:?} {line:?}"
         );
@@ -727,7 +827,7 @@ mod tests {
             }
             let edges = lines.map(|l| Pedge { a: l[0], b: l[1] });
             assert_eq!(
-                splineisinside(&edges, &sps),
+                splineisinside(&edges, &sps, &mut scratch),
                 reference::splineisinside(&edges, &sps)
             );
         }
@@ -735,6 +835,72 @@ mod tests {
             misses > 1000,
             "exercise the rejection, not only its fallback"
         );
+    }
+
+    /// Barrier sides on shared lines, as a box corridor has: vertical sides at a few x,
+    /// horizontal ones at a few y in both directions, and point barriers, so the `solve3`
+    /// memo hits. The memo's own check recomputes every hit; the routing decisions must also
+    /// match the reference, through one scratch shared by every curve.
+    #[test]
+    fn solve3_memo_hits_on_shared_lines_and_keeps_every_decision() {
+        let mut state = 0x6d2b_79f5_c3a1_0e47;
+        let mut scratch = SplineScratch::default();
+        let hits = MEMO_HITS.with(std::cell::Cell::get);
+        let mut inside = 0;
+        for i in 0..4_000 {
+            let scale = [1.0, 100.0, 1e4, 1e-3][i % 4];
+            let xs: [f64; 3] = std::array::from_fn(|_| value(&mut state, scale));
+            let ys: [f64; 3] = std::array::from_fn(|_| value(&mut state, scale));
+            let mut edges = Vec::new();
+            for &x in &xs {
+                for k in 0..3 {
+                    let (y0, y1) = (ys[k], ys[(k + 1) % 3]);
+                    edges.push(Pedge {
+                        a: Ppoint::new(x, y0),
+                        b: Ppoint::new(x, y1),
+                    });
+                }
+            }
+            for &y in &ys {
+                for k in 0..3 {
+                    let (x0, x1) = (xs[k], xs[(k + 1) % 3]);
+                    edges.push(Pedge {
+                        a: Ppoint::new(x0, y),
+                        b: Ppoint::new(x1, y),
+                    });
+                }
+                let p = Ppoint::new(xs[0], y);
+                edges.push(Pedge { a: p, b: p });
+            }
+            for _ in 0..4 {
+                let sps = std::array::from_fn(|_| {
+                    Ppoint::new(value(&mut state, scale), value(&mut state, scale))
+                });
+                let got = splineisinside(&edges, &sps, &mut scratch);
+                assert_eq!(got, reference::splineisinside(&edges, &sps), "{sps:?}");
+                inside += usize::from(got);
+            }
+        }
+        let hits = MEMO_HITS.with(std::cell::Cell::get) - hits;
+        assert!(hits > 10_000, "the memo should hit on shared lines: {hits}");
+        assert!(
+            inside > 100,
+            "exercise curves that pass, not only ones that cross"
+        );
+    }
+
+    /// The check recomputes a hit: a slot holding a wrong answer stops the run.
+    #[test]
+    #[should_panic(expected = "solve3 memo: roots differ")]
+    fn solve3_memo_check_catches_a_wrong_slot() {
+        let mut memo = Solve3Memo::default();
+        let coeff = [-0.25, 0.0, 0.0, 1.0];
+        let mut roots = [0.0; 3];
+        assert_eq!(memo.solve3(&coeff, &mut roots), 1);
+        for slot in &mut memo.slots {
+            slot.roots[0] += 1.0;
+        }
+        memo.solve3(&coeff, &mut roots);
     }
 
     #[test]
@@ -892,7 +1058,7 @@ mod tests {
             a: Ppoint::new(0.0, 0.0),
             b: Ppoint::new(0.0, 0.0),
         };
-        assert!(splineisinside(&[edge], &sps));
+        assert!(splineisinside(&[edge], &sps, &mut SplineScratch::default()));
     }
 
     /// #635: a double root gives five `addroot` calls, one more than C's buffer holds, so

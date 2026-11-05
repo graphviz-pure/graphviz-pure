@@ -426,19 +426,23 @@ pub fn routesplines_(pp: &mut Path, polyline: bool, real: RealEdge<'_>) -> Optio
         if let (Some(a), Some(b)) = (ps.first(), ps.last()) {
             use graphviz_pure_core::diag::fmt_f;
             let f = |v: f64| fmt_f(v, 3);
-            let ends = format!("[{}, {}] -- [{}, {}]", f(a.x), f(a.y), f(b.x), f(b.y));
+            // Formatted only for a message `-v` prints (`gv_info!` evaluates its arguments
+            // only then).
+            let ends = || format!("[{}, {}] -- [{}, {}]", f(a.x), f(a.y), f(b.x), f(b.y));
             if is_horizontal {
                 graphviz_pure_core::gv_info!(
                     "routespl.c",
                     520,
-                    "spline {ends} is horizontal; will be trivially bounded"
+                    "spline {} is horizontal; will be trivially bounded",
+                    ends()
                 );
             }
             if is_vertical {
                 graphviz_pure_core::gv_info!(
                     "routespl.c",
                     534,
-                    "spline {ends} is vertical; will be trivially bounded"
+                    "spline {} is vertical; will be trivially bounded",
+                    ends()
                 );
             }
         }

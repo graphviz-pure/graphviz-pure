@@ -2116,6 +2116,14 @@ impl Dot<'_> {
                 return;
             }
         }
+        // At most every box is kept: one allocation for them all.
+        p.boxes.reserve(
+            tendp
+                .boxes
+                .len()
+                .saturating_add(boxes.len())
+                .saturating_add(hendp.boxes.len()),
+        );
         for b in &tendp.boxes {
             add_box(p, *b);
         }
