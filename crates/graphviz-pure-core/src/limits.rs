@@ -337,19 +337,22 @@ impl Drop for PopGuard {
     }
 }
 
-/// Adds the units counted since the countdown was armed to the step count.
+/// Adds the units counted since the countdown was armed (or last settled) to the step
+/// count, and counts on from the countdown as it is.
 fn settle_count(s: &mut State) {
     if s.armed > 0 {
-        s.steps = s
-            .steps
-            .saturating_add(s.armed.saturating_sub(COUNTDOWN.get()));
-        s.armed = 0;
+        let left = COUNTDOWN.get();
+        s.steps = s.steps.saturating_add(s.armed.saturating_sub(left));
+        s.armed = left;
     }
 }
 
 /// Sets the countdown for the top frame: the next slow check comes after
-/// [`POLL_INTERVAL`] units, or when the work budget runs out.
+/// [`POLL_INTERVAL`] units, or when the work budget runs out. The units counted since the
+/// countdown was last armed are added first, so work done in between (a library call
+/// inside a `cancel_when` closure) is not lost.
 fn arm(s: &mut State) {
+    settle_count(s);
     let Some(frame) = s.frames.last() else {
         s.armed = 0;
         COUNTDOWN.set(u64::MAX);
@@ -505,6 +508,7 @@ fn slow_tick(units: u64) -> bool {
         if s.trip.is_none() {
             settle_count(s);
             s.steps = s.steps.saturating_add(units);
+            s.armed = 0;
             COUNTDOWN.set(0);
         }
         true
@@ -777,6 +781,23 @@ mod tests {
         assert_eq!(limits.run(|| ticks_until_stop(3000)), None);
         // Once when the run starts, then at 1,024 and 2,048 ticks.
         assert_eq!(calls.load(Ordering::Relaxed), 3);
+    }
+
+    #[test]
+    fn work_inside_a_closure_counts() {
+        // The closure's ticks stand for a library call it makes: 500 units each time it is
+        // polled (when the run starts, then every 1,024 ticks), counted against the budget.
+        let stop = Limits::new()
+            .max_steps(3000)
+            .cancel_when(|| {
+                for _ in 0..500 {
+                    tick();
+                }
+                false
+            })
+            .run(|| ticks_until_stop(10_000));
+        // 500 + 1,024 + 500 + 977 = 3,001.
+        assert_eq!(stop, Some(2001));
     }
 
     #[test]
