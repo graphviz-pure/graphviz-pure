@@ -226,3 +226,55 @@ fn every_budget_ends_cleanly(engine: &str) {
 fn every_dot_budget_ends_cleanly() {
     every_budget_ends_cleanly("dot");
 }
+
+#[test]
+fn a_cancel_when_closure_may_call_the_library() {
+    let out = Limits::new()
+        .cancel_when(|| {
+            let _ = graphviz_pure::render_dot("digraph { a }", "dot", "svg").unwrap();
+            false
+        })
+        .run(|| graphviz_pure::render_dot("digraph { a -> b }", "dot", "svg"));
+    assert!(out.is_ok());
+}
+
+#[test]
+fn the_edge_limit_stops_inside_one_statement() {
+    // One statement asks for 3,000 x 3,000 edges.
+    let list = |p: &str| {
+        (0..3000)
+            .map(|i| format!("{p}{i}"))
+            .collect::<Vec<_>>()
+            .join(" ")
+    };
+    let src = format!("digraph {{ {{{}}} -> {{{}}} }}", list("a"), list("b"));
+    let started = std::time::Instant::now();
+    let err = Limits::new()
+        .max_edges(1000)
+        .run(|| graphviz_pure::parse_dot(&src))
+        .err()
+        .unwrap();
+    assert_eq!(err.limit(), Some(Limit::Edges));
+    assert!(started.elapsed() < std::time::Duration::from_secs(2));
+}
+
+#[test]
+fn a_limit_reached_while_parsing_is_seen_when_the_next_phase_starts() {
+    // The heap probe runs when the run starts, when the call starts, and when the layout
+    // starts (the layout crate's `a_stopped_run_does_not_lay_out` pins that check); the
+    // third reading is over the limit.
+    let reads = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let seen = std::sync::Arc::clone(&reads);
+    let err = Limits::new()
+        .heap_limit(1000, move || {
+            if seen.fetch_add(1, std::sync::atomic::Ordering::Relaxed) >= 2 {
+                2000
+            } else {
+                0
+            }
+        })
+        .run(|| graphviz_pure::render_dot("digraph { a -> b }", "dot", "svg"))
+        .unwrap_err();
+    assert_eq!(err.limit(), Some(Limit::Heap));
+    assert_eq!(reads.load(std::sync::atomic::Ordering::Relaxed), 3);
+}

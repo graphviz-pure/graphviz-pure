@@ -973,6 +973,15 @@ impl<'a> Parser<'a> {
             for (tail, tail_port) in tails {
                 let heads = self.item_endpoints(&pair[1]);
                 for (head, head_port) in heads {
+                    // Not in C: one statement can make the product of two lists of edges,
+                    // so the edge limit and the run's limits are checked at each edge.
+                    if self.limit_err.is_some() {
+                        return;
+                    }
+                    if limits::tick() {
+                        self.limit_err = limits::error();
+                        return;
+                    }
                     self.newedge(
                         tail,
                         tail_port.clone(),

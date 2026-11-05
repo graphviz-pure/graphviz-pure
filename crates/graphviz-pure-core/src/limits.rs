@@ -204,7 +204,12 @@ impl Limits {
 
     /// A total-heap limit. `probe` returns the bytes in use, read from the caller's own
     /// counting allocator (a library cannot install one); checkpoints compare it with
-    /// `bytes`.
+    /// `bytes`. The probe runs only at checkpoints, so one allocation larger than the room
+    /// left is not stopped by it: [`Self::max_allocation`] covers the input-sized buffers,
+    /// and an OS limit covers the rest.
+    ///
+    /// The probe runs inside the call, like a [`Self::cancel_when`] closure, with the same
+    /// rules for calling back into the library.
     #[must_use]
     pub fn heap_limit(
         mut self,
@@ -224,6 +229,10 @@ impl Limits {
 
     /// Cancels the call when `poll` returns `true`. Checkpoints call it, so a caller with
     /// one thread (an event loop, WebAssembly) can cancel. Several may be added.
+    ///
+    /// `poll` runs inside the call, on its thread. It may call back into the library: that
+    /// call runs under the same limits, counts its work against them, and does not run the
+    /// closures again (a nested check reports the state as it is), so it cannot recurse.
     #[must_use]
     pub fn cancel_when(mut self, poll: impl Fn() -> bool + Send + Sync + 'static) -> Self {
         self.polls.push(Arc::new(poll));
@@ -240,6 +249,14 @@ impl Limits {
     ///
     /// A nested `run` adds its limits to the enclosing ones: the stricter value of each
     /// applies, and every token and `cancel_when` closure of both is checked.
+    ///
+    /// The limits live in thread-local state. A thread that `f` starts does not see them,
+    /// and neither do the worker threads of the `parallel` feature; the checkpoints are on
+    /// the calling thread. An `async` caller cannot hold a `run` across an `.await`: call
+    /// `run` inside the synchronous part, around the library calls.
+    ///
+    /// The checks are cooperative: they sit in the long loops, so a call stops at its next
+    /// checkpoint, which in some phases comes long after the limit.
     pub fn run<R>(&self, f: impl FnOnce() -> R) -> R {
         push(self);
         let _guard = PopGuard;
@@ -291,6 +308,8 @@ thread_local! {
     /// Units of work before the next slow check. `u64::MAX` outside a `run`, 0 once a limit
     /// is reached.
     static COUNTDOWN: Cell<u64> = const { Cell::new(u64::MAX) };
+    /// Whether [`evaluate`] is running the caller's closures.
+    static EVALUATING: Cell<bool> = const { Cell::new(false) };
     static MAX_INPUT_BYTES: Cell<u64> = const { Cell::new(u64::MAX) };
     static MAX_NODES: Cell<u64> = const { Cell::new(u64::MAX) };
     static MAX_EDGES: Cell<u64> = const { Cell::new(u64::MAX) };
@@ -298,6 +317,15 @@ thread_local! {
     static STATE: RefCell<State> = const {
         RefCell::new(State { frames: Vec::new(), steps: 0, armed: 0, trip: None })
     };
+}
+
+/// Clears [`EVALUATING`], including when a closure panics.
+struct EvaluatingGuard;
+
+impl Drop for EvaluatingGuard {
+    fn drop(&mut self) {
+        EVALUATING.set(false);
+    }
 }
 
 /// Pops the [`Limits::run`] frame, including when the closure panics.
@@ -389,6 +417,12 @@ fn pop() {
 /// Checks every limit of the top frame now, outside the state's borrow (the closures are
 /// the caller's code), and records the first one reached. Returns whether one is.
 fn evaluate() -> bool {
+    // A `cancel_when` or heap-probe closure that calls into the library comes back here
+    // from inside `reached`. The nested evaluation reads nothing and reports the state as
+    // it is, so the closure cannot recurse without end.
+    if EVALUATING.get() {
+        return STATE.with_borrow(|s| s.trip.is_some());
+    }
     let Some((limits, steps, cap)) = STATE.with_borrow_mut(|s| {
         if s.trip.is_some() {
             return None;
@@ -399,6 +433,8 @@ fn evaluate() -> bool {
     }) else {
         return STATE.with_borrow(|s| s.trip.is_some());
     };
+    EVALUATING.set(true);
+    let _guard = EvaluatingGuard;
     let trip = reached(&limits, steps, cap);
     STATE.with_borrow_mut(|s| {
         if s.trip.is_none() {
@@ -727,6 +763,20 @@ mod tests {
             assert!(!stopped());
             assert_eq!(ticks_until_stop(100), None);
         });
+    }
+
+    #[test]
+    fn a_closure_that_checks_again_does_not_recurse() {
+        let calls = Arc::new(AtomicUsize::new(0));
+        let seen = Arc::clone(&calls);
+        let limits = Limits::new().cancel_when(move || {
+            seen.fetch_add(1, Ordering::Relaxed);
+            // What a library call inside the closure does first.
+            check().is_err()
+        });
+        assert_eq!(limits.run(|| ticks_until_stop(3000)), None);
+        // Once when the run starts, then at 1,024 and 2,048 ticks.
+        assert_eq!(calls.load(Ordering::Relaxed), 3);
     }
 
     #[test]
