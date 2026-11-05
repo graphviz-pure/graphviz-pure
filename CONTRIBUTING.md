@@ -50,7 +50,8 @@ fails if the layout or geom crates gain an `unwrap`, `expect`, index or integer-
   path beside them is allowed when it has a written equivalence proof and a test-mode cross-check
   against them ([docs/perf/ns-cut-sets.md](docs/perf/ns-cut-sets.md),
   [docs/perf/mincross-scans.md](docs/perf/mincross-scans.md),
-  [docs/perf/pathplan-shortcuts.md](docs/perf/pathplan-shortcuts.md)).
+  [docs/perf/pathplan-shortcuts.md](docs/perf/pathplan-shortcuts.md),
+  [docs/perf/route-solve3-memo.md](docs/perf/route-solve3-memo.md)).
 - **Prove it.** A fix for a difference from C comes with the input that showed it, ideally added
   to a corpus under `tests/`, and the ratchet baselines refreshed if more files now match
   (`scripts/update-baselines.sh`). A change must not

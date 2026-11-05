@@ -933,13 +933,19 @@ const BZ_MAX_DEPTH: usize = 1 << 16;
 /// `update_bb_bz`'s recursion, on an explicit stack in C's order (#269): a piece's left half,
 /// then its right half. Returns whether a piece needed a split the budget refused.
 fn update_bb_bz_r(bb: &mut BoundingBox, cp: &[Point; 4], budget: &mut u64) -> bool {
+    let out = |bb: &BoundingBox, cp: &[Point; 4]| {
+        cp.iter()
+            .any(|p| p.x > bb.ur.x || p.x < bb.ll.x || p.y > bb.ur.y || p.y < bb.ll.y)
+    };
+    // The loop's first step, before the stack exists: a segment already inside `bb` (the
+    // common case) leaves it unchanged without allocating.
+    if !out(bb, cp) {
+        return false;
+    }
     let mut refused = false;
     let mut stack = vec![(*cp, 0_usize)];
     while let Some((cp, depth)) = stack.pop() {
-        let out = cp
-            .iter()
-            .any(|p| p.x > bb.ur.x || p.x < bb.ll.x || p.y > bb.ur.y || p.y < bb.ll.y);
-        if !out {
+        if !out(bb, &cp) {
             continue;
         }
         // C has no finiteness test. Every half `Bezier` splits off keeps the curve's midpoint,

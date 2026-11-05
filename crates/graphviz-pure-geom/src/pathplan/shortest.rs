@@ -140,30 +140,26 @@ pub fn pshortestpath(
     let p2 = poly[minpi];
     let p1 = poly[if minpi == 0 { pn - 1 } else { minpi - 1 }];
     let p3 = poly[(minpi + 1) % pn];
-    let mut order: Vec<usize> = Vec::with_capacity(pn);
+    let mut pnl = Pnl {
+        pp: Vec::with_capacity(pn + 2),
+        link: Vec::new(),
+    };
     if (p1.x == p2.x && p2.x == p3.x && p3.y > p2.y) || ccw(p1, p2, p3) != ISCCW {
         for pi in (0..pn).rev() {
             if pi < pn - 1 && poly[pi].x == poly[pi + 1].x && poly[pi].y == poly[pi + 1].y {
                 continue;
             }
-            order.push(pi);
+            pnl.pp.extend(poly.get(pi));
         }
     } else {
         for pi in 0..pn {
             if pi > 0 && poly[pi].x == poly[pi - 1].x && poly[pi].y == poly[pi - 1].y {
                 continue;
             }
-            order.push(pi);
+            pnl.pp.extend(poly.get(pi));
         }
     }
-    let pnll = order.len();
-    let mut pnl = Pnl {
-        pp: Vec::with_capacity(pnll + 2),
-        link: Vec::new(),
-    };
-    for &pi in &order {
-        pnl.pp.push(poly[pi]);
-    }
+    let pnll = pnl.pp.len();
     pnl.pp.push(eps[0]);
     pnl.pp.push(eps[1]);
     // pnls[k].link = &pnls[k % pn] initially.
@@ -171,8 +167,9 @@ pub fn pshortestpath(
         .map(|k| if k < pnll { k % pn } else { NONE })
         .collect();
 
-    // Triangulate. C keeps the triangles found so far if it fails.
-    let mut tris: Vec<Triangle> = Vec::new();
+    // Triangulate. C keeps the triangles found so far if it fails. A polygon of n points has
+    // n - 2 triangles; a failed triangulation stops short of that.
+    let mut tris: Vec<Triangle> = Vec::with_capacity(pnll.saturating_sub(2));
     let whole = super::clip::triangulate(pnl.pp.get(..pnll).unwrap_or(&[]), &mut tris);
     #[cfg(any(test, feature = "pathplan-check"))]
     {
@@ -270,19 +267,14 @@ pub fn pshortestpath(
             }
         }
     }
-    let mut out = Vec::new();
-    let mut p = e1;
-    loop {
-        out.push(pnl.pp[p]);
-        if p == e0 {
-            break;
-        }
-        let l = pnl.link[p];
-        if l == NONE {
-            break;
-        }
-        p = l;
-    }
+    // The path, from `e1` back along the links: counted first, so `out` is allocated once.
+    let walk = || {
+        std::iter::successors(Some(e1), |&p| {
+            (p != e0).then(|| pnl.link[p]).filter(|&l| l != NONE)
+        })
+    };
+    let mut out = Vec::with_capacity(walk().count());
+    out.extend(walk().map(|p| pnl.pp[p]));
     out.reverse();
     Ok(out)
 }
