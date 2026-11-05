@@ -78,10 +78,12 @@ signatures. The port already keeps per-call state this way (`diag::capture`), an
   polygon vertices (`peripheries`, `sides`, #591), neato's dense model (Kamada-Kawai's two
   `n × n` arrays, SGD's pair terms, stress majorization's packed Laplacians), dot's node and
   edge arenas, and the raster pixmap, after C's cairo scaling (#675, #716). Checked before
-  the allocation. dot's arenas are checked, with the doubling `Vec` does, before the two
-  phases that grow them in bulk: a virtual-node chain (a large `minlen`) and position's
-  auxiliary graph (a slack node per edge). Any other growth of them past the limit stops the
-  call after that one reallocation. Past it the current call
+  the allocation. dot's arenas are checked, with `Vec`'s growth, before the phases that
+  grow them in bulk: a virtual-node chain (a large `minlen`), position's auxiliary graph (a
+  slack node per edge, boundary nodes per cluster) and `connect_graph`. Every other push onto
+  them checks the reallocation it causes and, past the limit, stops the call after that one
+  reallocation. Their first fill from the parsed graph is bounded by `max_nodes` and
+  `max_edges` instead. Past it the current call
   stops: every later checkpoint in that call reports it, and the call returns its error. The
   next call in the `run` is not stopped by it. Other buffers (sfdp's matrices, the output
   string) are not covered. The port's own vertex budget (`MAX_VERTICES`) is checked first:
