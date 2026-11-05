@@ -1,7 +1,9 @@
 //! `lib/pathplan/route.c`: fit a piecewise Bézier through a polyline route
 //! while staying clear of barrier segments.
 
+#[cfg(test)]
 use super::solvers::solve3;
+use super::solvers::solve3_unit;
 use super::{Pedge, Ppoint};
 use graphviz_pure_core::math;
 
@@ -272,13 +274,14 @@ const EMPTY: u8 = u8::MAX;
 const MEMO_SLOTS: usize = 64;
 
 /// Rust-only helper; no C counterpart. A direct-mapped cache of `solve3` for C's
-/// `splineintersectsline` (`lib/pathplan/route.c`). Barrier sides on one line (the boxes'
-/// shared left, right, top and bottom coordinates) give bit-identical coefficient arrays, and
-/// `solve3` is a pure function of them: it reads nothing else, writes `roots[..n]` from them
-/// alone (each before it reads it back), and returns `n`. So a hit returns what the call would
-/// have, bit for bit; callers read only `roots[..n]`. A miss calls `solve3` and replaces the
-/// slot, so the cache never changes a result, only whether `solve3` runs.
-/// `docs/perf/route-solve3-memo.md`.
+/// `splineintersectsline` (`lib/pathplan/route.c`), through [`solve3_unit`], which answers as
+/// `solve3` does for the roots in `[0, 1]` (`docs/perf/solve3-unit.md`). Barrier sides on one
+/// line (the boxes' shared left, right, top and bottom coordinates) give bit-identical
+/// coefficient arrays, and `solve3_unit` is a pure function of them: it reads nothing else,
+/// writes `roots[..n]` from them alone (each before it reads it back), and returns `n`. So a hit
+/// returns what the call would have, bit for bit; callers read only `roots[..n]`. A miss calls
+/// `solve3_unit` and replaces the slot, so the cache never changes a result, only whether the
+/// solver runs. `docs/perf/route-solve3-memo.md`.
 struct Solve3Memo {
     slots: [Solved; MEMO_SLOTS],
 }
@@ -307,7 +310,7 @@ impl Solve3Memo {
     fn solve3(&mut self, coeff: &[f64; 4], roots: &mut [f64; 3]) -> usize {
         let key = coeff.map(f64::to_bits);
         let Some(slot) = self.slots.get_mut(Self::slot_of(&key)) else {
-            return solve3(coeff, roots);
+            return solve3_unit(coeff, roots);
         };
         if slot.n != EMPTY && slot.key == key {
             *roots = slot.roots;
@@ -315,7 +318,7 @@ impl Solve3Memo {
             #[cfg(any(test, feature = "pathplan-check"))]
             {
                 let mut fresh = [f64::NAN; 3];
-                let fresh_n = solve3(coeff, &mut fresh);
+                let fresh_n = solve3_unit(coeff, &mut fresh);
                 let read = if fresh_n == 4 { 0 } else { fresh_n };
                 assert_eq!(fresh_n, n, "solve3 memo: root count differs for {coeff:?}");
                 assert!(
@@ -330,7 +333,7 @@ impl Solve3Memo {
             }
             return n;
         }
-        let n = solve3(coeff, roots);
+        let n = solve3_unit(coeff, roots);
         *slot = Solved {
             key,
             n: u8::try_from(n).unwrap_or(EMPTY),
@@ -901,7 +904,7 @@ mod tests {
     fn solve3_memo_key_holds_every_coefficient() {
         let solved = |c: &[f64; 4]| {
             let mut r = [f64::NAN; 3];
-            let n = solve3(c, &mut r);
+            let n = solve3_unit(c, &mut r);
             let read = if n == 4 { 0 } else { n };
             (n, r.map(f64::to_bits)[..read].to_vec())
         };
