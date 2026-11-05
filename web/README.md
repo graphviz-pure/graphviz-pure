@@ -14,7 +14,7 @@ await init();
 const svg = render('digraph G { a -> b [label="fast"]; }', 'dot', 'svg');
 ```
 
-SVG from untrusted DOT is untrusted markup: like C Graphviz, `URL`/`href` attributes can carry `javascript:` links, so sanitise it before embedding it inline (including with `innerHTML`), or display it with `<img>`. Layout cost is unbounded, as in C; services must impose input-size, time and memory limits in an isolated worker or process with a timeout.
+SVG from untrusted DOT is untrusted markup: like C Graphviz, `URL`/`href` attributes can carry `javascript:` links, so sanitise it before embedding it inline (including with `innerHTML`), or display it with `<img>`. Layout cost is unbounded, as in C. The `options` argument below caps it per call; the checks are cooperative, so services should still run untrusted input in an isolated worker or process with a timeout.
 
 `init()` loads the WebAssembly module (1.9 MB, about 650 KB gzipped) once; call it before
 anything else. Where it finds the module depends on the runtime. CI runs each setup below
@@ -87,10 +87,46 @@ A failure throws `GraphvizError`, a class the package exports (`extends Error`),
 without the program-name prefix. `status` is a number and is currently always `1`,
 the status C's `dot` exits with when one graph fails. `kind` is `"Syntax"`,
 `"UnsupportedEngine"`, `"UnsupportedFormat"`, `"Layout"`, `"Attribute"`, `"Render"`,
-or `"Error"` for a kind this version does not name yet.
+`"LimitExceeded"`, `"Cancelled"`, or `"Error"` for a kind this version does not name yet.
 `diagnostics` is the `agerr` messages emitted around the failure. The failure's own
 text is `message`, not one of those entries. The plain functions and the
 `*WithDiagnostics` functions throw the same object.
+
+Every render function and `inspectGraph` take an optional last argument that limits and
+cancels the call. Without it, or with `undefined`, `null` or `{}`, nothing changes.
+
+```js
+const controller = new AbortController();
+const svg = render(dot, 'dot', 'svg', {
+  maxInputBytes: 1 << 20, // DOT source length, in UTF-8 bytes
+  maxNodes: 10_000,       // per graph, as declared
+  maxEdges: 50_000,
+  maxSteps: 5_000_000,    // deterministic work budget
+  maxAllocation: 512 << 20, // largest input-sized buffer, in bytes
+  maxMemory: 1 << 30,     // the instance's linear memory, in bytes (it never shrinks)
+  timeout: 2_000,         // milliseconds, from performance.now()
+  signal: controller.signal,
+  shouldCancel: () => Atomics.load(flags, 0) === 1,
+});
+```
+
+A reached limit throws `GraphvizError` with `kind` `"LimitExceeded"` and `limit` naming it
+(`"InputBytes"`, `"Nodes"`, `"Edges"`, `"Deadline"` for `timeout`, `"Steps"`,
+`"Allocation"`, `"Memory"`). A cancel throws `kind` `"Cancelled"`. The call returns its whole
+output, the same bytes as without options, or throws; never a partial drawing. The checks
+run at checkpoints in the parser, the layout loops and the renderer, so a call can run
+past a limit until its next checkpoint. The same `maxSteps` on the same input and version
+always stops at the same point. A bad option throws a `TypeError`.
+
+The calls are synchronous, so nothing on the calling thread's event loop runs while one
+does: `signal` is read when the call starts and at every checkpoint, which stops calls that
+start after an abort, and `controller.abort()` from inside `shouldCancel` stops a running
+one, but an `AbortSignal.timeout()` or a `setTimeout` cannot fire mid-call. To stop a
+running call from outside, use `timeout`, or `shouldCancel` reading a flag that another
+worker sets in a `SharedArrayBuffer`. `shouldCancel` may call the package again (that call
+runs under the same limits); an exception it throws ends the call and is rethrown as is.
+Cloudflare Workers freeze the clock while code runs, so there `timeout` fires only at `0`;
+use the Worker's CPU limit.
 
 `supportedEngines()` and `supportedFormats()` return arrays of strings.
 `supportedFormats()` lists every format name `render` accepts, including aliases:
