@@ -6,12 +6,14 @@ reference font setup, **not the bytes of C's cairo PDF**. The other formats keep
 their existing fidelity guarantees. This is a vector conversion, not a bitmap
 wrapped in a PDF.
 
-The CLI's default `pdf` Cargo feature includes PDF in the release binaries and
-source installs. `cargo build -p graphviz-pure-cli --no-default-features` omits it
-and rejects `-Tpdf`. Neither the facade library nor WebAssembly enables it. The
-CLI forwards the feature to the device registration in `graphviz-pure-render`
+The CLI's default `pdf` Cargo feature includes PDF in native and WASI
+(`wasm32-wasip1`) release binaries and source installs. The WASI release builds
+`graphviz-pure-cli` with default features, so it includes PDF.
+`cargo build -p graphviz-pure-cli --no-default-features` omits it and rejects
+`-Tpdf`. The facade library and the `graphviz-pure-wasm` browser/JavaScript
+bindings do not enable it. The CLI forwards the feature to the device registration in `graphviz-pure-render`
 and optional conversion in `graphviz-pure-raster`; svg2pdf is absent from normal
-library and wasm dependency trees.
+facade-library and `graphviz-pure-wasm` dependency trees.
 
 Text uses the raster crate's bundled Tinos, Arimo and Cousine fonts and is
 converted to outlines; it is not searchable/selectable PDF text. No system
@@ -48,7 +50,8 @@ those targets.
 As with the existing raster patches, the workspace patch applies to repository
 and release builds. Cargo does not propagate patches into a downstream
 crates.io source build: those installs use upstream svg2pdf and do not guarantee
-reproducible resource ordering. See [the vendor notes](../../vendor/README.md).
+reproducible resource ordering until the vendored svg2pdf changes are published
+and adopted. See [the vendor notes](../../vendor/README.md).
 
 To deliberately regenerate the port fixture after reviewing a converter change:
 
@@ -81,5 +84,5 @@ cargo build --release --locked --offline --target x86_64-unknown-linux-musl \
 Wall time is one informational pair on a shared machine, not a performance
 gate. Both binaries were built offline; timing excludes cargo-slot waiting and
 includes compilation/linking. The musl release PDF matches the GNU debug
-fixture byte for byte. Normal facade and wasm dependency trees exclude both
-svg2pdf and pdf-writer.
+fixture byte for byte. Normal facade-library and `graphviz-pure-wasm` dependency
+trees exclude both svg2pdf and pdf-writer.
