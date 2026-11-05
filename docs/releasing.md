@@ -373,7 +373,10 @@ once with placeholder releases:
 4. For each of those eight new names: open the crate's Settings → Trusted Publishing → add
    GitHub with owner `graphviz-pure`, repository `graphviz-pure`, workflow `release.yml`,
    environment `release`. Save, then enable **"Require trusted publishing"** for that crate.
-   Repeat for all eight. The eight main crates already use the same settings.
+   Repeat for all eight. The eight main crates already use the same settings. Every crate must
+   also list `cloudbring` as an owner. `scripts/crates-to-publish.py` fails the release's check
+   job if a name is unregistered or that owner is missing, so an incomplete setup fails the dry
+   run before any crate can be published.
 5. Delete the API token; `cargo logout`.
 
 ### npm (organization `graphviz-pure`)

@@ -46,7 +46,7 @@ VENDORED_CRATES = {
     "graphviz-pure-tiny-skia": {"LICENSE": "vendor/tiny-skia/LICENSE", "README.md": "vendor/tiny-skia/README.md"},
     "graphviz-pure-tiny-skia-path": {"LICENSE": "vendor/tiny-skia-path/LICENSE", "README.md": "vendor/tiny-skia-path/README.md"},
     "graphviz-pure-kurbo": {"LICENSE-APACHE": "vendor/kurbo/LICENSE-APACHE", "LICENSE-MIT": "vendor/kurbo/LICENSE-MIT", "README.md": "vendor/kurbo/README.md"},
-    "graphviz-pure-svgtypes": {"LICENSE-APACHE": "vendor/svgtypes/LICENSE-APACHE", "LICENSE-MIT": "vendor/svgtypes/LICENSE-MIT", "README.md": "vendor/svgtypes/README.md"},
+    "graphviz-pure-svgtypes": {"LICENSE-APACHE": "vendor/svgtypes/LICENSE-APACHE", "LICENSE-MIT": "vendor/svgtypes/LICENSE-MIT", "AUTHORS": "vendor/svgtypes/AUTHORS", "README.md": "vendor/svgtypes/README.md"},
     "graphviz-pure-skrifa": {"LICENSE-APACHE": "vendor/skrifa/LICENSE-APACHE", "LICENSE-MIT": "vendor/skrifa/LICENSE-MIT", "README.md": "vendor/skrifa/README.md"},
     "graphviz-pure-resvg": {"LICENSE-APACHE": "vendor/resvg/LICENSE-APACHE", "LICENSE-MIT": "vendor/resvg/LICENSE-MIT", "README.md": "vendor/resvg/README.md"},
     "graphviz-pure-usvg": {"LICENSE-APACHE": "vendor/usvg/LICENSE-APACHE", "LICENSE-MIT": "vendor/usvg/LICENSE-MIT", "README.md": "vendor/usvg/README.md"},

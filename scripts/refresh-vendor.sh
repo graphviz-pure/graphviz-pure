@@ -29,7 +29,7 @@ trim_crate() {
   rm -rf "$dir/examples" "$dir/benches" "$dir/tests" "$dir/docs" "$dir/.github" "$dir/.cargo" "$dir/scripts"
   rm -f "$dir/Cargo.lock" "$dir/Cargo.toml.orig" "$dir/.cargo_vcs_info.json" "$dir/.cargo-ok" \
     "$dir/.gitignore" "$dir/.typos.toml" "$dir/.taplo.toml" "$dir/README.md" \
-    "$dir/CHANGELOG.md" "$dir/AUTHORS" "$dir/src/main.rs"
+    "$dir/CHANGELOG.md" "$dir/src/main.rs"
   python3 - "$dir/Cargo.toml" << 'PY'
 import sys
 path = sys.argv[1]

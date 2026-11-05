@@ -37,7 +37,9 @@ The nested `vendor/Cargo.toml` workspace publishes `graphviz-pure-tiny-skia`,
 version. All eight packages share the graphviz-pure release version and exact internal
 requirements; `scripts/bump-version.sh` advances both workspaces and their lockfiles together,
 so a later patch cannot be skipped as an already-published upstream version. Upstream
-authorship, copyright notices and `LICENSE*` files are retained. The release workflow publishes
+authorship, copyright notices and `LICENSE*` files are retained, including svgtypes' upstream
+`AUTHORS`. `THIRD-PARTY-LICENSES.md` also names every fork's upstream crate and version.
+The release workflow publishes
 this workspace before the main workspace, so every fork is available before
 `graphviz-pure-raster`.
 

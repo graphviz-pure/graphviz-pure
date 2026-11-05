@@ -50,7 +50,7 @@ name: Release
 #   publishes with a Wasmer API token, a secret of the `release` environment that only that
 #   job reads.
 # - github-release, after the same approval, mints a GitHub App token from the environment
-#   secrets RELEASE_APP_ID and RELEASE_APP_PRIVATE_KEY, pushes the release commit to master
+#   variable RELEASE_APP_CLIENT_ID and secret RELEASE_APP_PRIVATE_KEY, pushes the release commit to master
 #   (fast-forward, or a merge commit if master moved; a conflict fails before anything is
 #   created), tags that commit (annotated, unsigned) and publishes the GitHub release. It
 #   then dispatches update.yml in the Homebrew tap and the Scoop bucket. The App token lives
@@ -798,7 +798,7 @@ jobs:
         id: app
         uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
         with:
-          app-id: ${{ secrets.RELEASE_APP_ID }}
+          client-id: ${{ vars.RELEASE_APP_CLIENT_ID }}
           private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
           owner: ${{ github.repository_owner }}
           repositories: |
