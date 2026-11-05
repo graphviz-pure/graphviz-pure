@@ -17,7 +17,7 @@ GVP_CPUS_PER_RUNNER=4
 GVP_MEMORY_PER_RUNNER=10g
 GVP_RUNTIME=runsc
 CFG
-sudo install -m 0644 "$dir/gvp-ci.slice" "$dir/gvp-ci-runners.service" /etc/systemd/system/
+sudo install -m 0644 "$dir/gvpci.slice" "$dir/gvp-ci-runners.service" /etc/systemd/system/
 sudo systemctl daemon-reload
 sudo systemctl enable gvp-ci-runners.service
 sudo systemctl restart gvp-ci-runners.service

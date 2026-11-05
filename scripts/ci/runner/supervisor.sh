@@ -83,7 +83,7 @@ run_slot() {
     if ! GVP_JIT_CONFIG=$jit docker run -d --name "$c" \
         --label "gvp-ci.runner=$name" \
         --runtime "$RUNTIME" \
-        --cgroup-parent gvp-ci.slice \
+        --cgroup-parent gvpci.slice \
         --cpus "$CPUS" --memory "$MEMORY" --memory-swap "$MEMORY" --pids-limit 16384 \
         --network gvp-ci --dns 1.1.1.1 --dns 9.9.9.9 \
         --security-opt no-new-privileges --cap-drop ALL --cap-add SETUID --cap-add SETGID \

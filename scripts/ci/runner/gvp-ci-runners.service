@@ -9,7 +9,7 @@ Wants=docker.service network-online.target
 Type=simple
 User=agent
 Group=docker
-Slice=gvp-ci.slice
+Slice=gvpci.slice
 Nice=15
 Environment=GVP_CI_ROOT=/jobs/gvp-ci
 ExecStartPre=+/jobs/gvp-ci/bin/network.sh

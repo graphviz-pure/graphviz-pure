@@ -91,8 +91,8 @@ public job logs, so they carry a slot number and a time, not the machine's name.
 
 | Limit | Value | Where |
 | --- | --- | --- |
-| All runners together | 14 CPUs (half of 28), 43 GB memory (40 GB soft) | `gvp-ci.slice` |
-| CPU and IO weight | 20 (other groups default to 100) | `gvp-ci.slice` |
+| All runners together | 14 CPUs (half of 28), 43 GB memory (40 GB soft) | `gvpci.slice` |
+| CPU and IO weight | 20 (other groups default to 100) | `gvpci.slice` |
 | Each runner | 4 CPUs, 10 GB memory, no swap, 16,384 processes | `supervisor.sh` |
 | Runners | 4 | `/jobs/gvp-ci/config.env` |
 | Disk | a slot waits while `/jobs` has under 150 GB free | `supervisor.sh` |
@@ -112,7 +112,8 @@ from a 14-CPU slice, so the quota binds only when all four are saturated at once
 More concurrent runners at four CPUs each need a larger share of the machine than half.
 The peak memory of the whole slice in the trials was 14.9 GB.
 
-The weight makes the runners yield whenever the CPUs are contended: the delegates' builds
+The weight makes the runners yield whenever the CPUs are contended (the slice sits at the top
+of the cgroup tree, beside `user.slice` and `system.slice`, so the weight applies against them): the delegates' builds
 (`gvp-delegates`, capped at 80%) and everything else win over CI. The supervisor itself runs at
 nice 15. Docker's data root, the images and the scratch directories are all on `/jobs`; nothing
 goes to the root filesystem.
@@ -127,7 +128,7 @@ scripts/ci/runner/install.sh
 
 It builds the image (`build.sh`), copies the supervisor, `network.sh` and `gvp-ci` to
 `/jobs/gvp-ci/bin`, writes `/jobs/gvp-ci/config.env` the first time, installs
-`gvp-ci.slice` and `gvp-ci-runners.service` into `/etc/systemd/system`, enables the service
+`gvpci.slice` and `gvp-ci-runners.service` into `/etc/systemd/system`, enables the service
 and restarts it. The service runs the installed copies, so a branch or a pull request never
 changes the running supervisor. Run `install.sh` again after a change to `scripts/ci/runner/`
 lands on master.
