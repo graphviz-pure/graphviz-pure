@@ -23,6 +23,7 @@ use super::Dot;
 use super::qsort::qsort;
 use super::types::*;
 use super::utils::*;
+use graphviz_pure_core::limits;
 use graphviz_pure_core::math;
 use graphviz_pure_core::strtod::atof;
 use std::collections::VecDeque;
@@ -1441,6 +1442,10 @@ impl Dot<'_> {
         loop {
             let mut delta: i64 = 0;
             for r in minr..=maxr {
+                // Not in C: a limit of the caller's `Limits::run` ends the transposes.
+                if limits::tick_by(rank_units(self.rk(g, r).n)) {
+                    return Ok(());
+                }
                 if self.rk(g, r).candidate {
                     delta +=
                         if self.mincross_store.graph.is_none() || self.mincross_store.constrained {
@@ -1505,7 +1510,8 @@ impl Dot<'_> {
                 );
                 let t = trying;
                 trying += 1;
-                if t >= self.min_quit {
+                // Not in C: a limit of the caller's `Limits::run` ends the iterations.
+                if t >= self.min_quit || limits::stopped() {
                     break;
                 }
                 if cur_cross == 0 {
@@ -2381,6 +2387,10 @@ impl Dot<'_> {
         }
         let mut r = first;
         while r != last + dir {
+            // Not in C: a limit of the caller's `Limits::run` ends the step.
+            if limits::tick_by(rank_units(self.rk(g, r).n)) {
+                return Ok(());
+            }
             let other = r - dir;
             let hasfixed = self.medians(g, r, other);
             if self.mincross_store.graph.is_none() || self.mincross_store.constrained {
@@ -2620,6 +2630,11 @@ impl Dot<'_> {
             }
         }
     }
+}
+
+/// The work a pass over a rank of `n` nodes counts against [`limits::tick_by`]. Not in C.
+fn rank_units(n: i32) -> u64 {
+    u64::try_from(n).unwrap_or(0).max(1)
 }
 
 #[cfg(test)]

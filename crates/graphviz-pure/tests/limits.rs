@@ -278,3 +278,16 @@ fn a_limit_reached_while_parsing_is_seen_when_the_next_phase_starts() {
     assert_eq!(err.limit(), Some(Limit::Heap));
     assert_eq!(reads.load(std::sync::atomic::Ordering::Relaxed), 3);
 }
+
+#[test]
+fn a_long_minlen_chain_stops_while_it_is_built() {
+    // 20 million virtual nodes in C and on master; the budget stops dot's class2 early.
+    let src = "digraph { a -> b [minlen=20000000] }";
+    let started = std::time::Instant::now();
+    let err = Limits::new()
+        .max_steps(100_000)
+        .run(|| graphviz_pure::render_dot(src, "dot", "svg"))
+        .unwrap_err();
+    assert_eq!(err.limit(), Some(Limit::Steps));
+    assert!(started.elapsed() < std::time::Duration::from_secs(20));
+}
