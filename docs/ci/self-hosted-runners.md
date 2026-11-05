@@ -93,17 +93,24 @@ public job logs, so they carry a slot number and a time, not the machine's name.
 | --- | --- | --- |
 | All runners together | 14 CPUs (half of 28), 43 GB memory (40 GB soft) | `gvp-ci.slice` |
 | CPU and IO weight | 20 (other groups default to 100) | `gvp-ci.slice` |
-| Each runner | 2 CPUs, 6 GB memory, no swap, 16,384 processes | `supervisor.sh` |
-| Runners | 7 | `/jobs/gvp-ci/config.env` |
+| Each runner | 4 CPUs, 10 GB memory, no swap, 16,384 processes | `supervisor.sh` |
+| Runners | 4 | `/jobs/gvp-ci/config.env` |
 | Disk | a slot waits while `/jobs` has under 150 GB free | `supervisor.sh` |
 
-Seven runners of two CPUs use exactly the slice's 14, so the slice's quota never throttles a
-job that its own cap allows, and `nproc` in the container (2) is what the job really gets.
-The first trial had six runners of four CPUs: under full load the slice throttled them to
-about 2.3 CPUs each, while cargo and the test harness ran four threads, and a CLI test with a
-20-second deadline (`ipsep_vpsc_cycle_error_ends_the_layout`, 5 s when the slice is idle) ran
-out of time. At two CPUs that test binary passes in 191 s, against 183 s at four throttled
-CPUs. The peak memory of the whole slice in the trials was 13.8 GB.
+Each runner has four CPUs because the hosted runner has four and the jobs assume it:
+`scripts/parallel-sfdp-bytes.sh` refuses to run with fewer (`nproc` below 4 would compare the
+sequential path with itself), and cargo and the test harness size their parallelism by
+`nproc`, which under gVisor is the container's CPU limit. Four runners of four ask for 16 CPUs
+from a 14-CPU slice, so the quota binds only when all four are saturated at once. The trials:
+
+| Runners × CPUs | Demand on 14 CPUs | Result |
+| --- | --- | --- |
+| 6 × 4 | 24 (1.7×) | every job passed but the two that needed a tool the image then lacked; the slice was throttled for 690 s |
+| 6 × 4, plus one more 4-CPU container | 28 (2×) | `ipsep_vpsc_cycle_error_ends_the_layout`, which must finish in 20 s (5 s on an idle slice), timed out |
+| 7 × 2 | 14 (1×) | no throttling, but the sfdp byte check refused two CPUs |
+
+More concurrent runners at four CPUs each need a larger share of the machine than half.
+The peak memory of the whole slice in the trials was 14.9 GB.
 
 The weight makes the runners yield whenever the CPUs are contended: the delegates' builds
 (`gvp-delegates`, capped at 80%) and everything else win over CI. The supervisor itself runs at

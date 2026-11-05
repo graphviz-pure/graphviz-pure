@@ -14,12 +14,12 @@ ROOT=${GVP_CI_ROOT:-/jobs/gvp-ci}
 # shellcheck source=/dev/null
 [ -f "$ROOT/config.env" ] && . "$ROOT/config.env"
 REPO=${GVP_REPO:-graphviz-pure/graphviz-pure}
-RUNNERS=${GVP_RUNNERS:-7}
+RUNNERS=${GVP_RUNNERS:-4}
 IMAGE=${GVP_IMAGE:-gvp-ci-runner:current}
 RUNTIME=${GVP_RUNTIME:-runsc}
 LABELS=${GVP_LABELS:-gvp-ci}
-CPUS=${GVP_CPUS_PER_RUNNER:-2}
-MEMORY=${GVP_MEMORY_PER_RUNNER:-6g}
+CPUS=${GVP_CPUS_PER_RUNNER:-4}
+MEMORY=${GVP_MEMORY_PER_RUNNER:-10g}
 MIN_FREE_GB=${GVP_MIN_FREE_GB:-150}
 PREFIX=${GVP_PREFIX:-gvp-ci}
 # Runner names appear in public job logs: no hostname.
