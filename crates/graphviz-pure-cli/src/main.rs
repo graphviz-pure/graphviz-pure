@@ -626,31 +626,11 @@ fn auto_output_filename(input: Option<&OsStr>, graph_index: usize, langname: &st
     name
 }
 
-/// Writes collected raster diagnostics, in order. The renderer's own warnings (C's
-/// `fprintf(stderr, "%s: ...", cmdname)`) carry no prefix of their own, so the command
-/// name is added; everything else already has the exact stderr text C writes — `agerr`
-/// messages their `Error: `/`Warning: ` prefix, library lines (gd, libjpeg) their own.
-///
-/// Returns whether an error-level diagnostic was reported: C's `errorfn` is `agerr`, which
-/// counts in the same process, so `dot` exits 1 for it.
-fn print_raster_diagnostics(cmdname: &str, diagnostics: &[graphviz_pure_core::Diagnostic]) -> bool {
-    let mut error = false;
+/// Writes collected raster diagnostics, in order, with C's command-name prefix.
+fn print_raster_diagnostics(cmdname: &str, diagnostics: &[graphviz_pure_core::Diagnostic]) {
     for diagnostic in diagnostics {
-        match diagnostic.level() {
-            graphviz_pure_core::DiagnosticLevel::Warning => {
-                fprintf_stderr(&format!("{cmdname}: {}", diagnostic.message()));
-            }
-            _ => {
-                fprintf_stderr(diagnostic.message());
-                error |= matches!(
-                    diagnostic.level(),
-                    graphviz_pure_core::DiagnosticLevel::Error
-                        | graphviz_pure_core::DiagnosticLevel::CountedAsError
-                );
-            }
-        }
+        fprintf_stderr(&format!("{cmdname}: {}", diagnostic.message()));
     }
-    error
 }
 
 /// The output of one job for one graph: text formats from their writer, raster formats
@@ -661,7 +641,6 @@ fn render_job(
     graph: &Graph,
     langname: &str,
     cmdname: &str,
-    rc: &mut i32,
 ) -> Result<Vec<u8>, graphviz_pure_core::GraphvizError> {
     let typ = langname.split(':').next().unwrap_or("");
     #[cfg(feature = "pdf")]
@@ -676,17 +655,11 @@ fn render_job(
         let svg = jobs.render_raster_svg_as(job, langname)?;
         return match graphviz_pure_raster::rasterize(&svg, fmt, explicit_dpi) {
             Ok(rendered) => {
-                *rc = (*rc).max(i32::from(print_raster_diagnostics(
-                    cmdname,
-                    rendered.diagnostics(),
-                )));
+                print_raster_diagnostics(cmdname, rendered.diagnostics());
                 Ok(rendered.into_output())
             }
             Err(error) => {
-                *rc = (*rc).max(i32::from(print_raster_diagnostics(
-                    cmdname,
-                    error.diagnostics(),
-                )));
+                print_raster_diagnostics(cmdname, error.diagnostics());
                 Err(error)
             }
         };
@@ -817,14 +790,7 @@ impl Run<'_> {
                     .render(graph, n)
                     .map(|s| graphviz_pure_core::charset::encode(&s).into_owned())
             } else {
-                render_job(
-                    &mut graph_jobs,
-                    n,
-                    graph,
-                    &langname,
-                    &self.opts.cmdname,
-                    &mut self.rc,
-                )
+                render_job(&mut graph_jobs, n, graph, &langname, &self.opts.cmdname)
             };
             // what the job wrote to the standard output (`-Tjson`'s xdot job) came first
             let stdout = graph_jobs.take_stdout();

@@ -82,14 +82,10 @@ pub enum GraphvizErrorKind {
 pub enum DiagnosticLevel {
     /// `AGERR`. The message text starts with `Error: `.
     Error,
-    /// `AGWARN`, or an uncounted renderer warning the command's name prefixes.
+    /// `AGWARN`, or an uncounted renderer warning.
     Warning,
     /// `AGMAX`. Counted as an error. The message text starts with `Warning: `.
     CountedAsError,
-    /// A stderr line one of the renderer's own libraries (gd, libjpeg) writes itself, already
-    /// prefixed by that library. Unlike a [`Warning`] renderer line, it is the whole line and
-    /// gets no command-name prefix when it is printed.
-    Stderr,
 }
 
 /// One `agerr` / `agwarningf` message or renderer warning, in the order C wrote it.

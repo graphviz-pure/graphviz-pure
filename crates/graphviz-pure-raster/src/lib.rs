@@ -172,6 +172,12 @@ const CAIRO_XMAX: f64 = 32767.0;
 const CAIRO_YMAX: f64 = 32767.0;
 
 /// C: plugin/pango/gvrender_pango.c:cairogen_begin_page
+///
+/// Both raster formats take this cap. C's `-Tpng` and `-Tjpg` both resolve to a
+/// `:cairo` device (for jpg, `jpg:cairo` has quality 6 from gdk or 5 from gd, against 1
+/// for `jpg:gd`), so the cairo renderer draws the page and `gd`'s own area cap in
+/// `gdgen_begin_page` never runs. After the cap both sides are at most 32767, which
+/// also keeps the JPEG encoder's `u16` dimensions exact.
 fn fit_cairo_bitmap(w: u32, h: u32) -> (u32, u32, f64) {
     if f64::from(w) < CAIRO_XMAX && f64::from(h) < CAIRO_YMAX {
         return (w, h, 1.0);
@@ -186,113 +192,12 @@ fn fit_cairo_bitmap(w: u32, h: u32) -> (u32, u32, f64) {
     (w, h, scale)
 }
 
-/// C: plugin/gd/gvrender_gd.c:gdgen_begin_page — `#define GD_XYMAX INT32_MAX`.
-const GD_XYMAX: u32 = i32::MAX as u32;
-
-/// libjpeg's `JPEG_MAX_DIMENSION`, which the gd renderer's JPEG writer runs into: libgd
-/// src/gd_jpeg.c:`fatal_jpeg_error` after libjpeg jcmaster.c:`initial_setup` refuses a
-/// dimension above it (`JERR_WIDTH_OVERFLOW`, "Maximum supported image dimension is 65500
-/// pixels").
-const JPEG_MAX_DIMENSION: u32 = 65500;
-
-/// C: plugin/gd/gvrender_gd.c:gdgen_begin_page
-///
-/// ```c
-/// if (job->width * job->height >= GD_XYMAX) {
-///     double scale = sqrt(GD_XYMAX / (job->width * job->height));
-///     assert(scale > 0 && scale <= 1);
-///     job->width = (unsigned)(job->width * scale);
-///     job->height = (unsigned)(job->height * scale);
-///     job->zoom *= scale;
-///     fprintf(stderr,
-///         "%s: graph is too large for gd-renderer bitmaps. Scaling by %g to fit\n",
-///         job->common->cmdname, scale);
-/// }
-/// ```
-///
-/// C multiplies its two `unsigned` device dimensions — the product wraps modulo 2^32
-/// before the comparison — and `GD_XYMAX / (job->width * job->height)` is an *integer*
-/// division of two unsigned values, so the scale is 1 when the product equals `GD_XYMAX`
-/// and 0 above it. gd's release builds (no `assert`) then carry a zero dimension on, and
-/// the JPEG writer fails on the empty picture (see [`jpeg_write_refused`]); only a
-/// product of exactly `GD_XYMAX` keeps its size.
-fn fit_gd_bitmap(w: u32, h: u32) -> (u32, u32, f64) {
-    let product = w.wrapping_mul(h);
-    if product < GD_XYMAX {
-        return (w, h, 1.0);
-    }
-    let scale = f64::from(GD_XYMAX / product).sqrt();
-    let w = (f64::from(w) * scale) as u32;
-    let h = (f64::from(h) * scale) as u32;
-    graphviz_pure_core::diag::render_warning(&format!(
-        "graph is too large for gd-renderer bitmaps. Scaling by {} to fit\n",
-        graphviz_pure_core::cnum::fmt_g(scale, 6)
-    ));
-    (w, h, scale)
-}
-
-/// The gd image creation of `gdgen_begin_page`: `gdImageCreate((int)width, (int)height)`
-/// starts with libgd src/gd_security.c:
-///
-/// ```c
-/// int overflow2(int a, int b)
-/// {
-///     if(a <= 0 || b <= 0) {
-///         gd_error_ex(GD_WARNING, "one parameter to a memory allocation multiplication is negative or zero, failing operation gracefully\n");
-///         return 1;
-///     }
-///     if(a > INT_MAX / b) {
-///         gd_error_ex(GD_WARNING, "product of memory allocation multiplication would exceed INT_MAX, failing operation gracefully\n");
-///         return 1;
-///     }
-///     return 0;
-/// }
-/// ```
-///
-/// `gdImageCreate` (libgd src/gd.c) then returns `NULL`, and `gdgen_begin_page` answers
-/// with `job->common->errorfn("gdImageCreate returned NULL. Malloc problem?\n")` — `agerr`,
-/// so the message carries `Error: ` and the run's error count rises: `dot` exits 1. The
-/// page is dropped (`gdgen_end_page` returns on the null image), so nothing is drawn and
-/// the JPEG writer never runs. The zero scale and the wrapped unsigned product both end
-/// here; only a picture that allocates reaches libjpeg's dimension limit.
-fn gd_image_create_refused(w: u32, h: u32) -> bool {
-    // C casts the unsigned device dimensions to int for the call.
-    let (a, b) = (w as i32, h as i32);
-    let reason = if a <= 0 || b <= 0 {
-        "one parameter to a memory allocation multiplication is negative or zero, failing operation gracefully\n"
-    } else if a > i32::MAX / b {
-        "product of memory allocation multiplication would exceed INT_MAX, failing operation gracefully\n"
-    } else {
-        return false;
-    };
-    graphviz_pure_core::diag::render_stderr(&format!("GD Warning: {reason}"));
-    graphviz_pure_core::diag::agerrorf("gdImageCreate returned NULL. Malloc problem?\n");
-    true
-}
-
-/// The gd renderer's JPEG write (libgd src/gd_jpeg.c:`_gdImageJpegCtx`) stops at the first
-/// libjpeg error: `fatal_jpeg_error` prints the library's message with gd's default
-/// stderr handler (`gd.c:gd_stderr_error`, `GD Warning: ` and no trailing newline) and
-/// longjmps, `_gdImageJpegCtx` returns, and no bytes reach the output. A dimension above
-/// `JPEG_MAX_DIMENSION` dies in `jcmaster.c:initial_setup`, before libjpeg writes its
-/// header, so the file stays empty and the run exits 0 (gd ignores the failure).
-fn jpeg_dimension_limit(w: u32, h: u32) -> bool {
-    if w <= JPEG_MAX_DIMENSION && h <= JPEG_MAX_DIMENSION {
-        return false;
-    }
-    graphviz_pure_core::diag::render_stderr(&format!(
-        "GD Warning: gd-jpeg: JPEG library reports unrecoverable error: Maximum supported image dimension is {JPEG_MAX_DIMENSION} pixels"
-    ));
-    true
-}
-
 /// Draws the SVG and returns the picture.
 ///
 /// `explicit_dpi` says whether the graph set `dpi` or `resolution` (then the SVG is
 /// already scaled and is drawn at one pixel per point).
 fn render_pixmap(
     svg: &str,
-    format: RasterFormat,
     explicit_dpi: bool,
 ) -> Result<Option<tiny_skia::Pixmap>, GraphvizError> {
     let tree = parse_svg(svg)?;
@@ -304,16 +209,12 @@ fn render_pixmap(
         (size.width() * scale).round().max(1.0) as u32,
         (size.height() * scale).round().max(1.0) as u32,
     );
-    let (w, h, fit) = match format {
-        RasterFormat::Png => fit_cairo_bitmap(w, h),
-        RasterFormat::Jpeg => fit_gd_bitmap(w, h),
-    };
-    if format == RasterFormat::Jpeg && (gd_image_create_refused(w, h) || jpeg_dimension_limit(w, h))
-    {
-        return Ok(None);
-    }
+    let (w, h, fit) = fit_cairo_bitmap(w, h);
     if w == 0 || h == 0 {
-        // cairo accepts the zero-sized surface but writes no PNG bytes.
+        // cairo accepts the zero-sized surface but writes no PNG bytes. C crashes here for
+        // JPEG: its `jpg:cairo:gd` device's `gdImageCreateTrueColor` refuses the zero side
+        // and plugin/gd/gvdevice_gd.c:gd_format dereferences the null image. The port
+        // writes no JPEG bytes either (docs/porting/crashes.md, "A raster side scaled to 0").
         return Ok(None);
     }
     let scale = f64::from(scale) * fit;
@@ -332,7 +233,7 @@ fn rasterize_inner(
     format: RasterFormat,
     explicit_dpi: bool,
 ) -> Result<Vec<u8>, GraphvizError> {
-    let Some(pixmap) = render_pixmap(svg, format, explicit_dpi)? else {
+    let Some(pixmap) = render_pixmap(svg, explicit_dpi)? else {
         return Ok(Vec::new());
     };
     let (w, h) = (pixmap.width(), pixmap.height());
@@ -356,8 +257,8 @@ fn rasterize_inner(
                 rgb.extend([over(c.red()), over(c.green()), over(c.blue())]);
             }
             let mut out = Vec::new();
-            // `jpeg_dimension_limit` has kept both dimensions at or below libjpeg's 65500,
-            // so the `u16` the encoder takes holds them exactly.
+            // `fit_cairo_bitmap` has kept both dimensions at or below 32767, so the `u16`
+            // the encoder takes holds them exactly.
             jpeg_encoder::Encoder::new(&mut out, 90)
                 .encode(&rgb, w as u16, h as u16, jpeg_encoder::ColorType::Rgb)
                 .map_err(|e| GraphvizError::render(format!("encoding the JPEG: {e}")))?;
@@ -497,125 +398,37 @@ mod tests {
             let svg = format!(
                 r#"<svg xmlns="http://www.w3.org/2000/svg" width="{w}pt" height="{h}pt" viewBox="0 0 {w} {h}"/>"#
             );
-            let png = rasterize(&svg, RasterFormat::Png, true).unwrap();
-            assert!(png.output().is_empty());
-            assert_eq!(png.diagnostics().len(), 1);
-            assert_eq!(
-                png.diagnostics()[0].message(),
-                "graph is too large for cairo-renderer bitmaps. Scaling by 0.32767 to fit\n"
-            );
+            // C crashes for JPEG here; the port writes no bytes, as for PNG (#716).
+            for format in [RasterFormat::Png, RasterFormat::Jpeg] {
+                let out = rasterize(&svg, format, true).unwrap();
+                assert!(out.output().is_empty());
+                assert_eq!(out.diagnostics().len(), 1);
+                assert_eq!(
+                    out.diagnostics()[0].message(),
+                    "graph is too large for cairo-renderer bitmaps. Scaling by 0.32767 to fit\n"
+                );
+            }
         }
     }
 
+    // Issue #716: C's plain `-Tjpg` is a `jpg:cairo` device, so JPEG takes cairo's cap too.
+    // C (jpg:cairo:gd) writes a 32767 x 32 JPEG with this warning.
     #[test]
-    fn cairo_limit_does_not_apply_to_jpeg() {
-        // The cairo cap is the PNG device's alone; the same drawing as JPEG has no cap of
-        // its own at this size (100000 * 100 is under gd's area limit) and no warning.
-        let (_, diagnostics) = graphviz_pure_core::diag::capture(|| fit_gd_bitmap(100000, 100));
-        assert!(diagnostics.is_empty());
-    }
-
-    #[test]
-    fn jpeg_scales_to_the_gd_bitmap_limit() {
-        // Under the cap: unchanged, no warning.
-        let ((w, h, scale), diagnostics) =
-            graphviz_pure_core::diag::capture(|| fit_gd_bitmap(100000, 100));
-        assert_eq!((w, h, scale), (100000, 100, 1.0));
-        assert!(diagnostics.is_empty());
-
-        // C's area is an unsigned product, so it wraps: 100000 * 50000 is 705032704
-        // modulo 2^32, under GD_XYMAX, and like C this one is not scaled at all.
-        let ((w, h, scale), diagnostics) =
-            graphviz_pure_core::diag::capture(|| fit_gd_bitmap(100000, 50000));
-        assert_eq!((w, h, scale), (100000, 50000, 1.0));
-        assert!(diagnostics.is_empty());
-
-        // Over the cap, C divides its two unsigned values as integers, so the scale is 0
-        // and both dimensions truncate to nothing, with %g printing the 0.
-        for (w, h) in [(50000, 50000), (100000, 30000)] {
-            let ((w2, h2, scale), diagnostics) =
-                graphviz_pure_core::diag::capture(|| fit_gd_bitmap(w, h));
-            assert_eq!(scale, 0.0);
-            assert_eq!((w2, h2), (0, 0));
-            assert_eq!(diagnostics.len(), 1);
-            assert_eq!(
-                diagnostics[0].message(),
-                "graph is too large for gd-renderer bitmaps. Scaling by 0 to fit\n"
-            );
-            assert_eq!(diagnostics[0].level(), crate::DiagnosticLevel::Warning);
-        }
-    }
-
-    #[test]
-    fn jpeg_dimension_over_the_libjpeg_limit_writes_nothing() {
-        // 100000 * 100 is under gd's area cap and allocates (overflow2 passes: 100000 is
-        // under INT_MAX / 100), so the picture is drawn; the width alone then stops
-        // libjpeg before its header, with gd's own stderr line and no bytes, and no
-        // graphviz error: exit 0.
+    fn jpeg_takes_the_cairo_bitmap_limit() {
         let jpg = rasterize(
             r#"<svg xmlns="http://www.w3.org/2000/svg" width="100000pt" height="100pt" viewBox="0 0 100000 100"/>"#,
             RasterFormat::Jpeg,
             true,
         )
         .unwrap();
-        assert!(jpg.output().is_empty());
+        let out = jpg.output();
+        let sof = out.windows(2).position(|w| w == [0xff, 0xc0]).unwrap();
+        assert_eq!(u16::from_be_bytes([out[sof + 5], out[sof + 6]]), 32);
+        assert_eq!(u16::from_be_bytes([out[sof + 7], out[sof + 8]]), 32767);
         assert_eq!(jpg.diagnostics().len(), 1);
         assert_eq!(
             jpg.diagnostics()[0].message(),
-            "GD Warning: gd-jpeg: JPEG library reports unrecoverable error: Maximum supported image dimension is 65500 pixels"
-        );
-        assert_eq!(jpg.diagnostics()[0].level(), crate::DiagnosticLevel::Stderr);
-    }
-
-    #[test]
-    fn jpeg_scaled_to_nothing_loses_the_page_like_c() {
-        // 100000 * 30000 is over gd's area cap, so the integer-division scale is 0 and the
-        // page is 0 x 0. gdImageCreate refuses a zero side (overflow2), gd prints its own
-        // warning, and errorfn's agerr reports the null image: no drawing, no JPEG write,
-        // three lines in C's order.
-        let jpg = rasterize(
-            r#"<svg xmlns="http://www.w3.org/2000/svg" width="100000pt" height="30000pt" viewBox="0 0 100000 30000"/>"#,
-            RasterFormat::Jpeg,
-            true,
-        )
-        .unwrap();
-        assert!(jpg.output().is_empty());
-        assert_eq!(jpg.diagnostics().len(), 3);
-        assert_eq!(
-            jpg.diagnostics()[0].message(),
-            "graph is too large for gd-renderer bitmaps. Scaling by 0 to fit\n"
-        );
-        assert_eq!(
-            jpg.diagnostics()[1].message(),
-            "GD Warning: one parameter to a memory allocation multiplication is negative or zero, failing operation gracefully\n"
-        );
-        assert_eq!(
-            jpg.diagnostics()[2].message(),
-            "Error: gdImageCreate returned NULL. Malloc problem?\n"
-        );
-        assert_eq!(jpg.diagnostics()[2].level(), crate::DiagnosticLevel::Error);
-    }
-
-    #[test]
-    fn jpeg_wrapped_area_that_allocates_nothing_loses_the_page_like_c() {
-        // 100000 * 50000 wraps to 705032704, under GD_XYMAX, so gd does not scale and
-        // says nothing: the picture reaches gdImageCreate, whose overflow2 refuses the
-        // 5e9 product with the exceed-INT_MAX line and the same null-image agerr.
-        let jpg = rasterize(
-            r#"<svg xmlns="http://www.w3.org/2000/svg" width="100000pt" height="50000pt" viewBox="0 0 100000 50000"/>"#,
-            RasterFormat::Jpeg,
-            true,
-        )
-        .unwrap();
-        assert!(jpg.output().is_empty());
-        assert_eq!(jpg.diagnostics().len(), 2);
-        assert_eq!(
-            jpg.diagnostics()[0].message(),
-            "GD Warning: product of memory allocation multiplication would exceed INT_MAX, failing operation gracefully\n"
-        );
-        assert_eq!(
-            jpg.diagnostics()[1].message(),
-            "Error: gdImageCreate returned NULL. Malloc problem?\n"
+            "graph is too large for cairo-renderer bitmaps. Scaling by 0.32767 to fit\n"
         );
     }
 
@@ -633,7 +446,7 @@ mod tests {
 <text text-anchor="middle" x="27" y="-85.8" font-family="Times,serif" font-size="14.00">a</text></g></svg>"#;
         for svg in [SVG, TRANSPARENT] {
             for explicit_dpi in [false, true] {
-                let reference = render_pixmap(svg, RasterFormat::Png, explicit_dpi)
+                let reference = render_pixmap(svg, explicit_dpi)
                     .unwrap()
                     .unwrap()
                     .encode_png()

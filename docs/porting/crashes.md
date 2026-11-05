@@ -1124,3 +1124,19 @@ default node is 65,700, and C aborts (`overlap=portho`, `porthoxy`, `porthoyx`, 
 sfdp; also a large `sep`). `mkConstraintG`, which the `ortho` modes use, has no such check. The port
 stores the full value, as the assignment under the assertion does. Past about 3e6 inches
 `initItem`'s integer boxes wrap ([Extreme coordinates](#extreme-coordinates)).
+
+## A raster side scaled to 0
+
+Issue: #716.
+
+C's plain `-Tjpg` resolves to a `jpg:cairo` device (quality 6 from the gdk plugin or 5 from
+gd, against 1 for `jpg:gd`), so `cairogen_begin_page` (`plugin/pango/gvrender_pango.c`) caps
+each side at 32767, as for `-Tpng`. A page such as `viewport="100000,1,1"` truncates one side
+to 0. For PNG, cairo accepts the empty surface and writes no bytes, and the port does the same.
+For JPEG the `jpg:cairo:gd` device calls `gdImageCreateTrueColor(32767, 0)`, which prints
+`GD Warning: one parameter to a memory allocation multiplication is negative or zero, failing
+operation gracefully` and returns NULL, and `gd_format` (`plugin/gd/gvdevice_gd.c`)
+dereferences it: C segfaults (exit 139, measured on Debian's 2.42.4 with libgd 2.3.3). The
+port treats JPEG like PNG: cairo's scaling warning, no output bytes, exit 0. It does not print
+the gd line, which comes from a device the port does not have.
+
