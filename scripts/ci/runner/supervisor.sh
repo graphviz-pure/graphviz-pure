@@ -98,7 +98,8 @@ run_slot() {
       sleep 60; continue
     fi
     mkdir -p "$SCRATCH/$slot"
-    sudo -n chown 64001:64001 "$SCRATCH/$slot"
+    # --no-dereference: if scratch/N were a symlink, chown would change the link, not its target.
+    sudo -n chown --no-dereference 64001:64001 "$SCRATCH/$slot"
     started=$(date +%s)
     if ! GVP_JIT_CONFIG=$jit docker run -d --name "$c" \
         --label "gvp-ci.runner=$name" \

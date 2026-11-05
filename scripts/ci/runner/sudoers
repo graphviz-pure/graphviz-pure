@@ -1,6 +1,6 @@
-# /etc/sudoers.d/gvp-ci (installed by install.sh, checked with visudo): what the self-hosted
+# /etc/sudoers.d/gvp-ci (installed by install.sh, checked with visudo): all the self-hosted
 # runners' service user may run as root. The scratch directories hold files of the containers'
-# uid 64001; gh-bot mints the project's GitHub App token for cancelling and re-running runs.
+# uid 64001. chown takes --no-dereference, so a symlink planted as scratch/N cannot hand its
+# target to that uid.
 gvp-ci ALL=(root) NOPASSWD: /usr/bin/rm -rf --one-file-system -- /jobs/gvp-ci/scratch/[1-9], /usr/bin/rm -rf --one-file-system -- /jobs/gvp-ci/scratch/[1-9][0-9]
-gvp-ci ALL=(root) NOPASSWD: /usr/bin/chown 64001\:64001 /jobs/gvp-ci/scratch/[1-9], /usr/bin/chown 64001\:64001 /jobs/gvp-ci/scratch/[1-9][0-9]
-gvp-ci ALL=(root) NOPASSWD: /usr/local/sbin/gvp-app-token-mint ""
+gvp-ci ALL=(root) NOPASSWD: /usr/bin/chown --no-dereference 64001\:64001 /jobs/gvp-ci/scratch/[1-9], /usr/bin/chown --no-dereference 64001\:64001 /jobs/gvp-ci/scratch/[1-9][0-9]

@@ -41,6 +41,10 @@ fi
 sudo chown root:root "$root/config.env"
 sudo chmod 0644 "$root/config.env"
 
+# Earlier installs let gvp-ci mint gh-bot's App token for cancel and re-run; the service's own
+# token does that now (Actions, read and write).
+sudo rm -f /etc/sudoers.d/gvp-ci-gh-bot
+
 # The token the service uses, root-only; systemd passes it to the units as a credential.
 sudo install -d -o root -g root -m 0700 /etc/gvp-ci
 if ! sudo test -s /etc/gvp-ci/token; then
