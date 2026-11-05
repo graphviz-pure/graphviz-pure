@@ -13,7 +13,7 @@ pkgdesc='Pure-Rust port of Graphviz 16.1.0, a dot-compatible command line with t
 arch=('x86_64' 'aarch64')
 url='https://graphviz-pure.github.io/'
 # EPL-2.0: the port. OFL-1.1: the Tinos, Arimo and Cousine fonts compiled into the binary.
-# MIT: the CORE-MATH pow port and the expat port. The texts are in the archive (LICENSE, LICENSES/).
+# MIT: the CORE-MATH pow and cbrt ports and the expat port. The texts are in the archive (LICENSE, LICENSES/).
 license=('EPL-2.0 AND OFL-1.1 AND MIT')
 depends=()
 provides=("$_name=$pkgver")

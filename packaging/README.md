@@ -168,7 +168,7 @@ statically linked crates, which conda-forge requires), stripped symbols and fat 
    arrive as pull requests from the autotick bot.
 
 `license` is `EPL-2.0 AND OFL-1.1 AND MIT`: the port, the fonts compiled into the binary, and the
-CORE-MATH `pow` and expat ports (see `NOTICE`), whose texts (`LICENSES/MIT-CORE-MATH.txt`,
+CORE-MATH `pow` and `cbrt` and expat ports (see `NOTICE`), whose texts (`LICENSES/MIT-CORE-MATH.txt`,
 `LICENSES/MIT-EXPAT.txt` and the fonts' `OFL-*.txt`) are in `license_file`. Crate dependencies are covered twice: `THIRDPARTY.yml`, which
 conda-forge requires and the build generates from exactly the crates it compiled, and the
 repository's `THIRD-PARTY-LICENSES.md` (cargo-about), which also carries each crate's copyright
