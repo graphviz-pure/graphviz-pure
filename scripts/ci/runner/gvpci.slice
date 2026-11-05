@@ -1,0 +1,18 @@
+# The self-hosted runners' share of this machine (docs/ci/self-hosted-runners.md): at most half
+# its 28 CPUs and about half its memory, and a low weight, so the runners yield to everything
+# else, the delegates' gvp-delegates group included, whenever the CPUs are contended. The name
+# has no hyphen: systemd would nest gvp-ci.slice under gvp.slice, and the weight would then
+# only compete inside gvp.slice, not against user.slice and system.slice.
+[Unit]
+Description=graphviz-pure self-hosted CI runners
+
+[Slice]
+CPUAccounting=yes
+CPUQuota=1400%
+CPUWeight=20
+MemoryAccounting=yes
+MemoryHigh=40G
+MemoryMax=43G
+IOAccounting=yes
+IOWeight=20
+TasksMax=65536

@@ -1,0 +1,124 @@
+#!/usr/bin/env bash
+# The kill switch, watchdog and status of the self-hosted runners
+# (docs/ci/self-hosted-runners.md).
+#
+#   gvp-ci off       every new job goes to GitHub-hosted runners (repository variable
+#                    GVP_SELF_HOSTED=false), then the runs still waiting for a local runner are
+#                    cancelled and re-run, so their jobs go to GitHub-hosted runners too
+#   gvp-ci on        heavy jobs from this repository go to the local runners again
+#   gvp-ci requeue   only the cancel-and-re-run part of `off`
+#   gvp-ci status    the variable, the supervisor, the containers and GitHub's runner list
+#   gvp-ci watchdog  run by gvp-ci-watchdog.timer: runs `off` when the variable is on and, for
+#                    GVP_WATCHDOG_MINUTES (5), no local runner is online or the supervisor is
+#                    unhealthy (service not active, or no heartbeat for five minutes)
+#
+# The variable is read when a job is queued, so `off` alone would leave the jobs already
+# queued for the local labels waiting; a re-run reads the variable again.
+#
+# GitHub calls: the variable and the runner list use the service's token (systemd credential
+# gh-token) when run by the service, and the caller's gh login otherwise. Cancelling and
+# re-running runs goes through gh-bot, the project's GitHub App.
+set -euo pipefail
+repo=graphviz-pure/graphviz-pure
+root=${GVP_CI_ROOT:-/jobs/gvp-ci}
+# shellcheck source=/dev/null
+[ -f "$root/config.env" ] && . "$root/config.env"
+if [ -n "${CREDENTIALS_DIRECTORY:-}" ] && [ -r "$CREDENTIALS_DIRECTORY/gh-token" ]; then
+  GH_TOKEN=$(cat "$CREDENTIALS_DIRECTORY/gh-token")
+  export GH_TOKEN
+  export GH_CONFIG_DIR=${GH_CONFIG_DIR:-$root/state/gh}
+fi
+case "${GVP_RUNNER_SCOPE:-repo}" in
+  org) runners_api=orgs/${repo%%/*}/actions/runners ;;
+  *) runners_api=repos/$repo/actions/runners ;;
+esac
+log() {
+  echo "$(date -u +%FT%TZ) $*"
+  if [ -w "$root/logs" ]; then echo "$(date -u +%FT%TZ) $*" >> "$root/logs/watchdog.log"; fi
+}
+
+online_runners() {
+  gh api --paginate "$runners_api" \
+    --jq '[.runners[] | select(.status == "online" and (.labels | map(.name) | index("gvp-ci")))] | length' \
+    | awk '{ n += $1 } END { print n + 0 }'
+}
+
+# The runs of this repository that have a job queued for the local labels.
+stuck_runs() {
+  for status in queued in_progress; do
+    gh-bot api --paginate "repos/$repo/actions/runs?status=$status&per_page=100" --jq '.workflow_runs[].id'
+  done | sort -u | while read -r run; do
+    n=$(gh-bot api --paginate "repos/$repo/actions/runs/$run/jobs?per_page=100" \
+      --jq '[.jobs[] | select(.status == "queued" and (.labels | index("gvp-ci")))] | length' \
+      | awk '{ n += $1 } END { print n + 0 }')
+    if [ "$n" -gt 0 ]; then echo "$run"; fi
+  done
+}
+
+requeue() {
+  local runs run i
+  runs=$(stuck_runs) || { log "requeue: could not list the runs"; return 1; }
+  [ -n "$runs" ] || { log "requeue: no run is waiting for a local runner"; return 0; }
+  for run in $runs; do
+    log "requeue: cancelling run $run (it waits for a local runner)"
+    gh-bot run cancel "$run" -R "$repo" >/dev/null 2>&1 || true
+  done
+  for run in $runs; do
+    for i in $(seq 1 36); do
+      [ "$(gh-bot run view "$run" -R "$repo" --json status --jq .status 2>/dev/null)" = completed ] && break
+      sleep 5
+    done
+    # Cancelled jobs count as failed; their re-run reads GVP_SELF_HOSTED again. A merge-queue
+    # run's pull request has left the queue when its run was cancelled: enqueue it again.
+    if gh-bot run rerun "$run" -R "$repo" --failed >/dev/null 2>&1; then
+      log "requeue: re-ran the cancelled jobs of run $run"
+    else
+      log "requeue: could not re-run run $run; re-run it by hand"
+    fi
+  done
+}
+
+case "${1:-status}" in
+  off)
+    gh variable set GVP_SELF_HOSTED --body false -R "$repo"
+    log "GVP_SELF_HOSTED=false: new jobs run on GitHub-hosted runners"
+    requeue
+    ;;
+  on)
+    gh variable set GVP_SELF_HOSTED --body true -R "$repo"
+    rm -f "$root/state/unhealthy-since" 2>/dev/null || true
+    log "GVP_SELF_HOSTED=true: heavy jobs from $repo run on the local runners"
+    ;;
+  requeue) requeue ;;
+  status)
+    echo "GVP_SELF_HOSTED=$(gh variable get GVP_SELF_HOSTED -R "$repo" 2>/dev/null || echo unset)"
+    systemctl --no-pager --lines=0 status gvp-ci-runners.service | head -3 || true
+    docker ps --filter label=gvp-ci.runner --format '{{.Names}}\t{{.Status}}\t{{.Label "gvp-ci.runner"}}' 2>/dev/null || true
+    gh api "$runners_api" --jq '.runners[] | "\(.name)\t\(.status)\tbusy=\(.busy)"'
+    ;;
+  watchdog)
+    since_file=$root/state/unhealthy-since
+    minutes=${GVP_WATCHDOG_MINUTES:-5}
+    # A failed GitHub call leaves everything as it is.
+    value=$(gh variable get GVP_SELF_HOSTED -R "$repo" 2>/dev/null) || exit 0
+    if [ "$value" != true ]; then rm -f "$since_file"; exit 0; fi
+    reason=""
+    if ! systemctl is-active --quiet gvp-ci-runners.service; then
+      reason="gvp-ci-runners.service is not active"
+    elif [ ! -f "$root/state/heartbeat" ] || [ $(( $(date +%s) - $(stat -c %Y "$root/state/heartbeat") )) -gt 300 ]; then
+      reason="the supervisor has not written its heartbeat for five minutes"
+    else
+      n=$(online_runners) || exit 0
+      [ "$n" -gt 0 ] || reason="no gvp-ci runner is online"
+    fi
+    if [ -z "$reason" ]; then rm -f "$since_file"; exit 0; fi
+    now=$(date +%s)
+    if [ ! -f "$since_file" ]; then echo "$now" > "$since_file"; log "watchdog: $reason"; exit 0; fi
+    if [ $(( now - $(cat "$since_file") )) -ge $(( minutes * 60 )) ]; then
+      log "watchdog: $reason, for $minutes minutes: switching off"
+      rm -f "$since_file"
+      "$0" off
+    fi
+    ;;
+  *) echo "usage: gvp-ci on|off|requeue|status|watchdog" >&2; exit 2 ;;
+esac

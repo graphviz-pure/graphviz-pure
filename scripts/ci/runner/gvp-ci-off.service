@@ -1,0 +1,15 @@
+# Run when gvp-ci-runners.service fails for good (a crash loop past its start limit): sends
+# every new job back to GitHub-hosted runners at once, without waiting for the watchdog.
+[Unit]
+Description=graphviz-pure self-hosted CI runners (switch off after a failure)
+
+[Service]
+Type=oneshot
+User=gvp-ci
+Group=gvp-ci
+SupplementaryGroups=docker
+# The GitHub token (docs/ci/self-hosted-runners.md, "The token"): root-only on disk, handed to
+# this service alone in $CREDENTIALS_DIRECTORY.
+LoadCredential=gh-token:/etc/gvp-ci/token
+Environment=GVP_CI_ROOT=/jobs/gvp-ci GH_CONFIG_DIR=/jobs/gvp-ci/state/gh
+ExecStart=/jobs/gvp-ci/bin/gvp-ci off

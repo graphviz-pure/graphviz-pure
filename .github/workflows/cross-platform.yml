@@ -16,7 +16,10 @@ name: Cross-platform
 # credential for the other. The site's fidelity data, gallery outputs and C references are
 # committed, since they need the C oracle, which CI does not have.
 #
-# Jobs run on GitHub-hosted runners, which are free for a public repository. The platform renders
+# The WebAssembly render, the one heavy Linux job here, runs on the project's self-hosted runners
+# for this repository's own events when the GVP_SELF_HOSTED variable is on, and on GitHub-hosted
+# runners otherwise (docs/ci/self-hosted-runners.md); every other job runs on GitHub-hosted
+# runners. The platform renders
 # and the comparison are skipped when the files they read already passed this workflow
 # (scripts/ci-result-cache.sh), so a change to documentation or the site's pages renders nothing,
 # and the site job takes the cross-platform results from the run that passed those files.
@@ -161,7 +164,12 @@ jobs:
     name: WebAssembly (Node.js)
     needs: lookup
     if: needs.lookup.outputs.hit != 'true'
-    runs-on: ubuntu-24.04
+    # Heavy Linux jobs (five minutes or more on a hosted runner) take this machine's self-hosted
+    # runners for this repository's own events while the repository variable GVP_SELF_HOSTED is
+    # 'true'; GitHub's ubuntu-24.04 otherwise, and always for a fork's pull request. Short jobs
+    # stay on ubuntu-24.04, so both pools work at once (docs/ci/self-hosted-runners.md). Another
+    # heavy job in this file reuses this through the alias *heavy-linux-runner.
+    runs-on: &heavy-linux-runner ${{ vars.GVP_SELF_HOSTED == 'true' && (contains(fromJSON('["push", "merge_group", "workflow_dispatch"]'), github.event_name) || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository)) && fromJSON('["self-hosted", "linux", "x64", "gvp-ci"]') || 'ubuntu-24.04' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

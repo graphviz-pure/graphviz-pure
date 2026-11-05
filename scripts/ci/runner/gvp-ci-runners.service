@@ -1,0 +1,33 @@
+# Keeps the self-hosted runners registered (supervisor.sh). Installed by install.sh, which copies
+# the scripts to /jobs/gvp-ci: a checkout or a pull request never changes the running copy.
+[Unit]
+Description=graphviz-pure self-hosted CI runners (supervisor)
+After=docker.service network-online.target
+Wants=docker.service network-online.target
+# Five failed starts in ten minutes is a crash loop: stop retrying and switch the runners off.
+StartLimitIntervalSec=600
+StartLimitBurst=5
+OnFailure=gvp-ci-off.service
+
+[Service]
+Type=simple
+User=gvp-ci
+Group=gvp-ci
+SupplementaryGroups=docker
+# The GitHub token (docs/ci/self-hosted-runners.md, "The token"): root-only on disk, handed to
+# this service alone in $CREDENTIALS_DIRECTORY.
+LoadCredential=gh-token:/etc/gvp-ci/token
+Environment=GVP_CI_ROOT=/jobs/gvp-ci GH_CONFIG_DIR=/jobs/gvp-ci/state/gh
+Slice=gvpci.slice
+Nice=15
+ExecStartPre=+/jobs/gvp-ci/bin/network.sh
+ExecStart=/jobs/gvp-ci/bin/supervisor.sh
+KillMode=mixed
+TimeoutStopSec=90
+Restart=always
+RestartSec=30
+StandardOutput=append:/jobs/gvp-ci/logs/service.log
+StandardError=append:/jobs/gvp-ci/logs/service.log
+
+[Install]
+WantedBy=multi-user.target

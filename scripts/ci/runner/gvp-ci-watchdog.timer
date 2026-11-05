@@ -1,0 +1,9 @@
+[Unit]
+Description=graphviz-pure self-hosted CI runners (watchdog every two minutes)
+
+[Timer]
+OnBootSec=5min
+OnUnitActiveSec=2min
+
+[Install]
+WantedBy=timers.target
