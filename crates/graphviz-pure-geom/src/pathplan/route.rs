@@ -296,13 +296,17 @@ impl Default for Solve3Memo {
 }
 
 impl Solve3Memo {
+    /// The slot a key maps to: every coefficient takes part.
+    fn slot_of(key: &[u64; 4]) -> usize {
+        let [k0, k1, k2, k3] = *key;
+        let mixed = k0 ^ k1.rotate_left(16) ^ k2.rotate_left(32) ^ k3.rotate_left(48);
+        (mixed.wrapping_mul(0x9e37_79b9_7f4a_7c15) >> 58) as usize
+    }
+
     /// `solve3(coeff, roots)`.
     fn solve3(&mut self, coeff: &[f64; 4], roots: &mut [f64; 3]) -> usize {
         let key = coeff.map(f64::to_bits);
-        let [k0, k1, k2, k3] = key;
-        let mixed = k0 ^ k1.rotate_left(16) ^ k2.rotate_left(32) ^ k3.rotate_left(48);
-        let at = (mixed.wrapping_mul(0x9e37_79b9_7f4a_7c15) >> 58) as usize;
-        let Some(slot) = self.slots.get_mut(at) else {
+        let Some(slot) = self.slots.get_mut(Self::slot_of(&key)) else {
             return solve3(coeff, roots);
         };
         if slot.n != EMPTY && slot.key == key {
@@ -887,6 +891,52 @@ mod tests {
             inside > 100,
             "exercise curves that pass, not only ones that cross"
         );
+    }
+
+    /// Two coefficient arrays that differ in one coefficient only, map to the same slot, and
+    /// have different `solve3` answers: the second must be a miss that returns its own answer,
+    /// for each of the four coefficients. A key that left one out would answer it from the
+    /// first array's slot.
+    #[test]
+    fn solve3_memo_key_holds_every_coefficient() {
+        let solved = |c: &[f64; 4]| {
+            let mut r = [f64::NAN; 3];
+            let n = solve3(c, &mut r);
+            let read = if n == 4 { 0 } else { n };
+            (n, r.map(f64::to_bits)[..read].to_vec())
+        };
+        // Three real roots in [0, 1] for the base cubic: (t - 0.2)(t - 0.5)(t - 0.9).
+        let base = [-0.09, 0.73, -1.6, 1.0];
+        for at in 0..4 {
+            let slot = Solve3Memo::slot_of(&base.map(f64::to_bits));
+            let other = (1..10_000)
+                .map(|i| {
+                    let mut c = base;
+                    c[at] += f64::from(i) / 1024.0;
+                    c
+                })
+                .find(|c| {
+                    Solve3Memo::slot_of(&c.map(f64::to_bits)) == slot && solved(c) != solved(&base)
+                })
+                .expect("a same-slot neighbour with another answer");
+            let mut memo = Solve3Memo::default();
+            let mut roots = [0.0; 3];
+            assert_eq!(memo.solve3(&base, &mut roots), solved(&base).0);
+            let hits = MEMO_HITS.with(std::cell::Cell::get);
+            roots = [f64::NAN; 3];
+            let n = memo.solve3(&other, &mut roots);
+            assert_eq!(
+                MEMO_HITS.with(std::cell::Cell::get),
+                hits,
+                "coeff[{at}]: not a miss"
+            );
+            let read = if n == 4 { 0 } else { n };
+            assert_eq!(
+                (n, roots.map(f64::to_bits)[..read].to_vec()),
+                solved(&other),
+                "coeff[{at}]: answered from another array's slot"
+            );
+        }
     }
 
     /// The check recomputes a hit: a slot holding a wrong answer stops the run.
