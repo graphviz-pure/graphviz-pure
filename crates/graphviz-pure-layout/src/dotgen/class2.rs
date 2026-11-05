@@ -61,6 +61,11 @@ impl Dot<'_> {
         let to_rank = self.nodes[to].rank;
         let mut r = self.nodes[from].rank + 1;
         while r <= to_rank {
+            // Not in C: a limit of the caller's `Limits::run` stops the chain (a large
+            // `minlen` asks for many virtual nodes).
+            if graphviz_pure_core::limits::tick() {
+                return Err(graphviz_pure_core::limits::STOPPED.to_string());
+            }
             let v = if r < to_rank {
                 let v = if r == label_rank {
                     self.label_vnode(g, orig)

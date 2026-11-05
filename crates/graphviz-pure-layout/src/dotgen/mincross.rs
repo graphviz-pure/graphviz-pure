@@ -23,6 +23,7 @@ use super::Dot;
 use super::qsort::qsort;
 use super::types::*;
 use super::utils::*;
+use graphviz_pure_core::limits;
 use graphviz_pure_core::math;
 use graphviz_pure_core::strtod::atof;
 use std::collections::VecDeque;
@@ -1416,6 +1417,11 @@ impl Dot<'_> {
 
     /// C: lib/dotgen/mincross.c:transpose
     fn transpose(&mut self, g: G, reverse: bool) -> Result<(), &'static str> {
+        // Not in C: a limit of the caller's `Limits::run` skips the transposes. The check
+        // is at the entry, before the check modes record or compare anything.
+        if limits::stopped() {
+            return Ok(());
+        }
         self.prepare_mincross(g)?;
         let (minr, maxr) = (self.graphs[g].minrank, self.graphs[g].maxrank);
         for r in minr..=maxr {
@@ -1459,6 +1465,9 @@ impl Dot<'_> {
 
     /// C: lib/dotgen/mincross.c:mincross
     fn mincross(&mut self, g: G, startpass: i32) -> Result<i64, String> {
+        // Not in C: a limit of the caller's `Limits::run` ends the layout before each
+        // component's and cluster's crossing minimization.
+        super::check_limits()?;
         self.mincross_store.graph = None;
         let endpass = 2;
         let mut maxthispass;
@@ -1505,7 +1514,8 @@ impl Dot<'_> {
                 );
                 let t = trying;
                 trying += 1;
-                if t >= self.min_quit {
+                // Not in C: a limit of the caller's `Limits::run` ends the iterations.
+                if t >= self.min_quit || limits::stopped() {
                     break;
                 }
                 if cur_cross == 0 {
@@ -2359,6 +2369,10 @@ impl Dot<'_> {
 
     /// C: lib/dotgen/mincross.c:mincross_step
     fn mincross_step(&mut self, g: G, pass: i32) -> Result<(), &'static str> {
+        // Not in C: as in `transpose`.
+        if limits::stopped() {
+            return Ok(());
+        }
         self.prepare_mincross(g)?;
         let reverse = pass % 4 < 2;
         let (first, last, dir);
@@ -2381,6 +2395,10 @@ impl Dot<'_> {
         }
         let mut r = first;
         while r != last + dir {
+            // Not in C: counts the rank's work against the caller's `Limits::run`. A limit
+            // reached here ends the iterations at the next step, not inside this one, whose
+            // reorders the check modes compare with C's.
+            let _ = limits::tick_by(rank_units(self.rk(g, r).n));
             let other = r - dir;
             let hasfixed = self.medians(g, r, other);
             if self.mincross_store.graph.is_none() || self.mincross_store.constrained {
@@ -2620,6 +2638,11 @@ impl Dot<'_> {
             }
         }
     }
+}
+
+/// The work a pass over a rank of `n` nodes counts against [`limits::tick_by`]. Not in C.
+fn rank_units(n: i32) -> u64 {
+    u64::try_from(n).unwrap_or(0).max(1)
 }
 
 #[cfg(test)]

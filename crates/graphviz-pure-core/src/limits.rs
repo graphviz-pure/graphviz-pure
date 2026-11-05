@@ -28,6 +28,10 @@ use crate::error::GraphvizError;
 /// Units of work between two reads of the tokens, the clock and the heap probe.
 pub const POLL_INTERVAL: u64 = 1024;
 
+/// The message a loop returns where it stops on a limit and its function returns a string
+/// error. The library call returns the limit's own error in its place ([`settle`]).
+pub const STOPPED: &str = "stopped by a limit";
+
 /// Which limit a [`GraphvizErrorKind::LimitExceeded`](crate::GraphvizErrorKind) error
 /// reached, from [`GraphvizError::limit`].
 ///

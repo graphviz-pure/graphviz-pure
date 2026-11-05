@@ -622,6 +622,10 @@ impl Dot<'_> {
                 cnt += 1;
                 l += 1;
             }
+            // Not in C: a limit of the caller's `Limits::run` stops the routing.
+            if graphviz_pure_core::limits::tick_by(cnt as u64) {
+                return Err(graphviz_pure_core::limits::STOPPED.to_string());
+            }
             let group: Vec<E> = edges[ind..ind + cnt].to_vec();
             let (t0, h0) = (self.edges[e0].tail, self.edges[e0].head);
             if et == EdgeType::Curved {

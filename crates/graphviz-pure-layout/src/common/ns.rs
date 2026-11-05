@@ -881,6 +881,10 @@ fn feasible_tree<G: NsGraph + ?Sized>(g: &mut G, ctx: &mut Ctx) -> Result<i32, S
     }
     let mut error = 0;
     while size > 1 {
+        // Not in C: a limit of the caller's `Limits::run` stops the merge.
+        if graphviz_pure_core::limits::tick() {
+            return Err(graphviz_pure_core::limits::STOPPED.to_string());
+        }
         // STextractmin
         let rv = tree[0];
         ctx.subtrees[rv].heap_index = NOT_ON_HEAP;
