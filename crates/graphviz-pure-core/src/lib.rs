@@ -15,6 +15,7 @@ pub mod error;
 pub mod font;
 pub mod geom;
 pub mod graph;
+pub mod limits;
 pub mod math;
 pub mod strtod;
 pub mod usershape;

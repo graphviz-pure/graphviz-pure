@@ -522,6 +522,8 @@ impl PostscriptJob {
         graph: &graphviz_pure_core::Graph,
         job: usize,
     ) -> graphviz_pure_core::Result<String> {
+        // Not in C: as `GraphJobs::render`.
+        graphviz_pure_core::limits::check()?;
         graphviz_pure_core::charset::begin_render(
             graph.root_name(),
             graph.graph_attrs.get("charset").map(String::as_str),

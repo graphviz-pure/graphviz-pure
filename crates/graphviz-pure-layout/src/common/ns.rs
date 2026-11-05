@@ -1309,7 +1309,9 @@ fn rank2_with<G: NsGraph + ?Sized>(
             let nl = if iter % 1000 == 0 { "\n" } else { "" };
             fprintf_stderr(&format!("{lead}{iter} {nl}"));
         }
-        if iter >= maxiter {
+        // Not in C: a limit of the caller's `Limits::run` ends the pivots as `maxiter`
+        // does; the call then returns the limit's error.
+        if iter >= maxiter || graphviz_pure_core::limits::tick() {
             break;
         }
     }

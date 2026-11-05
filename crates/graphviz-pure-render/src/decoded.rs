@@ -144,6 +144,10 @@ fn render_partial<T>(
     let err = in_rand_run(|| {
         for graph in graphs {
             match render(graph, &mut options) {
+                // Not in C: a graph a limit stopped is not returned, nor any after it.
+                Ok(_) if graphviz_pure_core::limits::stopped() => {
+                    return graphviz_pure_core::limits::error();
+                }
                 Ok(s) => out.push(s),
                 Err(e) => return Some(e),
             }

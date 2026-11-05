@@ -397,6 +397,9 @@ impl<'g> GraphJobs<'g> {
 
     /// Runs the job for `format` as the run's first job ([`Self::render_as`]).
     pub fn render(&mut self, format: OutputFormat, name: &str) -> Result<String> {
+        // Not in C: a limit of the caller's `Limits::run` reached before the render stops it
+        // before it starts.
+        graphviz_pure_core::limits::check()?;
         self.render_as(0, format, name)
     }
 

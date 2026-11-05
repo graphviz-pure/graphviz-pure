@@ -7,6 +7,7 @@ use std::borrow::Cow;
 use std::sync::Arc;
 type AttrMap2 = std::collections::BTreeMap<String, graphviz_pure_core::AttrSym>;
 
+use graphviz_pure_core::limits;
 use graphviz_pure_core::{
     AttrMap, BoundingBox, EdgeId, Graph, GraphKind, GraphvizError, NodeId, Port, Result,
     SubgraphData, SubgraphId,
@@ -196,6 +197,9 @@ pub struct Parser<'a> {
     /// bison's stack ran out (`memory exhausted`): `aagparse` returns without `graph`'s
     /// error recovery, so `agread` returns the graph as read so far.
     exhausted: bool,
+    /// A [`limits`] node or edge count the graph went past. Not in C: the body stops at the
+    /// next statement with it.
+    limit_err: Option<GraphvizError>,
 }
 
 /// C: lib/cgraph/scan.l:aagerror
@@ -263,6 +267,7 @@ impl<'a> Parser<'a> {
             local_ids: std::collections::BTreeMap::new(),
             yydepth: 1,
             exhausted: false,
+            limit_err: None,
         }
     }
 
@@ -563,6 +568,14 @@ impl<'a> Parser<'a> {
         // Whether the body read so far has a `stmtlist` (a statement before).
         let mut has_stmts = false;
         loop {
+            // Not in C: a node or edge count past its limit, or a run-wide limit, ends the
+            // parse.
+            if let Some(e) = self.limit_err.take() {
+                return Err(e);
+            }
+            if limits::tick() {
+                return Err(limits::error().unwrap_or_else(GraphvizError::cancelled));
+            }
             let step = if self.peek().kind == TokenKind::RBrace {
                 // optstmtlist : stmtlist | /* empty */
                 self.reduce(usize::from(has_stmts))?;
@@ -960,6 +973,15 @@ impl<'a> Parser<'a> {
             for (tail, tail_port) in tails {
                 let heads = self.item_endpoints(&pair[1]);
                 for (head, head_port) in heads {
+                    // Not in C: one statement can make the product of two lists of edges,
+                    // so the edge limit and the run's limits are checked at each edge.
+                    if self.limit_err.is_some() {
+                        return;
+                    }
+                    if limits::tick() {
+                        self.limit_err = limits::error();
+                        return;
+                    }
                     self.newedge(
                         tail,
                         tail_port.clone(),
@@ -1242,6 +1264,11 @@ impl<'a> Parser<'a> {
             }
         });
         if is_new {
+            if self.limit_err.is_none()
+                && let Err(e) = limits::check_nodes(self.graph.nodes.len())
+            {
+                self.limit_err = Some(e);
+            }
             let node = &mut self.graph.nodes[node_id.0 as usize];
             // A local name (`%…`) maps to an anonymous id, and `endgraph` forgets the name
             // (`aginternalmapclearlocalnames`): `agnameof` then calls the node `%<id>`.
@@ -1337,6 +1364,11 @@ impl<'a> Parser<'a> {
             initial.extend_from(&attrs);
             let id = self.graph.new_edge(tail, head, initial);
             debug_assert_eq!(id, edge_id);
+            if self.limit_err.is_none()
+                && let Err(e) = limits::check_edges(self.graph.edges.len())
+            {
+                self.limit_err = Some(e);
+            }
             let edge = &mut self.graph.edges[edge_id.0 as usize];
             if let Some((k, html)) = key {
                 edge.key = Some(k.clone());

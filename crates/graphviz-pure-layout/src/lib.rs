@@ -227,6 +227,9 @@ pub fn layout_graph_in_run(
 }
 
 fn layout_in_run(graph: &mut Graph, engine: LayoutEngine, options: LayoutOptions) -> Result<()> {
+    // Not in C: a limit of the caller's `Limits::run` reached before the layout (while the
+    // graph was parsed) stops it before it starts.
+    graphviz_pure_core::limits::check()?;
     debug_assert!(
         graph.subgraph_lists_are_closed(),
         "a subgraph lists a member twice or lacks one of its nested subgraphs'"
@@ -315,6 +318,24 @@ fn clear_layout_results(graph: &mut Graph) {
 mod tests {
     use super::*;
     use graphviz_pure_core::{AttrMap, Graph, GraphKind, Point, SubgraphData, SubgraphId};
+
+    // A run already stopped (here, by a token cancelled before it) stops the layout before
+    // it starts.
+    #[test]
+    fn a_stopped_run_does_not_lay_out() {
+        let token = graphviz_pure_core::limits::CancelToken::new();
+        token.cancel();
+        let mut g = Graph::new("G", GraphKind::Directed, false);
+        let a = g.ensure_node("a");
+        let b = g.ensure_node("b");
+        g.add_edge(a, b, AttrMap::new());
+        let err = graphviz_pure_core::limits::Limits::new()
+            .cancel_token(token)
+            .run(|| layout_graph(&mut g, LayoutEngine::Dot))
+            .unwrap_err();
+        assert_eq!(err.kind(), graphviz_pure_core::GraphvizErrorKind::Cancelled);
+        assert_eq!(g.nodes[1].pos, Point::default());
+    }
 
     #[test]
     fn builder_sets_every_field() {

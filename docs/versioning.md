@@ -12,9 +12,10 @@ one release version, set in `[workspace.package]` in `Cargo.toml`, `web/package.
   and `graphviz-pure-render` are implementation crates with no semver promise.
   The types the facade re-exports (`GraphvizError`, `GraphvizErrorKind`, `Diagnostic`,
   `DiagnosticLevel`, `Rendered`, `Result`, `charset`, `LayoutEngine`, `LayoutOptions`,
-  `LayoutOptionsBuilder`, `GlobalAttrs`, `OutputFormat`) are covered by the facade's promise
-  even though they are defined in an implementation crate. `graphviz-pure-raster` re-exports
-  `GraphvizError`, `GraphvizErrorKind`, `Diagnostic`, `DiagnosticLevel` and `Rendered`, and
+  `LayoutOptionsBuilder`, `GlobalAttrs`, `OutputFormat`, `Limits`, `Limit`, `CancelToken`)
+  are covered by the facade's promise even though they are defined in an implementation
+  crate. `graphviz-pure-raster` re-exports `GraphvizError`, `GraphvizErrorKind`,
+  `Diagnostic`, `DiagnosticLevel`, `Rendered`, `Limits`, `Limit` and `CancelToken`, and
   its `RasterFormat` is part of that same promise.
   `GraphvizError::__map_text`, `GraphvizError::__set_diagnostics`,
   `Diagnostic::__map_message` and `Rendered::__from_parts` are outside it: hidden hooks

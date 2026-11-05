@@ -21,6 +21,7 @@
 //! at 96 dpi (1pt = 4/3 px); with one, the SVG is already scaled to that resolution and is
 //! rasterized at one pixel per point.
 
+pub use graphviz_pure_core::limits::{CancelToken, Limit, Limits};
 pub use graphviz_pure_core::{
     Diagnostic, DiagnosticLevel, GraphvizError, GraphvizErrorKind, Rendered,
 };
@@ -130,6 +131,8 @@ fn fontdb() -> Arc<usvg::fontdb::Database> {
 /// The bytes are [`Rendered<Vec<u8>>`]. Diagnostics from the rasterizing call are
 /// on that value, or on the error. This writes nothing to stderr.
 ///
+/// Inside a [`Limits::run`], the run's time, work, heap and cancel limits apply.
+///
 /// ```
 /// use graphviz_pure_raster::{RasterFormat, rasterize};
 ///
@@ -144,8 +147,10 @@ pub fn rasterize(
     format: RasterFormat,
     explicit_dpi: bool,
 ) -> Result<Rendered<Vec<u8>>, GraphvizError> {
-    let (result, diagnostics) =
-        graphviz_pure_core::diag::capture(|| rasterize_inner(svg, format, explicit_dpi));
+    let (result, diagnostics) = graphviz_pure_core::diag::capture(|| {
+        graphviz_pure_core::limits::check()?;
+        graphviz_pure_core::limits::settle(rasterize_inner(svg, format, explicit_dpi))
+    });
     match result {
         Ok(output) => Ok(Rendered::__from_parts(output, diagnostics)),
         Err(error) => Err(error.__set_diagnostics(diagnostics)),
@@ -315,6 +320,22 @@ mod tests {
 <g transform="scale(1 1) rotate(0) translate(4 112)"><polygon fill="white" stroke="none" points="-4,4 -4,-112 58,-112 58,4 -4,4"/>
 <ellipse fill="none" stroke="black" cx="27" cy="-90" rx="27" ry="18"/>
 <text text-anchor="middle" x="27" y="-85.8" font-family="Times,serif" font-size="14.00">a</text></g></svg>"#;
+
+    #[test]
+    fn a_cancelled_run_does_not_rasterize() {
+        let token = CancelToken::new();
+        token.cancel();
+        let err = Limits::new()
+            .cancel_token(token)
+            .run(|| rasterize(SVG, RasterFormat::Png, false))
+            .unwrap_err();
+        assert_eq!(err.kind(), GraphvizErrorKind::Cancelled);
+        let png = Limits::new()
+            .max_steps(1 << 20)
+            .run(|| rasterize(SVG, RasterFormat::Png, false))
+            .unwrap();
+        assert_eq!(png, rasterize(SVG, RasterFormat::Png, false).unwrap());
+    }
 
     #[test]
     fn png_has_graphviz_default_size() {
