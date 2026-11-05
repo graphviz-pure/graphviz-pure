@@ -97,9 +97,8 @@ run_slot() {
     log "slot $slot: started $name"
     rc=$(docker wait "$c" 2>/dev/null || echo "?")
     log "slot $slot: $name exited ($rc) after $(( $(date +%s) - started )) s"
-    # A runner that exits within a minute without a job is a registration or start-up failure;
-    # don't spin.
-    [ $(( $(date +%s) - started )) -lt 60 ] && sleep 30
+    # A runner that fails within a minute is a registration or start-up failure; don't spin.
+    if [ "$rc" != 0 ] && [ $(( $(date +%s) - started )) -lt 60 ]; then sleep 30; fi
   done
 }
 
@@ -109,8 +108,10 @@ stop_all() {
   # The slot loops first, so none starts a replacement.
   for p in "${pids[@]}"; do pkill -TERM -P "$p" 2>/dev/null; kill -TERM "$p" 2>/dev/null; done
   # The runners deregister when they stop (ephemeral); a job in progress is cancelled.
-  for s in $(seq 1 "$RUNNERS"); do docker stop -t 20 "$PREFIX-$s" >/dev/null 2>&1 & done
-  wait
+  [ -n "${sleeper:-}" ] && kill "$sleeper" 2>/dev/null
+  # One docker stop for all containers: it stops them in parallel.
+  mapfile -t names < <(docker ps -a --filter "label=gvp-ci.runner" --format '{{.Names}}')
+  [ "${#names[@]}" -gt 0 ] && docker stop -t 20 "${names[@]}" >/dev/null 2>&1
   for s in $(seq 1 "$RUNNERS"); do clean_slot "$s"; done
   remove_stale_runners
   exit 0
@@ -127,6 +128,7 @@ for s in $(seq 1 "$RUNNERS"); do run_slot "$s" & pids+=($!); done
 # Every 10 minutes, drop registrations no container serves.
 while :; do
   sleep 600 &
-  wait $! || true
+  sleeper=$!
+  wait "$sleeper" || true
   remove_stale_runners
 done

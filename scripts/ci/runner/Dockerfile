@@ -14,6 +14,9 @@ ARG RUNNER_VERSION=2.338.2
 ARG RUNNER_SHA256=baebf204307bac6193480852732f0aba2ae97b6c5597c244f4d5558390147c40
 ARG GH_VERSION=2.103.3
 ARG GH_SHA256=4c806978ffce1cec70853302a56d70ac6da4f19bae7adca4e1a8ab00633dd91d
+# The hosted image's default Node major is on PATH; jobs that pin one use actions/setup-node.
+ARG NODE_VERSION=20.20.2
+ARG NODE_SHA256=df770b2a6f130ed8627c9782c988fda9669fa23898329a61a871e32f965e007d
 # Google's Linux package signing key (the hosted image installs Chrome from the same repository).
 ARG CHROME_KEY_FINGERPRINT=EB4C1BFD4F042F6DDDCCEC917721F63BD38B4796
 
@@ -22,14 +25,14 @@ ENV DEBIAN_FRONTEND=noninteractive \
     LC_ALL=C.UTF-8
 
 # The tools the Linux jobs call without installing: a C toolchain for rustc's linker and build
-# scripts, python3, jq, git, curl, unzip and zstd (actions/cache), plus the packages that jobs
-# install with `sudo apt-get install` (musl-tools, qemu-user, valgrind), preinstalled because the
-# job user has no root; see the sudo shim below.
+# scripts, python3, jq, git, curl, unzip, zstd (actions/cache), column and bc, plus the packages
+# that jobs install with `sudo apt-get install` (musl-tools, qemu-user, valgrind), preinstalled
+# because the job user has no root; see the sudo shim below.
 RUN apt-get update \
  && apt-get install -y --no-install-recommends \
       build-essential pkg-config ca-certificates curl wget git git-lfs gnupg jq \
       python3 python3-venv python3-pip unzip zip xz-utils zstd bzip2 file \
-      less lsb-release locales openssh-client patch rsync tzdata time \
+      bsdextrautils bc less lsb-release locales openssh-client patch rsync tzdata time \
       musl-tools qemu-user valgrind \
       libnss3 libatk-bridge2.0-0t64 libgtk-3-0t64 libgbm1 libasound2t64 libxss1 fonts-liberation xdg-utils \
  && rm -rf /var/lib/apt/lists/*
@@ -53,6 +56,13 @@ RUN curl -fsSL -o /tmp/gh.tgz "https://github.com/cli/cli/releases/download/v${G
  && tar -xzf /tmp/gh.tgz -C /tmp \
  && install -m 0755 "/tmp/gh_${GH_VERSION}_linux_amd64/bin/gh" /usr/local/bin/gh \
  && rm -rf /tmp/gh.tgz "/tmp/gh_${GH_VERSION}_linux_amd64"
+
+# Node.js on PATH, as on the hosted image (scripts/tests run node without setup-node).
+RUN curl -fsSL -o /tmp/node.tar.xz "https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-x64.tar.xz" \
+ && echo "${NODE_SHA256}  /tmp/node.tar.xz" | sha256sum --check --strict \
+ && tar -xJf /tmp/node.tar.xz -C /usr/local --strip-components=1 --exclude='*.md' --exclude=LICENSE \
+ && rm /tmp/node.tar.xz \
+ && node --version
 
 # The job user, named and placed like the hosted runner's (/home/runner/work/<repo>/<repo>), so
 # paths in caches and outputs match. It has no root and no sudo.
