@@ -1436,11 +1436,42 @@ fn oversized_png_scales_like_cairo_without_changing_svg() {
     assert!(svg.contains("<svg width=\"100000pt\" height=\"100pt\""));
 }
 
+// Issue #716: C's plain `-Tjpg` resolves to a jpg:cairo device (quality 6 or 5 against 1
+// for jpg:gd), so cairo's per-dimension cap applies to JPEG as to PNG. C (Debian 2.42.4
+// with the pango and gd plugins, the same plugin table and cap as 16.1.0) prints this
+// warning, exits 0 and writes a 32767 x 32 JPEG for viewport 100000,100 and a
+// 32767 x 9830 one for 100000,30000.
+#[test]
+fn oversized_jpeg_scales_like_cairo() {
+    for (viewport, height) in [("100000,100,1", 32), ("100000,30000,1", 9830)] {
+        let src = format!("digraph {{ dpi=72; viewport=\"{viewport}\"; a }}");
+        let jpg = tmp(&format!("cairo_limit_{height}.jpg"));
+        let (_, err, ok) = run(&["-Tjpg", "-o", jpg.to_str().unwrap()], &src);
+        assert!(ok, "{err}");
+        assert_eq!(
+            err,
+            "graphviz-pure: graph is too large for cairo-renderer bitmaps. Scaling by 0.32767 to fit\n"
+        );
+        let bytes = std::fs::read(&jpg).unwrap();
+        let sof = bytes.windows(2).position(|w| w == [0xff, 0xc0]).unwrap();
+        assert_eq!(u16::from_be_bytes([bytes[sof + 5], bytes[sof + 6]]), height);
+        assert_eq!(u16::from_be_bytes([bytes[sof + 7], bytes[sof + 8]]), 32767);
+    }
+}
+
+// C's `-Tjpg` crashes here (its jpg:cairo:gd device dereferences the null gd image,
+// exit 139); the port treats JPEG like PNG: the warning, no bytes, exit 0 (#716,
+// docs/porting/crashes.md).
 #[test]
 fn zero_after_cairo_scaling_writes_an_empty_png_like_c() {
-    for viewport in ["100000,1,1", "1,100000,1"] {
+    for (format, viewport) in [
+        ("-Tpng", "100000,1,1"),
+        ("-Tpng", "1,100000,1"),
+        ("-Tjpg", "100000,1,1"),
+        ("-Tjpg", "1,100000,1"),
+    ] {
         let src = format!("digraph {{ dpi=72; viewport=\"{viewport}\"; a }}");
-        let (out, err, ok) = run(&["-Tpng"], &src);
+        let (out, err, ok) = run(&[format], &src);
         assert!(ok, "{err}");
         assert!(out.is_empty());
         assert_eq!(

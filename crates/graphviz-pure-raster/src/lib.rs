@@ -177,8 +177,14 @@ const CAIRO_XMAX: f64 = 32767.0;
 const CAIRO_YMAX: f64 = 32767.0;
 
 /// C: plugin/pango/gvrender_pango.c:cairogen_begin_page
-fn fit_cairo_bitmap(format: RasterFormat, w: u32, h: u32) -> (u32, u32, f64) {
-    if format != RasterFormat::Png || (f64::from(w) < CAIRO_XMAX && f64::from(h) < CAIRO_YMAX) {
+///
+/// Both raster formats take this cap. C's `-Tpng` and `-Tjpg` both resolve to a
+/// `:cairo` device (for jpg, `jpg:cairo` has quality 6 from gdk or 5 from gd, against 1
+/// for `jpg:gd`), so the cairo renderer draws the page and `gd`'s own area cap in
+/// `gdgen_begin_page` never runs. After the cap both sides are at most 32767, which
+/// also keeps the JPEG encoder's `u16` dimensions exact.
+fn fit_cairo_bitmap(w: u32, h: u32) -> (u32, u32, f64) {
+    if f64::from(w) < CAIRO_XMAX && f64::from(h) < CAIRO_YMAX {
         return (w, h, 1.0);
     }
     let scale = (CAIRO_XMAX / f64::from(w)).min(CAIRO_YMAX / f64::from(h));
@@ -197,7 +203,6 @@ fn fit_cairo_bitmap(format: RasterFormat, w: u32, h: u32) -> (u32, u32, f64) {
 /// already scaled and is drawn at one pixel per point).
 fn render_pixmap(
     svg: &str,
-    format: RasterFormat,
     explicit_dpi: bool,
 ) -> Result<Option<tiny_skia::Pixmap>, GraphvizError> {
     let tree = parse_svg(svg)?;
@@ -209,9 +214,12 @@ fn render_pixmap(
         (size.width() * scale).round().max(1.0) as u32,
         (size.height() * scale).round().max(1.0) as u32,
     );
-    let (w, h, fit) = fit_cairo_bitmap(format, w, h);
+    let (w, h, fit) = fit_cairo_bitmap(w, h);
     if w == 0 || h == 0 {
-        // cairo accepts the zero-sized surface but writes no PNG bytes.
+        // cairo accepts the zero-sized surface but writes no PNG bytes. C crashes here for
+        // JPEG: its `jpg:cairo:gd` device's `gdImageCreateTrueColor` refuses the zero side
+        // and plugin/gd/gvdevice_gd.c:gd_format dereferences the null image. The port
+        // writes no JPEG bytes either (docs/porting/crashes.md, "A raster side scaled to 0").
         return Ok(None);
     }
     let scale = f64::from(scale) * fit;
@@ -230,7 +238,7 @@ fn rasterize_inner(
     format: RasterFormat,
     explicit_dpi: bool,
 ) -> Result<Vec<u8>, GraphvizError> {
-    let Some(pixmap) = render_pixmap(svg, format, explicit_dpi)? else {
+    let Some(pixmap) = render_pixmap(svg, explicit_dpi)? else {
         return Ok(Vec::new());
     };
     let (w, h) = (pixmap.width(), pixmap.height());
@@ -254,6 +262,8 @@ fn rasterize_inner(
                 rgb.extend([over(c.red()), over(c.green()), over(c.blue())]);
             }
             let mut out = Vec::new();
+            // `fit_cairo_bitmap` has kept both dimensions at or below 32767, so the `u16`
+            // the encoder takes holds them exactly.
             jpeg_encoder::Encoder::new(&mut out, 90)
                 .encode(&rgb, w as u16, h as u16, jpeg_encoder::ColorType::Rgb)
                 .map_err(|e| GraphvizError::render(format!("encoding the JPEG: {e}")))?;
@@ -409,22 +419,38 @@ mod tests {
             let svg = format!(
                 r#"<svg xmlns="http://www.w3.org/2000/svg" width="{w}pt" height="{h}pt" viewBox="0 0 {w} {h}"/>"#
             );
-            let png = rasterize(&svg, RasterFormat::Png, true).unwrap();
-            assert!(png.output().is_empty());
-            assert_eq!(png.diagnostics().len(), 1);
-            assert_eq!(
-                png.diagnostics()[0].message(),
-                "graph is too large for cairo-renderer bitmaps. Scaling by 0.32767 to fit\n"
-            );
+            // C crashes for JPEG here; the port writes no bytes, as for PNG (#716).
+            for format in [RasterFormat::Png, RasterFormat::Jpeg] {
+                let out = rasterize(&svg, format, true).unwrap();
+                assert!(out.output().is_empty());
+                assert_eq!(out.diagnostics().len(), 1);
+                assert_eq!(
+                    out.diagnostics()[0].message(),
+                    "graph is too large for cairo-renderer bitmaps. Scaling by 0.32767 to fit\n"
+                );
+            }
         }
     }
 
+    // Issue #716: C's plain `-Tjpg` is a `jpg:cairo` device, so JPEG takes cairo's cap too.
+    // C (jpg:cairo:gd) writes a 32767 x 32 JPEG with this warning.
     #[test]
-    fn cairo_limit_does_not_apply_to_jpeg() {
-        let ((w, h, scale), diagnostics) =
-            graphviz_pure_core::diag::capture(|| fit_cairo_bitmap(RasterFormat::Jpeg, 100000, 100));
-        assert_eq!((w, h, scale), (100000, 100, 1.0));
-        assert!(diagnostics.is_empty());
+    fn jpeg_takes_the_cairo_bitmap_limit() {
+        let jpg = rasterize(
+            r#"<svg xmlns="http://www.w3.org/2000/svg" width="100000pt" height="100pt" viewBox="0 0 100000 100"/>"#,
+            RasterFormat::Jpeg,
+            true,
+        )
+        .unwrap();
+        let out = jpg.output();
+        let sof = out.windows(2).position(|w| w == [0xff, 0xc0]).unwrap();
+        assert_eq!(u16::from_be_bytes([out[sof + 5], out[sof + 6]]), 32);
+        assert_eq!(u16::from_be_bytes([out[sof + 7], out[sof + 8]]), 32767);
+        assert_eq!(jpg.diagnostics().len(), 1);
+        assert_eq!(
+            jpg.diagnostics()[0].message(),
+            "graph is too large for cairo-renderer bitmaps. Scaling by 0.32767 to fit\n"
+        );
     }
 
     // The PNG the raster path writes is the one `tiny_skia`'s `Pixmap::encode_png`
@@ -441,7 +467,7 @@ mod tests {
 <text text-anchor="middle" x="27" y="-85.8" font-family="Times,serif" font-size="14.00">a</text></g></svg>"#;
         for svg in [SVG, TRANSPARENT] {
             for explicit_dpi in [false, true] {
-                let reference = render_pixmap(svg, RasterFormat::Png, explicit_dpi)
+                let reference = render_pixmap(svg, explicit_dpi)
                     .unwrap()
                     .unwrap()
                     .encode_png()
