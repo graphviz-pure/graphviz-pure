@@ -71,7 +71,9 @@ signatures. The port already keeps per-call state this way (`diag::capture`), an
   stable across releases: a release that moves a checkpoint changes it.
 - **Allocation.** The largest single buffer whose size the input chooses: polygon vertices
   (`peripheries`, `sides`; today's `MAX_VERTICES` budget, #591), neato's and sfdp's dense
-  `n × n` matrices, and the raster pixmap (#675, #716). Checked before the allocation.
+  `n × n` matrices, and the raster pixmap (#675, #716). Checked before the allocation. Past
+  it the current call stops: every later checkpoint in that call reports it, and the call
+  returns its error. The next call in the `run` is not stopped by it.
 - **Heap.** Safe Rust cannot read the process heap without a global allocator, and a library
   must not install one. The caller passes `fn() -> usize` that reads its own counting allocator;
   checkpoints compare it with the limit. Without such an allocator, use the allocation limit
@@ -122,13 +124,13 @@ JavaScript API (`@graphviz-pure/wasm`) is a follow-up issue once the Rust API ha
 
 ## Pull requests
 
-1. This document.
-2. Core and facade: `Limits`, `CancelToken`, `Limit`, the two error kinds, `run`, the checkpoint
-   machinery, the input-size limits in the parser, the heap probe. Tests for each limit with a
-   checkpoint in network simplex as the first loop.
-3. dot: mincross, position, splines and the rest of dot's loops.
-4. neato, fdp, sfdp, circo, twopi, osage and patchwork.
-5. Rendering and raster: emission checkpoints, the allocation limit at the polygon, matrix and
-   pixmap sites.
+1. This document (#787).
+2. Core and facade (#792): `Limits`, `CancelToken`, `Limit`, the two error kinds, `run`, the
+   checkpoint machinery, the input-size limits in the parser, the heap probe, and network
+   simplex's pivot loop.
+3. dot (#796): the tight-tree merge, mincross, virtual-node chains and spline routing.
+4. neato, fdp, sfdp and circo, and the spline routing the other engines share (#797).
+5. Rendering and raster, and the allocation limit at the polygon, neato-model and pixmap
+   sites.
 
 Each runs `scripts/check-semver.sh pr`, the fidelity tests and the perf ratchet.
