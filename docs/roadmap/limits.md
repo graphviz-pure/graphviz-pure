@@ -76,9 +76,12 @@ signatures. The port already keeps per-call state this way (`diag::capture`), an
   checkpoint changes it.
 - **Allocation.** The largest single buffer whose size the input chooses, at four sites:
   polygon vertices (`peripheries`, `sides`, #591), neato's dense model (Kamada-Kawai's two
-  `n × n` arrays, SGD's pair terms, stress majorization's packed Laplacians), the node and
-  edge arenas of dot's virtual-node chains (a large `minlen`), and the raster pixmap, after
-  C's cairo scaling (#675, #716). Checked before the allocation. Past it the current call
+  `n × n` arrays, SGD's pair terms, stress majorization's packed Laplacians), dot's node and
+  edge arenas, and the raster pixmap, after C's cairo scaling (#675, #716). Checked before
+  the allocation. dot's arenas are checked, with the doubling `Vec` does, before the two
+  phases that grow them in bulk: a virtual-node chain (a large `minlen`) and position's
+  auxiliary graph (a slack node per edge). Any other growth of them past the limit stops the
+  call after that one reallocation. Past it the current call
   stops: every later checkpoint in that call reports it, and the call returns its error. The
   next call in the `run` is not stopped by it. Other buffers (sfdp's matrices, the output
   string) are not covered. The port's own vertex budget (`MAX_VERTICES`) is checked first:
@@ -110,7 +113,8 @@ Checkpoints sit in these loops and phase boundaries:
   stress smoothing; circo: crossing reduction;
 - the spline routing that neato, fdp, circo, twopi, osage and patchwork share, per node;
 - the SVG-family emitter, per node, per edge and per periphery; the raster crate before the
-  pixmap is allocated and after the draw.
+  pixmap is allocated and after the draw, and `render_pdf` when it starts, before the
+  conversion and after it.
 
 twopi, osage and patchwork have no checkpoint of their own: their layouts are linear or
 `n log n` past the shared phases (packing, spline routing, rendering), which do check. The
@@ -136,6 +140,7 @@ byte-identical to an unlimited call, or the error; never a partial drawing.
 - After `layout_graph` fails on a limit, the graph's layout is unspecified: lay it out again or
   drop it.
 - Diagnostics collected before the stop stay on the error.
+
 No thread is started, no signal is used and no `unsafe` is needed: the state is a
 `thread_local!` of `Cell`s, the token an `AtomicBool`.
 
@@ -165,9 +170,10 @@ Services still need a worker or process limit (SECURITY.md).
 ## Byte identity and cost
 
 Limits are off by default, and a checkpoint never changes a float or a decision, only whether
-the loop continues. Measured over the series, the default path costs at most +0.76%
-instructions on the perf-ratchet cases (twopi on 1,000 two-node components; +0.27% or less
-on every other case), with the same allocations. An unlimited run takes the same branches as today. The fidelity ratchets
+the loop continues. Measured over the series against master 08553b47, the default path costs at
+most +0.18% instructions on the perf-ratchet cases, with the same allocations. The twopi
+cases move by up to about 1% either way from a hash seed (#794) and are left out of that
+figure. An unlimited run takes the same branches as today. The fidelity ratchets
 stay as they are. Each implementation PR runs the perf ratchet (instructions must not rise more
 than 2%, allocations not at all); checkpoints go in outer loops, not in per-element inner loops,
 to keep that.
@@ -185,7 +191,7 @@ JavaScript API (`@graphviz-pure/wasm`) is a follow-up issue once the Rust API ha
    spline routing and the ortho router.
 4. neato, fdp, sfdp and circo, overlap removal, and the spline routing the other engines share
    (#797).
-5. Rendering and raster, and the allocation limit at the polygon, neato-model, virtual-node
+5. Rendering, raster and PDF, and the allocation limit at the polygon, neato-model, dot-arena
    and pixmap sites (#799).
 
 The series merges as one unit, so `max_allocation` never ships without its sites.
