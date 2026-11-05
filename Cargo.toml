@@ -52,6 +52,8 @@ unsafe_code = "forbid"
 # [patch] applies to this workspace (CI, release binaries, wasm). It does not apply
 # when a downstream crate depends on a crates.io release of graphviz-pure.
 [patch.crates-io]
+# PDF resource dictionaries follow allocated reference order, not HashMap order.
+svg2pdf = { path = "vendor/svg2pdf" }
 kurbo = { path = "vendor/kurbo" }
 skrifa = { path = "vendor/skrifa" }
 svgtypes = { path = "vendor/svgtypes" }

@@ -1,0 +1,9 @@
+digraph {
+  graph [bgcolor="white", rankdir=LR];
+  node [style=filled, fillcolor="lightblue:gold", gradientangle=30];
+  a [label="Hello", fontname="Times-Roman"];
+  b [label="PDF", fontname="Helvetica"];
+  c [label="World", fontname="Courier"];
+  a -> b [color="#12345680", penwidth=2, label="vector"];
+  b -> c [style=dashed];
+}

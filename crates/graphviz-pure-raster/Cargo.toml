@@ -20,7 +20,12 @@ include = [
     "NOTICE",
 ]
 
+[features]
+# Enabled by the CLI only, never by the facade or wasm crate.
+pdf = ["dep:svg2pdf"]
+
 [dependencies]
+svg2pdf = { version = "0.13.0", default-features = false, optional = true }
 graphviz-pure-core.workspace = true
 resvg = { version = "0.48.1", default-features = false, features = ["text"] }
 # The PNG encoder, so the pixels can be encoded where they are drawn, without a

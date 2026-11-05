@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
-# Re-download the pinned raster crates and re-apply scripts/vendor-patches.
+# Re-download the pinned rendering crates and re-apply scripts/vendor-patches.
 #
 #   scripts/refresh-vendor.sh                 # replace vendor/<crate>
 #   scripts/refresh-vendor.sh --check         # fail if that result differs
 #   scripts/refresh-vendor.sh --save-patches  # write the patches from the current vendor/
 #
 # The pins are the versions below. A file trim (examples, benches, tests, docs,
-# lockfiles) is applied before the patch, so the patch is only the portable-math
-# edit. Licences stay. vendor/README.md is not touched.
+# lockfiles) is applied before the patch. Patches record portable math and PDF
+# resource ordering changes. Licences stay. vendor/README.md is not touched.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -18,6 +18,7 @@ crates=(
   "kurbo 0.13.1"
   "svgtypes 0.16.1"
   "skrifa 0.44.0"
+  "svg2pdf 0.13.0"
 )
 
 trim_crate() {

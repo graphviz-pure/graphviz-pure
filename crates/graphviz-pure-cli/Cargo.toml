@@ -45,6 +45,9 @@ pkg-fmt = "zip"
 pkg-fmt = "zip"
 
 [features]
+# Shipped CLI binaries include PDF; library and wasm dependencies do not enable it.
+default = ["pdf"]
+pdf = ["graphviz-pure-raster/pdf", "graphviz-pure-render/pdf"]
 # Opt-in, off by default. Forwards to the layout crate. Not enabled for the
 # published archives or for wasm. `GRAPHVIZ_PURE_THREADS=1` stays sequential.
 parallel = ["graphviz-pure-layout/parallel"]

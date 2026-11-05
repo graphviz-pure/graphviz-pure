@@ -195,18 +195,7 @@ fn render_pixmap(
     format: RasterFormat,
     explicit_dpi: bool,
 ) -> Result<Option<tiny_skia::Pixmap>, GraphvizError> {
-    let opt = usvg::Options {
-        fontdb: fontdb(),
-        font_family: "Tinos".to_string(),
-        // no `<image>` is resolved: neither a file nor a `data:` URL
-        image_href_resolver: usvg::ImageHrefResolver {
-            resolve_data: Box::new(|_, _, _| None),
-            resolve_string: Box::new(|_, _| None),
-        },
-        ..usvg::Options::default()
-    };
-    let tree = usvg::Tree::from_str(svg, &opt)
-        .map_err(|e| GraphvizError::render(format!("rasterizing the SVG: {e}")))?;
+    let tree = parse_svg(svg)?;
     // usvg reads the SVG's `pt` sizes as CSS pixels at 96 dpi (1pt = 4/3 px), Graphviz's default
     // raster resolution. With an explicit dpi the SVG's points are already the pixels.
     let scale = if explicit_dpi { 0.75 } else { 1.0 };
@@ -266,6 +255,56 @@ fn rasterize_inner(
             Ok(out)
         }
     }
+}
+
+/// Parses using bundled fonts only, without resolving image files or data URLs.
+fn parse_svg(svg: &str) -> Result<usvg::Tree, GraphvizError> {
+    let opt = usvg::Options {
+        fontdb: fontdb(),
+        font_family: "Tinos".to_string(),
+        // no `<image>` is resolved: neither a file nor a `data:` URL
+        image_href_resolver: usvg::ImageHrefResolver {
+            resolve_data: Box::new(|_, _, _| None),
+            resolve_string: Box::new(|_, _| None),
+        },
+        ..usvg::Options::default()
+    };
+    usvg::Tree::from_str(svg, &opt)
+        .map_err(|e| GraphvizError::render(format!("rasterizing the SVG: {e}")))
+}
+
+/// Converts the existing SVG drawing to a single-page vector PDF.
+///
+/// Available only with `pdf` (enabled by the CLI). Layout matches the reference C
+/// layout; PDF bytes do not match cairo. Text uses the bundled fonts as outlines,
+/// images are omitted, and no system fonts, timestamps or document IDs are used.
+#[cfg(feature = "pdf")]
+pub fn render_pdf(svg: &str) -> Result<Vec<u8>, GraphvizError> {
+    let tree = parse_svg(svg)?;
+    // svg2pdf 0.13 uses usvg 0.45; the raster stack uses 0.48. Serialize
+    // the normalized paths so font shaping and portable math stay in our existing
+    // stack, rather than loading a second font database or embedding font subsets.
+    let outlined = tree.to_string(&usvg::WriteOptions::default());
+    let options = svg2pdf::usvg::Options {
+        image_href_resolver: svg2pdf::usvg::ImageHrefResolver {
+            resolve_data: Box::new(|_, _, _| None),
+            resolve_string: Box::new(|_, _| None),
+        },
+        ..Default::default()
+    };
+    let tree = svg2pdf::usvg::Tree::from_str(&outlined, &options)
+        .map_err(|e| GraphvizError::render(format!("preparing the PDF: {e}")))?;
+    svg2pdf::to_pdf(
+        &tree,
+        svg2pdf::ConversionOptions {
+            embed_text: false,
+            compress: false,
+            ..Default::default()
+        },
+        // usvg normalizes pt to CSS pixels at 96 dpi; restore PDF points.
+        svg2pdf::PageOptions { dpi: 96.0 },
+    )
+    .map_err(|e| GraphvizError::render(format!("converting the SVG to PDF: {e}")))
 }
 
 #[cfg(test)]

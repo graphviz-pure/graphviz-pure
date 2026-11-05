@@ -1,0 +1,38 @@
+diff -ruN a/src/util/helper.rs b/src/util/helper.rs
+--- a/src/util/helper.rs
++++ b/src/util/helper.rs
+@@ -29,11 +29,11 @@
+ 
+ /// Extension trait to convert a [String] into a [Name]
+ pub trait NameExt {
+-    fn to_pdf_name(&self) -> Name;
++    fn to_pdf_name(&self) -> Name<'_>;
+ }
+ 
+ impl NameExt for String {
+-    fn to_pdf_name(&self) -> Name {
++    fn to_pdf_name(&self) -> Name<'_> {
+         Name(self.as_bytes())
+     }
+ }
+diff -ruN a/src/util/resources.rs b/src/util/resources.rs
+--- a/src/util/resources.rs
++++ b/src/util/resources.rs
+@@ -154,12 +154,16 @@
+     /// Dump all pending resources into a resources dictionary.
+     pub fn finish(self, resources: &mut Resources) {
+         for object_type in PendingResourceType::iterator() {
+-            let entries: Vec<_> = self
++            let mut entries: Vec<_> = self
+                 .pending_resources
+                 .values()
+                 .filter(|e| e.object_type == object_type)
+                 .collect();
+ 
++            // HashMap iteration is randomized. Resource references are allocated in
++            // drawing order, so sort by reference for reproducible PDF bytes.
++            entries.sort_by_key(|entry| entry.reference.get());
++
+             if !entries.is_empty() {
+                 let mut dict = object_type.get_dict(resources);
+ 

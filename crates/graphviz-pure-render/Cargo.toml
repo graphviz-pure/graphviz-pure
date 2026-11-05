@@ -10,6 +10,10 @@ readme.workspace = true
 homepage.workspace = true
 description = "Graphviz output formats in pure Rust: svg, json, json0, dot, xdot, canon, plain, plain-ext"
 
+[features]
+# Registers the CLI PDF device; conversion lives in the optional raster/pdf feature.
+pdf = []
+
 [dependencies]
 graphviz-pure-core.workspace = true
 graphviz-pure-geom.workspace = true

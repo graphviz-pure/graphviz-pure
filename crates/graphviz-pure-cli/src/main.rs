@@ -643,6 +643,11 @@ fn render_job(
     cmdname: &str,
 ) -> Result<Vec<u8>, graphviz_pure_core::GraphvizError> {
     let typ = langname.split(':').next().unwrap_or("");
+    #[cfg(feature = "pdf")]
+    if typ == "pdf" {
+        let svg = jobs.render_as(job, OutputFormat::Svg, langname)?;
+        return graphviz_pure_raster::render_pdf(&svg);
+    }
     if let Some(fmt) = graphviz_pure_raster::RasterFormat::parse(typ) {
         // Graphviz draws raster formats at 96 dpi unless the graph sets `dpi` (or
         // `resolution`), which then scales the drawing.
