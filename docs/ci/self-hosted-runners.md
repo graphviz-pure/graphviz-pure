@@ -93,9 +93,17 @@ public job logs, so they carry a slot number and a time, not the machine's name.
 | --- | --- | --- |
 | All runners together | 14 CPUs (half of 28), 43 GB memory (40 GB soft) | `gvp-ci.slice` |
 | CPU and IO weight | 20 (other groups default to 100) | `gvp-ci.slice` |
-| Each runner | 4 CPUs, 10 GB memory, no swap, 16,384 processes | `supervisor.sh` |
-| Runners | 6 | `/jobs/gvp-ci/config.env` |
+| Each runner | 2 CPUs, 6 GB memory, no swap, 16,384 processes | `supervisor.sh` |
+| Runners | 7 | `/jobs/gvp-ci/config.env` |
 | Disk | a slot waits while `/jobs` has under 150 GB free | `supervisor.sh` |
+
+Seven runners of two CPUs use exactly the slice's 14, so the slice's quota never throttles a
+job that its own cap allows, and `nproc` in the container (2) is what the job really gets.
+The first trial had six runners of four CPUs: under full load the slice throttled them to
+about 2.3 CPUs each, while cargo and the test harness ran four threads, and a CLI test with a
+20-second deadline (`ipsep_vpsc_cycle_error_ends_the_layout`, 5 s when the slice is idle) ran
+out of time. At two CPUs that test binary passes in 191 s, against 183 s at four throttled
+CPUs. The peak memory of the whole slice in the trials was 13.8 GB.
 
 The weight makes the runners yield whenever the CPUs are contended: the delegates' builds
 (`gvp-delegates`, capped at 80%) and everything else win over CI. The supervisor itself runs at

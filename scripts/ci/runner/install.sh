@@ -12,9 +12,9 @@ mkdir -p "$root/bin" "$root/logs" "$root/scratch"
 install -m 0755 "$dir/supervisor.sh" "$dir/network.sh" "$dir/gvp-ci" "$root/bin/"
 [ -f "$root/config.env" ] || cat > "$root/config.env" <<'CFG'
 # Read by supervisor.sh at start (systemctl restart gvp-ci-runners after a change).
-GVP_RUNNERS=6
-GVP_CPUS_PER_RUNNER=4
-GVP_MEMORY_PER_RUNNER=10g
+GVP_RUNNERS=7
+GVP_CPUS_PER_RUNNER=2
+GVP_MEMORY_PER_RUNNER=6g
 GVP_RUNTIME=runsc
 CFG
 sudo install -m 0644 "$dir/gvp-ci.slice" "$dir/gvp-ci-runners.service" /etc/systemd/system/

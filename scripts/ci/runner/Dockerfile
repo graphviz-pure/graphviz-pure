@@ -94,9 +94,9 @@ WORKDIR /home/runner
 # rustup, as on the hosted image (~/.cargo/bin on PATH). Each job installs the toolchain it
 # names; stable is preinstalled so that install is usually a check. rustup-init is checked
 # against the sha256 published beside it.
-ENV PATH=/home/runner/.cargo/bin:$PATH \
-    CARGO_HOME=/home/runner/.cargo \
-    RUSTUP_HOME=/home/runner/.rustup
+# CARGO_HOME and RUSTUP_HOME stay unset, as on the hosted image: Swatinem/rust-cache hashes them
+# into its cache key, and setting them would keep these runners from sharing the hosted caches.
+ENV PATH=/home/runner/.cargo/bin:$PATH
 RUN curl -fsSL -o /tmp/rustup-init https://static.rust-lang.org/rustup/dist/x86_64-unknown-linux-gnu/rustup-init \
  && curl -fsSL https://static.rust-lang.org/rustup/dist/x86_64-unknown-linux-gnu/rustup-init.sha256 \
       | awk '{ print $1 "  /tmp/rustup-init" }' | sha256sum --check --strict \
