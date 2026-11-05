@@ -477,3 +477,22 @@ fn the_allocation_limit_bounds_dot_s_node_arena() {
         .run(|| graphviz_pure::render_dot("digraph { a -> b [minlen=79000] }", "dot", "svg"));
     assert_eq!(limited.unwrap().output(), unlimited.unwrap().output());
 }
+
+#[test]
+fn plain_subgraphs_add_nothing_to_the_arena_estimate() {
+    // 100,000 empty subgraphs that are not clusters: position adds no node for them, so a
+    // small allocation limit lets `a -> b` through with the unlimited bytes.
+    let mut src = String::from("digraph { a -> b;\n");
+    for i in 0..100_000 {
+        src.push_str(&format!("subgraph s{i} {{}}\n"));
+    }
+    src.push('}');
+    let unlimited = graphviz_pure::render_dot(&src, "dot", "svg").unwrap();
+    for limit in [16u64 << 20, 256 << 20] {
+        let limited = Limits::new()
+            .max_allocation(limit)
+            .run(|| graphviz_pure::render_dot(&src, "dot", "svg"))
+            .unwrap();
+        assert_eq!(limited.output(), unlimited.output(), "under {limit} bytes");
+    }
+}

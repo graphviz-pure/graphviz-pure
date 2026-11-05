@@ -397,6 +397,7 @@ impl Dot<'_> {
     /// Pushes a copy of edge `e` onto the arena (an `Agedgepair_t` on the C stack).
     fn copy_edge(&mut self, e: E) -> E {
         let c = self.edges[e].clone();
+        self.note_edge_push();
         self.edges.push(c);
         self.edges.len() - 1
     }

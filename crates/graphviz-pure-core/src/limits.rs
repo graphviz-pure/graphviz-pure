@@ -203,9 +203,11 @@ impl Limits {
     /// majorization, SGD), dot's node and edge arenas, and the raster pixmap. Checked before
     /// the buffer is allocated; past it, the call stops with the limit's error.
     ///
-    /// dot's arenas are checked before the two phases that grow them in bulk (a virtual-node
-    /// chain, position's auxiliary graph), with the doubling `Vec` does. Any other growth past
-    /// the limit stops the call after that one reallocation. Other buffers are not covered:
+    /// dot's arenas are checked, with `Vec`'s growth, before the phases that grow them in bulk
+    /// (a virtual-node chain, position's auxiliary graph, `connect_graph`). Every other push
+    /// onto them checks the reallocation it causes and, past the limit, stops the call after
+    /// that one reallocation. The arenas' first fill from the parsed graph is bounded by
+    /// [`Self::max_nodes`] and [`Self::max_edges`] instead. Other buffers are not covered:
     /// [`Self::heap_limit`] and an OS limit bound them.
     ///
     /// The port's own vertex budget comes first: `peripheries=2147483647` asks for more than

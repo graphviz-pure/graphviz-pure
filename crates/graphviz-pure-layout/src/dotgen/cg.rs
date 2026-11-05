@@ -234,6 +234,7 @@ impl Dot<'_> {
     pub fn cg_new_node(&mut self, g: G, name: &str) -> N {
         let root = self.graphs[g].root;
         let n = self.nodes.len();
+        self.note_node_push();
         self.nodes.push(NodeInfo {
             name: name.to_string(),
             cg_root: Some(root),
@@ -476,6 +477,7 @@ impl Dot<'_> {
         }
         let e = self.edges.len();
         self.edge_seq += 1;
+        self.note_edge_push();
         self.edges.push(EdgeInfo {
             tail: t,
             head: h,
