@@ -19,6 +19,7 @@ use graphviz_pure_core::math;
 pub mod cccomps;
 use graphviz_pure_core::{BoundingBox, Point};
 use std::collections::HashSet;
+use std::hash::{BuildHasherDefault, DefaultHasher};
 
 /// `pack_mode`; order matters (`mode <= l_graph` selects polyomino packing).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Default)]
@@ -516,7 +517,14 @@ struct GInfo {
     index: usize,
 }
 
-type PointSet = HashSet<(i64, i64)>;
+// Keep collision probes repeatable: genBox/genPoly collect this set's iteration
+// order, and fits short-circuits on the first occupied cell. The order affects
+// work, not placement: fits only tests membership before inserting every cell,
+// same_shape ignores order, and verbose_cells sorts its diagnostic output.
+// DefaultHasher's fixed initial state is sufficient within a given Rust build;
+// no particular hash algorithm or cross-version iteration order is required.
+/// C: lib/pack/pack.c:genBox, genPoly, fits
+type PointSet = HashSet<(i64, i64), BuildHasherDefault<DefaultHasher>>;
 
 /// Not in C: the most cells genBox/genPoly may fill when computeStep saturated (issue #174).
 /// Measured on the reference build with one edge of `n` cells (#250's input, scaled): C takes
@@ -711,7 +719,7 @@ fn gen_box(
         bb0.ur.x.round(),
         bb0.ur.y.round(),
     );
-    let mut ps = PointSet::new();
+    let mut ps = PointSet::default();
     let ll = round_pt(cell(Point::new(center.x - m, center.y - m), ssize));
     let ur = round_pt(cell(
         Point::new(
@@ -776,7 +784,7 @@ fn gen_poly<P: PackGraph + ?Sized>(
     index: usize,
     budget: &mut Budget,
 ) -> Option<GInfo> {
-    let mut ps = PointSet::new();
+    let mut ps = PointSet::default();
     let margin = f64::from(pinfo.margin);
     let gbb = g.pk_bb(gi);
     let dx = center.x - gbb.ll.x.round();
@@ -1178,7 +1186,7 @@ fn poly_graphs<P: PackGraph + ?Sized>(g: &mut P, pinfo: &PackInfo) -> Option<Vec
     let mut search = Search::default();
     let mut sinfo: Vec<usize> = (0..ng).collect();
     qsort_by(&mut sinfo, |a, b| cmpf(a, b, &infos));
-    let mut ps = PointSet::new();
+    let mut ps = PointSet::default();
     let mut places = vec![Point::default(); ng];
     if let Some(fixed) = &pinfo.fixed {
         for i in 0..ng {
@@ -1459,7 +1467,7 @@ fn poly_rects(bbs: &[BoundingBox], pinfo: &PackInfo) -> Option<Vec<Point>> {
     let mut search = Search::default();
     let mut sinfo: Vec<usize> = (0..bbs.len()).collect();
     qsort_by(&mut sinfo, |a, b| cmpf(a, b, &infos));
-    let mut ps = PointSet::new();
+    let mut ps = PointSet::default();
     let mut places = vec![Point::default(); bbs.len()];
     for (i, &si) in sinfo.iter().enumerate() {
         let inf = &infos[si];
@@ -1487,6 +1495,26 @@ pub fn pack_rects(bbs: &mut [BoundingBox], pinfo: &PackInfo) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn point_set_iteration_is_repeatable() {
+        // Rebuild independently, including growth, duplicates and signed coordinates.
+        // Do not pin a particular order: std may change its hash/table implementation.
+        let build = || {
+            let mut cells = PointSet::default();
+            for x in -20..20 {
+                for y in -10..10 {
+                    cells.insert((x, y));
+                    cells.insert((x, y));
+                }
+            }
+            cells.into_iter().collect::<Vec<_>>()
+        };
+        let expected = build();
+        for _ in 0..16 {
+            assert_eq!(build(), expected);
+        }
+    }
 
     #[test]
     fn shape_equality_is_exact_and_ignores_iteration_order() {
@@ -1535,8 +1563,8 @@ mod tests {
             bbs.push(BoundingBox::new(x, y, x + w, y + h));
         }
         for fixed in [false, true] {
-            let mut actual = PointSet::new();
-            let mut expected = PointSet::new();
+            let mut actual = PointSet::default();
+            let mut expected = PointSet::default();
             let mut search = Search::default();
             if fixed {
                 let inf = &infos[0];
@@ -1545,7 +1573,14 @@ mod tests {
             }
             for (i, inf) in infos.iter().enumerate().skip(usize::from(fixed)) {
                 let a = place_graph(i, inf, &mut actual, 7, 8, &bbs, &mut search);
-                let b = place_graph_reference(i, inf, &mut expected, 7, 8, &bbs);
+                // Cell iteration order can change the number of collision probes,
+                // but not the chosen placement or the occupied cell set.
+                let reversed = GInfo {
+                    cells: inf.cells.iter().rev().copied().collect(),
+                    perim: inf.perim,
+                    index: inf.index,
+                };
+                let b = place_graph_reference(i, &reversed, &mut expected, 7, 8, &bbs);
                 assert_eq!(
                     (a.x.to_bits(), a.y.to_bits()),
                     (b.x.to_bits(), b.y.to_bits()),
@@ -1738,7 +1773,7 @@ mod tests {
                 ..Bezier::default()
             }],
         };
-        let mut ps = PointSet::new();
+        let mut ps = PointSet::default();
         let mut budget = Budget::for_step(27);
         assert!(fill_edge(
             &g,
