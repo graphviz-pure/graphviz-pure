@@ -200,8 +200,15 @@ impl Limits {
 
     /// The largest single buffer whose size the input chooses, in bytes: polygon vertices
     /// (`peripheries`, `sides`), neato's dense `n × n` models (Kamada-Kawai, stress
-    /// majorization, SGD) and the raster pixmap. Checked before the buffer is allocated;
-    /// past it, the call stops with the limit's error.
+    /// majorization, SGD), the node and edge arenas of dot's virtual-node chains, and the
+    /// raster pixmap. Checked before the buffer is allocated; past it, the call stops with
+    /// the limit's error. Other buffers are not covered: [`Self::heap_limit`] and an OS limit
+    /// bound them.
+    ///
+    /// The port's own vertex budget comes first: `peripheries=2147483647` asks for more than
+    /// it allows, so the call fails with C's out-of-memory message, an error of kind
+    /// [`GraphvizErrorKind::Allocation`](crate::GraphvizErrorKind) whose
+    /// [`GraphvizError::limit`] is `None`, whatever this limit is.
     #[must_use]
     pub fn max_allocation(mut self, bytes: u64) -> Self {
         self.allocation = Some(bytes);

@@ -428,3 +428,28 @@ fn an_allocation_limit_in_a_partial_render_ends_with_it() {
         assert!(graphviz_pure::render_dot("digraph { a -> b }", "dot", "svg").is_ok());
     });
 }
+
+#[test]
+fn the_allocation_limit_stops_a_long_virtual_node_chain() {
+    // 100 million virtual nodes: the arenas would grow to gigabytes.
+    let started = std::time::Instant::now();
+    let err = Limits::new()
+        .max_allocation(64 << 20)
+        .run(|| graphviz_pure::render_dot("digraph { a -> b [minlen=100000000] }", "dot", "svg"))
+        .unwrap_err();
+    assert_eq!(err.limit(), Some(Limit::Allocation));
+    assert!(started.elapsed() < std::time::Duration::from_secs(5));
+}
+
+#[test]
+fn each_periphery_counts_as_work() {
+    // Laid out outside the run: one node of 100,000 peripheries is drawn inside it.
+    let mut parsed =
+        graphviz_pure::parse_dot("digraph { a [shape=box, peripheries=100000] }").unwrap();
+    let _ = graphviz_pure::layout_graph(parsed.output_mut(), LayoutEngine::Dot).unwrap();
+    let err = Limits::new()
+        .max_steps(10_000)
+        .run(|| graphviz_pure::render_graph(parsed.output(), OutputFormat::Svg))
+        .unwrap_err();
+    assert_eq!(err.limit(), Some(Limit::Steps));
+}

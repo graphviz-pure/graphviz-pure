@@ -342,6 +342,11 @@ impl<E: Engine> Emitter<'_, E> {
         }
         let mut af = vec![Point::default(); sides];
         for j in 0..peripheries {
+            // Not in C: a node can ask for millions of peripheries, so each one counts its
+            // sides against the caller's `Limits::run`.
+            if graphviz_pure_core::limits::tick_by(sides as u64) {
+                break;
+            }
             for (i, a) in af.iter_mut().enumerate() {
                 let p = poly.vertices[i + j * sides];
                 // C (clang) fuses `P.x * xsize + ND_coord(n).x` (`fmla.2d`).
@@ -494,6 +499,10 @@ impl<E: Engine> Emitter<'_, E> {
         }
         let mut filled = 1;
         for j in 0..peripheries {
+            // Not in C: as in the polygon's periphery loop.
+            if graphviz_pure_core::limits::tick() {
+                break;
+            }
             let v0 = poly.vertices[j * poly.sides];
             let v1 = poly.vertices[j * poly.sides + 1];
             self.ellipse([add(v0, nd.coord), add(v1, nd.coord)], filled);

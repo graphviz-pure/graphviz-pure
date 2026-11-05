@@ -223,17 +223,20 @@ fn render_pixmap(
         return Ok(None);
     }
     let scale = f64::from(scale) * fit;
-    // Not in C: the caller's `Limits::max_allocation`, for the RGBA pixels.
+    // Not in C: the caller's `Limits::max_allocation`, for the RGBA pixels, and a run-wide
+    // limit reached while the SVG was read, both before the pixels are allocated and zeroed.
     graphviz_pure_core::limits::check_allocation(u64::from(w) * u64::from(h) * 4)?;
+    graphviz_pure_core::limits::check()?;
     let mut pixmap = tiny_skia::Pixmap::new(w, h)
         .ok_or_else(|| GraphvizError::render("the drawing is too large to rasterize"))?;
-    // Not in C: a run-wide limit reached while the SVG was read stops before the drawing.
-    graphviz_pure_core::limits::check()?;
     resvg::render(
         &tree,
         tiny_skia::Transform::from_scale(scale as f32, scale as f32),
         &mut pixmap.as_mut(),
     );
+    // Not in C: the drawing is one call that cannot stop part way, so a deadline or a
+    // cancel that came during it is honoured once it returns, before the encoding.
+    graphviz_pure_core::limits::check()?;
     Ok(Some(pixmap))
 }
 
@@ -353,6 +356,20 @@ mod tests {
                 .run(|| rasterize(SVG, RasterFormat::Png, false))
                 .is_ok()
         );
+    }
+
+    #[test]
+    fn a_cancel_during_the_drawing_is_honoured_after_it() {
+        // Polled when the run starts, when the call starts, before the drawing and after
+        // it; the fourth poll cancels.
+        let polls = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let seen = std::sync::Arc::clone(&polls);
+        let err = Limits::new()
+            .cancel_when(move || seen.fetch_add(1, std::sync::atomic::Ordering::Relaxed) >= 3)
+            .run(|| rasterize(SVG, RasterFormat::Png, false))
+            .unwrap_err();
+        assert_eq!(err.kind(), GraphvizErrorKind::Cancelled);
+        assert_eq!(polls.load(std::sync::atomic::Ordering::Relaxed), 4);
     }
 
     #[test]

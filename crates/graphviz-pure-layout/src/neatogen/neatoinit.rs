@@ -469,10 +469,10 @@ fn neato_layout_component(
     let model_bytes = match layout_mode {
         // `GD_dist` and `GD_spring`: two `n × n` arrays of `double`.
         MODE_KK => n.saturating_mul(n).saturating_mul(16),
-        // SGD's terms: every pair, with its distance and weight.
-        MODE_SGD => n.saturating_mul(n.saturating_sub(1)) / 2 * 16,
-        // The packed Laplacians, `n (n + 1) / 2` floats each, two of them.
-        _ => n.saturating_mul(n + 1) / 2 * 8,
+        // SGD's terms: every pair (`n (n - 1) / 2`), 16 bytes with its distance and weight.
+        MODE_SGD => n.saturating_mul(n.saturating_sub(1)).saturating_mul(8),
+        // The packed Laplacians: `n (n + 1) / 2` floats each, two of them.
+        _ => n.saturating_mul(n.saturating_add(1)).saturating_mul(4),
     };
     if graphviz_pure_core::limits::check_allocation(model_bytes).is_err() {
         return;
