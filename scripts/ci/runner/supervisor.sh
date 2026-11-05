@@ -1,0 +1,132 @@
+#!/usr/bin/env bash
+# Keeps GVP_RUNNERS idle ephemeral runners registered for graphviz-pure/graphviz-pure, each in
+# its own disposable container, and replaces each one after its job. Run by
+# gvp-ci-runners.service from its installed copy under /jobs/gvp-ci (install.sh), never from a
+# checkout. See docs/ci/self-hosted-runners.md.
+#
+# Each slot loops: generate a just-in-time runner configuration (the owner's gh login; it is
+# the only credential here, and it never enters a container), start a container with it, wait
+# for the runner to take one job and exit, keep its log, delete the container and its scratch
+# directory, repeat.
+set -uo pipefail
+
+ROOT=${GVP_CI_ROOT:-/jobs/gvp-ci}
+# shellcheck source=/dev/null
+[ -f "$ROOT/config.env" ] && . "$ROOT/config.env"
+REPO=${GVP_REPO:-graphviz-pure/graphviz-pure}
+RUNNERS=${GVP_RUNNERS:-6}
+IMAGE=${GVP_IMAGE:-gvp-ci-runner:current}
+RUNTIME=${GVP_RUNTIME:-runsc}
+LABELS=${GVP_LABELS:-gvp-ci}
+CPUS=${GVP_CPUS_PER_RUNNER:-4}
+MEMORY=${GVP_MEMORY_PER_RUNNER:-10g}
+MIN_FREE_GB=${GVP_MIN_FREE_GB:-150}
+PREFIX=${GVP_PREFIX:-gvp-ci}
+# Runner names appear in public job logs: no hostname.
+HOST=${GVP_HOST_TAG:-h1}
+LOGS=$ROOT/logs
+SCRATCH=$ROOT/scratch
+
+mkdir -p "$LOGS" "$SCRATCH"
+log() { echo "$(date -u +%FT%TZ) $*" >> "$LOGS/supervisor.log"; echo "$*"; }
+
+# Runners of this machine that GitHub still lists but no container serves (left by a crash or a
+# reboot) are removed, so the repository's runner list stays the live set.
+remove_stale_runners() {
+  local live ids
+  live=$(docker ps --filter "label=gvp-ci.runner" --format '{{.Label "gvp-ci.runner"}}')
+  ids=$(gh api --paginate "repos/$REPO/actions/runners" \
+    --jq ".runners[] | select(.name | startswith(\"$PREFIX-$HOST-\")) | \"\(.id) \(.name) \(.status) \(.busy)\"") || return 0
+  while read -r id name status busy; do
+    [ -n "$id" ] || continue
+    grep -qxF "$name" <<< "$live" && continue
+    [ "$busy" = true ] && continue
+    gh api -X DELETE "repos/$REPO/actions/runners/$id" >/dev/null 2>&1 && log "removed stale runner $name ($status)"
+  done <<< "$ids"
+}
+
+clean_slot() {
+  local slot=$1 c="$PREFIX-$1"
+  if docker container inspect "$c" >/dev/null 2>&1; then
+    docker logs "$c" >> "$LOGS/$c.log" 2>&1 || true
+    docker rm -f "$c" >/dev/null 2>&1 || true
+  fi
+  # Files in the scratch directory belong to the container's uid; root removes them.
+  if [ -d "$SCRATCH/$slot" ]; then
+    sudo -n rm -rf --one-file-system -- "${SCRATCH:?}/$slot"
+  fi
+}
+
+free_gb() { df -BG --output=avail /jobs | awk 'NR==2 { gsub(/G/, ""); print $1 }'; }
+
+run_slot() {
+  local slot=$1 c="$PREFIX-$1" name jit started rc
+  while :; do
+    clean_slot "$slot"
+    if [ -f "$ROOT/paused" ]; then sleep 30; continue; fi
+    if [ "$(free_gb)" -lt "$MIN_FREE_GB" ]; then
+      log "slot $slot: /jobs has $(free_gb) GB free (< $MIN_FREE_GB), waiting"
+      sleep 60; continue
+    fi
+    name="$PREFIX-$HOST-$slot-$(date -u +%Y%m%d%H%M%S)"
+    labels_json=$(jq -cn --arg l "$LABELS" '["self-hosted","linux","x64"] + ($l | split(","))')
+    jit=$(jq -n --arg n "$name" --argjson l "$labels_json" \
+        '{name: $n, runner_group_id: 1, labels: $l, work_folder: "/home/runner/work"}' \
+      | gh api -X POST "repos/$REPO/actions/runners/generate-jitconfig" --input - --jq .encoded_jit_config 2>> "$LOGS/supervisor.log")
+    if [ -z "$jit" ]; then
+      log "slot $slot: generate-jitconfig failed, retrying in 60 s"
+      sleep 60; continue
+    fi
+    mkdir -p "$SCRATCH/$slot"
+    sudo -n chown 1001:1001 "$SCRATCH/$slot"
+    started=$(date +%s)
+    if ! GVP_JIT_CONFIG=$jit docker run -d --name "$c" \
+        --label "gvp-ci.runner=$name" \
+        --runtime "$RUNTIME" \
+        --cgroup-parent gvp-ci.slice \
+        --cpus "$CPUS" --memory "$MEMORY" --memory-swap "$MEMORY" --pids-limit 16384 \
+        --network gvp-ci --dns 1.1.1.1 --dns 9.9.9.9 \
+        --security-opt no-new-privileges --cap-drop ALL --cap-add SETUID --cap-add SETGID \
+        --shm-size 2g \
+        --mount "type=bind,src=$SCRATCH/$slot,dst=/home/runner/work" \
+        -e GVP_JIT_CONFIG \
+        "$IMAGE" >/dev/null 2>> "$LOGS/supervisor.log"; then
+      log "slot $slot: docker run failed, retrying in 60 s"
+      sleep 60; continue
+    fi
+    log "slot $slot: started $name"
+    rc=$(docker wait "$c" 2>/dev/null || echo "?")
+    log "slot $slot: $name exited ($rc) after $(( $(date +%s) - started )) s"
+    # A runner that exits within a minute without a job is a registration or start-up failure;
+    # don't spin.
+    [ $(( $(date +%s) - started )) -lt 60 ] && sleep 30
+  done
+}
+
+stop_all() {
+  log "stopping"
+  trap - TERM INT
+  # The slot loops first, so none starts a replacement.
+  for p in "${pids[@]}"; do pkill -TERM -P "$p" 2>/dev/null; kill -TERM "$p" 2>/dev/null; done
+  # The runners deregister when they stop (ephemeral); a job in progress is cancelled.
+  for s in $(seq 1 "$RUNNERS"); do docker stop -t 20 "$PREFIX-$s" >/dev/null 2>&1 & done
+  wait
+  for s in $(seq 1 "$RUNNERS"); do clean_slot "$s"; done
+  remove_stale_runners
+  exit 0
+}
+
+trap stop_all TERM INT
+
+log "starting $RUNNERS runners ($IMAGE, runtime $RUNTIME, $CPUS CPUs and $MEMORY each)"
+docker image inspect "$IMAGE" >/dev/null || { log "image $IMAGE missing: run build.sh"; exit 1; }
+for s in $(seq 1 "$RUNNERS"); do clean_slot "$s"; done
+remove_stale_runners
+pids=()
+for s in $(seq 1 "$RUNNERS"); do run_slot "$s" & pids+=($!); done
+# Every 10 minutes, drop registrations no container serves.
+while :; do
+  sleep 600 &
+  wait $! || true
+  remove_stale_runners
+done

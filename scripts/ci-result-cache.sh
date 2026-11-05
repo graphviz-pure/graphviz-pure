@@ -56,6 +56,8 @@ ignored=(
   # Run by hand, by the release, or by a job that always runs.
   scripts/bump-version.sh
   scripts/c-oracle-linux
+  # The self-hosted runners' image and supervisor (docs/ci/self-hosted-runners.md).
+  scripts/ci/runner
   scripts/ci-stats
   scripts/ci-report-failure.sh
   'scripts/*-probe.c'

@@ -1,0 +1,25 @@
+# Keeps the self-hosted runners registered (supervisor.sh). Installed by install.sh, which copies
+# the scripts to /jobs/gvp-ci: a checkout or a pull request never changes the running copy.
+[Unit]
+Description=graphviz-pure self-hosted CI runners (supervisor)
+After=docker.service network-online.target
+Wants=docker.service network-online.target
+
+[Service]
+Type=simple
+User=agent
+Group=docker
+Slice=gvp-ci.slice
+Nice=15
+Environment=GVP_CI_ROOT=/jobs/gvp-ci
+ExecStartPre=+/jobs/gvp-ci/bin/network.sh
+ExecStart=/jobs/gvp-ci/bin/supervisor.sh
+KillMode=mixed
+TimeoutStopSec=90
+Restart=always
+RestartSec=30
+StandardOutput=append:/jobs/gvp-ci/logs/service.log
+StandardError=append:/jobs/gvp-ci/logs/service.log
+
+[Install]
+WantedBy=multi-user.target

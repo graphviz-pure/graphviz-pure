@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+# The kill switch and status of the self-hosted runners (docs/ci/self-hosted-runners.md).
+#
+#   gvp-ci off      every new job goes to GitHub-hosted runners (repository variable
+#                   GVP_SELF_HOSTED=false); the local runners finish the jobs they hold
+#   gvp-ci on       jobs from this repository go to the local runners again
+#   gvp-ci status   the variable, the supervisor, the containers and GitHub's runner list
+#
+# The variable is read by every runs-on that can choose a local runner, so `off` never leaves
+# a job waiting for a runner that is gone. Stop the supervisor only after `off`.
+set -euo pipefail
+repo=graphviz-pure/graphviz-pure
+case "${1:-status}" in
+  off) gh variable set GVP_SELF_HOSTED --body false -R "$repo"; echo "GVP_SELF_HOSTED=false: new jobs run on GitHub-hosted runners" ;;
+  on) gh variable set GVP_SELF_HOSTED --body true -R "$repo"; echo "GVP_SELF_HOSTED=true: jobs from $repo run on the local runners" ;;
+  status)
+    echo "GVP_SELF_HOSTED=$(gh variable get GVP_SELF_HOSTED -R "$repo" 2>/dev/null || echo unset)"
+    systemctl --no-pager --lines=0 status gvp-ci-runners.service | head -3 || true
+    docker ps --filter label=gvp-ci.runner --format '{{.Names}}\t{{.Status}}\t{{.Label "gvp-ci.runner"}}'
+    gh api "repos/$repo/actions/runners" --jq '.runners[] | "\(.name)\t\(.status)\tbusy=\(.busy)"'
+    ;;
+  *) echo "usage: gvp-ci on|off|status" >&2; exit 2 ;;
+esac
