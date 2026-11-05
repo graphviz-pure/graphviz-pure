@@ -132,7 +132,9 @@ pub const MAX_VERTICES: u64 = 1 << 24;
 /// reports the allocation C asked for as failed. Not in C (see [`MAX_VERTICES`]).
 pub fn gv_calloc_budget<T>(nmemb: u64, max: u64) -> Result<(), AllocFailure> {
     let bytes = check(nmemb, size_of::<T>() as u64)?;
-    if nmemb > max {
+    // Not in C either: past the caller's `Limits::max_allocation`, the call stops with the
+    // limit's error (`limits::settle` replaces this failure with it).
+    if nmemb > max || crate::limits::check_allocation(bytes).is_err() {
         return Err(AllocFailure::OutOfMemory { bytes });
     }
     Ok(())

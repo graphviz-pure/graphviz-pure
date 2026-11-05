@@ -1207,6 +1207,10 @@ impl<'a, E: Engine> Emitter<'a, E> {
     }
 
     fn emit_node(&mut self, n: usize, drawn: &mut [bool]) {
+        // Not in C: a limit of the caller's `Limits::run` stops the drawing.
+        if graphviz_pure_core::limits::tick() {
+            return;
+        }
         let m = self.job.m;
         let nd = &m.nodes[n];
         if drawn[n] || m.g.nodes[n].layout.clust_node {
@@ -1386,6 +1390,10 @@ impl<'a, E: Engine> Emitter<'a, E> {
     }
 
     fn emit_edge(&mut self, e: usize) {
+        // Not in C: a limit of the caller's `Limits::run` stops the drawing.
+        if graphviz_pure_core::limits::tick() {
+            return;
+        }
         let m = self.job.m;
         let ed = &m.edges[e];
         let clip = self.job.clip;

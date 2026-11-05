@@ -223,8 +223,12 @@ fn render_pixmap(
         return Ok(None);
     }
     let scale = f64::from(scale) * fit;
+    // Not in C: the caller's `Limits::max_allocation`, for the RGBA pixels.
+    graphviz_pure_core::limits::check_allocation(u64::from(w) * u64::from(h) * 4)?;
     let mut pixmap = tiny_skia::Pixmap::new(w, h)
         .ok_or_else(|| GraphvizError::render("the drawing is too large to rasterize"))?;
+    // Not in C: a run-wide limit reached while the SVG was read stops before the drawing.
+    graphviz_pure_core::limits::check()?;
     resvg::render(
         &tree,
         tiny_skia::Transform::from_scale(scale as f32, scale as f32),
@@ -330,6 +334,26 @@ mod tests {
 <g transform="scale(1 1) rotate(0) translate(4 112)"><polygon fill="white" stroke="none" points="-4,4 -4,-112 58,-112 58,4 -4,4"/>
 <ellipse fill="none" stroke="black" cx="27" cy="-90" rx="27" ry="18"/>
 <text text-anchor="middle" x="27" y="-85.8" font-family="Times,serif" font-size="14.00">a</text></g></svg>"#;
+
+    #[test]
+    fn the_allocation_limit_stops_the_pixmap() {
+        // 62 x 116 pt at 96 dpi: 83 x 155 px of 4 bytes.
+        let err = Limits::new()
+            .max_allocation(10_000)
+            .run(|| rasterize(SVG, RasterFormat::Png, false))
+            .unwrap_err();
+        assert_eq!(err.limit(), Some(Limit::Allocation));
+        assert_eq!(
+            err.message(),
+            "an allocation of 51460 bytes is over the limit of 10000"
+        );
+        assert!(
+            Limits::new()
+                .max_allocation(51_460)
+                .run(|| rasterize(SVG, RasterFormat::Png, false))
+                .is_ok()
+        );
+    }
 
     #[test]
     fn a_cancelled_run_does_not_rasterize() {

@@ -463,6 +463,20 @@ fn neato_layout_component(
         graph_name: name.to_string(),
         ..NeatoParams::default()
     };
+    // Not in C: the dense model this mode builds for `n` nodes, against the caller's
+    // `Limits::max_allocation`; past it the call stops with the limit's error.
+    let n = sub.nodes.len() as u64;
+    let model_bytes = match layout_mode {
+        // `GD_dist` and `GD_spring`: two `n × n` arrays of `double`.
+        MODE_KK => n.saturating_mul(n).saturating_mul(16),
+        // SGD's terms: every pair, with its distance and weight.
+        MODE_SGD => n.saturating_mul(n.saturating_sub(1)) / 2 * 16,
+        // The packed Laplacians, `n (n + 1) / 2` floats each, two of them.
+        _ => n.saturating_mul(n + 1) / 2 * 8,
+    };
+    if graphviz_pure_core::limits::check_allocation(model_bytes).is_err() {
+        return;
+    }
     let (ng, kk) = scan_graph_mode(g, sub, layout_mode, &mut p);
     if ng < 2 || p.max_iter < 0 {
         return;
