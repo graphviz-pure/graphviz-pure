@@ -5,6 +5,11 @@ Description=graphviz-pure self-hosted CI runners (switch off after a failure)
 
 [Service]
 Type=oneshot
-User=agent
-Environment=GVP_CI_ROOT=/jobs/gvp-ci
+User=gvp-ci
+Group=gvp-ci
+SupplementaryGroups=docker
+# The GitHub token (docs/ci/self-hosted-runners.md, "The token"): root-only on disk, handed to
+# this service alone in $CREDENTIALS_DIRECTORY.
+LoadCredential=gh-token:/etc/gvp-ci/token
+Environment=GVP_CI_ROOT=/jobs/gvp-ci GH_CONFIG_DIR=/jobs/gvp-ci/state/gh
 ExecStart=/jobs/gvp-ci/bin/gvp-ci off

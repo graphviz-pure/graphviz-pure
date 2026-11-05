@@ -1,10 +1,16 @@
-# Turns the self-hosted runners' switch off when none has been online for ten minutes
+# Turns the self-hosted runners' switch off, and re-runs the jobs waiting for them, when no
+# runner has been online or the supervisor has been unhealthy for five minutes
 # (gvp-ci watchdog; docs/ci/self-hosted-runners.md). Started by gvp-ci-watchdog.timer.
 [Unit]
 Description=graphviz-pure self-hosted CI runners (watchdog)
 
 [Service]
 Type=oneshot
-User=agent
-Environment=GVP_CI_ROOT=/jobs/gvp-ci
+User=gvp-ci
+Group=gvp-ci
+SupplementaryGroups=docker
+# The GitHub token (docs/ci/self-hosted-runners.md, "The token"): root-only on disk, handed to
+# this service alone in $CREDENTIALS_DIRECTORY.
+LoadCredential=gh-token:/etc/gvp-ci/token
+Environment=GVP_CI_ROOT=/jobs/gvp-ci GH_CONFIG_DIR=/jobs/gvp-ci/state/gh
 ExecStart=/jobs/gvp-ci/bin/gvp-ci watchdog

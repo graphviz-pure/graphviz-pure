@@ -11,11 +11,15 @@ OnFailure=gvp-ci-off.service
 
 [Service]
 Type=simple
-User=agent
-Group=docker
+User=gvp-ci
+Group=gvp-ci
+SupplementaryGroups=docker
+# The GitHub token (docs/ci/self-hosted-runners.md, "The token"): root-only on disk, handed to
+# this service alone in $CREDENTIALS_DIRECTORY.
+LoadCredential=gh-token:/etc/gvp-ci/token
+Environment=GVP_CI_ROOT=/jobs/gvp-ci GH_CONFIG_DIR=/jobs/gvp-ci/state/gh
 Slice=gvpci.slice
 Nice=15
-Environment=GVP_CI_ROOT=/jobs/gvp-ci
 ExecStartPre=+/jobs/gvp-ci/bin/network.sh
 ExecStart=/jobs/gvp-ci/bin/supervisor.sh
 KillMode=mixed

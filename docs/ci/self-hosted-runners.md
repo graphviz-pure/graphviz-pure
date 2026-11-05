@@ -12,8 +12,9 @@ jobs stay on GitHub-hosted runners, as do `release.yml`, `fuzz.yml` (the release
 One command sends every new job back to GitHub-hosted runners:
 
 ```sh
-/jobs/gvp-ci/bin/gvp-ci off      # GVP_SELF_HOSTED=false
+/jobs/gvp-ci/bin/gvp-ci off      # GVP_SELF_HOSTED=false, then cancel and re-run the waiting runs
 /jobs/gvp-ci/bin/gvp-ci on       # GVP_SELF_HOSTED=true
+/jobs/gvp-ci/bin/gvp-ci requeue  # only the cancel and re-run
 /jobs/gvp-ci/bin/gvp-ci status   # the variable, the supervisor, the containers, GitHub's list
 ```
 
@@ -22,20 +23,27 @@ runner reads. Without the variable, or with any value but `true`, every job runs
 `ubuntu-24.04`. The same switch from the web: Settings → Secrets and variables → Actions →
 Variables.
 
-`runs-on` is read when a job is queued. Turning the switch off does not move a job that is
-already waiting for a local runner: cancel its run and re-run it. A re-run reads the variable
-again, so the job then goes to `ubuntu-24.04` (tested: a job that ran locally went to
-`ubuntu-24.04` on its re-run with the switch off). In the merge queue, cancelling the run drops
-the pull request from the queue; enqueue it again.
+`runs-on` is read when a job is queued, so the variable alone does not move a job already
+waiting for a local runner. `gvp-ci off` therefore also cancels every run of the repository
+that has a job queued for the `gvp-ci` labels, waits for it to stop, and re-runs its cancelled
+jobs (`gh run rerun --failed`, through gh-bot). A re-run reads the variable again, so those jobs
+go to `ubuntu-24.04`: tested, a job that had run locally went to `ubuntu-24.04` on its re-run
+with the switch off. Jobs of those runs that were running on hosted runners are re-run too.
+Two cases need a person:
+- **The merge queue.** A merge-queue run that is cancelled drops its pull request from the
+  queue. The re-run passes, but the pull request must be enqueued again.
+- **Switching off by hand without the script** (the web page, or `gh variable set`). Then run
+  `gvp-ci requeue`, or cancel and re-run each waiting run.
 
 The switch also turns itself off:
-
-- `gvp-ci-watchdog.timer` runs `gvp-ci watchdog` every two minutes. When the variable is on
-  and GitHub has listed no online `gvp-ci` runner for 10 minutes, it runs `gvp-ci off`. That
-  covers the supervisor being stopped or crashing, Docker failing, the disk guard below, and a
-  reboot that does not bring the runners back.
+- `gvp-ci-watchdog.timer` runs `gvp-ci watchdog` every two minutes. It runs `gvp-ci off` when
+  the variable is on and, for five minutes, one of these holds: `gvp-ci-runners.service` is not
+  active; the supervisor has not touched its heartbeat (`/jobs/gvp-ci/state/heartbeat`, every
+  minute) for five minutes; or GitHub lists no online `gvp-ci` runner. That covers the
+  supervisor being stopped, hung or crashing, Docker failing, the disk guard below, and a reboot
+  that does not bring the runners back.
 - `gvp-ci-runners.service` gives up after five failed starts in ten minutes and then starts
-  `gvp-ci-off.service`, which switches off at once.
+  `gvp-ci-off.service`, which runs `gvp-ci off` at once.
 
 Each logs to `/jobs/gvp-ci/logs/watchdog.log`. Neither turns the switch back on: check the
 runners, then run `gvp-ci on`.
@@ -123,19 +131,91 @@ runner's JIT configuration. That configuration is on the runner's command line a
 `/opt/actions-runner`, both readable by the job's own user. It registers one runner for one
 job, which is already running, so it is worth nothing to the job.
 
-What stays on the host: the supervisor and the watchdog run as the owner's account `agent`,
-and use its `gh` login to register runners, generate JIT configurations and set
-`GVP_SELF_HOSTED`. That login is not restricted to those three calls: it is the owner's full
-login, with administrator rights on the repository. It never enters a container. Anything that
-runs as `agent` holds it, which is why `/jobs/gvp-ci` and `bin/` are root-owned: `agent` cannot
-change what the service runs. `agent` is in the docker group and has sudo, so this protects
-against accidents, not against the account itself. Follow-up (#808): run the service as its own system
-user with a token limited to this repository's runner administration and variables.
+What stays on the host:
+- **The service user.** The supervisor, the watchdog and `gvp-ci-off.service` run as the system
+  user `gvp-ci`, which has no login shell and no home. It is in the docker group, which is
+  equivalent to root on this machine, since that is how it starts containers. Its sudo rights
+  (`scripts/ci/runner/sudoers`) are three commands: removing and handing over a scratch slot
+  (`rm`, `chown`), and minting gh-bot's short-lived App token for cancelling and re-running runs.
+- **Root-owned files.** `/jobs/gvp-ci`, `bin/` and `config.env` are root-owned, so `gvp-ci`
+  cannot change what its own service runs.
+- **The token.** Its GitHub token is `/etc/gvp-ci/token`, root-only (0600 in a 0700
+  directory). systemd hands it to the three units alone (`LoadCredential=`), and it never
+  enters a container.
 
-Residual risk: the hook allows `push` and `merge_group`. A fork's pull request that someone
-enqueues, and Dependabot's pull requests, which are branches of this repository, therefore run
-here, inside gVisor, once queued. Read a fork's `build.rs`, `Cargo.lock`, workflow, script and
-test changes before enqueueing it.
+The token's power matters. Until the owner creates the narrow token below, `/etc/gvp-ci/token`
+holds a copy of the owner's `gh` login. That is the owner's full account, with administrator
+rights on the repository, not a token restricted to runner registration and the variable. A
+process running as `gvp-ci`, or anyone with root, can use it for anything the owner can. The
+narrow token removes that.
+
+### The token
+
+The runner calls need these permissions:
+- registering runners and generating JIT configurations;
+- listing runners and deleting idle registrations;
+- setting `GVP_SELF_HOSTED`.
+
+For runners registered on the repository, a fine-grained token needs the repository's
+"Administration" permission, which also covers every repository setting. Registered in an
+organization runner group restricted to this repository, the same calls need only the
+organization permission "Self-hosted runners". The supervisor supports both
+(`GVP_RUNNER_SCOPE=repo|org`). The narrow setup needs the owner's clicks:
+
+1. **Runner group.** Organization settings → Actions → Runner groups → New runner group.
+   - Name: `gvp-ci`.
+   - Repository access: "Selected repositories", graphviz-pure only.
+   - Tick "Allow public repositories".
+   - Workflow access: all workflows.
+   - Create it, and note the number at the end of its URL (the group id).
+2. **Token.** Your settings → Developer settings → Personal access tokens → Fine-grained
+   tokens → Generate new token.
+   - Name: `gvp-ci runners`.
+   - Resource owner: graphviz-pure.
+   - Expiration: the longest the organization allows; put the date in your calendar.
+   - Repository access: "Only select repositories", graphviz-pure.
+   - Repository permissions: Variables → Read and write (Metadata → Read is added by itself).
+   - Organization permissions: Self-hosted runners → Read and write.
+   - Generate, and copy the token.
+3. **Approval.** If the organization requires approval of fine-grained tokens, approve it under
+   Organization settings → Personal access tokens → Pending requests.
+4. **Install.** On the machine:
+
+   ```sh
+   sudo install -o root -g root -m 0600 /dev/stdin /etc/gvp-ci/token   # paste, then Ctrl-D
+   sudoedit /jobs/gvp-ci/config.env   # GVP_RUNNER_SCOPE=org and GVP_RUNNER_GROUP_ID=<group id>
+   sudo systemctl restart gvp-ci-runners
+   /jobs/gvp-ci/bin/gvp-ci status
+   ```
+
+   `status` must list four online runners. Then delete the repository-level runners that
+   GitHub still lists, if any: Settings → Actions → Runners.
+
+Cancelling and re-running runs does not use this token: gh-bot does it, as the project's
+GitHub App. If the token expires, the supervisor cannot register runners. The watchdog then
+sees no runner online, but it cannot set the variable with an expired token either: renew the
+token before it expires, or switch off from the web page.
+
+Residual risk: code that did not start in this repository still runs here, inside gVisor, in
+three ways:
+- **The merge queue.** A fork's pull request, once someone enqueues it, runs here as a
+  `merge_group` run.
+- **Pushes to master.** The merged commit runs here as a `push` run.
+- **Dependabot.** Its pull requests are branches of this repository, so their `pull_request`
+  runs are local from the first push. A dependency update can bring in a new crate's build
+  script or proc macro, which runs at build time.
+
+The rule, for every fork pull request before it is enqueued and every Dependabot pull request
+before it is merged: read every change to
+- `build.rs` files, proc-macro crates and `Cargo.toml`/`Cargo.lock` (new or changed crates and
+  their sources);
+- `.github/`, `scripts/` and anything a workflow runs;
+- tests and test data that run programs or open the network;
+- `package.json`/`package-lock.json` under `web/`, `site/` and `scripts/` (npm install scripts).
+
+A change there that you cannot account for blocks the merge. Turning the switch off
+(`gvp-ci off`) is the fallback for running a pull request you have not read fully: it then runs
+on GitHub's runners instead of here.
 
 Runner names appear in public job logs, so they carry a slot number and a time, not the
 machine's name.
@@ -191,6 +271,9 @@ scripts/ci/runner/install.sh
 ```
 
 It:
+- creates the system user `gvp-ci` and installs its sudoers rule;
+- the first time, writes the installing account's `gh` login to `/etc/gvp-ci/token`, until the
+  narrow token replaces it;
 - builds the image (`build.sh`);
 - installs the supervisor, `network.sh` and `gvp-ci` into the root-owned `/jobs/gvp-ci/bin`;
 - writes the root-owned `/jobs/gvp-ci/config.env` the first time;
@@ -207,9 +290,11 @@ supervisor. Run `install.sh` again after a change to `scripts/ci/runner/` lands 
 | `scripts/ci/runner/job-started.sh` | the event and repository check (installed in the image at `/opt/gvp-ci/job-started.sh`) |
 | `scripts/ci/runner/entrypoint.sh` | writes public DNS resolvers, drops to `runner`, starts the JIT runner |
 | `scripts/ci/runner/supervisor.sh` | keeps the runners registered, replaces each after its job, guards the disk |
-| `scripts/ci/runner/gvp-ci` | the switch, the status and the watchdog |
+| `scripts/ci/runner/gvp-ci` | the switch, the cancel and re-run, the status and the watchdog |
+| `scripts/ci/runner/sudoers` | the service user's sudo rights, installed as `/etc/sudoers.d/gvp-ci` |
+| `/etc/gvp-ci/token` | the service's GitHub token, root-only |
 | `/jobs/gvp-ci/logs/` | `supervisor.log`, `service.log`, `watchdog.log`, one log per slot's runner containers |
-| `/jobs/gvp-ci/state/` | the watchdog's timer; `paused`, which makes idle slots wait |
+| `/jobs/gvp-ci/state/` | the supervisor's heartbeat; the watchdog's timer; `paused`, which makes idle slots wait |
 
 The supervisor recovers from a reboot: the service is enabled and restarts on failure,
 `network.sh` reapplies the firewall rules at every start, and at start and every ten minutes the

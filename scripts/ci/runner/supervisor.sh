@@ -4,16 +4,31 @@
 # gvp-ci-runners.service from its installed copy under /jobs/gvp-ci (install.sh), never from a
 # checkout. See docs/ci/self-hosted-runners.md.
 #
-# Each slot loops: generate a just-in-time runner configuration (the owner's gh login; it is
-# the only credential here, and it never enters a container), start a container with it, wait
-# for the runner to take one job and exit, keep its log, delete the container and its scratch
-# directory, repeat.
+# Each slot loops: generate a just-in-time runner configuration, start a container with it,
+# wait for the runner to take one job and exit, keep its log, delete the container and its
+# scratch directory, repeat. The service runs as the system user gvp-ci; its GitHub token comes
+# from systemd (LoadCredential=gh-token, from /etc/gvp-ci/token) and never enters a container.
 set -uo pipefail
 
 ROOT=${GVP_CI_ROOT:-/jobs/gvp-ci}
 # shellcheck source=/dev/null
 [ -f "$ROOT/config.env" ] && . "$ROOT/config.env"
 REPO=${GVP_REPO:-graphviz-pure/graphviz-pure}
+# repo: runners registered on the repository (needs the token's Administration permission).
+# org: runners registered in the organization's runner group GVP_RUNNER_GROUP_ID, restricted to
+# this repository (needs only the "Self-hosted runners" organization permission).
+SCOPE=${GVP_RUNNER_SCOPE:-repo}
+GROUP_ID=${GVP_RUNNER_GROUP_ID:-1}
+case "$SCOPE" in
+  repo) API=repos/$REPO/actions/runners ;;
+  org) API=orgs/${REPO%%/*}/actions/runners ;;
+  *) echo "GVP_RUNNER_SCOPE must be repo or org" >&2; exit 1 ;;
+esac
+if [ -n "${CREDENTIALS_DIRECTORY:-}" ] && [ -r "$CREDENTIALS_DIRECTORY/gh-token" ]; then
+  GH_TOKEN=$(cat "$CREDENTIALS_DIRECTORY/gh-token")
+  export GH_TOKEN
+fi
+export GH_CONFIG_DIR=${GH_CONFIG_DIR:-${GVP_CI_ROOT:-/jobs/gvp-ci}/state/gh}
 RUNNERS=${GVP_RUNNERS:-4}
 IMAGE=${GVP_IMAGE:-gvp-ci-runner:current}
 RUNTIME=${GVP_RUNTIME:-runsc}
@@ -40,13 +55,13 @@ log() { echo "$(date -u +%FT%TZ) $*" >> "$LOGS/supervisor.log"; echo "$*"; }
 remove_stale_runners() {
   local live ids
   live=$(docker ps --filter "label=gvp-ci.runner" --format '{{.Label "gvp-ci.runner"}}')
-  ids=$(gh api --paginate "repos/$REPO/actions/runners" \
+  ids=$(gh api --paginate "$API" \
     --jq ".runners[] | select(.name | startswith(\"$PREFIX-$HOST-\")) | \"\(.id) \(.name) \(.status) \(.busy)\"") || return 0
   while read -r id name status busy; do
     [ -n "$id" ] || continue
     grep -qxF "$name" <<< "$live" && continue
     [ "$busy" = true ] && continue
-    gh api -X DELETE "repos/$REPO/actions/runners/$id" >/dev/null 2>&1 && log "removed stale runner $name ($status)"
+    gh api -X DELETE "$API/$id" >/dev/null 2>&1 && log "removed stale runner $name ($status)"
   done <<< "$ids"
 }
 
@@ -76,8 +91,8 @@ run_slot() {
     name="$PREFIX-$HOST-$slot-$(date -u +%Y%m%d%H%M%S)"
     labels_json=$(jq -cn --arg l "$LABELS" '["self-hosted","linux","x64"] + ($l | split(","))')
     jit=$(jq -n --arg n "$name" --argjson l "$labels_json" \
-        '{name: $n, runner_group_id: 1, labels: $l, work_folder: "/home/runner/work"}' \
-      | gh api -X POST "repos/$REPO/actions/runners/generate-jitconfig" --input - --jq .encoded_jit_config 2>> "$LOGS/supervisor.log")
+        --argjson g "$GROUP_ID" '{name: $n, runner_group_id: $g, labels: $l, work_folder: "/home/runner/work"}' \
+      | gh api -X POST "$API/generate-jitconfig" --input - --jq .encoded_jit_config 2>> "$LOGS/supervisor.log")
     if [ -z "$jit" ]; then
       log "slot $slot: generate-jitconfig failed, retrying in 60 s"
       sleep 60; continue
@@ -124,14 +139,16 @@ stop_all() {
 
 trap stop_all TERM INT
 
-log "starting $RUNNERS runners ($IMAGE, runtime $RUNTIME, $CPUS CPUs and $MEMORY each)"
+log "starting $RUNNERS runners ($IMAGE, runtime $RUNTIME, $CPUS CPUs and $MEMORY each, $SCOPE scope)"
 docker image inspect "$IMAGE" >/dev/null || { log "image $IMAGE missing: run build.sh"; exit 1; }
 for s in $(seq 1 "$RUNNERS"); do clean_slot "$s"; done
 remove_stale_runners
 pids=()
 for s in $(seq 1 "$RUNNERS"); do run_slot "$s" & pids+=($!); done
-# Every minute, check the disk; every 10 minutes, drop registrations no container serves.
+# Every minute, check the disk and touch the heartbeat the watchdog reads; every 10 minutes,
+# drop registrations no container serves.
 tick=0
+touch "$STATE/heartbeat"
 while :; do
   sleep 60 &
   sleeper=$!
@@ -143,6 +160,7 @@ while :; do
       docker kill "${running[@]}" >/dev/null 2>&1
     fi
   fi
+  touch "$STATE/heartbeat"
   tick=$(( (tick + 1) % 10 ))
   [ "$tick" = 0 ] && remove_stale_runners
 done
