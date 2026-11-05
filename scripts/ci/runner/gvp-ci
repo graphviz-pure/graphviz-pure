@@ -17,11 +17,10 @@
 # queued for the local labels waiting; a re-run reads the variable again.
 #
 # GitHub calls: the variable uses the service's token (systemd credential gh-token) when run by
-# the service, and the caller's gh login otherwise. The runner list always uses the service's
-# token: `status` run by a person reads it through a transient unit as gvp-ci, since the org
-# runner list needs the token's "Self-hosted runners" permission. Cancelling and re-running
-# runs uses gh-bot, the project's GitHub App, unless GVP_ACTIONS_TOKEN=service (config.env),
-# once the service's token has the repository permission Actions (read and write).
+# the service, and the caller's gh login otherwise. The runner list, and cancelling and
+# re-running runs, always use the service's token, whose permissions are "Self-hosted runners"
+# (organization), Variables and Actions (repository): run by a person, those steps run again as
+# gvp-ci in a transient unit.
 set -euo pipefail
 repo=graphviz-pure/graphviz-pure
 root=${GVP_CI_ROOT:-/jobs/gvp-ci}
@@ -36,11 +35,6 @@ case "${GVP_RUNNER_SCOPE:-repo}" in
   org) runners_api=orgs/${repo%%/*}/actions/runners ;;
   *) runners_api=repos/$repo/actions/runners ;;
 esac
-# The GitHub CLI for listing, cancelling and re-running workflow runs.
-actions_gh() {
-  if [ "${GVP_ACTIONS_TOKEN:-gh-bot}" = service ]; then gh "$@"; else gh-bot "$@"; fi
-}
-
 # Runs a subcommand with the service's token. Inside the service units the credential is at
 # hand; from a person's shell the subcommand runs again as gvp-ci, with the same credential, in
 # a transient unit (sudo; the token file stays root-only and never reaches the shell).
@@ -70,9 +64,9 @@ online_runners() {
 # The runs of this repository that have a job queued for the local labels.
 stuck_runs() {
   for status in queued in_progress; do
-    actions_gh api --paginate "repos/$repo/actions/runs?status=$status&per_page=100" --jq '.workflow_runs[].id'
+    gh api --paginate "repos/$repo/actions/runs?status=$status&per_page=100" --jq '.workflow_runs[].id'
   done | sort -u | while read -r run; do
-    n=$(actions_gh api --paginate "repos/$repo/actions/runs/$run/jobs?per_page=100" \
+    n=$(gh api --paginate "repos/$repo/actions/runs/$run/jobs?per_page=100" \
       --jq '[.jobs[] | select(.status == "queued" and (.labels | index("gvp-ci")))] | length' \
       | awk '{ n += $1 } END { print n + 0 }')
     if [ "$n" -gt 0 ]; then echo "$run"; fi
@@ -81,8 +75,8 @@ stuck_runs() {
 
 requeue() {
   local runs run i
-  # With the service's token, cancel and re-run as the service, not with the caller's login.
-  if [ "${GVP_ACTIONS_TOKEN:-gh-bot}" = service ] && [ -z "${CREDENTIALS_DIRECTORY:-}" ]; then
+  # Cancel and re-run with the service's token, as the service, never with the caller's login.
+  if [ -z "${CREDENTIALS_DIRECTORY:-}" ]; then
     as_service requeue
     return
   fi
@@ -90,16 +84,16 @@ requeue() {
   [ -n "$runs" ] || { log "requeue: no run is waiting for a local runner"; return 0; }
   for run in $runs; do
     log "requeue: cancelling run $run (it waits for a local runner)"
-    actions_gh run cancel "$run" -R "$repo" >/dev/null 2>&1 || true
+    gh run cancel "$run" -R "$repo" >/dev/null 2>&1 || true
   done
   for run in $runs; do
     for i in $(seq 1 36); do
-      [ "$(actions_gh run view "$run" -R "$repo" --json status --jq .status 2>/dev/null)" = completed ] && break
+      [ "$(gh run view "$run" -R "$repo" --json status --jq .status 2>/dev/null)" = completed ] && break
       sleep 5
     done
     # Cancelled jobs count as failed; their re-run reads GVP_SELF_HOSTED again. A merge-queue
     # run's pull request has left the queue when its run was cancelled: enqueue it again.
-    if actions_gh run rerun "$run" -R "$repo" --failed >/dev/null 2>&1; then
+    if gh run rerun "$run" -R "$repo" --failed >/dev/null 2>&1; then
       log "requeue: re-ran the cancelled jobs of run $run"
     else
       log "requeue: could not re-run run $run; re-run it by hand"

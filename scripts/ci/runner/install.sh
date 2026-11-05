@@ -36,23 +36,14 @@ GVP_MEMORY_PER_RUNNER=10g
 GVP_RUNTIME=runsc
 # repo, or org with GVP_RUNNER_GROUP_ID for the narrow token (docs/ci/self-hosted-runners.md).
 GVP_RUNNER_SCOPE=repo
-# gh-bot, or service once the service token has Actions (read and write); see the docs.
-GVP_ACTIONS_TOKEN=gh-bot
 CFG
 fi
 sudo chown root:root "$root/config.env"
 sudo chmod 0644 "$root/config.env"
 
-# gh-bot's token mint, for the watchdog's cancel and re-run, only while the service's own token
-# lacks the Actions permission (GVP_ACTIONS_TOKEN=gh-bot, the default).
-actions_token=$(sed -n 's/^GVP_ACTIONS_TOKEN=//p' "$root/config.env" | tail -1)
-if [ "${actions_token:-gh-bot}" = service ]; then
-  sudo rm -f /etc/sudoers.d/gvp-ci-gh-bot
-  echo "install.sh: cancel and re-run use the service token; gh-bot's mint rule is removed" >&2
-else
-  sudo visudo -cf "$dir/sudoers-gh-bot" >/dev/null
-  sudo install -o root -g root -m 0440 "$dir/sudoers-gh-bot" /etc/sudoers.d/gvp-ci-gh-bot
-fi
+# Earlier installs let gvp-ci mint gh-bot's App token for cancel and re-run; the service's own
+# token does that now (Actions, read and write).
+sudo rm -f /etc/sudoers.d/gvp-ci-gh-bot
 
 # The token the service uses, root-only; systemd passes it to the units as a credential.
 sudo install -d -o root -g root -m 0700 /etc/gvp-ci

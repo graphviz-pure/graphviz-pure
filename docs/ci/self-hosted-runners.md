@@ -27,7 +27,7 @@ Variables.
 `runs-on` is read when a job is queued, so the variable alone does not move a job already
 waiting for a local runner. `gvp-ci off` therefore also cancels every run of the repository
 that has a job queued for the `gvp-ci` labels, waits for it to stop, and re-runs its cancelled
-jobs (`gh run rerun --failed`, through gh-bot or the service token: see "The token"). A re-run
+jobs (`gh run rerun --failed`, with the service's token: see "The token"). A re-run
 reads the variable again, so those jobs go to `ubuntu-24.04`: tested, a job that had run locally
 went to `ubuntu-24.04` on its re-run with the switch off. Jobs of those runs that were running on hosted runners are re-run too.
 Two cases need a person:
@@ -138,10 +138,8 @@ What stays on the host:
   equivalent to root on this machine, since that is how it starts containers. Its sudo rights
   (`scripts/ci/runner/sudoers`) are two commands: removing a scratch slot and handing it to the
   containers' uid (`rm`, and `chown --no-dereference`, so a symlink planted as a slot cannot hand
-  over its target). While `GVP_ACTIONS_TOKEN=gh-bot`, a third rule
-  (`scripts/ci/runner/sudoers-gh-bot`) lets it mint gh-bot's short-lived App token for cancelling
-  and re-running runs. That App token can do far more, admin merges included, which is why the
-  rule goes once the service token can do the job (below).
+  over its target). Nothing else: it cannot mint gh-bot's App token, which can do far more,
+  admin merges included. Its own token cancels and re-runs runs.
 - **Root-owned files.** `/jobs/gvp-ci`, `bin/` and `config.env` are root-owned, so `gvp-ci`
   cannot change what its own service runs.
 - **The token.** Its GitHub token is `/etc/gvp-ci/token`, root-only (0600 in a 0700
@@ -149,7 +147,8 @@ What stays on the host:
   enters a container.
 
 `/etc/gvp-ci/token` is the narrow fine-grained token below (since #808): the organization
-permission "Self-hosted runners" and the repository permission "Variables", nothing else. An
+permission "Self-hosted runners" and the repository permissions "Variables" and "Actions",
+nothing else. An
 install that has not done those steps yet holds a copy of the installing account's `gh` login
 instead, which for the owner is the full account: replace it.
 
@@ -179,7 +178,8 @@ needs the owner's clicks:
    - Resource owner: graphviz-pure.
    - Expiration: the longest the organization allows; put the date in your calendar.
    - Repository access: "Only select repositories", graphviz-pure.
-   - Repository permissions: Variables → Read and write (Metadata → Read is added by itself).
+   - Repository permissions: Variables → Read and write; Actions → Read and write (for cancelling
+     and re-running stuck runs); Metadata → Read is added by itself.
    - Organization permissions: Self-hosted runners → Read and write.
    - Generate, and copy the token.
 3. **Approval.** If the organization requires approval of fine-grained tokens, approve it under
@@ -200,18 +200,10 @@ needs the owner's clicks:
 list organization runners: it runs `gvp-ci runners` as `gvp-ci` in a transient unit
 (`systemd-run`, with the same `LoadCredential=`), so the token never reaches the shell.
 
-Cancelling and re-running runs (the watchdog, `gvp-ci off`, `gvp-ci requeue`) uses gh-bot, the
-project's GitHub App, while `GVP_ACTIONS_TOKEN=gh-bot` (the default). To move it to this token
-and drop gh-bot's mint rule:
-
-1. The token's settings (Your settings → Developer settings → Personal access tokens →
-   Fine-grained tokens → `gvp-ci runners` → Edit) → Repository permissions → Actions → Read and
-   write → Update. Approve the change if the organization asks.
-2. On the machine: `sudoedit /jobs/gvp-ci/config.env`, set `GVP_ACTIONS_TOKEN=service`, then run
-   `scripts/ci/runner/install.sh` from a checkout of master. It removes
-   `/etc/sudoers.d/gvp-ci-gh-bot`.
-3. Check: `/jobs/gvp-ci/bin/gvp-ci requeue` logs "no run is waiting for a local runner" (it
-   lists runs with the token), and `sudo -l -U gvp-ci` lists no `gvp-app-token-mint`.
+Cancelling and re-running runs (the watchdog, `gvp-ci off`, `gvp-ci requeue`) uses this token
+too, through its Actions permission. Run from a person's shell, that step also runs as
+`gvp-ci` in a transient unit, never with the caller's login. On GitHub those cancels and re-runs
+show the token's owner as the actor.
 
 If the token expires, the supervisor cannot register runners. The watchdog then sees no runner
 online, but it cannot set the variable with an expired token either: renew the token before it
@@ -313,7 +305,6 @@ supervisor. Run `install.sh` again after a change to `scripts/ci/runner/` lands 
 | `scripts/ci/runner/supervisor.sh` | keeps the runners registered, replaces each after its job, guards the disk |
 | `scripts/ci/runner/gvp-ci` | the switch, the cancel and re-run, the status and the watchdog |
 | `scripts/ci/runner/sudoers` | the service user's sudo rights, installed as `/etc/sudoers.d/gvp-ci` |
-| `scripts/ci/runner/sudoers-gh-bot` | gh-bot's mint rule, installed as `/etc/sudoers.d/gvp-ci-gh-bot` only while `GVP_ACTIONS_TOKEN=gh-bot` |
 | `/etc/gvp-ci/token` | the service's GitHub token, root-only |
 | `/jobs/gvp-ci/logs/` | `supervisor.log`, `service.log`, `watchdog.log`, one log per slot's runner containers |
 | `/jobs/gvp-ci/state/` | the supervisor's heartbeat; the watchdog's timer; `paused`, which makes idle slots wait |
