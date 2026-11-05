@@ -312,6 +312,10 @@ fn x_layout(
         let x_ov = x.p.c * k2;
         let x_nonov = nedges as f64 * x_ov * 2.0 / (nnodes * (nnodes - 1)) as f64;
         for i in 0..x.p.loopcnt {
+            // Not in C: a limit of the caller's `Limits::run` ends the loop.
+            if graphviz_pure_core::limits::tick_by((nnodes as u64).saturating_mul(nnodes as u64)) {
+                break;
+            }
             let temp = x.cool(i);
             if temp <= 0.0 {
                 break;

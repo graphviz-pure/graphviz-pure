@@ -1252,6 +1252,10 @@ pub fn adjust(g: &mut LGraph<'_>, sub: &Sub, mode: AdjustMode) -> bool {
         } else {
             rm_equality(&mut info);
             loop {
+                // Not in C: a limit of the caller's `Limits::run` ends the loop.
+                if graphviz_pure_core::limits::tick_by(info.len() as u64) {
+                    break;
+                }
                 let f = 1.0 + INCR;
                 for ip in info.iter_mut() {
                     ip.coord.x *= f;
@@ -1277,6 +1281,10 @@ pub fn adjust(g: &mut LGraph<'_>, sub: &Sub, mode: AdjustMode) -> bool {
             let mut bad_level = 0;
             let mut first = true;
             loop {
+                // Not in C: a limit of the caller's `Limits::run` ends the loop.
+                if graphviz_pure_core::limits::tick_by(info.len() as u64) {
+                    break;
+                }
                 voronoi_pass(&mut info, win, do_all, !first, &order);
                 first = false;
                 iter_cnt = iter_cnt.wrapping_add(1);

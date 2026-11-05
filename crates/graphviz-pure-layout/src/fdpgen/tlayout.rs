@@ -590,6 +590,10 @@ pub fn fdp_t_layout(st: &mut TState, dg: &mut DG, comp: &Comp, xpms: &mut XParam
             tr(st, dg);
         }
         for i in 0..st.t.loopcnt {
+            // Not in C: a limit of the caller's `Limits::run` ends the loop.
+            if graphviz_pure_core::limits::tick_by(comp.nodes.len() as u64) {
+                break;
+            }
             let temp = st.cool(i);
             g_adjust(st, dg, comp, temp, has_ports, &mut grid);
             if super::trace(5) {
@@ -599,6 +603,11 @@ pub fn fdp_t_layout(st: &mut TState, dg: &mut DG, comp: &Comp, xpms: &mut XParam
         }
     } else {
         for i in 0..st.t.loopcnt {
+            // Not in C: a limit of the caller's `Limits::run` ends the loop.
+            let n = comp.nodes.len() as u64;
+            if graphviz_pure_core::limits::tick_by(n.saturating_mul(n)) {
+                break;
+            }
             let temp = st.cool(i);
             adjust(st, dg, comp, temp, has_ports);
         }

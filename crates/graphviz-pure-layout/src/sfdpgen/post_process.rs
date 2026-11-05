@@ -159,6 +159,10 @@ impl StressMajorizationSmoother {
         }
         let mut iter = 0;
         loop {
+            // Not in C: a limit of the caller's `Limits::run` ends the loop.
+            if graphviz_pure_core::limits::tick_by(m as u64) {
+                break;
+            }
             let cont = iter < maxit_sm && diff > tol;
             iter += 1;
             if !cont {

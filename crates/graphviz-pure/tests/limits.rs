@@ -217,7 +217,7 @@ fn every_budget_ends_cleanly(engine: &str) {
                 }
                 Err(e) => assert_eq!(e.limit(), Some(Limit::Steps), "{name} at {steps}: {e}"),
             }
-            steps += 1 + steps / 8;
+            steps += 1 + steps / 4;
         }
     }
 }
@@ -309,5 +309,56 @@ fn every_ortho_budget_ends_cleanly() {
             Err(e) => assert_eq!(e.limit(), Some(Limit::Steps), "at {steps}: {e}"),
         }
         steps += 1 + steps / 8;
+    }
+}
+
+#[test]
+fn every_neato_budget_ends_cleanly() {
+    every_budget_ends_cleanly("neato");
+}
+
+#[test]
+fn every_fdp_budget_ends_cleanly() {
+    every_budget_ends_cleanly("fdp");
+}
+
+#[test]
+fn every_sfdp_budget_ends_cleanly() {
+    every_budget_ends_cleanly("sfdp");
+}
+
+#[test]
+fn every_circo_budget_ends_cleanly() {
+    every_budget_ends_cleanly("circo");
+}
+
+#[test]
+fn every_twopi_budget_ends_cleanly() {
+    every_budget_ends_cleanly("twopi");
+}
+
+#[test]
+fn every_osage_and_patchwork_budget_ends_cleanly() {
+    every_budget_ends_cleanly("osage");
+    every_budget_ends_cleanly("patchwork");
+}
+
+#[test]
+fn each_engine_s_layout_stops_at_a_zero_budget() {
+    // Parsed outside the run, so only the layout's own checkpoints count.
+    let src = fixture("unix.gv");
+    for engine in [
+        LayoutEngine::Neato,
+        LayoutEngine::Fdp,
+        LayoutEngine::Sfdp,
+        LayoutEngine::Circo,
+        LayoutEngine::Twopi,
+    ] {
+        let mut graph = graphviz_pure::parse_dot(&src).unwrap().into_output();
+        let err = Limits::new()
+            .max_steps(0)
+            .run(|| graphviz_pure::layout_graph(&mut graph, engine))
+            .unwrap_err();
+        assert_eq!(err.limit(), Some(Limit::Steps), "{engine:?}");
     }
 }

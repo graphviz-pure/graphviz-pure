@@ -1092,6 +1092,11 @@ fn reduce_edge_crossings(c: &mut Circ, mut list: Vec<usize>, subg: &CGraph) -> V
         None
     };
     for _ in 0..CROSS_ITER {
+        // Not in C: a limit of the caller's `Limits::run` ends the loop.
+        let n = list.len() as u64;
+        if graphviz_pure_core::limits::tick_by(n.saturating_mul(n)) {
+            return list;
+        }
         let orig_crossings = crossings;
         list = match delta.as_mut() {
             Some(delta) => reduce_delta(c, list, &mut scratch, delta, &mut crossings),
