@@ -1452,24 +1452,26 @@ fn zero_after_cairo_scaling_writes_an_empty_png_like_c() {
 
 // Issue #716: C draws jpg with its gd renderer, whose area cap is GD_XYMAX (INT32_MAX), not
 // cairo's per-dimension one. C's `sqrt(GD_XYMAX / (width * height))` divides two unsigned
-// values as integers, so the scale is 0 whenever the cap fires with a larger product, and
-// the zero-sized picture then fails in libjpeg ("Empty JPEG image"), after gd's "GD
-// Warning:" line (no command-name prefix, no trailing newline). No bytes, exit 0.
+// values as integers, so the scale is 0 whenever the cap fires with a larger product; the
+// 0 x 0 picture then dies in `gdImageCreate` (libgd src/gd_security.c:overflow2 refuses a
+// zero side), and `errorfn`'s agerr makes `dot` exit 1. A picture that allocates but is
+// wider than libjpeg's 65500 keeps gd's "GD Warning:" line, writes no bytes and exits 0.
 #[test]
 fn oversized_jpeg_hits_gds_area_cap_and_the_libjpeg_dimension_limit_like_c() {
-    // 100000 * 30000 pixels is over GD_XYMAX: scaled to nothing, then refused as empty.
+    // 100000 * 30000 pixels is over GD_XYMAX: scaled to nothing, dropped at allocation.
     let src = "digraph { dpi=72; viewport=\"100000,30000,1\"; a }";
     let (out, err, ok) = run(&["-Tjpg"], src);
-    assert!(ok, "{err}");
+    assert!(!ok);
     assert!(out.is_empty());
     assert_eq!(
         err,
         "graphviz-pure: graph is too large for gd-renderer bitmaps. Scaling by 0 to fit\n\
-         GD Warning: gd-jpeg: JPEG library reports unrecoverable error: Empty JPEG image (DNL not supported)"
+         GD Warning: one parameter to a memory allocation multiplication is negative or zero, failing operation gracefully\n\
+         Error: gdImageCreate returned NULL. Malloc problem?\n"
     );
 
-    // 100000 * 100 is under the area cap, so gd does not scale it; the width alone stops
-    // libjpeg, with no graphviz warning before the library's line.
+    // 100000 * 100 allocates (100000 < INT_MAX / 100), so gd draws it; the width alone
+    // stops libjpeg, with no graphviz warning before the library's line and no error.
     let src = "digraph { dpi=72; viewport=\"100000,100,1\"; a }";
     let (out, err, ok) = run(&["-Tjpg"], src);
     assert!(ok, "{err}");
@@ -1500,17 +1502,19 @@ fn oversized_jpeg_hits_gds_area_cap_and_the_libjpeg_dimension_limit_like_c() {
     assert_eq!(err, "");
 }
 
-// 100000 * 50000 wraps C's unsigned area to 705032704, under GD_XYMAX: like C, no gd
-// scaling and no area warning, and only libjpeg's dimension line is written.
+// 100000 * 50000 wraps C's unsigned area to 705032704, under GD_XYMAX: like C, gd does not
+// scale and says nothing, and the picture dies in gdImageCreate, whose overflow2 refuses
+// the 5e9 product — the exceed-INT_MAX line, the null-image error, exit 1, no bytes.
 #[test]
 fn jpeg_area_cap_wraps_like_cs_unsigned_multiplication() {
     let src = "digraph { dpi=72; viewport=\"100000,50000,1\"; a }";
     let (out, err, ok) = run(&["-Tjpg"], src);
-    assert!(ok, "{err}");
+    assert!(!ok);
     assert!(out.is_empty());
     assert_eq!(
         err,
-        "GD Warning: gd-jpeg: JPEG library reports unrecoverable error: Maximum supported image dimension is 65500 pixels"
+        "GD Warning: product of memory allocation multiplication would exceed INT_MAX, failing operation gracefully\n\
+         Error: gdImageCreate returned NULL. Malloc problem?\n"
     );
 }
 

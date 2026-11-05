@@ -231,23 +231,57 @@ fn fit_gd_bitmap(w: u32, h: u32) -> (u32, u32, f64) {
     (w, h, scale)
 }
 
-/// The gd renderer's JPEG write (libgd src/gd_jpeg.c:`_gdImageJpegCtx`) stops at the first
-/// libjpeg error: `fatal_jpeg_error` prints the library's message with gd's default
-/// stderr handler (`gd.c:gd_stderr_error`, `GD Warning: ` and no trailing newline) and
-/// longjmps, `_gdImageJpegCtx` returns, and no bytes reach the output. The two failures
-/// are libjpeg's dimension check (`jcmaster.c:initial_setup`) — a dimension above
-/// `JPEG_MAX_DIMENSION`, or the empty picture gd's zero scale leaves, which both die
-/// before the header is written, so the file stays empty — and the run continues.
-fn jpeg_write_refused(w: u32, h: u32) -> bool {
-    let reason = if w > JPEG_MAX_DIMENSION || h > JPEG_MAX_DIMENSION {
-        format!("Maximum supported image dimension is {JPEG_MAX_DIMENSION} pixels")
-    } else if w == 0 || h == 0 {
-        "Empty JPEG image (DNL not supported)".to_string()
+/// The gd image creation of `gdgen_begin_page`: `gdImageCreate((int)width, (int)height)`
+/// starts with libgd src/gd_security.c:
+///
+/// ```c
+/// int overflow2(int a, int b)
+/// {
+///     if(a <= 0 || b <= 0) {
+///         gd_error_ex(GD_WARNING, "one parameter to a memory allocation multiplication is negative or zero, failing operation gracefully\n");
+///         return 1;
+///     }
+///     if(a > INT_MAX / b) {
+///         gd_error_ex(GD_WARNING, "product of memory allocation multiplication would exceed INT_MAX, failing operation gracefully\n");
+///         return 1;
+///     }
+///     return 0;
+/// }
+/// ```
+///
+/// `gdImageCreate` (libgd src/gd.c) then returns `NULL`, and `gdgen_begin_page` answers
+/// with `job->common->errorfn("gdImageCreate returned NULL. Malloc problem?\n")` — `agerr`,
+/// so the message carries `Error: ` and the run's error count rises: `dot` exits 1. The
+/// page is dropped (`gdgen_end_page` returns on the null image), so nothing is drawn and
+/// the JPEG writer never runs. The zero scale and the wrapped unsigned product both end
+/// here; only a picture that allocates reaches libjpeg's dimension limit.
+fn gd_image_create_refused(w: u32, h: u32) -> bool {
+    // C casts the unsigned device dimensions to int for the call.
+    let (a, b) = (w as i32, h as i32);
+    let reason = if a <= 0 || b <= 0 {
+        "one parameter to a memory allocation multiplication is negative or zero, failing operation gracefully\n"
+    } else if a > i32::MAX / b {
+        "product of memory allocation multiplication would exceed INT_MAX, failing operation gracefully\n"
     } else {
         return false;
     };
+    graphviz_pure_core::diag::render_stderr(&format!("GD Warning: {reason}"));
+    graphviz_pure_core::diag::agerrorf("gdImageCreate returned NULL. Malloc problem?\n");
+    true
+}
+
+/// The gd renderer's JPEG write (libgd src/gd_jpeg.c:`_gdImageJpegCtx`) stops at the first
+/// libjpeg error: `fatal_jpeg_error` prints the library's message with gd's default
+/// stderr handler (`gd.c:gd_stderr_error`, `GD Warning: ` and no trailing newline) and
+/// longjmps, `_gdImageJpegCtx` returns, and no bytes reach the output. A dimension above
+/// `JPEG_MAX_DIMENSION` dies in `jcmaster.c:initial_setup`, before libjpeg writes its
+/// header, so the file stays empty and the run exits 0 (gd ignores the failure).
+fn jpeg_dimension_limit(w: u32, h: u32) -> bool {
+    if w <= JPEG_MAX_DIMENSION && h <= JPEG_MAX_DIMENSION {
+        return false;
+    }
     graphviz_pure_core::diag::render_stderr(&format!(
-        "GD Warning: gd-jpeg: JPEG library reports unrecoverable error: {reason}"
+        "GD Warning: gd-jpeg: JPEG library reports unrecoverable error: Maximum supported image dimension is {JPEG_MAX_DIMENSION} pixels"
     ));
     true
 }
@@ -274,7 +308,8 @@ fn render_pixmap(
         RasterFormat::Png => fit_cairo_bitmap(w, h),
         RasterFormat::Jpeg => fit_gd_bitmap(w, h),
     };
-    if format == RasterFormat::Jpeg && jpeg_write_refused(w, h) {
+    if format == RasterFormat::Jpeg && (gd_image_create_refused(w, h) || jpeg_dimension_limit(w, h))
+    {
         return Ok(None);
     }
     if w == 0 || h == 0 {
@@ -513,8 +548,10 @@ mod tests {
 
     #[test]
     fn jpeg_dimension_over_the_libjpeg_limit_writes_nothing() {
-        // 100000 * 100 is under gd's area cap, so gd does not scale it; the width alone
-        // stops libjpeg before its header, with gd's own stderr line and no bytes.
+        // 100000 * 100 is under gd's area cap and allocates (overflow2 passes: 100000 is
+        // under INT_MAX / 100), so the picture is drawn; the width alone then stops
+        // libjpeg before its header, with gd's own stderr line and no bytes, and no
+        // graphviz error: exit 0.
         let jpg = rasterize(
             r#"<svg xmlns="http://www.w3.org/2000/svg" width="100000pt" height="100pt" viewBox="0 0 100000 100"/>"#,
             RasterFormat::Jpeg,
@@ -531,11 +568,41 @@ mod tests {
     }
 
     #[test]
-    fn jpeg_scaled_to_nothing_writes_nothing() {
-        // 100000 * 30000 is over gd's area cap, so the page scales to zero, and the empty
-        // picture then fails in libjpeg: both of C's lines, in that order, and no bytes.
+    fn jpeg_scaled_to_nothing_loses_the_page_like_c() {
+        // 100000 * 30000 is over gd's area cap, so the integer-division scale is 0 and the
+        // page is 0 x 0. gdImageCreate refuses a zero side (overflow2), gd prints its own
+        // warning, and errorfn's agerr reports the null image: no drawing, no JPEG write,
+        // three lines in C's order.
         let jpg = rasterize(
             r#"<svg xmlns="http://www.w3.org/2000/svg" width="100000pt" height="30000pt" viewBox="0 0 100000 30000"/>"#,
+            RasterFormat::Jpeg,
+            true,
+        )
+        .unwrap();
+        assert!(jpg.output().is_empty());
+        assert_eq!(jpg.diagnostics().len(), 3);
+        assert_eq!(
+            jpg.diagnostics()[0].message(),
+            "graph is too large for gd-renderer bitmaps. Scaling by 0 to fit\n"
+        );
+        assert_eq!(
+            jpg.diagnostics()[1].message(),
+            "GD Warning: one parameter to a memory allocation multiplication is negative or zero, failing operation gracefully\n"
+        );
+        assert_eq!(
+            jpg.diagnostics()[2].message(),
+            "Error: gdImageCreate returned NULL. Malloc problem?\n"
+        );
+        assert_eq!(jpg.diagnostics()[2].level(), crate::DiagnosticLevel::Error);
+    }
+
+    #[test]
+    fn jpeg_wrapped_area_that_allocates_nothing_loses_the_page_like_c() {
+        // 100000 * 50000 wraps to 705032704, under GD_XYMAX, so gd does not scale and
+        // says nothing: the picture reaches gdImageCreate, whose overflow2 refuses the
+        // 5e9 product with the exceed-INT_MAX line and the same null-image agerr.
+        let jpg = rasterize(
+            r#"<svg xmlns="http://www.w3.org/2000/svg" width="100000pt" height="50000pt" viewBox="0 0 100000 50000"/>"#,
             RasterFormat::Jpeg,
             true,
         )
@@ -544,11 +611,11 @@ mod tests {
         assert_eq!(jpg.diagnostics().len(), 2);
         assert_eq!(
             jpg.diagnostics()[0].message(),
-            "graph is too large for gd-renderer bitmaps. Scaling by 0 to fit\n"
+            "GD Warning: product of memory allocation multiplication would exceed INT_MAX, failing operation gracefully\n"
         );
         assert_eq!(
             jpg.diagnostics()[1].message(),
-            "GD Warning: gd-jpeg: JPEG library reports unrecoverable error: Empty JPEG image (DNL not supported)"
+            "Error: gdImageCreate returned NULL. Malloc problem?\n"
         );
     }
 
