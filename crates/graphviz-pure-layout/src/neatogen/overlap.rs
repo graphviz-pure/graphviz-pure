@@ -217,6 +217,10 @@ fn overlap_scaling(
         scale_sto = if scale_sta == 0.0 { epsilon } else { scale_sta };
         scale_coord(&mut x[..n], scale_sto);
         loop {
+            // Not in C: a limit of the caller's `Limits::run` ends the loop.
+            if graphviz_pure_core::limits::tick_by(m as u64) {
+                break;
+            }
             scale_sto *= 2.0;
             scale_coord(&mut x[..n], 2.0);
             if !has_overlap(dim, m, x, width) {
@@ -228,6 +232,10 @@ fn overlap_scaling(
     let mut scale_best = scale_sto;
     let mut iter = 0;
     loop {
+        // Not in C: a limit of the caller's `Limits::run` ends the loop.
+        if graphviz_pure_core::limits::tick_by(m as u64) {
+            break;
+        }
         let cont = iter < maxiter && scale_sto - scale_sta > epsilon;
         iter += 1;
         if !cont {
@@ -456,6 +464,10 @@ pub fn remove_overlap_el(
         );
     };
     while i < ntry {
+        // Not in C: a limit of the caller's `Limits::run` ends the loop.
+        if graphviz_pure_core::limits::tick_by(m as u64) {
+            break;
+        }
         if verbose_on() {
             print_bounding_box(m, dim, x);
         }
