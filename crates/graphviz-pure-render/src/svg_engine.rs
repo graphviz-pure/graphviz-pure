@@ -309,6 +309,8 @@ struct CairoJob {
 const CAIRO_FEATURES: Features = Features {
     flags: GVRENDER_Y_GOES_DOWN | GVRENDER_DOES_TRANSFORM | GVDEVICE_DOES_TRUECOLOR,
     default_pad: 4.0,
+    default_margin: Point::default(),
+    default_pagesize: Point::default(),
     knowncolors: &[],
     rgba: true,
     default_dpi: 72.0,
@@ -588,6 +590,8 @@ impl Engine for SvgEngine {
                 | GVRENDER_DOES_TOOLTIPS
                 | GVDEVICE_DOES_TRUECOLOR,
             default_pad: 4.0,
+            default_margin: Point::default(),
+            default_pagesize: Point::default(),
             knowncolors: SVG_KNOWNCOLORS,
             rgba: true,
             default_dpi: 72.0,
