@@ -1139,4 +1139,3 @@ operation gracefully` and returns NULL, and `gd_format` (`plugin/gd/gvdevice_gd.
 dereferences it: C segfaults (exit 139, measured on Debian's 2.42.4 with libgd 2.3.3). The
 port treats JPEG like PNG: cairo's scaling warning, no output bytes, exit 0. It does not print
 the gd line, which comes from a device the port does not have.
-
