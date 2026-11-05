@@ -6,6 +6,22 @@ All notable changes are listed here. The format follows
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-11-05
+
+3 changes: 3 fixed.
+
+### Fixed
+
+- A node whose `peripheries` or `sides` asks for a vertex array of more than 32 GiB (for example
+  `peripheries=2147483647`) now stops with `out of memory when trying to allocate N bytes` and
+  exit status 1, instead of allocating 64 GiB and running out of memory (#591).
+- Speed up osage and patchwork’s three headline cases by about 8.2% and 6.6% on x86-64-v3 musl
+  PGO by removing temporary single-attribute statement maps and final string copies. Patchwork
+  5k SVG peak RSS rises 246 KiB versus master; engine RSS remains 0.641× / 0.653× v1.0 (#783).
+- Speed up patchwork’s three headline cases by about 8.3% on x86-64-v3 musl PGO by sharing
+  bit-identical small polygon vertex arrays. Measured patchwork peak RSS falls from 0.655× to
+  0.626× v1.0, with lower RSS on all eight measured cases (#784).
+
 ## [1.1.0] - 2026-11-04
 
 62 changes: 1 added, 8 changed, 53 fixed.
@@ -875,7 +891,8 @@ The first release.
   and the OFL licences of the bundled Tinos, Arimo and Cousine fonts.
 - A container image, `ghcr.io/graphviz-pure/graphviz-pure` (linux/amd64 and linux/arm64).
 
-[Unreleased]: https://github.com/graphviz-pure/graphviz-pure/compare/v1.1.0...HEAD
+[Unreleased]: https://github.com/graphviz-pure/graphviz-pure/compare/v1.2.0...HEAD
+[1.2.0]: https://github.com/graphviz-pure/graphviz-pure/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/graphviz-pure/graphviz-pure/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/graphviz-pure/graphviz-pure/compare/v0.2.3...v1.0.0
 [0.2.3]: https://github.com/graphviz-pure/graphviz-pure/compare/v0.2.2...v0.2.3
