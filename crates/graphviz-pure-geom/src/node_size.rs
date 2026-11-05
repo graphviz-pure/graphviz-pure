@@ -712,7 +712,12 @@ fn node_geometry_measured(node: &NodeData, env: &NodeSizeEnv<'_>) -> Result<Node
     let shape_name = late_nnstring(attrs, "shape", "ellipse");
     // bind_shape: a `shapefile` that `safefile` accepts (except with epsf) makes the shape
     // `custom`, a user shape that copies `Shapes[0]` (box).
-    let custom = usershape::binds_custom(shape_name, attrs.get("shapefile").map(String::as_str));
+    let custom = usershape::binds_custom(
+        &node.name,
+        node.html_name,
+        shape_name,
+        attrs.get("shapefile").map(String::as_str),
+    );
     let unknown = !custom
         && ShapeKind::parse(shape_name) == ShapeKind::Box
         && !matches!(shape_name, "box" | "rect" | "rectangle");

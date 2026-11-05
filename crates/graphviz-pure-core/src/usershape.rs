@@ -147,6 +147,9 @@ pub struct UserShapes {
     pub epsf: Vec<EpsfNode>,
     /// `epsf_define`: cached files in `dtfirst`/`dtnext` order.
     pub epsf_definitions: Vec<EpsfDefinition>,
+    /// What `bind_shape` decided for each node (`GraphState::binds`): the renderers re-ask
+    /// it without touching the files.
+    pub binds: HashMap<(String, String, Option<String>), bool>,
 }
 
 /// C: lib/common/psusershape.c:user_init,epsf_define
@@ -177,6 +180,13 @@ struct GraphState {
     /// C runs `epsf_init` once per node; the port's repeat sizings (quiet passes, the
     /// renderers' model) get the same answer.
     epsf_nodes: HashMap<(String, Option<String>), (Option<EpsfShape>, Deferred)>,
+    /// C binds each node's shape once, in `common_init_node`; its `safefile` runs then,
+    /// and not in C's later phases or re-reads. The port's repeat sizings re-ask
+    /// [`binds_custom`], and must not re-run it: a repeat would rewrite `findPath`'s
+    /// buffer where C's does not move, and a later graph's `EPSF_contents` lookup compares
+    /// against that text (#683). Keyed like [`GraphState::epsf_nodes`], by
+    /// (node, shape, shapefile).
+    binds: HashMap<(String, String, Option<String>), bool>,
 }
 
 thread_local! {
@@ -226,6 +236,7 @@ pub fn begin_layout(imagepath: Option<&str>, shapefile_declared: bool, dpi: f64)
             shapefile_declared,
             dpi,
             epsf_nodes: HashMap::new(),
+            binds: HashMap::new(),
         }
     });
 }
@@ -274,6 +285,7 @@ pub fn layout_result() -> UserShapes {
                 shape: *shape,
             })
             .collect(),
+        binds: g.binds.clone(),
     })
 }
 
@@ -318,6 +330,7 @@ pub fn rendering<R>(s: &UserShapes, f: impl FnOnce() -> R) -> R {
                 )
             })
             .collect(),
+        binds: s.binds.clone(),
     };
     let images: HashMap<_, _> = s
         .images
@@ -420,9 +433,25 @@ fn safefile_from(filename: &str) -> Option<(String, bool)> {
 }
 
 /// `bind_shape`: a non-empty `shapefile` that `safefile` accepts makes the shape `custom`
-/// (except for `epsf`).
-pub fn binds_custom(shape: &str, shapefile: Option<&str>) -> bool {
-    shape != "epsf" && shapefile.is_some_and(|f| safefile(f).is_some())
+/// (except for `epsf`). C binds each node's shape once, in `common_init_node`; the port's
+/// repeat sizings (quiet passes, the renderers' model, port resolution) get the answer the
+/// first bind gave, without `safefile` running again. A node without a shapefile, and an
+/// `epsf` node, never bind and never reach `safefile`: those need no cache.
+pub fn binds_custom(name: &str, html_name: bool, shape: &str, shapefile: Option<&str>) -> bool {
+    let Some(file) = shapefile.filter(|f| !f.is_empty()) else {
+        return false;
+    };
+    if shape == "epsf" {
+        return false;
+    }
+    let node = crate::Graph::node_key(name, html_name);
+    let key = (node.into_owned(), shape.to_string(), Some(file.to_string()));
+    if let Some(custom) = graph(|g| g.binds.get(&key).copied()) {
+        return custom;
+    }
+    let custom = safefile(file).is_some();
+    graph(|g| g.binds.insert(key, custom));
+    custom
 }
 
 /// The bytes C passes to `fopen` for `path`.
@@ -499,6 +528,9 @@ fn strerror(e: &io::Error) -> String {
 #[derive(Debug, Clone, PartialEq)]
 pub struct UserShape {
     pub name: String,
+    /// The path `gvusershape_file_access` opened. C keeps it as the open `us->f` and the
+    /// renderers re-read it without another `safefile`; the port keeps the path.
+    pub path: String,
     pub ty: ImageType,
     pub x: f64,
     pub y: f64,
@@ -555,6 +587,7 @@ fn gvusershape_open(name: &str) -> Option<UserShape> {
     let d = size::read_size(&mut f, ty, name, &mut |m| warnings.push(m.to_string()));
     let us = UserShape {
         name: name.to_string(),
+        path,
         ty,
         x: d.x,
         y: d.y,
@@ -1185,6 +1218,29 @@ mod tests {
         std::fs::write(&ps, b"no box any more\n").unwrap();
         assert_eq!(epsf_init(Some("g.ps"), "b"), Some(b));
         let _ = nobb;
+        begin_layout(None, false, 0.0);
+    }
+
+    // the scratch directory is an `imagepath` entry only under Unix paths (`:` separates)
+    #[cfg(unix)]
+    #[test]
+    fn binds_custom_binds_once_per_node() {
+        let ps = scratch_file("s.ps", b"%!PS\n");
+        let dir = std::path::Path::new(&ps)
+            .parent()
+            .unwrap()
+            .to_string_lossy()
+            .into_owned();
+        begin_layout(Some(&dir), false, 0.0);
+        assert!(binds_custom("a", false, "ellipse", Some("s.ps")));
+        assert!(!binds_custom("b", false, "ellipse", Some("missing.ps")));
+        // epsf never binds, and a repeat bind gets the first answer without `safefile`
+        assert!(!binds_custom("c", false, "epsf", Some("s.ps")));
+        std::fs::remove_file(&ps).unwrap();
+        assert!(binds_custom("a", false, "ellipse", Some("s.ps")));
+        // a new graph binds afresh
+        begin_layout(Some(&dir), false, 0.0);
+        assert!(!binds_custom("a", false, "ellipse", Some("s.ps")));
         begin_layout(None, false, 0.0);
     }
 
