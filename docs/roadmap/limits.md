@@ -46,10 +46,10 @@ raster crate, so a raster-only user needs nothing else):
 | item | what it is |
 | :--- | :--- |
 | `Limits` | `#[non_exhaustive]`, `Clone + Debug + Default`, builder methods above, `run`. |
-| `Limits::run<R>(&self, f: impl FnOnce() -> R) -> R` | Applies the limits to the calls `f` makes on this thread. Nested `run`s combine: the stricter value of each limit applies. |
+| `Limits::run<R>(&self, f: impl FnOnce() -> R) -> R` | Applies the limits to the calls `f` makes on this thread. The time, work, heap and cancel limits cover the whole `run`; the size and allocation limits apply to each call on its own. Nested `run`s combine: the stricter value of each limit applies. |
 | `CancelToken` | An `Arc<AtomicBool>`: `new`, `cancel`, `is_cancelled`. |
 | `Limit` | `#[non_exhaustive]` enum: `InputBytes`, `Nodes`, `Edges`, `Deadline`, `Steps`, `Allocation`, `Heap`. |
-| `GraphvizErrorKind::LimitExceeded`, `::Cancelled` | New kinds. `Display`: `Limit exceeded: <detail>` and `Cancelled`. |
+| `GraphvizErrorKind::LimitExceeded`, `::Cancelled` | New kinds. `Display`: `Limit exceeded: <detail>` and `Cancelled: the call was cancelled`. |
 | `GraphvizError::limit() -> Option<Limit>` | Which limit, for `LimitExceeded`. |
 
 Why a scope and not a parameter. The facade has twelve entry points and the raster crate one.
@@ -66,7 +66,7 @@ signatures. The port already keeps per-call state this way (`diag::capture`), an
 - **Deadline.** Read from `std::time::Instant` at checkpoints. `wasm32-unknown-unknown` has no
   clock (`Instant::now` panics there), so a caller on it cannot make an `Instant`; it uses
   `cancel_when` with its own clock.
-- **Steps.** Each checkpoint counts one step. Two runs of the same version on the same input
+- **Steps.** Each checkpoint counts its units of work: one for a fine-grained loop (a pivot), the elements visited for a coarse one (a stress iteration counts its nodes). Two runs of the same version on the same input
   and budget stop at the same point, so a test or a fuzzer can pin the outcome. The count is not
   stable across releases: a release that moves a checkpoint changes it.
 - **Allocation.** The largest single buffer whose size the input chooses: polygon vertices
@@ -85,10 +85,10 @@ Checkpoints sit in the long loops: network simplex pivots, mincross passes and t
 dot's position and spline phases, neato's stress and majorization iterations, fdp's and sfdp's
 iterations and levels, circo, twopi, osage and patchwork's per-component loops, and the
 renderers' per-node and per-edge emission and the raster draw. A checkpoint is
-`limits::tick()`: one thread-local countdown and a branch. With no `run` in force the countdown
-starts at `u64::MAX` and the slow path never runs. With limits, the slow path runs every 1,024
-steps (every step for a step budget smaller than that): it reads the token, the callback, the
-clock and the heap probe.
+`limits::tick()` or `limits::tick_by(units)`: one thread-local countdown and a branch. With no
+`run` in force the countdown starts at `u64::MAX` and the slow path never runs. With limits, the
+slow path runs every 1,024 units, or sooner when the work budget is about to run out: it reads
+the tokens, the callbacks, the clock and the heap probe.
 
 When a limit is reached the thread's state records it, and from then on every checkpoint
 reports it at once. The loop that saw it leaves the way it leaves at `maxiter` (a network
