@@ -167,7 +167,8 @@ impl Dot<'_> {
     ///
     /// - `make_edge_pairs`: a slack node and two edges per edge;
     /// - `make_lr_constraints`: a separation edge per pair of neighbours in a rank, and up to
-    ///   two per self-loop and one per flat edge;
+    ///   two per flat edge, in `flat_out` or `other` (a labelled flat edge whose ends are not
+    ///   adjacent gets two, for its label node, `ND_alg`); self-loops add none;
     /// - `pos_clusters`, for each cluster: its two boundary nodes, up to four edges per rank
     ///   it spans (`contain_nodes`, `keepout_othernodes`), up to four more (its boundary and
     ///   label edges and `contain_subclust`'s pair), and one per pair of its sibling clusters
@@ -188,11 +189,11 @@ impl Dot<'_> {
         let Some(graph) = self.graphs.get(g) else {
             return (0, 0);
         };
-        let (mut edges, mut loops, mut flat) = (0usize, 0usize, 0usize);
+        let (mut edges, mut other, mut flat) = (0usize, 0usize, 0usize);
         let mut n = graph.nlist;
         while let Some(node) = n.and_then(|x| self.nodes.get(x)) {
             edges = edges.saturating_add(node.out.len());
-            loops = loops.saturating_add(node.other.len());
+            other = other.saturating_add(node.other.len());
             flat = flat.saturating_add(node.flat_out.len());
             n = node.next;
         }
@@ -234,8 +235,8 @@ impl Dot<'_> {
         let new_edges = edges
             .saturating_mul(2)
             .saturating_add(neighbours)
-            .saturating_add(loops.saturating_mul(2))
-            .saturating_add(flat)
+            .saturating_add(other.saturating_mul(2))
+            .saturating_add(flat.saturating_mul(2))
             .saturating_add(cluster_ranks.saturating_mul(4))
             .saturating_add(clusters.saturating_mul(4))
             .saturating_add(sibling_pairs)
