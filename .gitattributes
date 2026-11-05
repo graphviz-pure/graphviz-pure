@@ -8,3 +8,5 @@ site/public/samples/** -text
 *.dot -text
 *.svg -text
 *.ps -text
+# PDF fixtures contain binary streams and CRLF cross-reference records.
+*.pdf binary

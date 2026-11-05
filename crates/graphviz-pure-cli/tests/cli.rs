@@ -386,6 +386,9 @@ fn issue298_verbose_reports_the_plugins_it_uses() {
                   device\t:  canon cmapx cmapx_np dot dot_json gv jpe jpeg jpg json json0 plain \
                   plain-ext png ps svg svg_inline xdot xdot1.2 xdot1.4 xdot_json\n    \
                   loadimage\t:  eps gif jpe jpeg jpg png ps svg\n";
+    #[cfg(feature = "pdf")]
+    let status = status.replace("json0 plain", "json0 pdf plain");
+    let status = status.as_ref();
     let version = format!(
         "graphviz-pure - graphviz version 16.1.0 (graphviz-pure {})\n",
         env!("CARGO_PKG_VERSION")
@@ -1327,6 +1330,89 @@ fn png_and_jpeg_output_are_images_at_graphviz_sizes() {
     );
     assert!(ok, "{err}");
     assert_eq!(&std::fs::read(&jpg).unwrap()[..2], &[0xFF, 0xD8]);
+}
+
+// The committed PDF fixture is compared on Linux, Windows and macOS by the
+// existing cargo-test matrix. It is a port fixture, not C cairo's PDF bytes.
+#[cfg(feature = "pdf")]
+#[test]
+fn pdf_is_valid_and_reproducible_across_processes_and_platforms() {
+    let dir = scratch("pdf-reproducible");
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let src = std::fs::read_to_string(root.join("tests/render/pdf.gv")).unwrap();
+    let expected = std::fs::read(root.join("tests/render/pdf.pdf")).unwrap();
+    for name in ["first.pdf", "second.pdf", "third.pdf"] {
+        let (_, err, code) = run_in(&dir, &["-Tpdf", "-o", name], &src);
+        assert_eq!(code, 0, "{err}");
+        assert!(err.is_empty(), "{err}");
+        let bytes = std::fs::read(dir.join(name)).unwrap();
+        assert_eq!(
+            bytes, expected,
+            "PDF differs from the cross-platform fixture"
+        );
+        assert!(bytes.starts_with(b"%PDF-1.7\n"));
+        let text = String::from_utf8_lossy(&bytes);
+        assert!(text.contains("/Type /Catalog"));
+        assert!(text.contains("/Type /Page\n"));
+        assert!(text.contains("/Count 1"));
+        assert!(
+            text.contains("/MediaBox [0 0 322 44]"),
+            "page size must match the SVG points"
+        );
+        for forbidden in ["/CreationDate", "/ModDate", "/ID", "/Font"] {
+            assert!(!text.contains(forbidden), "unexpected {forbidden}");
+        }
+        // Validate the actual cross-reference offsets, object headers and trailer,
+        // rather than accepting a file just because it has a PDF magic number.
+        let eof = text.rsplit_once("startxref\n").unwrap().1;
+        let offset: usize = eof.lines().next().unwrap().parse().unwrap();
+        assert!(eof.ends_with("%%EOF"));
+        let mut xref = std::str::from_utf8(&bytes[offset..]).unwrap().lines();
+        assert_eq!(xref.next(), Some("xref"));
+        let subsection = xref.next().unwrap();
+        let mut fields = subsection.split_whitespace();
+        assert_eq!(fields.next(), Some("0"));
+        let count: usize = fields.next().unwrap().parse().unwrap();
+        assert_eq!(xref.next(), Some("0000000000 65535 f"));
+        for id in 1..count {
+            let entry = xref.next().unwrap();
+            let object_offset: usize = entry[..10].parse().unwrap();
+            assert!(bytes[object_offset..].starts_with(format!("{id} 0 obj\n").as_bytes()));
+        }
+        assert_eq!(xref.next(), Some("trailer"));
+    }
+}
+
+#[cfg(feature = "pdf")]
+#[test]
+fn pdf_preserves_point_sizes_and_coexists_with_svg_jobs() {
+    let dir = scratch("pdf-jobs");
+    for (dpi, dimensions) in [("72", "62 116"), ("144", "124 232")] {
+        let src = format!("digraph {{ dpi={dpi}; a -> b }}");
+        let (_, err, code) = run_in(
+            &dir,
+            &["-Tpdf:svg:core", "-o", "out.pdf", "-Tsvg", "-o", "out.svg"],
+            &src,
+        );
+        assert_eq!(code, 0, "{err}");
+        let pdf = std::fs::read(dir.join("out.pdf")).unwrap();
+        let text = String::from_utf8_lossy(&pdf);
+        assert!(
+            text.contains(&format!("/MediaBox [0 0 {dimensions}]")),
+            "{text}"
+        );
+        let (svg, err, ok) = run(&["-Tsvg"], &src);
+        assert!(ok, "{err}");
+        assert_eq!(std::fs::read_to_string(dir.join("out.svg")).unwrap(), svg);
+    }
+}
+
+#[cfg(not(feature = "pdf"))]
+#[test]
+fn pdf_is_unavailable_without_the_feature() {
+    let (_, err, ok) = run(&["-Tpdf"], "digraph { a }");
+    assert!(!ok);
+    assert!(err.starts_with("Format: \"pdf\" not recognized."), "{err}");
 }
 
 #[test]

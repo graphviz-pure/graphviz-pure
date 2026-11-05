@@ -41,3 +41,15 @@ Core's `math` is `f64` only and the crate is the graph model, so these calls sta
 does not need, and re-applies `scripts/vendor-patches`. `scripts/check-vendor-math.sh`
 fails if a transcendental call slips off that patch. Licences are the upstream
 `LICENSE*` files, picked up by `cargo about`.
+
+## PDF resource ordering (#714)
+
+`svg2pdf` 0.13.0 is vendored with resource dictionaries sorted by allocated
+reference instead of randomized HashMap order, plus explicit elided lifetimes
+for current Rust. `scripts/vendor-patches/svg2pdf.patch` records the changes.
+The CLI enables it without text, image or filter features. Text is outlined by
+the existing patched usvg 0.48 stack, then parsed as paths by svg2pdf's usvg 0.45.
+No system fonts or font subsets enter the PDF. Content compression is disabled
+and the writer adds only a fixed producer, without timestamps or document IDs.
+Like the other patches, this applies to repository builds; crates.io source
+installs use upstream svg2pdf and do not guarantee deterministic PDF bytes.

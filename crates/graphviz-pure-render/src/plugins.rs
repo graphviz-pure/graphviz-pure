@@ -34,7 +34,7 @@ pub const LAYOUT_PLUGINS: [(&str, &str); 11] = [
 ];
 
 /// The output device plugins: type (`format:render`) and package, in `gvplugin_list` order.
-pub const DEVICE_PLUGINS: [(&str, &str); 21] = [
+pub const DEVICE_PLUGINS: [(&str, &str); 21 + cfg!(feature = "pdf") as usize] = [
     ("canon:dot", "core"),
     ("cmapx:map", "core"),
     ("cmapx_np:map", "core"),
@@ -46,6 +46,8 @@ pub const DEVICE_PLUGINS: [(&str, &str); 21] = [
     ("jpg:cairo", "cairo"),
     ("json:json", "core"),
     ("json0:json", "core"),
+    #[cfg(feature = "pdf")]
+    ("pdf:svg", "core"),
     ("plain:dot", "core"),
     ("plain-ext:dot", "core"),
     ("png:cairo", "cairo"),

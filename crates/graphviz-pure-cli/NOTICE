@@ -44,7 +44,7 @@ crates/graphviz-pure-raster/fonts/
     The Tinos, Arimo and Cousine Project Authors, under the SIL Open Font
     License 1.1 (fonts/OFL-*.txt, also in the release archives' LICENSES/
     directory). They are compiled into the graphviz-pure binary to draw text in
-    PNG and JPEG output.
+    PNG, JPEG and PDF output.
 
 JPEG output
     This software is based in part on the work of the Independent JPEG Group
@@ -52,6 +52,11 @@ JPEG output
 
 PNG and JPEG output are drawn with resvg and tiny-skia (linebender, MIT OR
 Apache-2.0 and BSD-3-Clause).
+
+PDF output
+    SVG-to-PDF conversion uses svg2pdf (MIT OR Apache-2.0). Its bundled ICC
+    profiles (vendor/svg2pdf/src/icc/) are dedicated to the public domain
+    under CC0 1.0 Universal; see vendor/svg2pdf/NOTICE.
 
 Rust crate dependencies
     The graphviz-pure binary and the graphviz-pure-wasm module are built with
