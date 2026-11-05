@@ -70,7 +70,9 @@ the Free plan allows only [10 ms of CPU time per request](https://developers.clo
 
 `render(dot, engine, format)` lays out the first graph and returns the output string.
 `renderAll` returns one string per graph. `renderAllBytes` takes and returns raw bytes
-(`Uint8Array`), including non-UTF-8 input, as the command line does. `renderSvg` and
+(`Uint8Array`), including non-UTF-8 input, as the command line does. After a syntax error,
+`renderAllBytes` still returns the graphs read before it, as `dot` writes them, and throws
+only when nothing was rendered. `renderSvg` and
 `renderJson` are `render` with the format filled in.
 
 `renderWithDiagnostics`, `renderAllWithDiagnostics` and `renderAllBytesWithDiagnostics`
@@ -113,7 +115,9 @@ const svg = render(dot, 'dot', 'svg', {
 A reached limit throws `GraphvizError` with `kind` `"LimitExceeded"` and `limit` naming it
 (`"InputBytes"`, `"Nodes"`, `"Edges"`, `"Deadline"` for `timeout`, `"Steps"`,
 `"Allocation"`, `"Memory"`). A cancel throws `kind` `"Cancelled"`. The call returns its whole
-output, the same bytes as without options, or throws; never a partial drawing. The checks
+output, the same bytes as without options, or throws; never a partial drawing. Unlike a
+syntax error, a limit or a cancel makes `renderAllBytes` throw even when earlier graphs
+were rendered. The checks
 run at checkpoints in the parser, the layout loops and the renderer, so a call can run
 past a limit until its next checkpoint. The same `maxSteps` on the same input and version
 always stops at the same point. A bad option throws a `TypeError`.

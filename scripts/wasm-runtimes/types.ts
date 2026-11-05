@@ -20,6 +20,7 @@ import init, {
   type GraphStats,
   type GraphvizErrorKind,
   type GraphvizLimit,
+  type InitOutput,
   type RenderOptions,
   type RenderedBytes,
   type RenderedText,
@@ -83,6 +84,15 @@ const limited: string = render("digraph { a -> b }", "dot", "svg", options) +
 const limitedAll: string[] = renderAll("digraph { a -> b }", "dot", "svg", { maxNodes: 1 });
 const limitedBytes: Uint8Array = renderAllBytes(new Uint8Array(), "dot", "svg", { timeout: 0 });
 const limitedStats: GraphStats = inspectGraph("digraph { a -> b }", "dot", { maxSteps: 1 });
+const nulled: string = render("digraph { a -> b }", "dot", "svg", null) + renderSvg("digraph { a -> b }", "dot", null);
+const nulledStats: GraphStats = inspectGraph("digraph { a -> b }", "dot", null);
+// Raw InitOutput calls written before `options` existed still typecheck.
+function rawCalls(out: InitOutput): void {
+  out.render(0, 0, 0, 0, 0, 0);
+  out.renderSvg(0, 0, 0, 0);
+  out.inspectGraph(0, 0, 0, 0);
+  out.render(0, 0, 0, 0, 0, 0, undefined);
+}
 const limits: Record<GraphvizLimit, true> = {
   InputBytes: true,
   Nodes: true,
@@ -109,6 +119,9 @@ void limitedAll;
 void limitedBytes;
 void limitedStats;
 void limits;
+void nulled;
+void nulledStats;
+void rawCalls;
 void directed;
 void name;
 void output;

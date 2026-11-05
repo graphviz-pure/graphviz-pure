@@ -646,6 +646,9 @@ pub fn render_all_with_diagnostics(
 /// Graphs read before a syntax error are still returned. This throws only when
 /// the error leaves nothing to render, and then with the same `GraphvizError`
 /// as [`render`].
+///
+/// A limit or a cancel from `options` always throws, even after some graphs
+/// were rendered: unlike a syntax error, it returns no partial output.
 #[wasm_bindgen(js_name = renderAllBytes)]
 pub fn render_all_bytes(
     dot_source: &[u8],
@@ -663,7 +666,7 @@ pub fn render_all_bytes(
 /// [`render_all_bytes`] plus the diagnostics of the whole call. `output` is
 /// the `Uint8Array` [`render_all_bytes`] returns. A partial success (some
 /// graphs rendered, then a syntax error) carries the `agerr` messages, not the
-/// syntax error's `message`.
+/// syntax error's `message`. A limit or a cancel always throws.
 #[wasm_bindgen(js_name = renderAllBytesWithDiagnostics)]
 pub fn render_all_bytes_with_diagnostics(
     dot_source: &[u8],
