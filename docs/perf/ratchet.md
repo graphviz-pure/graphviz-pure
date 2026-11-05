@@ -30,9 +30,15 @@ than native and dhat about 15×, so each would add minutes.
 
 Both binaries are built for **x86_64-unknown-linux-musl**, the static build releases ship for
 Linux. A static binary carries its own `malloc` and `memcpy`, so the instruction counts do not
-depend on the runner's glibc or on which CPU-specific `memcpy` glibc picks; counts from the
-same build agree to within a few thousand instructions between runs (the environment and the
-process ID). Allocation counts and peak heap do not vary at all, as long as the input paths are
+depend on the runner's glibc or on which CPU-specific `memcpy` glibc picks. Packing's cell sets
+use a fixed-seed hasher: their iteration order controls how many collision probes execute,
+even though it cannot change the chosen placement. Random seeds previously produced up to
+about 1.5% variation on `twopi_pairs_1000` (#776), consuming much of the 2% gate.
+Counts are still not exactly constant: other randomized lookups, the environment and process
+startup can contribute noise. See the [five-run before/after measurements for every case](pack-hash-repeatability.md)
+for the observed residual spread on a fixed binary, toolchain and Valgrind version; this is
+an empirical bound, not a cross-version guarantee. The instruction gate remains **+2%**.
+Allocation counts and peak heap do not vary at all, as long as the input paths are
 the same, which is why every case runs from the repository root with relative paths. musl's
 allocator is slower than glibc's, so the musl instruction counts include more `malloc` work
 than a glibc build would; the ratchet compares like with like, so that does not matter for the
