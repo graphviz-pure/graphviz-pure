@@ -300,11 +300,22 @@ pub fn fprintf_stderr(msg: &str) {
 /// A renderer warning C writes with `fprintf(stderr, ...)`, returned by a capturing
 /// library call instead of filtered or prefixed like an `agerr` warning.
 pub fn render_warning(msg: &str) {
+    render_diagnostic(crate::error::DiagnosticLevel::Warning, msg);
+}
+
+/// A stderr line one of the renderer's own libraries (gd, libjpeg) writes with its own
+/// prefix, so the whole line as it is printed: no command name is prepended to it. Like
+/// [`render_warning`], a capturing library call returns it instead of dropping it like
+/// [`fprintf_stderr`] output.
+pub fn render_stderr(msg: &str) {
+    render_diagnostic(crate::error::DiagnosticLevel::Stderr, msg);
+}
+
+fn render_diagnostic(level: crate::error::DiagnosticLevel, msg: &str) {
     let bytes = crate::charset::encode(msg);
     if capturing() {
         let message = String::from_utf8_lossy(&bytes).into_owned();
-        let diagnostic =
-            crate::error::Diagnostic::new(crate::error::DiagnosticLevel::Warning, message);
+        let diagnostic = crate::error::Diagnostic::new(level, message);
         FRAMES.with(|frames| {
             if let Some(frame) = frames.borrow_mut().top.as_mut() {
                 frame.diagnostics.push(diagnostic);
@@ -589,6 +600,14 @@ mod tests {
         assert_eq!(error_count(), 0);
         assert_eq!(agseterr(old), AgErrLevel::Err);
         reset_errors();
+    }
+
+    #[test]
+    fn render_stderr_is_captured_with_the_library_prefix_only() {
+        let ((), messages) = capture(|| render_stderr("GD Warning: gd-jpeg: line"));
+        assert_eq!(messages.len(), 1);
+        assert_eq!(messages[0].level(), crate::error::DiagnosticLevel::Stderr);
+        assert_eq!(messages[0].message(), "GD Warning: gd-jpeg: line");
     }
 
     #[test]

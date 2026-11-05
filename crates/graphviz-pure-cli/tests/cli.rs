@@ -1450,6 +1450,70 @@ fn zero_after_cairo_scaling_writes_an_empty_png_like_c() {
     }
 }
 
+// Issue #716: C draws jpg with its gd renderer, whose area cap is GD_XYMAX (INT32_MAX), not
+// cairo's per-dimension one. C's `sqrt(GD_XYMAX / (width * height))` divides two unsigned
+// values as integers, so the scale is 0 whenever the cap fires with a larger product, and
+// the zero-sized picture then fails in libjpeg ("Empty JPEG image"), after gd's "GD
+// Warning:" line (no command-name prefix, no trailing newline). No bytes, exit 0.
+#[test]
+fn oversized_jpeg_hits_gds_area_cap_and_the_libjpeg_dimension_limit_like_c() {
+    // 100000 * 30000 pixels is over GD_XYMAX: scaled to nothing, then refused as empty.
+    let src = "digraph { dpi=72; viewport=\"100000,30000,1\"; a }";
+    let (out, err, ok) = run(&["-Tjpg"], src);
+    assert!(ok, "{err}");
+    assert!(out.is_empty());
+    assert_eq!(
+        err,
+        "graphviz-pure: graph is too large for gd-renderer bitmaps. Scaling by 0 to fit\n\
+         GD Warning: gd-jpeg: JPEG library reports unrecoverable error: Empty JPEG image (DNL not supported)"
+    );
+
+    // 100000 * 100 is under the area cap, so gd does not scale it; the width alone stops
+    // libjpeg, with no graphviz warning before the library's line.
+    let src = "digraph { dpi=72; viewport=\"100000,100,1\"; a }";
+    let (out, err, ok) = run(&["-Tjpg"], src);
+    assert!(ok, "{err}");
+    assert!(out.is_empty());
+    assert_eq!(
+        err,
+        "GD Warning: gd-jpeg: JPEG library reports unrecoverable error: Maximum supported image dimension is 65500 pixels"
+    );
+
+    // The same drawing keeps cairo's cap and its own message as PNG (#721).
+    let png = tmp("gd_limit.png");
+    let (_, err, ok) = run(
+        &["-Tpng", "-o", png.to_str().unwrap()],
+        "digraph { dpi=72; viewport=\"100000,100,1\"; a }",
+    );
+    assert!(ok, "{err}");
+    let bytes = std::fs::read(&png).unwrap();
+    assert_eq!(&bytes[1..4], b"PNG");
+    assert_eq!(
+        err,
+        "graphviz-pure: graph is too large for cairo-renderer bitmaps. Scaling by 0.32767 to fit\n"
+    );
+
+    // And SVG is untouched by both raster caps.
+    let (svg, err, ok) = run(&["-Tsvg"], src);
+    assert!(ok, "{err}");
+    assert!(svg.contains("<svg width=\"100000pt\" height=\"100pt\""));
+    assert_eq!(err, "");
+}
+
+// 100000 * 50000 wraps C's unsigned area to 705032704, under GD_XYMAX: like C, no gd
+// scaling and no area warning, and only libjpeg's dimension line is written.
+#[test]
+fn jpeg_area_cap_wraps_like_cs_unsigned_multiplication() {
+    let src = "digraph { dpi=72; viewport=\"100000,50000,1\"; a }";
+    let (out, err, ok) = run(&["-Tjpg"], src);
+    assert!(ok, "{err}");
+    assert!(out.is_empty());
+    assert_eq!(
+        err,
+        "GD Warning: gd-jpeg: JPEG library reports unrecoverable error: Maximum supported image dimension is 65500 pixels"
+    );
+}
+
 // Issue #355: C draws png and jpg with its cairo renderer, which has none of the SVG
 // renderer's maps, tooltips, targets and labels, and whose devices have no layers. So C
 // converts no edge tooltip for them (`emit_begin_edge`'s `preprocessTooltip` runs only with

@@ -626,10 +626,16 @@ fn auto_output_filename(input: Option<&OsStr>, graph_index: usize, langname: &st
     name
 }
 
-/// Writes collected raster diagnostics, in order, with C's command-name prefix.
+/// Writes collected raster diagnostics, in order: renderer warnings with C's command-name
+/// prefix, and lines the renderer's own libraries (gd, libjpeg) wrote with their own prefix
+/// as they are.
 fn print_raster_diagnostics(cmdname: &str, diagnostics: &[graphviz_pure_core::Diagnostic]) {
     for diagnostic in diagnostics {
-        fprintf_stderr(&format!("{cmdname}: {}", diagnostic.message()));
+        let line = match diagnostic.level() {
+            graphviz_pure_core::DiagnosticLevel::Stderr => diagnostic.message().to_string(),
+            _ => format!("{cmdname}: {}", diagnostic.message()),
+        };
+        fprintf_stderr(&line);
     }
 }
 
