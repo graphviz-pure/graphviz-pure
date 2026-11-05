@@ -21,13 +21,18 @@ LABELS=${GVP_LABELS:-gvp-ci}
 CPUS=${GVP_CPUS_PER_RUNNER:-4}
 MEMORY=${GVP_MEMORY_PER_RUNNER:-10g}
 MIN_FREE_GB=${GVP_MIN_FREE_GB:-150}
+# Below this, the jobs running are killed: a container's writable layer has no size limit
+# (/jobs is XFS without project quotas), so this is what stops one job filling the disk.
+KILL_FREE_GB=${GVP_KILL_FREE_GB:-50}
 PREFIX=${GVP_PREFIX:-gvp-ci}
 # Runner names appear in public job logs: no hostname.
 HOST=${GVP_HOST_TAG:-h1}
+# install.sh makes $ROOT, bin/ and config.env root-owned; these three belong to the service user.
 LOGS=$ROOT/logs
 SCRATCH=$ROOT/scratch
+STATE=$ROOT/state
 
-mkdir -p "$LOGS" "$SCRATCH"
+mkdir -p "$LOGS" "$SCRATCH" "$STATE"
 log() { echo "$(date -u +%FT%TZ) $*" >> "$LOGS/supervisor.log"; echo "$*"; }
 
 # Runners of this machine that GitHub still lists but no container serves (left by a crash or a
@@ -63,7 +68,7 @@ run_slot() {
   local slot=$1 c="$PREFIX-$1" name jit started rc
   while :; do
     clean_slot "$slot"
-    if [ -f "$ROOT/paused" ]; then sleep 30; continue; fi
+    if [ -f "$STATE/paused" ]; then sleep 30; continue; fi
     if [ "$(free_gb)" -lt "$MIN_FREE_GB" ]; then
       log "slot $slot: /jobs has $(free_gb) GB free (< $MIN_FREE_GB), waiting"
       sleep 60; continue
@@ -78,7 +83,7 @@ run_slot() {
       sleep 60; continue
     fi
     mkdir -p "$SCRATCH/$slot"
-    sudo -n chown 1001:1001 "$SCRATCH/$slot"
+    sudo -n chown 64001:64001 "$SCRATCH/$slot"
     started=$(date +%s)
     if ! GVP_JIT_CONFIG=$jit docker run -d --name "$c" \
         --label "gvp-ci.runner=$name" \
@@ -125,10 +130,19 @@ for s in $(seq 1 "$RUNNERS"); do clean_slot "$s"; done
 remove_stale_runners
 pids=()
 for s in $(seq 1 "$RUNNERS"); do run_slot "$s" & pids+=($!); done
-# Every 10 minutes, drop registrations no container serves.
+# Every minute, check the disk; every 10 minutes, drop registrations no container serves.
+tick=0
 while :; do
-  sleep 600 &
+  sleep 60 &
   sleeper=$!
   wait "$sleeper" || true
-  remove_stale_runners
+  if [ "$(free_gb)" -lt "$KILL_FREE_GB" ]; then
+    mapfile -t running < <(docker ps --filter "label=gvp-ci.runner" --format '{{.Names}}')
+    if [ "${#running[@]}" -gt 0 ]; then
+      log "/jobs has $(free_gb) GB free (< $KILL_FREE_GB): killing ${running[*]}"
+      docker kill "${running[@]}" >/dev/null 2>&1
+    fi
+  fi
+  tick=$(( (tick + 1) % 10 ))
+  [ "$tick" = 0 ] && remove_stale_runners
 done

@@ -20,11 +20,12 @@ concurrency:
 env:
   CARGO_TERM_COLOR: always
 
-# The Linux x86-64 jobs run on the project's self-hosted runners for this repository's own events
-# when the repository variable GVP_SELF_HOSTED is 'true', and on GitHub-hosted ubuntu-24.04
-# otherwise and for every fork's pull request (docs/ci/self-hosted-runners.md). The other
-# platforms run on GitHub-hosted runners, which are free for a public repository. The build and
-# test jobs are skipped when the files they read already passed this workflow (scripts/ci-result-cache.sh), so a
+# The heavy Linux jobs (verify, the three check modes, cpu-fidelity, wasm-e2e and
+# parallel-neato) run on the project's self-hosted runners for this repository's own events when
+# the repository variable GVP_SELF_HOSTED is 'true', and on GitHub-hosted ubuntu-24.04 otherwise
+# and for every fork's pull request (docs/ci/self-hosted-runners.md). Every other job runs on
+# GitHub-hosted runners, which are free for a public repository. The build and test jobs are
+# skipped when the files they read already passed this workflow (scripts/ci-result-cache.sh), so a
 # change to documentation or the site's pages runs none of them; a skipped required check counts
 # as passed. parallel-neato is one of those jobs: the opt-in `parallel` feature, off in every
 # other job. It checks sfdp's quadtree repulsion, and that neato's sequential mat-vec
@@ -32,11 +33,7 @@ env:
 jobs:
   lookup:
     name: Earlier result for these inputs
-    # The Linux runner: this machine's self-hosted runners for this repository's own events when
-    # the repository variable GVP_SELF_HOSTED is 'true', GitHub's ubuntu-24.04 otherwise and
-    # always for a fork's pull request (docs/ci/self-hosted-runners.md). The other Linux jobs
-    # reuse it through the YAML alias *linux-runner.
-    runs-on: &linux-runner ${{ vars.GVP_SELF_HOSTED == 'true' && (contains(fromJSON('["push", "merge_group", "workflow_dispatch"]'), github.event_name) || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository)) && fromJSON('["self-hosted", "linux", "x64", "gvp-ci"]') || 'ubuntu-24.04' }}
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
       actions: read # list the marker artifacts of earlier runs
@@ -56,7 +53,12 @@ jobs:
     name: Format, Clippy, Test & WASM Check
     needs: lookup
     if: needs.lookup.outputs.hit != 'true'
-    runs-on: *linux-runner
+    # Heavy Linux jobs (five minutes or more on a hosted runner) take this machine's self-hosted
+    # runners for this repository's own events while the repository variable GVP_SELF_HOSTED is
+    # 'true'; GitHub's ubuntu-24.04 otherwise, and always for a fork's pull request. Short jobs
+    # stay on ubuntu-24.04, so both pools work at once (docs/ci/self-hosted-runners.md). Another
+    # heavy job in this file reuses this through the alias *heavy-linux-runner.
+    runs-on: &heavy-linux-runner ${{ vars.GVP_SELF_HOSTED == 'true' && (contains(fromJSON('["push", "merge_group", "workflow_dispatch"]'), github.event_name) || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository)) && fromJSON('["self-hosted", "linux", "x64", "gvp-ci"]') || 'ubuntu-24.04' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -91,7 +93,7 @@ jobs:
     name: Network simplex check mode
     needs: lookup
     if: needs.lookup.outputs.hit != 'true'
-    runs-on: *linux-runner
+    runs-on: *heavy-linux-runner
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -108,7 +110,7 @@ jobs:
     timeout-minutes: 20
     needs: lookup
     if: needs.lookup.outputs.hit != 'true'
-    runs-on: *linux-runner
+    runs-on: *heavy-linux-runner
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -124,7 +126,7 @@ jobs:
     name: Routing check mode
     needs: lookup
     if: needs.lookup.outputs.hit != 'true'
-    runs-on: *linux-runner
+    runs-on: *heavy-linux-runner
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -140,7 +142,7 @@ jobs:
     name: x86-64-v3 fidelity and v1 byte equality (musl)
     needs: lookup
     if: needs.lookup.outputs.hit != 'true'
-    runs-on: *linux-runner
+    runs-on: *heavy-linux-runner
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -249,7 +251,7 @@ jobs:
     name: MSRV
     needs: lookup
     if: needs.lookup.outputs.hit != 'true'
-    runs-on: *linux-runner
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -269,7 +271,7 @@ jobs:
     name: WASM end-to-end (Node)
     needs: lookup
     if: needs.lookup.outputs.hit != 'true'
-    runs-on: *linux-runner
+    runs-on: *heavy-linux-runner
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -330,7 +332,7 @@ jobs:
     name: WASM package (Node.js, Deno, Bun, Workers, Chrome)
     needs: lookup
     if: needs.lookup.outputs.hit != 'true'
-    runs-on: *linux-runner
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -430,7 +432,7 @@ jobs:
   supply-chain:
     name: Supply chain (cargo-deny, zizmor)
     # Always runs: the advisory database changes even when the tree does not.
-    runs-on: *linux-runner
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -479,7 +481,7 @@ jobs:
   pr-risk:
     name: PR risk report
     if: github.event_name == 'pull_request'
-    runs-on: *linux-runner
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -503,7 +505,7 @@ jobs:
     name: Parallel neato bytes
     needs: lookup
     if: needs.lookup.outputs.hit != 'true'
-    runs-on: *linux-runner
+    runs-on: *heavy-linux-runner
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -548,7 +550,7 @@ jobs:
   # a pull request.
   proofs:
     name: Lean proofs
-    runs-on: *linux-runner
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -589,7 +591,7 @@ jobs:
   record:
     name: Record the result for these inputs
     needs: [verify, ns-check, mincross-check, routing-check, msrv, wasm-e2e, wasm-runtimes, cpu-fidelity, native-pgo, parallel-neato]
-    runs-on: *linux-runner
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

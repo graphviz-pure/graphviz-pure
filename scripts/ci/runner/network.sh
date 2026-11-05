@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Creates the runners' docker network and walls it off from this machine (run as root, at every
 # start of gvp-ci-runners.service; idempotent). Containers on it reach the internet only: not
-# the host's own services, not other containers, not private, link-local or tailnet addresses.
+# the host's own services, not other containers, not private, link-local, tailnet, benchmark or
+# reserved addresses.
 set -euo pipefail
 net=gvp-ci
 bridge=gvpci0
@@ -21,7 +22,8 @@ rule_forward() {
   iptables -C DOCKER-USER -i "$bridge" -d "$1" -j DROP 2>/dev/null \
     || iptables -I DOCKER-USER -i "$bridge" -d "$1" -j DROP
 }
-for cidr in 10.0.0.0/8 172.16.0.0/12 192.168.0.0/16 100.64.0.0/10 169.254.0.0/16 127.0.0.0/8 224.0.0.0/4; do
+for cidr in 0.0.0.0/8 10.0.0.0/8 100.64.0.0/10 127.0.0.0/8 169.254.0.0/16 172.16.0.0/12 \
+  192.0.0.0/24 192.168.0.0/16 198.18.0.0/15 224.0.0.0/4 240.0.0.0/4; do
   rule_forward "$cidr"
 done
 # Nothing from the runners reaches a socket on the host itself (the bridge gateway or any other

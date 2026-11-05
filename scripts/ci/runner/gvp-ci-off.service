@@ -1,0 +1,10 @@
+# Run when gvp-ci-runners.service fails for good (a crash loop past its start limit): sends
+# every new job back to GitHub-hosted runners at once, without waiting for the watchdog.
+[Unit]
+Description=graphviz-pure self-hosted CI runners (switch off after a failure)
+
+[Service]
+Type=oneshot
+User=agent
+Environment=GVP_CI_ROOT=/jobs/gvp-ci
+ExecStart=/jobs/gvp-ci/bin/gvp-ci off

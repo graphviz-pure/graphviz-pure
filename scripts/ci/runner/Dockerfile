@@ -65,9 +65,11 @@ RUN curl -fsSL -o /tmp/node.tar.xz "https://nodejs.org/dist/v${NODE_VERSION}/nod
  && node --version
 
 # The job user, named and placed like the hosted runner's (/home/runner/work/<repo>/<repo>), so
-# paths in caches and outputs match. It has no root and no sudo.
+# paths in caches and outputs match. It has no root and no sudo. Its uid and gid, 64001, are
+# unused on the host, so files a job leaves in the scratch directory belong to no host account.
 RUN userdel -r ubuntu 2>/dev/null || true \
- && useradd --create-home --uid 1001 --shell /bin/bash runner
+ && groupadd --gid 64001 runner \
+ && useradd --create-home --uid 64001 --gid 64001 --shell /bin/bash runner
 
 # The Actions runner, pinned and checked. Its own dependencies come from its installer script.
 RUN mkdir -p /opt/actions-runner \

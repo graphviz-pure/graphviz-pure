@@ -1,23 +1,52 @@
 #!/usr/bin/env bash
-# The kill switch and status of the self-hosted runners (docs/ci/self-hosted-runners.md).
+# The kill switch, watchdog and status of the self-hosted runners
+# (docs/ci/self-hosted-runners.md).
 #
-#   gvp-ci off      every new job goes to GitHub-hosted runners (repository variable
-#                   GVP_SELF_HOSTED=false); the local runners finish the jobs they hold
-#   gvp-ci on       jobs from this repository go to the local runners again
-#   gvp-ci status   the variable, the supervisor, the containers and GitHub's runner list
+#   gvp-ci off       every new job goes to GitHub-hosted runners (repository variable
+#                    GVP_SELF_HOSTED=false); the local runners finish the jobs they hold
+#   gvp-ci on        heavy jobs from this repository go to the local runners again
+#   gvp-ci status    the variable, the supervisor, the containers and GitHub's runner list
+#   gvp-ci watchdog  run by gvp-ci-watchdog.timer: turns the switch off when the variable is on
+#                    and no local runner has been online for GVP_WATCHDOG_MINUTES (10)
 #
 # The variable is read by every runs-on that can choose a local runner, so `off` never leaves
-# a job waiting for a runner that is gone. Stop the supervisor only after `off`.
+# a new job waiting for a runner that is gone. A job already queued for the local labels keeps
+# waiting: cancel its run and re-run it (docs/ci/self-hosted-runners.md, "Kill switch").
 set -euo pipefail
 repo=graphviz-pure/graphviz-pure
+root=${GVP_CI_ROOT:-/jobs/gvp-ci}
+log() { echo "$(date -u +%FT%TZ) $*" | tee -a "$root/logs/watchdog.log"; }
+
+online_runners() {
+  gh api --paginate "repos/$repo/actions/runners" \
+    --jq '[.runners[] | select(.status == "online" and (.labels | map(.name) | index("gvp-ci")))] | length' \
+    | awk '{ n += $1 } END { print n + 0 }'
+}
+
 case "${1:-status}" in
-  off) gh variable set GVP_SELF_HOSTED --body false -R "$repo"; echo "GVP_SELF_HOSTED=false: new jobs run on GitHub-hosted runners" ;;
-  on) gh variable set GVP_SELF_HOSTED --body true -R "$repo"; echo "GVP_SELF_HOSTED=true: jobs from $repo run on the local runners" ;;
+  off) gh variable set GVP_SELF_HOSTED --body false -R "$repo"; log "GVP_SELF_HOSTED=false: new jobs run on GitHub-hosted runners" ;;
+  on) gh variable set GVP_SELF_HOSTED --body true -R "$repo"; rm -f "$root/state/no-runner-since"; log "GVP_SELF_HOSTED=true: heavy jobs from $repo run on the local runners" ;;
   status)
     echo "GVP_SELF_HOSTED=$(gh variable get GVP_SELF_HOSTED -R "$repo" 2>/dev/null || echo unset)"
     systemctl --no-pager --lines=0 status gvp-ci-runners.service | head -3 || true
     docker ps --filter label=gvp-ci.runner --format '{{.Names}}\t{{.Status}}\t{{.Label "gvp-ci.runner"}}'
     gh api "repos/$repo/actions/runners" --jq '.runners[] | "\(.name)\t\(.status)\tbusy=\(.busy)"'
     ;;
-  *) echo "usage: gvp-ci on|off|status" >&2; exit 2 ;;
+  watchdog)
+    since_file=$root/state/no-runner-since
+    minutes=${GVP_WATCHDOG_MINUTES:-10}
+    # Any API failure leaves everything as it is.
+    value=$(gh variable get GVP_SELF_HOSTED -R "$repo" 2>/dev/null) || exit 0
+    if [ "$value" != true ]; then rm -f "$since_file"; exit 0; fi
+    n=$(online_runners) || exit 0
+    if [ "$n" -gt 0 ]; then rm -f "$since_file"; exit 0; fi
+    now=$(date +%s)
+    if [ ! -f "$since_file" ]; then echo "$now" > "$since_file"; log "watchdog: no gvp-ci runner online"; exit 0; fi
+    if [ $(( now - $(cat "$since_file") )) -ge $(( minutes * 60 )) ]; then
+      "$0" off
+      log "watchdog: no gvp-ci runner online for $minutes minutes; switched off. Cancel and re-run any run still waiting for a gvp-ci runner."
+      rm -f "$since_file"
+    fi
+    ;;
+  *) echo "usage: gvp-ci on|off|status|watchdog" >&2; exit 2 ;;
 esac

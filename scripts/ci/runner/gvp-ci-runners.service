@@ -4,6 +4,10 @@
 Description=graphviz-pure self-hosted CI runners (supervisor)
 After=docker.service network-online.target
 Wants=docker.service network-online.target
+# Five failed starts in ten minutes is a crash loop: stop retrying and switch the runners off.
+StartLimitIntervalSec=600
+StartLimitBurst=5
+OnFailure=gvp-ci-off.service
 
 [Service]
 Type=simple

@@ -16,9 +16,10 @@ name: Cross-platform
 # credential for the other. The site's fidelity data, gallery outputs and C references are
 # committed, since they need the C oracle, which CI does not have.
 #
-# The Linux x86-64 jobs run on the project's self-hosted runners for this repository's own
-# events when the GVP_SELF_HOSTED variable is on, and on GitHub-hosted runners otherwise
-# (docs/ci/self-hosted-runners.md); the other platforms run on GitHub-hosted runners. The platform renders
+# The WebAssembly render, the one heavy Linux job here, runs on the project's self-hosted runners
+# for this repository's own events when the GVP_SELF_HOSTED variable is on, and on GitHub-hosted
+# runners otherwise (docs/ci/self-hosted-runners.md); every other job runs on GitHub-hosted
+# runners. The platform renders
 # and the comparison are skipped when the files they read already passed this workflow
 # (scripts/ci-result-cache.sh), so a change to documentation or the site's pages renders nothing,
 # and the site job takes the cross-platform results from the run that passed those files.
@@ -52,11 +53,7 @@ env:
 jobs:
   lookup:
     name: Earlier result for these inputs
-    # The Linux runner: this machine's self-hosted runners for this repository's own events when
-    # the repository variable GVP_SELF_HOSTED is 'true', GitHub's ubuntu-24.04 otherwise and
-    # always for a fork's pull request (docs/ci/self-hosted-runners.md). The other Linux jobs
-    # reuse it through the YAML alias *linux-runner.
-    runs-on: &linux-runner ${{ vars.GVP_SELF_HOSTED == 'true' && (contains(fromJSON('["push", "merge_group", "workflow_dispatch"]'), github.event_name) || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository)) && fromJSON('["self-hosted", "linux", "x64", "gvp-ci"]') || 'ubuntu-24.04' }}
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
       actions: read # list the marker artifacts of earlier runs
@@ -89,11 +86,6 @@ jobs:
             kind=cross-platform-full
           else
             platforms=$(jq -c 'map(select(.id != "macos-x86_64"))' <<< "$platforms")
-          fi
-          # Linux x86-64 renders where this job runs: a self-hosted runner when the runs-on
-          # above chose one (docs/ci/self-hosted-runners.md), ubuntu-24.04 otherwise.
-          if [ "$RUNNER_ENVIRONMENT" = self-hosted ]; then
-            platforms=$(jq -c 'map(if .id == "linux-x86_64" then .runner = ["self-hosted", "linux", "x64", "gvp-ci"] else . end)' <<< "$platforms")
           fi
           platforms=$(jq -c . <<< "$platforms")
           expect=$(jq -r 'map(.id) + ["wasm32"] | join(",")' <<< "$platforms")
@@ -172,7 +164,12 @@ jobs:
     name: WebAssembly (Node.js)
     needs: lookup
     if: needs.lookup.outputs.hit != 'true'
-    runs-on: *linux-runner
+    # Heavy Linux jobs (five minutes or more on a hosted runner) take this machine's self-hosted
+    # runners for this repository's own events while the repository variable GVP_SELF_HOSTED is
+    # 'true'; GitHub's ubuntu-24.04 otherwise, and always for a fork's pull request. Short jobs
+    # stay on ubuntu-24.04, so both pools work at once (docs/ci/self-hosted-runners.md). Another
+    # heavy job in this file reuses this through the alias *heavy-linux-runner.
+    runs-on: &heavy-linux-runner ${{ vars.GVP_SELF_HOSTED == 'true' && (contains(fromJSON('["push", "merge_group", "workflow_dispatch"]'), github.event_name) || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository)) && fromJSON('["self-hosted", "linux", "x64", "gvp-ci"]') || 'ubuntu-24.04' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -223,7 +220,7 @@ jobs:
     # Runs when a platform job failed (a missing platform fails the comparison), not when the
     # run was cancelled or these inputs already passed.
     if: ${{ !cancelled() && needs.lookup.outputs.hit != 'true' }}
-    runs-on: *linux-runner
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -262,7 +259,7 @@ jobs:
     # A failed comparison is still published, so the page shows it; a cancelled run is not. When
     # nothing the site shows changed, the deploy keeps the `site` of an earlier master run.
     if: ${{ !cancelled() && needs.lookup.outputs.site == 'true' }}
-    runs-on: *linux-runner
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
       actions: read # download the cross-platform results of the run that passed these inputs
@@ -372,7 +369,7 @@ jobs:
     needs: [lookup, compare, site]
     # Only after a passing comparison, and a site build that passed or had nothing to build.
     if: ${{ !cancelled() && needs.compare.result == 'success' && contains(fromJSON('["success", "skipped"]'), needs.site.result) }}
-    runs-on: *linux-runner
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
