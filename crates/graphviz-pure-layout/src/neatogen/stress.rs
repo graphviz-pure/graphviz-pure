@@ -387,6 +387,10 @@ pub fn stress_majorization_kd_mkernel(
     let mut converged = false;
     let mut iterations = 0i64;
     while iterations < maxi && !converged {
+        // Not in C: a limit of the caller's `Limits::run` ends the loop.
+        if graphviz_pure_core::limits::tick_by((n as u64).saturating_mul(n as u64)) {
+            break;
+        }
         for d in degrees.iter_mut() {
             *d = 0.0;
         }

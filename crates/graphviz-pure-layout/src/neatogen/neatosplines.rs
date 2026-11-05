@@ -212,6 +212,10 @@ pub fn spline_edges_route(g: &mut LGraph<'_>, sub: &Sub, pmargin: &Expand, edget
     let use_edges = nop() > 1;
     for &n in &sub.nodes {
         let outs: Vec<usize> = g.outs(sub, n).collect();
+        // Not in C: a limit of the caller's `Limits::run` ends the loop.
+        if graphviz_pure_core::limits::tick_by(outs.len() as u64 + 1) {
+            break;
+        }
         for e in outs {
             let head = g.edges[e].head;
             if use_edges && g.edges.get(e).is_some_and(|ed| ed.spl.is_some()) {

@@ -450,6 +450,10 @@ fn move_node(g: &mut LGraph<'_>, kk: &mut KkState, ng: usize, m: usize, p: &Neat
 fn solve_model(g: &mut LGraph<'_>, kk: &mut KkState, ng: usize, p: &NeatoParams) {
     while let Some(m) = choose_node(g, kk, ng, p) {
         move_node(g, kk, ng, m, p);
+        // Not in C: a limit of the caller's `Limits::run` ends the loop.
+        if graphviz_pure_core::limits::tick_by(ng as u64) {
+            break;
+        }
     }
     if verbose_on() {
         let bang = if kk.moves == p.max_iter { "!" } else { "" };
@@ -483,6 +487,10 @@ pub fn shortest_path(
     }
     let mut heap: Vec<usize> = Vec::with_capacity(ng + 1);
     for &src in &sub.nodes.clone() {
+        // Not in C: a limit of the caller's `Limits::run` ends the loop.
+        if graphviz_pure_core::limits::tick_by(ng as u64) {
+            break;
+        }
         for &v in &sub.nodes {
             g.nodes[v].dist = initial_dist;
         }

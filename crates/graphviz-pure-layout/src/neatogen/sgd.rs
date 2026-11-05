@@ -161,6 +161,10 @@ pub fn sgd(g: &mut LGraph<'_>, sub: &Sub, model: i32, p: &NeatoParams) {
     }
     let mut rstate = RkState::new(0);
     for t in 0..p.max_iter {
+        // Not in C: a limit of the caller's `Limits::run` ends the loop.
+        if graphviz_pure_core::limits::tick_by(n_terms as u64) {
+            break;
+        }
         // fisheryates_shuffle: `n_terms > 0 && i >= 1`
         let mut i = n_terms.saturating_sub(1);
         while n_terms > 0 && i >= 1 {

@@ -398,6 +398,10 @@ fn spring_electrical_embedding_fast(
     let mut counts = [0.0f64; 4];
     let mut qt = QuadTree::default();
     loop {
+        // Not in C: a limit of the caller's `Limits::run` ends the loop.
+        if graphviz_pure_core::limits::tick_by(n as u64) {
+            break;
+        }
         iter += 1;
         let fnorm0 = fnorm;
         fnorm = 0.0;
@@ -459,6 +463,10 @@ fn spring_electrical_embedding_slow(
     let mut fnorm = 0.0f64;
     let mut iter = 0;
     loop {
+        // Not in C: a limit of the caller's `Limits::run` ends the loop.
+        if graphviz_pure_core::limits::tick_by(n as u64) {
+            break;
+        }
         force.iter_mut().for_each(|v| *v = 0.0);
         iter += 1;
         let fnorm0 = fnorm;
@@ -604,6 +612,10 @@ fn spring_electrical_embedding(
         };
     }
     loop {
+        // Not in C: a limit of the caller's `Limits::run` ends the loop.
+        if graphviz_pure_core::limits::tick_by(n as u64) {
+            break;
+        }
         iter += 1;
         let fnorm0 = fnorm;
         fnorm = 0.0;
@@ -696,6 +708,10 @@ pub fn spring_electrical_spring_embedding(
     let mut fnorm = 0.0f64;
     let mut iter = 0;
     loop {
+        // Not in C: a limit of the caller's `Limits::run` ends the loop.
+        if graphviz_pure_core::limits::tick_by(n as u64) {
+            break;
+        }
         iter += 1;
         let fnorm0 = fnorm;
         fnorm = 0.0;
