@@ -69,22 +69,54 @@ pub fn render_dot_all_with_options(
     // caller's, inside a `with_rand_state`) and `Nop`.
     let mut options = options;
     let mut ps = crate::PostscriptJob::default();
+    ps.set_format(ps_format(output_format));
     in_rand_run(|| {
         let mut out: Vec<String> = graphs
             .into_iter()
-            .map(|graph| {
-                if output_format == OutputFormat::Ps {
-                    render_parsed_ps(graph, engine, &mut options, &mut ps)
-                } else {
-                    render_parsed(graph, engine, output_format, format, &mut options)
-                }
-            })
+            .map(|graph| render_one(graph, engine, output_format, format, &mut options, &mut ps))
             .collect::<Result<_>>()?;
         if let Some(last) = out.last_mut() {
             last.push_str(&ps.finish());
         }
         Ok(out)
     })
+}
+
+/// One graph of a multi-graph run. The `-Tps` family shares `ps` across the graphs:
+/// the paging devices (`ps`, `ps2`) keep one document whose trailer the caller appends
+/// after the last graph, while `eps` ends its job after every graph, so each graph's
+/// string is a complete document of its own. Concatenated, the strings are C's output.
+fn render_one(
+    graph: Graph,
+    engine: &str,
+    output_format: OutputFormat,
+    format: &str,
+    options: &mut LayoutOptions,
+    ps: &mut crate::PostscriptJob,
+) -> Result<String> {
+    if matches!(
+        output_format,
+        OutputFormat::Ps | OutputFormat::Ps2 | OutputFormat::Eps
+    ) {
+        let text = render_parsed_ps(graph, engine, options, ps)?;
+        if output_format == OutputFormat::Eps {
+            // `eps:ps` has no `GVDEVICE_DOES_PAGES`, so C ends its job after every graph:
+            // each graph is a complete document of its own.
+            return Ok(text + &ps.finish());
+        }
+        Ok(text)
+    } else {
+        render_parsed(graph, engine, output_format, format, options)
+    }
+}
+
+/// The device of the `-Tps` family that `format` selects.
+fn ps_format(output_format: OutputFormat) -> crate::PsFormat {
+    match output_format {
+        OutputFormat::Ps2 => crate::PsFormat::Ps2,
+        OutputFormat::Eps => crate::PsFormat::Eps,
+        _ => crate::PsFormat::Ps,
+    }
 }
 
 /// `graphviz_pure::render_dot_all_partial` on decoded text.
@@ -100,12 +132,9 @@ pub fn render_dot_all_partial(
         Err(e) => return (Vec::new(), Some(e)),
     };
     let mut ps = crate::PostscriptJob::default();
+    ps.set_format(ps_format(output_format));
     let (mut out, err) = render_partial(dot_source, globals, options, |graph, options| {
-        if output_format == OutputFormat::Ps {
-            render_parsed_ps(graph, engine, options, &mut ps)
-        } else {
-            render_parsed(graph, engine, output_format, format, options)
-        }
+        render_one(graph, engine, output_format, format, options, &mut ps)
     });
     if let Some(last) = out.last_mut() {
         last.push_str(&ps.finish());

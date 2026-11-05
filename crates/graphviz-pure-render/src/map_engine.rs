@@ -113,6 +113,8 @@ impl Engine for MapEngine<'_> {
         Features {
             flags,
             default_pad: 4.0,
+            default_margin: Point::new(0.0, 0.0),
+            default_pagesize: Point::new(0.0, 0.0),
             default_dpi: 96.0,
             knowncolors: &[],
             rgba: false,

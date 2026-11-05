@@ -11,6 +11,17 @@ use graphviz_pure_core::{
 };
 use std::fmt::Write;
 
+/// C: plugin/core/gvrender_core_ps.c — `enum { FORMAT_PS, FORMAT_PS2, FORMAT_EPS }`: which
+/// of the `ps` family this device is (`gvdevice_ps_types` registers `ps:ps`, `ps2:ps` with
+/// `device_features_ps` and `eps:ps` with `device_features_eps`).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum PsFormat {
+    #[default]
+    Ps,
+    Ps2,
+    Eps,
+}
+
 /// C: plugin/core/gvrender_core_ps.c:psgen_engine
 #[derive(Default)]
 pub(crate) struct PsEngine {
@@ -19,6 +30,18 @@ pub(crate) struct PsEngine {
     streaming: bool,
     libraries: Vec<String>,
     bounding_box: Option<[i32; 4]>,
+    format: PsFormat,
+}
+
+impl PsFormat {
+    /// The `-T` name of the format, which `output_langname` reports.
+    fn name(self) -> &'static str {
+        match self {
+            PsFormat::Ps => "ps",
+            PsFormat::Ps2 => "ps2",
+            PsFormat::Eps => "eps",
+        }
+    }
 }
 
 /// C: lib/common/psusershape.c:ps_string
@@ -78,14 +101,26 @@ fn ps_string(s: &str) -> String {
     decode_slice(&out)
 }
 impl PsEngine {
+    pub(crate) fn new(format: PsFormat) -> Self {
+        Self {
+            format,
+            ..Self::default()
+        }
+    }
     fn finish(&mut self) {
         if let Some([x, y, u, v]) = self.bounding_box.take() {
-            writeln!(
-                self.out,
-                "%%Trailer\n%%Pages: {}\n%%BoundingBox: {x} {y} {u} {v}\nend\nrestore\n%%EOF",
-                self.pages
-            )
-            .unwrap();
+            // `psgen_end_job` writes `%%Pages` and the document's `%%BoundingBox` for every
+            // format but `eps`, whose single-page header already named both.
+            if self.format == PsFormat::Eps {
+                writeln!(self.out, "%%Trailer\nend\nrestore\n%%EOF").unwrap();
+            } else {
+                writeln!(
+                    self.out,
+                    "%%Trailer\n%%Pages: {}\n%%BoundingBox: {x} {y} {u} {v}\nend\nrestore\n%%EOF",
+                    self.pages
+                )
+                .unwrap();
+            }
         }
     }
     fn point(&mut self, p: Point) {
@@ -197,14 +232,23 @@ impl PsEngine {
 }
 impl Engine for PsEngine {
     fn features(&self) -> Features {
+        // `render_features_ps` and the device features of `gvdevice_ps_types`:
+        // `device_features_ps` (ps, ps2) paginate and take layers; `device_features_eps`
+        // has no flags at all — one page, no layers — but keeps the same margins and
+        // default page size, which `init_job_margin`/`init_job_pagination` read.
+        let device_flags = match self.format {
+            PsFormat::Ps | PsFormat::Ps2 => GVDEVICE_DOES_PAGES | GVDEVICE_DOES_LAYERS,
+            PsFormat::Eps => 0,
+        };
         Features {
-            flags: GVDEVICE_DOES_PAGES
-                | GVDEVICE_DOES_LAYERS
+            flags: device_flags
                 | GVRENDER_DOES_TRANSFORM
                 | GVRENDER_DOES_MAPS
                 | GVRENDER_DOES_MAP_RECTANGLE
                 | GVRENDER_NO_WHITE_BG,
             default_pad: 4.,
+            default_margin: Point::new(36., 36.),
+            default_pagesize: Point::new(612., 792.),
             default_dpi: 72.,
             knowncolors: &[],
             rgba: false,
@@ -262,7 +306,7 @@ impl Engine for PsEngine {
         }
     }
     fn output_langname(&self) -> &str {
-        "ps"
+        self.format.name()
     }
     fn render_type(&self) -> &str {
         "ps"
@@ -271,14 +315,30 @@ impl Engine for PsEngine {
         if self.pages != 0 {
             return;
         }
+        // `psgen_begin_job`: the eps device writes the EPSF conforming header.
+        self.out.push_str("%!PS-Adobe-3.0");
+        if self.format == PsFormat::Eps {
+            self.out.push_str(" EPSF-3.0");
+        }
         self.out
-            .push_str("%!PS-Adobe-3.0\n%%Creator: graphviz version 16.1.0 (20260904.0139)\n");
+            .push_str("\n%%Creator: graphviz version 16.1.0 (20260904.0139)\n");
     }
     fn begin_graph(&mut self, j: &Job) {
         if self.pages == 0 {
             writeln!(self.out, "%%Title: {}", j.m.g.root_name()).unwrap();
-            self.out
-                .push_str("%%Pages: (atend)\n%%BoundingBox: (atend)\n%%EndComments\nsave\n");
+            // `psgen_begin_graph`: eps names its one page and its bounding box here,
+            // where the paged formats defer both to the trailer (`(atend)`).
+            if self.format == PsFormat::Eps {
+                let [x, y, u, v] = j.page_bounding_box;
+                writeln!(
+                    self.out,
+                    "%%Pages: 1\n%%BoundingBox: {x} {y} {u} {v}\n%%EndComments\nsave"
+                )
+                .unwrap();
+            } else {
+                self.out
+                    .push_str("%%Pages: (atend)\n%%BoundingBox: (atend)\n%%EndComments\nsave\n");
+            }
             if !self.libraries.iter().any(String::is_empty) {
                 self.out.push_str(include_str!("ps_prolog.ps"));
             }
@@ -326,7 +386,26 @@ impl Engine for PsEngine {
     fn begin_page(&mut self, j: &Job) {
         self.pages += 1;
         let [x, y, u, v] = j.page_bounding_box;
-        writeln!(self.out,"%%Page: {0} {0}\n%%PageBoundingBox: {x} {y} {u} {v}\n%%PageOrientation: {1}\n{4} {5} {6} beginpage\ngsave\n{x} {y} {2} {3} boxprim clip newpath",self.pages,if j.rotation!=0 {"Landscape"}else{"Portrait"},u-x,v-y,j.page_elem.0,j.page_elem.1,j.pages.0*j.pages.1).unwrap();
+        let orientation = if j.rotation != 0 {
+            "Landscape"
+        } else {
+            "Portrait"
+        };
+        if self.format == PsFormat::Ps2 {
+            writeln!(
+                self.out,
+                "%%Page: {0} {0}\n%%PageBoundingBox: {x} {y} {u} {v}\n%%PageOrientation: {orientation}\n<< /PageSize [{u} {v}] >> setpagedevice\n{1} {2} {3} beginpage\ngsave\n{x} {y} {4} {5} boxprim clip newpath",
+                self.pages, j.page_elem.0, j.page_elem.1, j.pages.0 * j.pages.1, u - x, v - y
+            )
+            .unwrap();
+        } else {
+            writeln!(
+                self.out,
+                "%%Page: {0} {0}\n%%PageBoundingBox: {x} {y} {u} {v}\n%%PageOrientation: {orientation}\n{1} {2} {3} beginpage\ngsave\n{x} {y} {4} {5} boxprim clip newpath",
+                self.pages, j.page_elem.0, j.page_elem.1, j.pages.0 * j.pages.1, u - x, v - y
+            )
+            .unwrap();
+        }
         let g = |v| graphviz_pure_core::cnum::fmt_g(v, 6);
         writeln!(
             self.out,
@@ -338,6 +417,16 @@ impl Engine for PsEngine {
             g(j.translation.y)
         )
         .unwrap();
+        // `psgen_begin_page`'s ps2 epilogue: the canvas warning and the CropBox pdfmark.
+        if self.format == PsFormat::Ps2 {
+            const PDFMAX: i32 = 14400; /* Maximum size of PDF page */
+            if u >= PDFMAX || v >= PDFMAX {
+                graphviz_pure_core::diag::agerrorf(&format!(
+                    "canvas size ({u},{v}) exceeds PDF limit ({PDFMAX})\n\t(suggest setting a bounding box size, see dot(1))\n"
+                ));
+            }
+            writeln!(self.out, "[ /CropBox [{x} {y} {u} {v}] /PAGES pdfmark").unwrap();
+        }
     }
     fn end_page(&mut self, _j: &Job) {
         writeln!(
@@ -516,6 +605,12 @@ impl PostscriptJob {
         self.engine.libraries = libraries.to_vec();
     }
 
+    /// Sets which `-Tps`-family device this job writes; a fresh job is `-Tps`
+    /// (`PsFormat::Ps`).
+    pub fn set_format(&mut self, format: PsFormat) {
+        self.engine.format = format;
+    }
+
     /// Emits the next laid-out graph, retaining the document's pages and bounding box.
     pub fn render(
         &mut self,
@@ -545,11 +640,12 @@ impl PostscriptJob {
             Ok(std::mem::take(&mut self.engine.out))
         })
     }
-    /// Emits the trailer and resets the device for another document.
+    /// Emits the trailer and resets the device for another document of the same format.
     pub fn finish(&mut self) -> String {
         self.engine.finish();
         let out = std::mem::take(&mut self.engine.out);
-        self.engine = PsEngine::default();
+        let format = self.engine.format;
+        self.engine = PsEngine::new(format);
         out
     }
 }

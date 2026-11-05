@@ -17,6 +17,42 @@ lose both the table's HSV quantization and numeric HSV precision. PostScript
 strings use C's UTF-8/Latin-1 classification, byte conversion, and escaping,
 including its lossy explicit-Latin-1 conversion of characters outside Latin-1.
 
+## The `ps2` and `eps` devices
+
+C registers one PostScript renderer and three devices (`gvdevice_ps_types`):
+`ps:ps` and `ps2:ps` share `device_features_ps`, and `eps:ps` has
+`device_features_eps`. The device's id becomes the job's `render.id`, so
+`PsEngine` carries a `PsFormat` that the `-T` name selects:
+
+- **`ps2`** pages like `ps`. Each page also gets
+  `<< /PageSize [W H] >> setpagedevice` before `beginpage` and a
+  `[ /CropBox [...] /PAGES pdfmark` after the transform. A page whose upper-right
+  corner reaches `PDFMAX` (14400 points) reports C's `canvas size ... exceeds
+  PDF limit` error and is still written. The error makes the run exit 1.
+- **`eps`** has no device flags. Without `GVDEVICE_DOES_PAGES` it writes one page, ignores
+  `page`, and warns `layers not supported in eps output` for layers. Its header names
+  `EPSF-3.0`, `%%Pages: 1` and the page's bounding box, and its trailer omits
+  `%%Pages` and `%%BoundingBox`. The margin (36 points) and default page size
+  (612 by 792) are the same as `ps`. `Features` now carries both values, which
+  `init_job_margin` and `init_job_pagination` read from the device instead of
+  deriving them from the paging flag.
+
+Because `eps` cannot page, `gvRenderJobs` ends its job after every graph, so
+a multi-graph input writes one complete EPS document per graph. The CLI
+follows this through its active-job rule: only `ps` and `ps2` keep the file
+open. The library's `render_dot_all` returns one string per graph either way.
+With `ps` and `ps2` the strings are pages of one document, and the last one
+carries the trailer. With `eps` each string is a whole document. Joined, the strings are
+C's output in both cases.
+
+The same sweep (`scripts/check-postscript.py --format eps` and `--format ps2`,
+2,613 inputs, 2026-11-05) matched **2,596** inputs for `eps` and **2,595**
+for `ps2`. Every difference falls into one of the `-Tps` classes listed below:
+the NaN sign, the four C crashes, the four heap-dependent fdp layouts, and
+the eight twopi arrow inputs whose C output varies between runs. `ps2` also differs on
+sfdp's `wild_gv16_linux_x86_neatosplines_neato1_448ced.gv`, for which C gave
+two different outputs in five runs. Under `eps` the port matched C on that input.
+
 ## Oracle and fonts
 
 Verification uses the FMA-enabled C 16.1.0 oracle described in

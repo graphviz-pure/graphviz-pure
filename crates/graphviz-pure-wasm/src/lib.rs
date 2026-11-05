@@ -457,6 +457,8 @@ mod tests {
                 "svg",
                 "svg_inline",
                 "ps",
+                "ps2",
+                "eps",
                 "cmapx",
                 "json",
                 "json0",

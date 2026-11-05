@@ -127,6 +127,81 @@ fn postscript_same_format_jobs_share_the_document() {
     assert!(!dir.join("input.gv.2.ps").exists());
 }
 
+// C: plugin/core/gvrender_core_ps.c — `gvdevice_ps_types` registers `ps2:ps` (a
+// `setpagedevice` and CropBox per page) and `eps:ps` (one page, no layers, the bounding
+// box in the header) beside `ps:ps`. Issue #748.
+#[test]
+fn postscript_flavors_match_c_bytes() {
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    for format in ["ps2", "eps"] {
+        for name in ["postscript_document", "postscript_pages", "postscript_eps"] {
+            let input = root.join("tests/render").join(format!("{name}.gv"));
+            let output = Command::new(env!("CARGO_BIN_EXE_graphviz-pure"))
+                .current_dir(&root)
+                .arg(format!("-T{format}"))
+                .arg(input)
+                .output()
+                .unwrap();
+            assert!(
+                output.status.success(),
+                "{}",
+                String::from_utf8_lossy(&output.stderr)
+            );
+            assert_eq!(
+                output.stdout,
+                std::fs::read(
+                    root.join("tests/golden/ps")
+                        .join(format!("{name}.{format}"))
+                )
+                .unwrap(),
+                "{name}.{format}"
+            );
+        }
+    }
+    // `eps` has no `GVDEVICE_DOES_LAYERS`
+    let (_, err, ok) = run(&["-Teps"], "digraph { layers=\"a:b\"; x [layer=a] }");
+    assert!(ok, "{err}");
+    assert_eq!(err, "Warning: layers not supported in eps output\n");
+    // `ps2` reports a page past `PDFMAX` and still writes it, which fails the run
+    let (out, err, ok) = run(&["-Tps2"], "digraph { a [width=210 height=3] }");
+    assert!(!ok);
+    assert_eq!(
+        err,
+        "Error: canvas size (15164,260) exceeds PDF limit (14400)\n\t(suggest setting a bounding box size, see dot(1))\n"
+    );
+    assert!(out.contains("[ /CropBox [36 36 15164 260] /PAGES pdfmark\n"));
+}
+
+// C: lib/common/emit.c:gvRenderJobs. `ps2` pages like `ps`: one document for all the
+// graphs. `eps` has no `GVDEVICE_DOES_PAGES`, so every graph ends its job and is a
+// complete document; two `-Teps` jobs write four documents for two graphs.
+#[test]
+fn postscript_flavors_document_per_graph_or_per_run() {
+    let input = "digraph first {a->b}\ndigraph second {c}\n";
+    for (args, golden) in [
+        (
+            &["-Tps2"][..],
+            &include_bytes!("../../../tests/golden/ps/postscript_graphs.ps2")[..],
+        ),
+        (
+            &["-Teps"][..],
+            include_bytes!("../../../tests/golden/ps/postscript_graphs.eps"),
+        ),
+        (
+            &["-Tps2", "-Tps2"][..],
+            include_bytes!("../../../tests/golden/ps/postscript_jobs.ps2"),
+        ),
+        (
+            &["-Teps", "-Teps"][..],
+            include_bytes!("../../../tests/golden/ps/postscript_jobs.eps"),
+        ),
+    ] {
+        let (out, err, ok) = run(args, input);
+        assert!(ok, "{err}");
+        assert_eq!(out.as_bytes(), golden, "{args:?}");
+    }
+}
+
 // Issue #158: one job per `-T`, each through `emit_graph`.
 #[test]
 fn every_format_flag_renders_its_own_job() {
@@ -383,8 +458,8 @@ fn issue298_verbose_reports_the_plugins_it_uses() {
     let status = "Demand loading of plugins is disabled.\n    render\t:  cairo dot dot_json json json0 map ps svg svg_inline xdot xdot_json\n    \
                   layout\t:  circo dot fdp neato nop nop1 nop2 osage patchwork sfdp twopi\n    \
                   textlayout\t: \n    \
-                  device\t:  canon cmapx cmapx_np dot dot_json gv jpe jpeg jpg json json0 plain \
-                  plain-ext png ps svg svg_inline xdot xdot1.2 xdot1.4 xdot_json\n    \
+                  device\t:  canon cmapx cmapx_np dot dot_json eps gv jpe jpeg jpg json json0 plain \
+                  plain-ext png ps ps2 svg svg_inline xdot xdot1.2 xdot1.4 xdot_json\n    \
                   loadimage\t:  eps gif jpe jpeg jpg png ps svg\n";
     #[cfg(feature = "pdf")]
     let status = status.replace("json0 plain", "json0 pdf plain");

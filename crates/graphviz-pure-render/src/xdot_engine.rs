@@ -274,6 +274,8 @@ impl Engine for XdotEngine {
                 | GVRENDER_DOES_TARGETS
                 | GVRENDER_DOES_TOOLTIPS,
             default_pad: 0.0,
+            default_margin: Point::new(0.0, 0.0),
+            default_pagesize: Point::new(0.0, 0.0),
             knowncolors: &[],
             rgba: true,
             default_dpi: 72.0,
