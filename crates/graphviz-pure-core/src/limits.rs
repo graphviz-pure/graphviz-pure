@@ -200,10 +200,13 @@ impl Limits {
 
     /// The largest single buffer whose size the input chooses, in bytes: polygon vertices
     /// (`peripheries`, `sides`), neato's dense `n × n` models (Kamada-Kawai, stress
-    /// majorization, SGD), the node and edge arenas of dot's virtual-node chains, and the
-    /// raster pixmap. Checked before the buffer is allocated; past it, the call stops with
-    /// the limit's error. Other buffers are not covered: [`Self::heap_limit`] and an OS limit
-    /// bound them.
+    /// majorization, SGD), dot's node and edge arenas, and the raster pixmap. Checked before
+    /// the buffer is allocated; past it, the call stops with the limit's error.
+    ///
+    /// dot's arenas are checked before the two phases that grow them in bulk (a virtual-node
+    /// chain, position's auxiliary graph), with the doubling `Vec` does. Any other growth past
+    /// the limit stops the call after that one reallocation. Other buffers are not covered:
+    /// [`Self::heap_limit`] and an OS limit bound them.
     ///
     /// The port's own vertex budget comes first: `peripheries=2147483647` asks for more than
     /// it allows, so the call fails with C's out-of-memory message, an error of kind
@@ -447,7 +450,7 @@ fn evaluate() -> bool {
     // from inside `reached`. The nested evaluation reads nothing and reports the state as
     // it is, so the closure cannot recurse without end.
     if EVALUATING.get() {
-        return STATE.with_borrow(|s| s.trip.is_some());
+        return STATE.with_borrow(State::tripped);
     }
     let Some((limits, steps, cap)) = STATE.with_borrow_mut(|s| {
         if s.tripped() {
@@ -619,6 +622,13 @@ pub fn check_edges(count: usize) -> Result<(), GraphvizError> {
         ));
     }
     Ok(())
+}
+
+/// Whether a [`Limits::max_allocation`] is in force, so a caller can skip estimating the size
+/// of a buffer when none is.
+#[must_use]
+pub fn allocation_limited() -> bool {
+    MAX_ALLOCATION.get() != u64::MAX
 }
 
 /// [`Limits::max_allocation`] for a buffer of `bytes`, before it is allocated. Past the
@@ -851,6 +861,25 @@ mod tests {
             .run(|| ticks_until_stop(10_000));
         // 500 + 1,024 + 500 + 977 = 3,001.
         assert_eq!(stop, Some(2001));
+    }
+
+    #[test]
+    fn an_allocation_stop_inside_a_closure_stops_its_ticks() {
+        // A library call inside the closure reaches the allocation limit; its later ticks
+        // report the stop, as they would outside the closure.
+        let after = Arc::new(AtomicUsize::new(0));
+        let seen = Arc::clone(&after);
+        Limits::new()
+            .max_allocation(10)
+            .cancel_when(move || {
+                if check_allocation(11).is_err() && tick() {
+                    seen.fetch_add(1, Ordering::Relaxed);
+                }
+                let _ = settle(Ok::<_, GraphvizError>(()));
+                false
+            })
+            .run(|| {});
+        assert_eq!(after.load(Ordering::Relaxed), 1);
     }
 
     #[test]

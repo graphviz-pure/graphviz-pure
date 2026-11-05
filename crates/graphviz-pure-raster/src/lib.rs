@@ -300,9 +300,20 @@ fn parse_svg(svg: &str) -> Result<usvg::Tree, GraphvizError> {
 /// Available only with `pdf` (enabled by the CLI). Layout matches the reference C
 /// layout; PDF bytes do not match cairo. Text uses the bundled fonts as outlines,
 /// images are omitted, and no system fonts, timestamps or document IDs are used.
+///
+/// Inside a [`Limits::run`], the run's time, work, heap and cancel limits apply: they are
+/// read when the call starts, before the conversion and after it.
 #[cfg(feature = "pdf")]
 pub fn render_pdf(svg: &str) -> Result<Vec<u8>, GraphvizError> {
+    graphviz_pure_core::limits::check()?;
+    graphviz_pure_core::limits::settle(render_pdf_inner(svg))
+}
+
+#[cfg(feature = "pdf")]
+fn render_pdf_inner(svg: &str) -> Result<Vec<u8>, GraphvizError> {
     let tree = parse_svg(svg)?;
+    // Not in C: a limit reached while the SVG was read stops before the conversion.
+    graphviz_pure_core::limits::check()?;
     // svg2pdf 0.13 uses usvg 0.45; the raster stack uses 0.48. Serialize
     // the normalized paths so font shaping and portable math stay in our existing
     // stack, rather than loading a second font database or embedding font subsets.
@@ -327,6 +338,9 @@ pub fn render_pdf(svg: &str) -> Result<Vec<u8>, GraphvizError> {
         svg2pdf::PageOptions { dpi: 96.0 },
     )
     .map_err(|e| GraphvizError::render(format!("converting the SVG to PDF: {e}")))
+    // Not in C: the conversion is one call that cannot stop part way; a limit reached
+    // during it is honoured once it returns.
+    .and_then(|pdf| graphviz_pure_core::limits::check().map(|()| pdf))
 }
 
 #[cfg(test)]
@@ -370,6 +384,34 @@ mod tests {
             .unwrap_err();
         assert_eq!(err.kind(), GraphvizErrorKind::Cancelled);
         assert_eq!(polls.load(std::sync::atomic::Ordering::Relaxed), 4);
+    }
+
+    #[cfg(feature = "pdf")]
+    #[test]
+    fn render_pdf_honours_the_limits() {
+        let token = CancelToken::new();
+        token.cancel();
+        let err = Limits::new()
+            .cancel_token(token)
+            .run(|| render_pdf(SVG))
+            .unwrap_err();
+        assert_eq!(err.kind(), GraphvizErrorKind::Cancelled);
+        // Polled when the run starts, when the call starts, before the conversion and after
+        // it; the fourth poll cancels.
+        let polls = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let seen = std::sync::Arc::clone(&polls);
+        let err = Limits::new()
+            .cancel_when(move || seen.fetch_add(1, std::sync::atomic::Ordering::Relaxed) >= 3)
+            .run(|| render_pdf(SVG))
+            .unwrap_err();
+        assert_eq!(err.kind(), GraphvizErrorKind::Cancelled);
+        assert_eq!(polls.load(std::sync::atomic::Ordering::Relaxed), 4);
+        // Within generous limits, the same bytes as without.
+        let pdf = Limits::new()
+            .max_steps(1 << 20)
+            .run(|| render_pdf(SVG))
+            .unwrap();
+        assert_eq!(pdf, render_pdf(SVG).unwrap());
     }
 
     #[test]

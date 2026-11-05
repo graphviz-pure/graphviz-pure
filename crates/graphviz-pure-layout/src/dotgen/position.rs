@@ -110,8 +110,15 @@ impl Dot<'_> {
             self.set_ycoords(g)?;
         }
         // Not in C: the auxiliary graph and its network simplex start with the limits of
-        // the caller's `Limits::run`.
+        // the caller's `Limits::run`, and the arenas it grows are checked against
+        // `Limits::max_allocation`: a slack node and two edges per edge
+        // (`make_edge_pairs`), a separation edge per node (`make_lr_constraints`), and two
+        // nodes and a few edges per cluster (`pos_clusters`), plus a slack node per rank
+        // (`connect_graph`).
         super::check_limits()?;
+        if graphviz_pure_core::limits::allocation_limited() {
+            self.check_aux_graph_growth(g)?;
+        }
         self.create_aux_edges(g);
         if std::env::var_os("GVDUMP").is_some() {
             let nl = self.nlist_nodes(g);
@@ -150,6 +157,37 @@ impl Dot<'_> {
         self.set_aspect(g);
         self.remove_aux_edges(g);
         Ok(())
+    }
+
+    /// Not in C: [`Self::check_arena_growth`] for the auxiliary graph `create_aux_edges` adds.
+    fn check_aux_graph_growth(&self, g: G) -> std::result::Result<(), String> {
+        let Some(graph) = self.graphs.get(g) else {
+            return Ok(());
+        };
+        let (mut nodes, mut edges) = (0usize, 0usize);
+        let mut n = graph.nlist;
+        while let Some(node) = n.and_then(|x| self.nodes.get(x)) {
+            nodes = nodes.saturating_add(1);
+            edges = edges.saturating_add(node.out.len());
+            n = node.next;
+        }
+        let ranks = usize::try_from(
+            i64::from(graph.maxrank)
+                .saturating_sub(i64::from(graph.minrank))
+                .saturating_add(1),
+        )
+        .unwrap_or(0);
+        let graphs = self.graphs.len();
+        self.check_arena_growth(
+            edges
+                .saturating_add(ranks)
+                .saturating_add(graphs.saturating_mul(2)),
+            edges
+                .saturating_mul(2)
+                .saturating_add(nodes)
+                .saturating_add(ranks.saturating_mul(2))
+                .saturating_add(graphs.saturating_mul(8)),
+        )
     }
 
     fn nsiter2(&self, g: G) -> i32 {

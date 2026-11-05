@@ -453,3 +453,27 @@ fn each_periphery_counts_as_work() {
         .unwrap_err();
     assert_eq!(err.limit(), Some(Limit::Steps));
 }
+
+#[test]
+fn the_allocation_limit_bounds_dot_s_node_arena() {
+    // 79,000 virtual nodes, then a slack node per edge in position's auxiliary graph: the
+    // arena of 808-byte nodes would double to 262,144 slots (202 MiB).
+    let err = Limits::new()
+        .max_allocation(64 << 20)
+        .run(|| graphviz_pure::render_dot("digraph { a -> b [minlen=79000] }", "dot", "svg"))
+        .unwrap_err();
+    assert_eq!(err.limit(), Some(Limit::Allocation));
+    // 128 MiB: the chain's own growth (131,072 slots, 101 MiB) fits; the auxiliary graph's
+    // (262,144 slots) does not, and position checks it before it builds the graph.
+    let err = Limits::new()
+        .max_allocation(128 << 20)
+        .run(|| graphviz_pure::render_dot("digraph { a -> b [minlen=79000] }", "dot", "svg"))
+        .unwrap_err();
+    assert_eq!(err.limit(), Some(Limit::Allocation));
+    // A limit above the arena's growth lets it through, with the unlimited bytes.
+    let unlimited = graphviz_pure::render_dot("digraph { a -> b [minlen=79000] }", "dot", "svg");
+    let limited = Limits::new()
+        .max_allocation(256 << 20)
+        .run(|| graphviz_pure::render_dot("digraph { a -> b [minlen=79000] }", "dot", "svg"));
+    assert_eq!(limited.unwrap().output(), unlimited.unwrap().output());
+}

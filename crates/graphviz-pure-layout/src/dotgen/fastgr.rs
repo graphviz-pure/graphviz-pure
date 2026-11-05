@@ -16,6 +16,21 @@ pub fn short(v: i32) -> i32 {
     v as i16 as i32
 }
 
+/// Not in C: the bytes the last reallocation takes when `extra` elements are pushed one at a
+/// time onto an arena of `len` in `capacity`. `Vec` doubles its capacity, from at least 4, so
+/// the arena ends at `capacity · 2^k`. 0 when they fit.
+pub(super) fn arena_growth_bytes(len: usize, capacity: usize, extra: usize, size: usize) -> u64 {
+    let need = len.saturating_add(extra);
+    if need <= capacity {
+        return 0;
+    }
+    let mut cap = capacity.max(4);
+    while cap < need {
+        cap = cap.saturating_mul(2);
+    }
+    (cap as u64).saturating_mul(size as u64)
+}
+
 impl Dot<'_> {
     fn ffe(&self, u: N, ul: &[E], v: N, vl: &[E]) -> Option<E> {
         if !ul.is_empty() && !vl.is_empty() {
@@ -65,6 +80,12 @@ impl Dot<'_> {
     /// Allocates a bare edge record (`make_aux_edge`/`new_virtual_edge` storage).
     pub fn alloc_edge(&mut self, u: N, v: N) -> E {
         let e = self.edges.len();
+        // Not in C: a reallocation past the caller's `Limits::max_allocation` stops the call
+        // after it ([`Self::check_arena_growth`] checks the bulk growers before they start).
+        if e == self.edges.capacity() {
+            let bytes = arena_growth_bytes(e, e, 1, size_of::<EdgeInfo>());
+            let _ = graphviz_pure_core::limits::check_allocation(bytes);
+        }
         self.edges.push(EdgeInfo {
             tail: u,
             head: v,
@@ -138,6 +159,11 @@ impl Dot<'_> {
 
     pub fn virtual_node(&mut self, g: G) -> N {
         let n = self.nodes.len();
+        // Not in C: as in `alloc_edge`.
+        if n == self.nodes.capacity() {
+            let bytes = arena_growth_bytes(n, n, 1, size_of::<NodeInfo>());
+            let _ = graphviz_pure_core::limits::check_allocation(bytes);
+        }
         self.nodes.push(NodeInfo {
             name: "virtual".to_string(),
             node_type: VIRTUAL,
@@ -149,6 +175,34 @@ impl Dot<'_> {
         });
         self.fast_node(g, n);
         n
+    }
+
+    /// Not in C: checks the reallocations of the node and edge arenas that `nodes` and `edges`
+    /// more elements cause against the caller's `Limits::max_allocation`, before a phase that
+    /// adds them in bulk starts. Past it the layout stops.
+    pub(super) fn check_arena_growth(
+        &self,
+        nodes: usize,
+        edges: usize,
+    ) -> std::result::Result<(), String> {
+        let n = arena_growth_bytes(
+            self.nodes.len(),
+            self.nodes.capacity(),
+            nodes,
+            size_of::<NodeInfo>(),
+        );
+        let e = arena_growth_bytes(
+            self.edges.len(),
+            self.edges.capacity(),
+            edges,
+            size_of::<EdgeInfo>(),
+        );
+        if graphviz_pure_core::limits::check_allocation(n).is_err()
+            || graphviz_pure_core::limits::check_allocation(e).is_err()
+        {
+            return Err(graphviz_pure_core::limits::STOPPED.to_string());
+        }
+        Ok(())
     }
 
     pub fn flat_edge(&mut self, g: G, e: E) {

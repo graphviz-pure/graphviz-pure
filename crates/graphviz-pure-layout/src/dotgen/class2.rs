@@ -6,17 +6,6 @@ use super::Dot;
 use super::fastgr::short;
 use super::types::*;
 
-/// Not in C: the bytes an arena of `len` elements in `capacity` reallocates to when `extra`
-/// more are pushed (it at least doubles), or 0 when they fit.
-fn grown_bytes(len: usize, capacity: usize, extra: usize, size: usize) -> u64 {
-    let need = len.saturating_add(extra);
-    if need <= capacity {
-        return 0;
-    }
-    let to = need.max(capacity.saturating_mul(2)) as u64;
-    to.saturating_mul(size as u64)
-}
-
 impl Dot<'_> {
     fn label_vnode(&mut self, g: G, orig: E) -> N {
         let l = self.edges[orig].label.unwrap();
@@ -80,23 +69,7 @@ impl Dot<'_> {
                 .saturating_add(1),
         )
         .unwrap_or(0);
-        let nodes = grown_bytes(
-            self.nodes.len(),
-            self.nodes.capacity(),
-            links,
-            size_of::<NodeInfo>(),
-        );
-        let edges = grown_bytes(
-            self.edges.len(),
-            self.edges.capacity(),
-            links,
-            size_of::<EdgeInfo>(),
-        );
-        if graphviz_pure_core::limits::check_allocation(nodes).is_err()
-            || graphviz_pure_core::limits::check_allocation(edges).is_err()
-        {
-            return Err(graphviz_pure_core::limits::STOPPED.to_string());
-        }
+        self.check_arena_growth(links, links)?;
         while r <= to_rank {
             // Not in C: a limit of the caller's `Limits::run` stops the chain (a large
             // `minlen` asks for many virtual nodes).
