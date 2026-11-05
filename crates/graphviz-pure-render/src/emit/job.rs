@@ -233,6 +233,10 @@ impl ObjState {
 pub(crate) struct Features {
     pub flags: u32,
     pub default_pad: f64,
+    /// `gvdevice_features_t.default_margin` (`init_job_margin`).
+    pub default_margin: Point,
+    /// `gvdevice_features_t.default_pagesize` (`init_job_pagination`'s unpaged branch).
+    pub default_pagesize: Point,
     pub default_dpi: f64,
     /// Sorted color names the renderer passes through as strings.
     pub knowncolors: &'static [&'static str],
@@ -405,14 +409,7 @@ impl<'a> Job<'a> {
             Point::new(features.default_pad, features.default_pad),
             |(x, y)| Point::new(x, y),
         );
-        let margin = scan2("margin").map_or(
-            if features.flags & GVDEVICE_DOES_PAGES != 0 {
-                Point::new(36.0, 36.0)
-            } else {
-                Point::default()
-            },
-            |(x, y)| Point::new(x, y),
-        );
+        let margin = scan2("margin").map_or(features.default_margin, |(x, y)| Point::new(x, y));
         let dpi = {
             let d = graphviz_pure_core::cnum::drawing_dpi(attrs.0);
             if d > 0.0 { d } else { features.default_dpi }
@@ -509,8 +506,8 @@ impl<'a> Job<'a> {
             image_size.y = image_size.y.min(page_size.y);
         } else {
             page_size = Point::new(
-                ((if paged { 612.0 } else { 0.0 }) - 2.0 * margin.x).max(0.0),
-                ((if paged { 792.0 } else { 0.0 }) - 2.0 * margin.y).max(0.0),
+                (features.default_pagesize.x - 2.0 * margin.x).max(0.0),
+                (features.default_pagesize.y - 2.0 * margin.y).max(0.0),
             );
             page_size.x = page_size.x.max(image_size.x);
             page_size.y = page_size.y.max(image_size.y);

@@ -743,10 +743,11 @@ impl Run<'_> {
                 graphviz_pure_core::diag::start_timer();
                 render_jobs_finish(graph, 4323);
             }
-            // A paging device keeps its file and document across consecutive graphs.
-            // Other devices finalize the output opened before them.
+            // A paging device (`GVDEVICE_DOES_PAGES`: the `ps` and `ps2` devices, not
+            // `eps`) keeps its file and document across consecutive graphs of the same
+            // format. Other devices finalize the output opened before them.
             let sink_job = if let Some(active) = self.active.take() {
-                let keep = langname.split(':').next() == Some("ps")
+                let keep = matches!(langname.split(':').next(), Some("ps") | Some("ps2"))
                     && self.opts.jobs[active].langname.as_deref() == Some(langname);
                 if keep {
                     active
@@ -781,7 +782,15 @@ impl Run<'_> {
                 });
             }
             self.active = Some(sink_job);
-            let rendered = if langname.split(':').next() == Some("ps") {
+            // The `ps` family shares one writer; the `-T` name picks its device.
+            let ps_format = match langname.split(':').next() {
+                Some("ps") => Some(graphviz_pure_render::PsFormat::Ps),
+                Some("ps2") => Some(graphviz_pure_render::PsFormat::Ps2),
+                Some("eps") => Some(graphviz_pure_render::PsFormat::Eps),
+                _ => None,
+            };
+            let rendered = if let Some(format) = ps_format {
+                self.opts.jobs[sink_job].ps.set_format(format);
                 self.opts.jobs[sink_job]
                     .ps
                     .set_libraries(&self.opts.libraries);

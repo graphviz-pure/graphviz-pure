@@ -13,7 +13,7 @@ pub mod json;
 mod map_engine;
 pub mod plugins;
 mod ps_engine;
-pub use ps_engine::PostscriptJob;
+pub use ps_engine::{PostscriptJob, PsFormat};
 mod svg_engine;
 mod xdot_engine;
 
@@ -68,6 +68,8 @@ pub enum OutputFormat {
     Svg,
     SvgInline,
     Ps,
+    Ps2,
+    Eps,
     Cmapx,
     Json,
     Json0,
@@ -84,6 +86,8 @@ impl OutputFormat {
         ("svg", Self::Svg),
         ("svg_inline", Self::SvgInline),
         ("ps", Self::Ps),
+        ("ps2", Self::Ps2),
+        ("eps", Self::Eps),
         ("cmapx", Self::Cmapx),
         ("json", Self::Json),
         ("json0", Self::Json0),
@@ -121,6 +125,8 @@ pub fn render_graph(graph: &Graph, format: OutputFormat) -> Result<String> {
         OutputFormat::Svg => "svg",
         OutputFormat::SvgInline => "svg_inline",
         OutputFormat::Ps => "ps",
+        OutputFormat::Ps2 => "ps2",
+        OutputFormat::Eps => "eps",
         OutputFormat::Cmapx => "cmapx",
         OutputFormat::Json => "json",
         OutputFormat::Json0 => "json0",
@@ -295,6 +301,8 @@ impl emit::job::Engine for NullEngine<'_> {
 const DOT_FEATURES: emit::job::Features = emit::job::Features {
     flags: emit::job::GVRENDER_DOES_TRANSFORM,
     default_pad: 0.0,
+    default_margin: graphviz_pure_core::Point::new(0.0, 0.0),
+    default_pagesize: graphviz_pure_core::Point::new(0.0, 0.0),
     knowncolors: &[],
     rgba: false,
     default_dpi: 72.0,
@@ -307,6 +315,8 @@ const JSON_FEATURES: emit::job::Features = emit::job::Features {
         | emit::job::GVRENDER_DOES_TARGETS
         | emit::job::GVRENDER_DOES_TOOLTIPS,
     default_pad: 0.0,
+    default_margin: graphviz_pure_core::Point::new(0.0, 0.0),
+    default_pagesize: graphviz_pure_core::Point::new(0.0, 0.0),
     knowncolors: &[],
     rgba: false,
     default_dpi: 72.0,
@@ -479,7 +489,9 @@ impl<'g> GraphJobs<'g> {
                 OutputFormat::Svg
                 | OutputFormat::SvgInline
                 | OutputFormat::Cmapx
-                | OutputFormat::Ps,
+                | OutputFormat::Ps
+                | OutputFormat::Ps2
+                | OutputFormat::Eps,
                 Some(v),
             ) => v,
             _ => graph,
@@ -489,10 +501,17 @@ impl<'g> GraphJobs<'g> {
         // output, which the writers below write at the end
         let mut pre = String::new();
         let text = match format {
-            OutputFormat::Ps => {
+            OutputFormat::Ps | OutputFormat::Ps2 | OutputFormat::Eps => {
+                // `-Tps`, `-Tps2` and `-Teps` share one writer (`gvrender_ps_types`); the
+                // format selects the device (`gvdevice_ps_types`) the job runs as.
+                let engine = ps_engine::PsEngine::new(match format {
+                    OutputFormat::Ps2 => ps_engine::PsFormat::Ps2,
+                    OutputFormat::Eps => ps_engine::PsFormat::Eps,
+                    _ => ps_engine::PsFormat::Ps,
+                });
                 emit::run_job(
                     &m,
-                    ps_engine::PsEngine::default(),
+                    engine,
                     emit::RunJob {
                         output_file: true,
                         ..opts

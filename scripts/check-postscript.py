@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Compare -Tps bytes across the engine corpora (no comment normalization).
+"""Compare -Tps (or -Tps2, -Teps) bytes across the engine corpora (no comment normalization).
 
 Set GVBINDIR and LD_PRELOAD for the C oracle; the port runs without either.
 Run at nice 15, with --out on a scratch filesystem. Only mismatches are saved.
@@ -18,6 +18,7 @@ def main():
     parser.add_argument("--port", required=True)
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--timeout", type=float, default=180)
+    parser.add_argument("--format", choices=["ps", "ps2", "eps"], default="ps")
     parser.add_argument("--engine", choices=["dot", "neato", "fdp", "sfdp", "circo", "twopi", "osage", "patchwork"])
     args = parser.parse_args()
     args.out.mkdir(parents=True, exist_ok=True)
@@ -39,15 +40,15 @@ def main():
 
     def compare(item):
         engine, path = item
-        argv = ["-K" + engine, "-Tps", str(path)]
+        argv = ["-K" + engine, "-T" + args.format, str(path)]
         c_status, expected = run(args.oracle, argv, os.environ)
         p_status, actual = run(args.port, argv, port_env)
         same = isinstance(c_status, int) and c_status >= 0 and c_status == p_status and expected == actual
         row = dict(engine=engine, file=str(path), c=c_status, port=p_status, same=same)
         if not same:
             tag = engine + "__" + path.stem
-            (args.out / (tag + ".c.ps")).write_bytes(expected)
-            (args.out / (tag + ".rs.ps")).write_bytes(actual)
+            (args.out / (tag + ".c." + args.format)).write_bytes(expected)
+            (args.out / (tag + ".rs." + args.format)).write_bytes(actual)
             if c_status == 0:
                 versions = {expected}
                 for _ in range(4):

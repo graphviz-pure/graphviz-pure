@@ -94,7 +94,7 @@ text is `message`, not one of those entries. The plain functions and the
 
 `supportedEngines()` and `supportedFormats()` return arrays of strings.
 `supportedFormats()` lists every format name `render` accepts, including aliases:
-`svg`, `svg_inline`, `ps`, `cmapx`, `json`, `json0`, `dot`, `xdot`, `canon`, `plain`,
+`svg`, `svg_inline`, `ps`, `ps2`, `eps`, `cmapx`, `json`, `json0`, `dot`, `xdot`, `canon`, `plain`,
 `cmapx_np`, `gv`, `xdot1.2`, `xdot1.4`, `dot_json`, `xdot_json` and `plain-ext`.
 Raster formats (`png`, `jpg`, `jpeg`) are not available in this package.
 

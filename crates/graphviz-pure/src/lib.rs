@@ -79,6 +79,10 @@ pub fn render_dot(dot_source: &str, engine: &str, format: &str) -> Result<Render
 }
 
 /// Renders every graph in `dot_source`, applying `globals` (`-G`/`-N`/`-E`) before each graph body.
+///
+/// The strings, concatenated, are what `dot` writes for the whole input. With `ps` and
+/// `ps2` the graphs are pages of one PostScript document, whose trailer ends the last
+/// string; with `eps` each string is a complete EPS document.
 pub fn render_dot_all(
     dot_source: &str,
     engine: &str,
@@ -286,6 +290,40 @@ fn rewrite(diagnostics: Vec<Diagnostic>) -> Vec<Diagnostic> {
 
 #[cfg(test)]
 mod tests {
+
+    // C: lib/common/emit.c:gvRenderJobs. With `ps` and `ps2` the graphs are pages of one
+    // document, whose trailer ends the last string; `eps` has no `GVDEVICE_DOES_PAGES`, so
+    // every string is a complete document. Concatenated, they are C's bytes (issue #748).
+    #[test]
+    fn render_dot_all_postscript_documents() {
+        let src = "digraph first {a->b}\ndigraph second {c}\n";
+        for (format, golden, documents) in [
+            (
+                "ps",
+                &include_bytes!("../../../tests/golden/ps/postscript_graphs.ps")[..],
+                1,
+            ),
+            (
+                "ps2",
+                include_bytes!("../../../tests/golden/ps/postscript_graphs.ps2"),
+                1,
+            ),
+            (
+                "eps",
+                include_bytes!("../../../tests/golden/ps/postscript_graphs.eps"),
+                2,
+            ),
+        ] {
+            let out = render_dot_all(src, "dot", format, &GlobalAttrs::default())
+                .unwrap()
+                .into_output();
+            assert_eq!(out.len(), 2, "{format}");
+            let ends = out.iter().filter(|s| s.ends_with("%%EOF\n")).count();
+            assert_eq!(ends, documents, "{format}");
+            assert!(out[1].ends_with("%%EOF\n"), "{format}");
+            assert_eq!(out.concat().as_bytes(), golden, "{format}");
+        }
+    }
 
     #[test]
     fn repeated_renders_are_identical() {
