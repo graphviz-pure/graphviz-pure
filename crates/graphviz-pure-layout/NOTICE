@@ -23,6 +23,11 @@ crates/graphviz-pure-core/src/math/portable/pow/
     in LICENSES/MIT-CORE-MATH.txt (and in the release archives' LICENSES/
     directory).
 
+crates/graphviz-pure-core/src/math/portable/cbrt.rs
+    CORE-MATH's binary64 cbrt (Copyright (c) 2021-2022 Alexei Sibidanov), as
+    the libm crate ports it to Rust, MIT licence. The licence text is in
+    LICENSES/MIT-CORE-MATH.txt.
+
 crates/graphviz-pure-geom/src/expat.rs
     A Rust port of the parts of the expat XML parser 2.7.4 that HTML-like labels
     use: its tokenizer, name tables and parsing (Copyright (c) 1998-2000 Thai

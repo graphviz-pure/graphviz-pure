@@ -370,3 +370,83 @@ fn fma_matches_reference() {
 fn fma_matches_reference_many() {
     check_fma(1 << 24);
 }
+
+/// Compares the copied `cbrt` (`portable/cbrt.rs`) with `libm::cbrt` on random bit patterns (every class),
+/// subnormals, exact cubes and their neighbours (the exact-result path), every exponent, and
+/// the two inputs the original special-cases.
+fn check_cbrt(random: u64) {
+    let mut r = Rng(0x0cb2_7a5e_d00d_f00d);
+    let (mut n, mut bad) = (0u64, Vec::new());
+    let mut check = |x: f64| {
+        n += 1;
+        if !same(portable::cbrt::cbrt(x), libm::cbrt(x)) && bad.len() < 5 {
+            bad.push(x);
+        }
+    };
+    for x in [
+        0.0,
+        -0.0,
+        f64::INFINITY,
+        f64::NEG_INFINITY,
+        f64::NAN,
+        -f64::NAN,
+        f64::MIN_POSITIVE,
+        -f64::MIN_POSITIVE,
+        5e-324,
+        -5e-324,
+        f64::MAX,
+        f64::MIN,
+        1.0,
+        -1.0,
+        8.0,
+        -27.0,
+        f64::from_bits(0xf7f7_92b2_8f60_0000),
+    ] {
+        check(x);
+    }
+    for special in [0x4009_b782_23aa_307c_u64, 0x401a_202b_fc89_ddff] {
+        for k in -300i32..=300 {
+            let v = f64::from_bits(special) * 8f64.powi(k);
+            for x in [v, -v, v.next_up(), v.next_down()] {
+                check(x);
+            }
+        }
+    }
+    for _ in 0..random {
+        check(f64::from_bits(r.next()));
+        check(f64::from_bits((r.next() >> 12) | (r.next() & (1 << 63))));
+        // At most 17 significant bits, so the cube is exact.
+        let y = ((r.next() >> 47) | 1) as f64 * 2f64.powi(r.below(600) as i32 - 300);
+        let c = y * y * y;
+        for x in [c, -c, c.next_up(), c.next_down()] {
+            check(x);
+        }
+    }
+    for e in 0..2047u64 {
+        for _ in 0..16 {
+            let m = if r.next() & 1 == 0 {
+                r.sparse_mant()
+            } else {
+                r.next() >> 12
+            };
+            check(f64::from_bits((r.next() & (1 << 63)) | (e << 52) | m));
+        }
+    }
+    assert!(
+        bad.is_empty(),
+        "cbrt: inputs that differ from libm (of {n}): {bad:?}"
+    );
+}
+
+#[test]
+fn cbrt_matches_libm() {
+    check_cbrt(100_000);
+}
+
+/// Long differential run (6 × 10^8 inputs):
+/// `cargo test --release -p graphviz-pure-core -- --ignored cbrt_matches_libm_many`.
+#[test]
+#[ignore = "slow; run in release"]
+fn cbrt_matches_libm_many() {
+    check_cbrt(100_000_000);
+}

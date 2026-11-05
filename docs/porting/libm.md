@@ -158,7 +158,16 @@ writes `hypot(a, b)`. The rewrite was mechanical, done with a `syn`-based rewrit
   - `pow`: a Rust port of CORE-MATH's correctly rounded `pow` (`portable/pow/`, see below).
     Apple's `pow` is within 0.511 ulp and differs from the correctly rounded result only near
     halfway cases, so a correctly rounded `pow` agrees with it far more often than musl's.
-  - everything else, `cbrt` included: the `libm` crate 0.2.16. This is the same musl-derived
+  - `cbrt` where `fma` is a target feature (the x86-64-v3 builds): the `libm` crate's port of
+    CORE-MATH's correctly rounded `cbrt`, copied into `portable/cbrt.rs` so its fused
+    multiply-adds are `math::fma`. The crate reaches its `fma`
+    through a pointer it picks at run time from the CPU features, an indirect call that spills
+    the live vector registers, twice on the common path; `math::fma` is the `vfmadd` instruction on
+    x86-64-v3. Every fma is correctly rounded, so the bits are the crate's: `math::tests`
+    compares the two on random, subnormal, special and exact-cube inputs, on every target.
+    Without the target feature, `math::fma` is the emulated fma and the copy is slower than
+    the crate (3% more instructions on dot's routing-heavy graphs), so `cbrt` stays the crate's.
+  - everything else: the `libm` crate 0.2.16. This is the same musl-derived
     code compiler-builtins uses for wasm32. Linux gets the same bits as wasm (glibc's
     `pow`/`exp` pick FMA or non-FMA paths by CPU), and `Cargo.lock` pins the results rather
     than the toolchain.
@@ -509,12 +518,13 @@ Everything under `crates/graphviz-pure-core/src/math/`:
 |---|---|---|---|
 | `mod.rs` | the `math::*` entry points | written for this port | project licence |
 | `portable/mod.rs` | re-exports of the `libm` crate | written for this port | project licence |
+| `portable/cbrt.rs` | correctly rounded `cbrt`, `math::cbrt` where `fma` is a target feature | the `libm` crate 0.2.16's `src/math/cbrt.rs` (Trevor Gross's port of CORE-MATH `src/binary64/cbrt/cbrt.c`, Copyright (c) 2021-2022 Alexei Sibidanov), cut to rounding to nearest, with `math::fma` for the crate's dispatched `fma`; licence text kept in the file | MIT |
 | `portable/fma.rs` | correctly rounded emulated `fma` (Boldo–Melquiond fast path + `libm::fma` fallback) | written for this port from the published algorithm (IEEE TC 57(4):462–471, 2008) | project licence |
 | `portable/pow/` | correctly rounded `pow` | Rust port of CORE-MATH `src/binary64/pow/` (Tom Hubrecht, Paul Zimmermann; Copyright (c) 2022-2025 CERN and Inria), tables converted mechanically; licence text kept in `pow/mod.rs` | MIT |
 | `portable/hypot.rs` | Apple-equivalent `hypot` | an original formula identified by black-box comparison with the system libm; no code copied | project licence |
 | `trace.rs` | `math-trace` argument logging | written for this port | project licence |
-| `tests.rs`, `portable/pow/tests.rs` | portable `fma` vs hardware/`libm::fma`; portable `hypot` vs system libm; `pow` regression values from the C | written for this port | project licence |
-| `libm` crate 0.2.16 (dependency) | `atan2`, `sin`, `cos`, `tan`, `asin`, `acos`, `exp`, `log`, `log2`, `cbrt`, fallback `fma` | rust-lang/compiler-builtins: musl/fdlibm ports; `cbrt` is CORE-MATH's (Alexei Sibidanov) | MIT |
+| `tests.rs`, `portable/pow/tests.rs` | portable `fma` vs hardware/`libm::fma`; portable `cbrt` vs `libm::cbrt`; portable `hypot` vs system libm; `pow` regression values from the C | written for this port | project licence |
+| `libm` crate 0.2.16 (dependency) | `atan2`, `sin`, `cos`, `tan`, `asin`, `acos`, `exp`, `log`, `log2`, fallback `fma`, and the reference `cbrt` for the tests | rust-lang/compiler-builtins: musl/fdlibm ports; `cbrt` is CORE-MATH's (Alexei Sibidanov) | MIT |
 
 No Apple source is shipped. An earlier version ported Apple Libm's `Source/ARM/cbrt.c`, which
 has no licence header and comes from an APSL release; it was replaced by the `libm` crate's

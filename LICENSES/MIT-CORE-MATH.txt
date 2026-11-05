@@ -5,6 +5,12 @@ under the MIT licence:
 
 Copyright (c) 2022-2025 CERN and Inria
 
+The correctly rounded cbrt in crates/graphviz-pure-core/src/math/portable/cbrt.rs is
+CORE-MATH's src/binary64/cbrt/cbrt.c, by Alexei Sibidanov, as the libm crate 0.2.16
+(rust-lang/compiler-builtins, MIT) ports it to Rust, distributed under the same MIT licence:
+
+Copyright (c) 2021-2022 Alexei Sibidanov
+
 Permission is hereby granted, free of charge, to any person obtaining a copy of this
 software and associated documentation files (the "Software"), to deal in the Software
 without restriction, including without limitation the rights to use, copy, modify, merge,
