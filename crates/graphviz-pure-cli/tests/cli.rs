@@ -5594,7 +5594,7 @@ fn issue591_an_allocation_past_the_budget_is_reported_as_cs_message() {
     ];
     for engine in ["dot", "neato", "fdp", "sfdp", "twopi", "circo", "osage"] {
         for (src, bytes) in cases {
-            let dir = scratch("issue591");
+            let dir = scratch("issue591-past-budget");
             let engine_arg = format!("-K{engine}");
             let (out, err, code) = run_in(&dir, &[&engine_arg, "-Tsvg"], src);
             assert_eq!(code, 1, "{engine}: {err}");
@@ -5616,13 +5616,13 @@ fn issue591_an_allocation_past_the_budget_is_reported_as_cs_message() {
 /// with the default pen width, so 2^30 peripheries are 2^30 + 1 of 2 vertices of 16 bytes.
 #[test]
 fn issue591_peripheries_under_the_budget_are_laid_out() {
-    let dir = scratch("issue591");
+    let dir = scratch("issue591-under-budget");
     let src = "digraph G { node [peripheries=2000000]; a }";
     let (out, err, code) = run_in(&dir, &["-Tdot"], src);
     assert_eq!(code, 0, "{err}");
     assert!(out.contains("peripheries=2000000"), "{out}");
 
-    let dir = scratch("issue591");
+    let dir = scratch("issue591-under-budget");
     let src = "digraph G { node [peripheries=1073741824]; a }";
     let (out, err, code) = run_in(&dir, &["-Tdot"], src);
     assert_eq!(code, 1, "{err}");
