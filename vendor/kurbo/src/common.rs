@@ -960,8 +960,8 @@ pub const GAUSS_LEGENDRE_COEFFS_32_HALF: &[(f64, f64)] = &[
 
 #[cfg(test)]
 mod tests {
-    use crate::portable_math::PortableMath;
     use crate::common::*;
+    use crate::portable_math::PortableMath;
     use arrayvec::ArrayVec;
 
     fn verify<const N: usize>(mut roots: ArrayVec<f64, N>, expected: &[f64]) {

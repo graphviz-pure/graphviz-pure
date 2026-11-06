@@ -1,7 +1,7 @@
 //! Contains a [`Transform`] object holding values of an affine transformation matrix.
 
-use crate::portable_math::PortableMath;
 use super::instance::ResolvedPaint;
+use crate::portable_math::PortableMath;
 #[cfg(feature = "libm")]
 #[allow(unused_imports)]
 use core_maths::*;

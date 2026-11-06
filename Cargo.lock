@@ -288,6 +288,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "graphviz-pure-kurbo"
+version = "1.2.0"
+dependencies = [
+ "arrayvec",
+ "euclid",
+ "libm",
+ "polycool",
+ "smallvec",
+]
+
+[[package]]
 name = "graphviz-pure-layout"
 version = "1.2.0"
 dependencies = [
@@ -316,12 +327,12 @@ name = "graphviz-pure-raster"
 version = "1.2.0"
 dependencies = [
  "graphviz-pure-core",
+ "graphviz-pure-kurbo",
+ "graphviz-pure-resvg",
+ "graphviz-pure-svg2pdf",
  "jpeg-encoder",
- "kurbo 0.13.1",
  "png",
- "resvg",
  "sha2",
- "svg2pdf",
 ]
 
 [[package]]
@@ -333,6 +344,97 @@ dependencies = [
  "graphviz-pure-layout",
  "graphviz-pure-parser",
  "serde_json",
+]
+
+[[package]]
+name = "graphviz-pure-resvg"
+version = "1.2.0"
+dependencies = [
+ "bytemuck",
+ "graphviz-pure-svgtypes",
+ "graphviz-pure-tiny-skia",
+ "graphviz-pure-usvg",
+ "log",
+ "pico-args",
+ "rgb",
+]
+
+[[package]]
+name = "graphviz-pure-skrifa"
+version = "1.2.0"
+dependencies = [
+ "bytemuck",
+ "libm",
+ "read-fonts",
+]
+
+[[package]]
+name = "graphviz-pure-svg2pdf"
+version = "1.2.0"
+dependencies = [
+ "log",
+ "miniz_oxide 0.8.9",
+ "once_cell",
+ "pdf-writer",
+ "usvg",
+]
+
+[[package]]
+name = "graphviz-pure-svgtypes"
+version = "1.2.0"
+dependencies = [
+ "graphviz-pure-kurbo",
+ "libm",
+ "siphasher",
+]
+
+[[package]]
+name = "graphviz-pure-tiny-skia"
+version = "1.2.0"
+dependencies = [
+ "arrayref",
+ "arrayvec",
+ "bytemuck",
+ "cfg-if",
+ "graphviz-pure-tiny-skia-path",
+ "libm",
+ "log",
+ "png",
+]
+
+[[package]]
+name = "graphviz-pure-tiny-skia-path"
+version = "1.2.0"
+dependencies = [
+ "arrayref",
+ "bytemuck",
+ "libm",
+ "strict-num",
+]
+
+[[package]]
+name = "graphviz-pure-usvg"
+version = "1.2.0"
+dependencies = [
+ "base64 0.23.1",
+ "data-url",
+ "fontdb",
+ "graphviz-pure-kurbo",
+ "graphviz-pure-skrifa",
+ "graphviz-pure-svgtypes",
+ "graphviz-pure-tiny-skia-path",
+ "harfrust",
+ "imagesize 0.15.0",
+ "log",
+ "pico-args",
+ "roxmltree 0.21.2",
+ "simplecss",
+ "siphasher",
+ "strict-num",
+ "unicode-bidi",
+ "unicode-script",
+ "unicode-vo",
+ "xmlwriter",
 ]
 
 [[package]]
@@ -402,17 +504,6 @@ checksum = "c62026ae44756f8a599ba21140f350303d4f08dcdcc71b5ad9c9bb8128c13c62"
 dependencies = [
  "arrayvec",
  "euclid",
- "smallvec",
-]
-
-[[package]]
-name = "kurbo"
-version = "0.13.1"
-dependencies = [
- "arrayvec",
- "euclid",
- "libm",
- "polycool",
  "smallvec",
 ]
 
@@ -607,21 +698,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "resvg"
-version = "0.49.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1572844b6727a1bf842190e9947641a68ac44bed83f50afb4bd1407a2564bee8"
-dependencies = [
- "bytemuck",
- "log",
- "pico-args",
- "rgb",
- "svgtypes 0.16.1",
- "tiny-skia",
- "usvg 0.49.0",
-]
-
-[[package]]
 name = "rgb"
 version = "0.8.53"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -751,15 +827,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "33f4fe9184a62d842c9ef383018f3306d8ba224fd9d836f56d7288308847c256"
 
 [[package]]
-name = "skrifa"
-version = "0.44.0"
-dependencies = [
- "bytemuck",
- "libm",
- "read-fonts",
-]
-
-[[package]]
 name = "slotmap"
 version = "1.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -784,32 +851,12 @@ dependencies = [
 ]
 
 [[package]]
-name = "svg2pdf"
-version = "0.13.0"
-dependencies = [
- "log",
- "miniz_oxide 0.8.9",
- "once_cell",
- "pdf-writer",
- "usvg 0.45.1",
-]
-
-[[package]]
 name = "svgtypes"
 version = "0.15.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "68c7541fff44b35860c1a7a47a7cadf3e4a304c457b58f9870d9706ece028afc"
 dependencies = [
- "kurbo 0.11.3",
- "siphasher",
-]
-
-[[package]]
-name = "svgtypes"
-version = "0.16.1"
-dependencies = [
- "kurbo 0.13.1",
- "libm",
+ "kurbo",
  "siphasher",
 ]
 
@@ -831,20 +878,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3bf63baf9f5039dadc247375c29eb13706706cfde997d0330d05aa63a77d8820"
 
 [[package]]
-name = "tiny-skia"
-version = "0.12.0"
-dependencies = [
- "arrayref",
- "arrayvec",
- "bytemuck",
- "cfg-if",
- "libm",
- "log",
- "png",
- "tiny-skia-path 0.12.0",
-]
-
-[[package]]
 name = "tiny-skia-path"
 version = "0.11.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -852,16 +885,6 @@ checksum = "9c9e7fc0c2e86a30b117d0462aa261b72b7a99b7ebd7deb3a14ceda95c5bdc93"
 dependencies = [
  "arrayref",
  "bytemuck",
- "strict-num",
-]
-
-[[package]]
-name = "tiny-skia-path"
-version = "0.12.0"
-dependencies = [
- "arrayref",
- "bytemuck",
- "libm",
  "strict-num",
 ]
 
@@ -911,42 +934,15 @@ dependencies = [
  "data-url",
  "flate2",
  "imagesize 0.13.0",
- "kurbo 0.11.3",
+ "kurbo",
  "log",
  "pico-args",
  "roxmltree 0.20.0",
  "simplecss",
  "siphasher",
  "strict-num",
- "svgtypes 0.15.3",
- "tiny-skia-path 0.11.4",
- "xmlwriter",
-]
-
-[[package]]
-name = "usvg"
-version = "0.49.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d09b73ee83641d390ad7ffd9000f347b16eb128e437675b6ff277ea5c7fcf22c"
-dependencies = [
- "base64 0.23.1",
- "data-url",
- "fontdb",
- "harfrust",
- "imagesize 0.15.0",
- "kurbo 0.13.1",
- "log",
- "pico-args",
- "roxmltree 0.21.2",
- "simplecss",
- "siphasher",
- "skrifa",
- "strict-num",
- "svgtypes 0.16.1",
- "tiny-skia-path 0.12.0",
- "unicode-bidi",
- "unicode-script",
- "unicode-vo",
+ "svgtypes",
+ "tiny-skia-path",
  "xmlwriter",
 ]
 

@@ -68,10 +68,10 @@ macro_rules! matches {
     }
 }
 
-mod portable_math;
 mod angle;
 mod aspect_ratio;
 mod color;
+mod portable_math;
 #[rustfmt::skip] mod colors;
 mod directional_position;
 mod enable_background;

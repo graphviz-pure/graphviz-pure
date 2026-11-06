@@ -21,3 +21,4 @@ node_modules/
 
 # Local scratch notes from the PR review/prepare skills (.local/review.md, .local/prep.md)
 /.local/
+__pycache__/

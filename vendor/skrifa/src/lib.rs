@@ -28,7 +28,6 @@ extern crate alloc;
 /// Expose our "raw" underlying parser crate.
 pub extern crate read_fonts as raw;
 
-mod portable_math;
 pub mod attribute;
 pub mod bitmap;
 pub mod charmap;
@@ -37,6 +36,7 @@ pub mod font;
 pub mod instance;
 pub mod metrics;
 pub mod outline;
+mod portable_math;
 
 pub mod setting;
 pub mod string;

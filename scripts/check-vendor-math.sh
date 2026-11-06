@@ -1,10 +1,12 @@
 #!/usr/bin/env bash
-# Fails if vendored raster code calls a platform libm transcendental.
+# Fails if the math-patched raster code calls a platform libm transcendental.
 #
 # The methods are the f32 and f64 entries in clippy.toml `disallowed-methods`
 # (docs/porting/libm.md). `sqrt` is not among them. Exceptions live in
 # scripts/vendor-math.allow: Vec2's zero-argument hypot and atan2, kurbo's powi,
-# and tiny-skia's f32x8 powf approximation.
+# and tiny-skia's f32x8 powf approximation. resvg/usvg are dependency-forwarding
+# forks: their filter and marker calls are not reached by the port's normalised
+# SVG paths. svg2pdf stays in the scan as a guard for its path-only conversion.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -38,7 +40,8 @@ for raw in allow_path.read_text().splitlines():
 hits = {rule: 0 for rule in rules}
 failures = []
 block = re.compile(r"/\*.*?\*/", re.S)
-for path in sorted(root.rglob("*.rs")):
+math_crates = ("tiny-skia", "tiny-skia-path", "kurbo", "svgtypes", "skrifa", "svg2pdf")
+for path in (path for crate in math_crates for path in sorted((root / crate).rglob("*.rs"))):
     text = path.read_text(encoding="utf-8", errors="replace")
     text = block.sub("", text)
     rel = path.as_posix()

@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# Sets VERSION in Cargo.toml (the workspace version and the version requirements of the
-# workspace's own crates), web/package.json, web/jsr.json and Cargo.lock, and inserts the
-# changelog section for VERSION. Does not commit. The release workflow runs this on a worktree
-# of master; see docs/releasing.md.
+# Sets VERSION in the main and nested rendering-fork manifests and their version requirements,
+# web/package.json, web/jsr.json and both Cargo.lock files, regenerates the vendor patches and
+# THIRD-PARTY-LICENSES.md, and inserts the changelog section for VERSION. Does not commit. The
+# release workflow runs this on a worktree of master; see docs/releasing.md.
 #
 # Usage: scripts/bump-version.sh VERSION --section FILE [--root DIR]
 #   --section FILE   the rendered section, including its "## [VERSION] - date" heading
@@ -34,7 +34,7 @@ grep -q '^## \[Unreleased\]' CHANGELOG.md || { echo "CHANGELOG.md has no Unrelea
 
 export VERSION_FILE=$section
 python3 - "$old" "$version" <<'PY'
-import json, os, re, sys
+import glob, json, os, re, sys
 old, new = sys.argv[1], sys.argv[2]
 section = open(os.environ["VERSION_FILE"]).read().strip("\n") + "\n"
 heading = f"## [{new}] - "
@@ -48,6 +48,34 @@ def bump_reqs(text, new):
         text,
     )
 
+forks = {
+    "graphviz-pure-tiny-skia", "graphviz-pure-tiny-skia-path", "graphviz-pure-kurbo",
+    "graphviz-pure-svgtypes", "graphviz-pure-skrifa", "graphviz-pure-resvg",
+    "graphviz-pure-usvg", "graphviz-pure-svg2pdf",
+}
+def bump_forks(path, new):
+    lines = open(path).read().splitlines(keepends=True)
+    section = ""
+    for i, line in enumerate(lines):
+        if line.startswith("["):
+            section = line.strip()
+        elif section == "[package]" and line.startswith("version = "):
+            lines[i] = f'version = "{new}"\n'
+        elif section != "[package]" and 'package = "graphviz-pure-' in line:
+            name = re.search(r'package = "([^"]+)"', line).group(1)
+            if name not in forks:
+                continue
+            if "{" in line:
+                lines[i] = re.sub(r'version = "[^"]+"', f'version = "={new}"', line, count=1)
+            else:
+                for j in range(i - 1, -1, -1):
+                    if lines[j].startswith("version = "):
+                        lines[j] = f'version = "={new}"\n'
+                        break
+                    if lines[j].startswith("["):
+                        sys.exit(f"{path}: {name} has no version requirement")
+    open(path, "w").write("".join(lines))
+
 toml = open("Cargo.toml").read()
 toml = re.sub(r'(\[workspace\.package\][^\[]*?\nversion = ")[^"]+(")', rf"\g<1>{new}\g<2>", toml, count=1)
 toml = bump_reqs(toml, new)
@@ -55,6 +83,8 @@ open("Cargo.toml", "w").write(toml)
 facade = "crates/graphviz-pure/Cargo.toml"
 facade_text = open(facade).read()
 open(facade, "w").write(bump_reqs(facade_text, new))
+for path in glob.glob("vendor/*/Cargo.toml") + ["crates/graphviz-pure-raster/Cargo.toml"]:
+    bump_forks(path, new)
 for path in ("web/package.json", "web/jsr.json"):
     pkg = json.load(open(path))
     pkg["version"] = new
@@ -76,5 +106,8 @@ log = links.sub(
 open("CHANGELOG.md", "w").write(log)
 PY
 "${cargo[@]}" update --workspace --quiet
+"${cargo[@]}" update --manifest-path vendor/Cargo.toml --workspace --quiet
+scripts/refresh-vendor.sh --save-patches
+scripts/third-party-licenses.sh
 echo "version $old -> $version"
 git --no-pager diff --stat

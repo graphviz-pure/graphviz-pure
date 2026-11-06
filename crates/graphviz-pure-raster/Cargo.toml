@@ -25,16 +25,16 @@ include = [
 pdf = ["dep:svg2pdf"]
 
 [dependencies]
-svg2pdf = { version = "0.13.0", default-features = false, optional = true }
+svg2pdf = { version = "=1.2.0", package = "graphviz-pure-svg2pdf", path = "../../vendor/svg2pdf", default-features = false, optional = true }
 graphviz-pure-core.workspace = true
-resvg = { version = "0.49.0", default-features = false, features = ["text"] }
+resvg = { version = "=1.2.0", package = "graphviz-pure-resvg", path = "../../vendor/resvg", default-features = false, features = ["text"] }
 # The PNG encoder, so the pixels can be encoded where they are drawn, without a
 # copy of the whole pixmap first. Already in the tree through tiny-skia.
 png = "0.18"
 jpeg-encoder = { version = "0.7.1", default-features = false, features = ["std"] }
 
 [dev-dependencies]
-kurbo = "0.13.1"
+kurbo = { version = "=1.2.0", package = "graphviz-pure-kurbo", path = "../../vendor/kurbo" }
 sha2 = "0.11"
 
 [lints]

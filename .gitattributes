@@ -10,3 +10,5 @@ site/public/samples/** -text
 *.ps -text
 # PDF fixtures contain binary streams and CRLF cross-reference records.
 *.pdf binary
+# Unified-diff context lines can be a single space; that is patch syntax, not source whitespace.
+scripts/vendor-patches/*.patch whitespace=-trailing-space

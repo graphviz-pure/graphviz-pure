@@ -1,0 +1,75 @@
+diff -ruN a/Cargo.toml b/Cargo.toml
+--- a/Cargo.toml
++++ b/Cargo.toml
+@@ -12,8 +12,8 @@
+ [package]
+ edition = "2024"
+ rust-version = "1.85.0"
+-name = "usvg"
+-version = "0.49.0"
++name = "graphviz-pure-usvg"
++version = "1.2.0"
+ build = false
+ exclude = ["tests"]
+ autolib = false
+@@ -21,8 +21,8 @@
+ autoexamples = false
+ autotests = false
+ autobenches = false
+-description = "An SVG simplification library."
+-documentation = "https://docs.rs/usvg/"
++description = "Upstream usvg 0.49.0 using graphviz-pure's portable-math raster forks."
++documentation = "https://docs.rs/graphviz-pure-usvg/"
+ readme = "README.md"
+ keywords = ["svg"]
+ categories = ["multimedia::images"]
+@@ -88,7 +88,9 @@
+ version = "0.15.0"
+ 
+ [dependencies.kurbo]
+-version = "0.13.0"
++version = "=1.2.0"
++package = "graphviz-pure-kurbo"
++path = "../kurbo"
+ 
+ [dependencies.log]
+ version = "0.4"
+@@ -107,7 +109,9 @@
+ version = "1.0"
+ 
+ [dependencies.skrifa]
+-version = "0.44"
++version = "=1.2.0"
++package = "graphviz-pure-skrifa"
++path = "../skrifa"
+ features = ["std"]
+ optional = true
+ default-features = false
+@@ -116,10 +120,14 @@
+ version = "0.1.1"
+ 
+ [dependencies.svgtypes]
+-version = "0.16.1"
++version = "=1.2.0"
++package = "graphviz-pure-svgtypes"
++path = "../svgtypes"
+ 
+ [dependencies.tiny-skia-path]
+-version = "0.12.0"
++version = "=1.2.0"
++package = "graphviz-pure-tiny-skia-path"
++path = "../tiny-skia-path"
+ 
+ [dependencies.unicode-bidi]
+ version = "0.3"
+diff -ruN a/README.md b/README.md
+--- a/README.md
++++ b/README.md
+@@ -0,0 +1,7 @@
++# graphviz-pure-usvg
++
++Repackaged fork of upstream [usvg 0.49.0](https://crates.io/crates/usvg/0.49.0), from [linebender/resvg](https://github.com/linebender/resvg), for graphviz-pure. This is not an upstream release.
++
++The SVG simplification source is unchanged. Its `kurbo`, `skrifa`, `svgtypes` and `tiny-skia-path` dependencies select the graphviz-pure-prefixed forks, so the complete raster path uses portable math. The Rust library target remains `usvg`.
++
++Upstream copyright notices and the Apache-2.0 and MIT licence texts in `LICENSE-APACHE` and `LICENSE-MIT` are retained.

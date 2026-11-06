@@ -32,13 +32,25 @@ BINARY = {
     "LICENSES/MIT-EXPAT.txt": "LICENSES/MIT-EXPAT.txt",
 }
 ARCHIVE = {**BINARY, **{"LICENSES/" + os.path.basename(f): f for f in fonts}}
-# Crates beyond LICENSE and NOTICE (copies of the root files, kept in each crate's directory):
+# Main crates beyond LICENSE and NOTICE (copies of the root files, kept in each crate's directory):
 # the ones holding the CORE-MATH and expat ports and the one bundling the fonts. A crate ships sources, not
 # its dependencies, so THIRD-PARTY-LICENSES.md is not in any.
 CRATES = {
     "graphviz-pure-core": {"LICENSES/MIT-CORE-MATH.txt": "LICENSES/MIT-CORE-MATH.txt"},
     "graphviz-pure-geom": {"LICENSES/MIT-EXPAT.txt": "LICENSES/MIT-EXPAT.txt"},
     "graphviz-pure-raster": {"fonts/" + os.path.basename(f): f for f in fonts},
+}
+# The raster forks keep their upstream licences rather than the main project's EPL licence.
+# Their READMEs name the upstream release and are checked too, so attribution cannot be dropped.
+VENDORED_CRATES = {
+    "graphviz-pure-tiny-skia": {"LICENSE": "vendor/tiny-skia/LICENSE", "README.md": "vendor/tiny-skia/README.md"},
+    "graphviz-pure-tiny-skia-path": {"LICENSE": "vendor/tiny-skia-path/LICENSE", "README.md": "vendor/tiny-skia-path/README.md"},
+    "graphviz-pure-kurbo": {"LICENSE-APACHE": "vendor/kurbo/LICENSE-APACHE", "LICENSE-MIT": "vendor/kurbo/LICENSE-MIT", "README.md": "vendor/kurbo/README.md"},
+    "graphviz-pure-svgtypes": {"LICENSE-APACHE": "vendor/svgtypes/LICENSE-APACHE", "LICENSE-MIT": "vendor/svgtypes/LICENSE-MIT", "AUTHORS": "vendor/svgtypes/AUTHORS", "README.md": "vendor/svgtypes/README.md"},
+    "graphviz-pure-skrifa": {"LICENSE-APACHE": "vendor/skrifa/LICENSE-APACHE", "LICENSE-MIT": "vendor/skrifa/LICENSE-MIT", "README.md": "vendor/skrifa/README.md"},
+    "graphviz-pure-resvg": {"LICENSE-APACHE": "vendor/resvg/LICENSE-APACHE", "LICENSE-MIT": "vendor/resvg/LICENSE-MIT", "README.md": "vendor/resvg/README.md"},
+    "graphviz-pure-usvg": {"LICENSE-APACHE": "vendor/usvg/LICENSE-APACHE", "LICENSE-MIT": "vendor/usvg/LICENSE-MIT", "README.md": "vendor/usvg/README.md"},
+    "graphviz-pure-svg2pdf": {"LICENSE-APACHE": "vendor/svg2pdf/LICENSE-APACHE", "LICENSE-MIT": "vendor/svg2pdf/LICENSE-MIT", "NOTICE": "vendor/svg2pdf/NOTICE", "README.md": "vendor/svg2pdf/README.md"},
 }
 
 
@@ -61,7 +73,10 @@ def required(name):
         return m.group(1), ARCHIVE
     m = re.fullmatch(r"(([a-z0-9_-]+)-[0-9][^/]*)\.crate", name)
     if m:
-        return m.group(1), {**BASE, **CRATES.get(m.group(2), {})}
+        crate = m.group(2)
+        if crate in VENDORED_CRATES:
+            return m.group(1), VENDORED_CRATES[crate]
+        return m.group(1), {**BASE, **CRATES.get(crate, {})}
     sys.exit(f"error: {name}: not a release archive, npm package or crate")
 
 

@@ -4,10 +4,10 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-use crate::portable_math::PortableMath;
 use super::point64::{Point64, SearchAxis};
 use super::quad64;
 use super::Scalar64;
+use crate::portable_math::PortableMath;
 
 #[cfg(all(not(feature = "std"), feature = "no-std-float"))]
 use tiny_skia_path::NoStdFloat;

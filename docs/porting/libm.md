@@ -10,10 +10,10 @@ No build calls a platform libm for them, and no feature brings one back: clippy'
 platforms (the WASM build has no raster output). `-Tpng` and `-Tjpeg` rasterize that SVG with
 resvg. The crates on that path (`tiny-skia`, `tiny-skia-path`, `kurbo`, `svgtypes`, `skrifa`)
 are patched copies under `vendor/` whose transcendental calls go through the `libm` crate
-instead of the platform libm (#339). Release binaries, wasm, npm, PyPI, Docker and builds
-from this repository use the portable math for PNG/JPEG; a crates.io source build
-(`cargo install`) still gets the platform libm in raster output until the forks or upstream
-features land.
+instead of the platform libm (#339). They and the dependency-forwarding resvg/usvg forks are
+published under `graphviz-pure-` prefixes, so release binaries, wasm, npm, PyPI, Docker,
+workspace builds and crates.io source builds (`cargo install`) all use the same portable math
+for PNG/JPEG (#712).
 
 Those vendored calls use the `libm` crate for `pow` and `hypot` too. `graphviz_pure_core::math`
 uses CORE-MATH for `pow` and its own `hypot`, and the `libm` crate for the other functions.

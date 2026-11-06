@@ -3,7 +3,7 @@
 #
 #   github  the GitHub release: every asset's build-provenance attestation (from release.yml) and
 #           SHA256SUMS
-#   crates  every publishable workspace crate at VERSION on crates.io
+#   crates  every publishable main crate at VERSION and every raster fork at its manifest version
 #   binstall  graphviz-pure-cli VERSION's cargo-binstall metadata, as published on crates.io,
 #           names every release archive and the binary in it (scripts/check-binstall.py), and,
 #           where cargo-binstall is on PATH, `cargo-binstall --dry-run` fetches and unpacks the
@@ -98,28 +98,31 @@ github() {
   else result github 0 "not verified: ${bad[*]}"; fi
 }
 
-# The workspace crates without publish = false, by package name.
+# Publishable main and rendering-fork crates, as NAME VERSION. All track the release version;
+# each fork's description records the upstream version it patches.
 crates() {
-  local f
-  for f in crates/*/Cargo.toml; do
+  local f name crate_version
+  for f in crates/*/Cargo.toml vendor/*/Cargo.toml; do
     grep -qE '^publish *= *false' "$f" && continue
-    awk -F'"' '/^\[package\]/{p=1} p && /^name *=/{print $2; exit}' "$f"
+    name=$(awk -F'"' '/^\[package\]/{p=1} p && /^name *=/{print $2; exit}' "$f")
+    crate_version=$(awk -F'"' '/^\[package\]/{p=1} p && /^version *= *"/{print $2; exit}' "$f")
+    printf '%s %s\n' "$name" "${crate_version:-$version}"
   done
 }
 crates_missing() {
-  local c
+  local c crate_version
   : > "$work/crates-missing"
-  for c in $(crates); do
-    curl -fsS -A "$ua" "https://crates.io/api/v1/crates/$c/$version" 2> /dev/null | jq -e '.version.yanked == false' > /dev/null ||
-      echo "$c" >> "$work/crates-missing"
-  done
+  while read -r c crate_version; do
+    curl -fsS -A "$ua" "https://crates.io/api/v1/crates/$c/$crate_version" 2> /dev/null | jq -e '.version.yanked == false' > /dev/null ||
+      echo "$c $crate_version" >> "$work/crates-missing"
+  done < <(crates)
   [ ! -s "$work/crates-missing" ]
 }
 crates_io() {
   local n
   n=$(crates | wc -l | tr -d ' ')
-  [ "$n" -gt 0 ] || { result crates 0 "no publishable crate found under crates/"; return; }
-  if retry crates_missing; then result crates 1 "$n crates at $version"
+  [ "$n" -gt 0 ] || { result crates 0 "no publishable crate found under crates/ or vendor/"; return; }
+  if retry crates_missing; then result crates 1 "$n crates at their manifest versions (graphviz-pure $version)"
   else result crates 0 "not on crates.io: $(tr '\n' ' ' < "$work/crates-missing")"; fi
 }
 
