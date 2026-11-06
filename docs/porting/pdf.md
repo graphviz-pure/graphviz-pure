@@ -25,7 +25,7 @@ at 96 dpi), including an explicit graph `dpi` scale.
 
 ## Reproducible bytes
 
-The existing patched usvg 0.48 stack normalizes the SVG and outlines the text.
+The existing patched usvg 0.49 stack normalizes the SVG and outlines the text.
 svg2pdf 0.13 uses usvg 0.45, so normalized paths are serialized and parsed into
 that version without enabling its text, image or filter features. This keeps
 font shaping and its portable math in the existing stack.

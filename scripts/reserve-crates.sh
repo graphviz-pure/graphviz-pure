@@ -30,9 +30,9 @@ for c in "${crates[@]}"; do
     graphviz-pure-skrifa)
       license="MIT OR Apache-2.0"; description="Placeholder for the graphviz-pure fork of upstream skrifa 0.44.0." ;;
     graphviz-pure-resvg)
-      license="Apache-2.0 OR MIT"; description="Placeholder for the graphviz-pure fork of upstream resvg 0.48.1." ;;
+      license="Apache-2.0 OR MIT"; description="Placeholder for the graphviz-pure fork of upstream resvg 0.49.0." ;;
     graphviz-pure-usvg)
-      license="Apache-2.0 OR MIT"; description="Placeholder for the graphviz-pure fork of upstream usvg 0.48.1." ;;
+      license="Apache-2.0 OR MIT"; description="Placeholder for the graphviz-pure fork of upstream usvg 0.49.0." ;;
     graphviz-pure-svg2pdf)
       license="MIT OR Apache-2.0"; description="Placeholder for the graphviz-pure fork of upstream svg2pdf 0.13.0." ;;
   esac

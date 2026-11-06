@@ -20,8 +20,8 @@ crates=(
   "svgtypes 0.16.1"
   "skrifa 0.44.0"
   "svg2pdf 0.13.0"
-  "resvg 0.48.1"
-  "usvg 0.48.1"
+  "resvg 0.49.0"
+  "usvg 0.49.0"
 )
 
 trim_crate() {

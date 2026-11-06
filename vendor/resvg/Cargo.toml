@@ -21,7 +21,7 @@ autobins = false
 autoexamples = false
 autotests = false
 autobenches = false
-description = "Upstream resvg 0.48.1 using graphviz-pure's portable-math raster forks."
+description = "Upstream resvg 0.49.0 using graphviz-pure's portable-math raster forks."
 readme = "README.md"
 keywords = [
     "svg",

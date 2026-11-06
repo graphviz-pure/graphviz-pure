@@ -65,7 +65,7 @@ transcendental call slips off the math patch. `cargo about` picks up the upstrea
 reference instead of randomized HashMap order, plus explicit elided lifetimes
 for current Rust. `scripts/vendor-patches/svg2pdf.patch` records those changes and its
 `graphviz-pure-svg2pdf` packaging metadata. The CLI enables it without text, image or
-filter features. Text is outlined by the existing patched usvg 0.48 stack, then parsed as
+filter features. Text is outlined by the existing patched usvg 0.49 stack, then parsed as
 paths by svg2pdf's upstream usvg 0.45 stack. No system fonts or font subsets enter the PDF.
 Content compression is disabled and the writer adds only a fixed producer, without
 timestamps or document IDs. The older usvg/kurbo/svgtypes/tiny-skia-path stack stays
