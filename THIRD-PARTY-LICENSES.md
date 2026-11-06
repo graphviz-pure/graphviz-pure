@@ -54,10 +54,10 @@ Graphviz, the bundled fonts and the other third-party material in the repository
 | [proc-macro2](https://crates.io/crates/proc-macro2) | 1.0.107 | MIT OR Apache-2.0 |
 | [quote](https://crates.io/crates/quote) | 1.0.47 | MIT OR Apache-2.0 |
 | [read-fonts](https://crates.io/crates/read-fonts) | 0.41.0 | MIT OR Apache-2.0 |
-| [resvg](https://crates.io/crates/resvg) | 0.48.1 | Apache-2.0 OR MIT |
+| [resvg](https://crates.io/crates/resvg) | 0.49.0 | Apache-2.0 OR MIT |
 | [rgb](https://crates.io/crates/rgb) | 0.8.53 | MIT |
 | [roxmltree](https://crates.io/crates/roxmltree) | 0.20.0 | MIT OR Apache-2.0 |
-| [roxmltree](https://crates.io/crates/roxmltree) | 0.21.1 | MIT OR Apache-2.0 |
+| [roxmltree](https://crates.io/crates/roxmltree) | 0.21.2 | MIT OR Apache-2.0 |
 | [ryu](https://crates.io/crates/ryu) | 1.0.23 | Apache-2.0 OR BSL-1.0 |
 | [serde](https://crates.io/crates/serde) | 1.0.229 | MIT OR Apache-2.0 |
 | [serde_core](https://crates.io/crates/serde_core) | 1.0.229 | MIT OR Apache-2.0 |
@@ -83,7 +83,7 @@ Graphviz, the bundled fonts and the other third-party material in the repository
 | [unicode-script](https://crates.io/crates/unicode-script) | 0.5.8 | MIT OR Apache-2.0 |
 | [unicode-vo](https://crates.io/crates/unicode-vo) | 0.1.0 | MIT OR Apache-2.0 |
 | [usvg](https://crates.io/crates/usvg) | 0.45.1 | Apache-2.0 OR MIT |
-| [usvg](https://crates.io/crates/usvg) | 0.48.1 | Apache-2.0 OR MIT |
+| [usvg](https://crates.io/crates/usvg) | 0.49.0 | Apache-2.0 OR MIT |
 | [wasm-bindgen](https://crates.io/crates/wasm-bindgen) | 0.2.129 | MIT OR Apache-2.0 |
 | [wasm-bindgen-macro](https://crates.io/crates/wasm-bindgen-macro) | 0.2.129 | MIT OR Apache-2.0 |
 | [wasm-bindgen-macro-support](https://crates.io/crates/wasm-bindgen-macro-support) | 0.2.129 | MIT OR Apache-2.0 |
@@ -884,9 +884,9 @@ DEALINGS IN THE SOFTWARE.
 
 Used by:
 
-- resvg 0.48.1
+- resvg 0.49.0
 - usvg 0.45.1
-- usvg 0.48.1
+- usvg 0.49.0
 
 ```text
 Copyright 2017 the Resvg Authors
@@ -1450,7 +1450,7 @@ SOFTWARE.
 Used by:
 
 - roxmltree 0.20.0 (Yevhenii Reizner <razrfalcon@gmail.com>)
-- roxmltree 0.21.1 (Yevhenii Reizner <razrfalcon@gmail.com>)
+- roxmltree 0.21.2 (Yevhenii Reizner <razrfalcon@gmail.com>)
 
 ```text
 The MIT License (MIT)
