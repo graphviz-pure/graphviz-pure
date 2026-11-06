@@ -181,7 +181,11 @@ than 2%, allocations not at all); checkpoints go in outer loops, not in per-elem
 to keep that.
 
 The command line gets no flags: C has none, and its output and exit status stay C's. The
-JavaScript API (`@graphviz-pure/wasm`) is a follow-up issue once the Rust API has shipped.
+JavaScript API (`@graphviz-pure/wasm`, #798) takes the limits as an optional last
+`options` argument of each call (`web/README.md`): the deadline is a `timeout` in
+milliseconds read from `performance.now()`, the heap limit reads the instance's linear
+memory, and cancellation is an `AbortSignal` or a `shouldCancel` callback, both polled at
+checkpoints through `cancel_when`.
 
 ## Pull requests
 

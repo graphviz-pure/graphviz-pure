@@ -19,6 +19,9 @@ import init, {
   type Diagnostic,
   type GraphStats,
   type GraphvizErrorKind,
+  type GraphvizLimit,
+  type InitOutput,
+  type RenderOptions,
   type RenderedBytes,
   type RenderedText,
   type RenderedTexts,
@@ -60,17 +63,65 @@ const kinds: Record<GraphvizErrorKind, true> = {
   Layout: true,
   Attribute: true,
   Render: true,
+  LimitExceeded: true,
+  Cancelled: true,
   Error: true,
+};
+
+const options: RenderOptions = {
+  maxInputBytes: 1 << 20,
+  maxNodes: 10_000,
+  maxEdges: 50_000,
+  maxSteps: 5_000_000,
+  maxAllocation: 512 << 20,
+  maxMemory: 1 << 30,
+  timeout: 5_000,
+  signal: new AbortController().signal,
+  shouldCancel: () => false,
+};
+const limited: string = render("digraph { a -> b }", "dot", "svg", options) +
+  renderSvg("digraph { a -> b }", "dot", {}) + renderJson("digraph { a -> b }", "dot", undefined);
+const limitedAll: string[] = renderAll("digraph { a -> b }", "dot", "svg", { maxNodes: 1 });
+const limitedBytes: Uint8Array = renderAllBytes(new Uint8Array(), "dot", "svg", { timeout: 0 });
+const limitedStats: GraphStats = inspectGraph("digraph { a -> b }", "dot", { maxSteps: 1 });
+const nulled: string = render("digraph { a -> b }", "dot", "svg", null) + renderSvg("digraph { a -> b }", "dot", null);
+const nulledStats: GraphStats = inspectGraph("digraph { a -> b }", "dot", null);
+// Raw InitOutput calls written before `options` existed still typecheck.
+function rawCalls(out: InitOutput): void {
+  out.render(0, 0, 0, 0, 0, 0);
+  out.renderSvg(0, 0, 0, 0);
+  out.inspectGraph(0, 0, 0, 0);
+  out.render(0, 0, 0, 0, 0, 0, undefined);
+}
+const limits: Record<GraphvizLimit, true> = {
+  InputBytes: true,
+  Nodes: true,
+  Edges: true,
+  Deadline: true,
+  Steps: true,
+  Allocation: true,
+  Memory: true,
+  Other: true,
 };
 
 function readError(err: unknown): string {
   if (!(err instanceof GraphvizError)) throw new Error("expected GraphvizError");
   const built = new GraphvizError("syntax error", 1, "Syntax", []);
   const kind: GraphvizErrorKind = built.kind;
+  const limit: GraphvizLimit | undefined = new GraphvizError("x", 1, "LimitExceeded", [], "Nodes").limit ?? err.limit;
+  void limit;
   return `${err.name}:${err.status}:${err.kind}:${err.message}:${err.diagnostics.length}:${level}:${kind}:${kinds.Syntax}`;
 }
 
 void width;
+void limited;
+void limitedAll;
+void limitedBytes;
+void limitedStats;
+void limits;
+void nulled;
+void nulledStats;
+void rawCalls;
 void directed;
 void name;
 void output;

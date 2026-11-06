@@ -89,7 +89,10 @@ for (const [kind, name] of [
   ['interface', 'InitOutput'],
 ]) {
   const a = declaration(generated, kind, name);
-  const b = declaration(hand, kind, name);
+  let b = declaration(hand, kind, name);
+  // The hand-checked InitOutput keeps the trailing `options` externref optional
+  // (`e?: any`), so raw calls written before #798 still typecheck.
+  if (b != null && name === 'InitOutput') b = b.replace(/\?: any\)/g, ': any)');
   if (a == null || b == null || norm(a) !== norm(b)) {
     problems.push(`${name} signature differs\n  generated: ${a}\n  hand:      ${b}`);
   }

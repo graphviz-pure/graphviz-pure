@@ -13,39 +13,45 @@ export type InitInput = RequestInfo | URL | Response | BufferSource | WebAssembl
 export type SyncInitInput = BufferSource | WebAssembly.Module;
 
 // wasm-bindgen's view of the instance exports. The drift check compares this
-// interface with the generated file, comments and whitespace aside.
+// interface with the generated file, comments and whitespace aside. The trailing
+// `options` slot is optional here (`?: any`) so calls written before it existed
+// still typecheck; wasm passes `undefined` for a missing externref argument.
 /** The WebAssembly instance exports returned by initialisation. */
 export interface InitOutput {
   /** The instance's linear memory. */
   readonly memory: WebAssembly.Memory;
   /** The raw ABI entry point for graph statistics. */
-  readonly inspectGraph: (a: number, b: number, c: number, d: number) => [number, number, number];
+  readonly inspectGraph: (a: number, b: number, c: number, d: number, e?: any) => [number, number, number];
   /** The raw ABI entry point for {@link render}. */
-  readonly render: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number, number, number];
+  readonly render: (a: number, b: number, c: number, d: number, e: number, f: number, g?: any) => [number, number, number, number];
   /** The raw ABI entry point for {@link renderAll}. */
-  readonly renderAll: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number, number, number];
+  readonly renderAll: (a: number, b: number, c: number, d: number, e: number, f: number, g?: any) => [number, number, number, number];
   /** The raw ABI entry point for {@link renderAllBytes}. */
-  readonly renderAllBytes: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number, number, number];
+  readonly renderAllBytes: (a: number, b: number, c: number, d: number, e: number, f: number, g?: any) => [number, number, number, number];
   /** The raw ABI entry point for {@link renderAllBytesWithDiagnostics}. */
-  readonly renderAllBytesWithDiagnostics: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number, number];
+  readonly renderAllBytesWithDiagnostics: (a: number, b: number, c: number, d: number, e: number, f: number, g?: any) => [number, number, number];
   /** The raw ABI entry point for {@link renderAllWithDiagnostics}. */
-  readonly renderAllWithDiagnostics: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number, number];
+  readonly renderAllWithDiagnostics: (a: number, b: number, c: number, d: number, e: number, f: number, g?: any) => [number, number, number];
   /** The raw ABI entry point for {@link renderJson}. */
-  readonly renderJson: (a: number, b: number, c: number, d: number) => [number, number, number, number];
+  readonly renderJson: (a: number, b: number, c: number, d: number, e?: any) => [number, number, number, number];
   /** The raw ABI entry point for {@link renderSvg}. */
-  readonly renderSvg: (a: number, b: number, c: number, d: number) => [number, number, number, number];
+  readonly renderSvg: (a: number, b: number, c: number, d: number, e?: any) => [number, number, number, number];
   /** The raw ABI entry point for {@link renderWithDiagnostics}. */
-  readonly renderWithDiagnostics: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number, number];
+  readonly renderWithDiagnostics: (a: number, b: number, c: number, d: number, e: number, f: number, g?: any) => [number, number, number];
   /** The raw ABI entry point for {@link supportedEngines}. */
   readonly supportedEngines: () => [number, number];
   /** The raw ABI entry point for {@link supportedFormats}. */
   readonly supportedFormats: () => [number, number];
   /** The raw ABI entry point for {@link version}. */
   readonly version: () => [number, number];
-  /** Frees an allocation in linear memory. */
-  readonly __wbindgen_free: (a: number, b: number, c: number) => void;
+  /** Stores a thrown JavaScript exception for the caller. */
+  readonly __wbindgen_exn_store: (a: number) => void;
+  /** Allocates a JavaScript object reference table slot. */
+  readonly __externref_table_alloc: () => number;
   /** The table holding JavaScript object references. */
   readonly __wbindgen_externrefs: WebAssembly.Table;
+  /** Frees an allocation in linear memory. */
+  readonly __wbindgen_free: (a: number, b: number, c: number) => void;
   /** Drops a slice of JavaScript object references. */
   readonly __externref_drop_slice: (a: number, b: number) => void;
   /** Allocates bytes in linear memory. */
@@ -92,7 +98,82 @@ export type GraphvizErrorKind =
   | "Layout"
   | "Attribute"
   | "Render"
+  | "LimitExceeded"
+  | "Cancelled"
   | "Error";
+
+/**
+ * Which limit a `LimitExceeded` failure reached: `maxInputBytes`, `maxNodes`,
+ * `maxEdges`, `timeout`, `maxSteps`, `maxAllocation`, `maxMemory`. `Other` is a
+ * limit this version of the types does not name yet.
+ */
+export type GraphvizLimit =
+  | "InputBytes"
+  | "Nodes"
+  | "Edges"
+  | "Deadline"
+  | "Steps"
+  | "Allocation"
+  | "Memory"
+  | "Other";
+
+/**
+ * Limits and cancellation for one call, the last argument of every render call and
+ * of {@link inspectGraph}. Every field is optional and off when absent; omitting the
+ * object, or passing `undefined` or `null`, runs the call exactly as without it.
+ *
+ * A call stops at its next checkpoint (the parser's statements, the layout loops,
+ * the emitter) and throws a {@link GraphvizError} of kind `LimitExceeded` (with
+ * `limit`) or `Cancelled`. It returns its whole output, the same bytes as an
+ * unlimited call, or throws: never a partial drawing. This holds for
+ * {@link renderAllBytes} too, which returns the graphs before a syntax error but not
+ * those before a limit or a cancel. The checks are cooperative,
+ * so a call can run past a limit until its next checkpoint; a service should still
+ * run untrusted input in a worker it can terminate.
+ *
+ * Counts must be non-negative safe integers; anything else throws a `TypeError`.
+ */
+export interface RenderOptions {
+  /** The longest DOT source accepted, in UTF-8 bytes. */
+  maxInputBytes?: number;
+  /** The most nodes one graph may declare. */
+  maxNodes?: number;
+  /** The most edges one graph may declare. */
+  maxEdges?: number;
+  /**
+   * A deterministic work budget: the same input, version and budget always stop at
+   * the same point. The unit is not stable across releases.
+   */
+  maxSteps?: number;
+  /** The largest single input-sized buffer (polygon vertices, neato's model, dot's arenas), in bytes. */
+  maxAllocation?: number;
+  /**
+   * The largest size of this instance's linear memory, in bytes, read at checkpoints.
+   * WebAssembly memory never shrinks, so it counts what earlier calls grew it to.
+   */
+  maxMemory?: number;
+  /**
+   * Milliseconds from the start of the call, read from `performance.now()` at
+   * checkpoints. Reaching it throws `LimitExceeded` with `limit` `Deadline`.
+   * Cloudflare Workers stop the clock while code runs, so there it fires only for `0`.
+   */
+  timeout?: number;
+  /**
+   * Cancels the call when aborted: throws kind `Cancelled`. It is read when the call
+   * starts and at every checkpoint. The call is synchronous, so nothing on this
+   * thread's event loop can abort it once it runs (an `AbortSignal.timeout` fires only
+   * after the call returns); an aborted signal stops calls before they start, and
+   * `shouldCancel` or `timeout` stop a running one.
+   */
+  signal?: AbortSignal;
+  /**
+   * Polled at checkpoints; returning `true` cancels the call (kind `Cancelled`). It
+   * runs inside the call, so it can read a clock or an `Atomics` flag that another
+   * worker sets in a `SharedArrayBuffer`. It may call this package again: that call
+   * runs under these limits too.
+   */
+  shouldCancel?: () => boolean;
+}
 
 /**
  * A failed call. The package exports this class, and a thrown failure is
@@ -113,8 +194,16 @@ export class GraphvizError extends Error {
   readonly kind: GraphvizErrorKind;
   /** Diagnostics collected before the call failed. */
   readonly diagnostics: Diagnostic[];
-  /** Creates an error with its exit status, category and collected diagnostics. */
-  constructor(message: string, status: number, kind: GraphvizErrorKind, diagnostics: Diagnostic[]);
+  /** The limit reached, only on a `LimitExceeded` failure. */
+  readonly limit?: GraphvizLimit;
+  /** Creates an error with its exit status, category, collected diagnostics and limit. */
+  constructor(
+    message: string,
+    status: number,
+    kind: GraphvizErrorKind,
+    diagnostics: Diagnostic[],
+    limit?: GraphvizLimit,
+  );
 }
 
 /**
@@ -165,49 +254,55 @@ export interface RenderedBytes {
 }
 
 /** The first graph's output. Throws a {@link GraphvizError}. Warnings are dropped. */
-export function render(dot_source: string, engine: string, format: string): string;
+export function render(dot_source: string, engine: string, format: string, options?: RenderOptions | null): string;
 
 /** {@link render} plus the diagnostics that call collected. */
 export function renderWithDiagnostics(
   dot_source: string,
   engine: string,
   format: string,
+  options?: RenderOptions | null,
 ): RenderedText;
 
 /** One output string per graph. Throws a {@link GraphvizError}. */
-export function renderAll(dot_source: string, engine: string, format: string): string[];
+export function renderAll(dot_source: string, engine: string, format: string, options?: RenderOptions | null): string[];
 
 /** {@link renderAll} plus the diagnostics of the whole call. */
 export function renderAllWithDiagnostics(
   dot_source: string,
   engine: string,
   format: string,
+  options?: RenderOptions | null,
 ): RenderedTexts;
 
 /**
  * Raw input bytes in, the command line's output bytes out (every graph concatenated).
- * Throws a {@link GraphvizError} only when a failure leaves nothing rendered.
+ * After a syntax error, the graphs read before it are still returned, as `dot` writes
+ * them; it throws only when the syntax error leaves nothing rendered. A limit or a
+ * cancel from `options` always throws, even when some graphs were already rendered.
  */
-export function renderAllBytes(dot_source: Uint8Array, engine: string, format: string): Uint8Array;
+export function renderAllBytes(dot_source: Uint8Array, engine: string, format: string, options?: RenderOptions | null): Uint8Array;
 
 /**
  * {@link renderAllBytes} plus the diagnostics of the whole call. A partial success
- * carries the `agerr` messages, not the syntax error's `message`.
+ * (graphs rendered, then a syntax error) carries the `agerr` messages, not the syntax
+ * error's `message`. A limit or a cancel always throws, as for {@link renderAllBytes}.
  */
 export function renderAllBytesWithDiagnostics(
   dot_source: Uint8Array,
   engine: string,
   format: string,
+  options?: RenderOptions | null,
 ): RenderedBytes;
 
 /** {@link render} with format `svg`. */
-export function renderSvg(dot_source: string, engine: string): string;
+export function renderSvg(dot_source: string, engine: string, options?: RenderOptions | null): string;
 
 /** {@link render} with format `json`. */
-export function renderJson(dot_source: string, engine: string): string;
+export function renderJson(dot_source: string, engine: string, options?: RenderOptions | null): string;
 
 /** Layout statistics. Warnings are not returned. Throws a {@link GraphvizError}. */
-export function inspectGraph(dot_source: string, engine: string): GraphStats;
+export function inspectGraph(dot_source: string, engine: string, options?: RenderOptions | null): GraphStats;
 
 /** `dot`, `neato`, `fdp`, `sfdp`, `twopi`, `circo`, `osage`, `patchwork`. */
 export function supportedEngines(): string[];
