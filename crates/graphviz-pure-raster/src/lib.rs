@@ -223,6 +223,10 @@ fn render_pixmap(
         return Ok(None);
     }
     let scale = f64::from(scale) * fit;
+    // Not in C: the caller's `Limits::max_allocation`, for the RGBA pixels, and a run-wide
+    // limit reached while the SVG was read, both before the pixels are allocated and zeroed.
+    graphviz_pure_core::limits::check_allocation(u64::from(w) * u64::from(h) * 4)?;
+    graphviz_pure_core::limits::check()?;
     let mut pixmap = tiny_skia::Pixmap::new(w, h)
         .ok_or_else(|| GraphvizError::render("the drawing is too large to rasterize"))?;
     resvg::render(
@@ -230,6 +234,9 @@ fn render_pixmap(
         tiny_skia::Transform::from_scale(scale as f32, scale as f32),
         &mut pixmap.as_mut(),
     );
+    // Not in C: the drawing is one call that cannot stop part way, so a deadline or a
+    // cancel that came during it is honoured once it returns, before the encoding.
+    graphviz_pure_core::limits::check()?;
     Ok(Some(pixmap))
 }
 
@@ -293,9 +300,20 @@ fn parse_svg(svg: &str) -> Result<usvg::Tree, GraphvizError> {
 /// Available only with `pdf` (enabled by the CLI). Layout matches the reference C
 /// layout; PDF bytes do not match cairo. Text uses the bundled fonts as outlines,
 /// images are omitted, and no system fonts, timestamps or document IDs are used.
+///
+/// Inside a [`Limits::run`], the run's time, work, heap and cancel limits apply: they are
+/// read when the call starts, before the conversion and after it.
 #[cfg(feature = "pdf")]
 pub fn render_pdf(svg: &str) -> Result<Vec<u8>, GraphvizError> {
+    graphviz_pure_core::limits::check()?;
+    graphviz_pure_core::limits::settle(render_pdf_inner(svg))
+}
+
+#[cfg(feature = "pdf")]
+fn render_pdf_inner(svg: &str) -> Result<Vec<u8>, GraphvizError> {
     let tree = parse_svg(svg)?;
+    // Not in C: a limit reached while the SVG was read stops before the conversion.
+    graphviz_pure_core::limits::check()?;
     // svg2pdf 0.13 uses usvg 0.45; the raster stack uses 0.48. Serialize
     // the normalized paths so font shaping and portable math stay in our existing
     // stack, rather than loading a second font database or embedding font subsets.
@@ -320,6 +338,9 @@ pub fn render_pdf(svg: &str) -> Result<Vec<u8>, GraphvizError> {
         svg2pdf::PageOptions { dpi: 96.0 },
     )
     .map_err(|e| GraphvizError::render(format!("converting the SVG to PDF: {e}")))
+    // Not in C: the conversion is one call that cannot stop part way; a limit reached
+    // during it is honoured once it returns.
+    .and_then(|pdf| graphviz_pure_core::limits::check().map(|()| pdf))
 }
 
 #[cfg(test)]
@@ -330,6 +351,68 @@ mod tests {
 <g transform="scale(1 1) rotate(0) translate(4 112)"><polygon fill="white" stroke="none" points="-4,4 -4,-112 58,-112 58,4 -4,4"/>
 <ellipse fill="none" stroke="black" cx="27" cy="-90" rx="27" ry="18"/>
 <text text-anchor="middle" x="27" y="-85.8" font-family="Times,serif" font-size="14.00">a</text></g></svg>"#;
+
+    #[test]
+    fn the_allocation_limit_stops_the_pixmap() {
+        // 62 x 116 pt at 96 dpi: 83 x 155 px of 4 bytes.
+        let err = Limits::new()
+            .max_allocation(10_000)
+            .run(|| rasterize(SVG, RasterFormat::Png, false))
+            .unwrap_err();
+        assert_eq!(err.limit(), Some(Limit::Allocation));
+        assert_eq!(
+            err.message(),
+            "an allocation of 51460 bytes is over the limit of 10000"
+        );
+        assert!(
+            Limits::new()
+                .max_allocation(51_460)
+                .run(|| rasterize(SVG, RasterFormat::Png, false))
+                .is_ok()
+        );
+    }
+
+    #[test]
+    fn a_cancel_during_the_drawing_is_honoured_after_it() {
+        // Polled when the run starts, when the call starts, before the drawing and after
+        // it; the fourth poll cancels.
+        let polls = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let seen = std::sync::Arc::clone(&polls);
+        let err = Limits::new()
+            .cancel_when(move || seen.fetch_add(1, std::sync::atomic::Ordering::Relaxed) >= 3)
+            .run(|| rasterize(SVG, RasterFormat::Png, false))
+            .unwrap_err();
+        assert_eq!(err.kind(), GraphvizErrorKind::Cancelled);
+        assert_eq!(polls.load(std::sync::atomic::Ordering::Relaxed), 4);
+    }
+
+    #[cfg(feature = "pdf")]
+    #[test]
+    fn render_pdf_honours_the_limits() {
+        let token = CancelToken::new();
+        token.cancel();
+        let err = Limits::new()
+            .cancel_token(token)
+            .run(|| render_pdf(SVG))
+            .unwrap_err();
+        assert_eq!(err.kind(), GraphvizErrorKind::Cancelled);
+        // Polled when the run starts, when the call starts, before the conversion and after
+        // it; the fourth poll cancels.
+        let polls = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let seen = std::sync::Arc::clone(&polls);
+        let err = Limits::new()
+            .cancel_when(move || seen.fetch_add(1, std::sync::atomic::Ordering::Relaxed) >= 3)
+            .run(|| render_pdf(SVG))
+            .unwrap_err();
+        assert_eq!(err.kind(), GraphvizErrorKind::Cancelled);
+        assert_eq!(polls.load(std::sync::atomic::Ordering::Relaxed), 4);
+        // Within generous limits, the same bytes as without.
+        let pdf = Limits::new()
+            .max_steps(1 << 20)
+            .run(|| render_pdf(SVG))
+            .unwrap();
+        assert_eq!(pdf, render_pdf(SVG).unwrap());
+    }
 
     #[test]
     fn a_cancelled_run_does_not_rasterize() {

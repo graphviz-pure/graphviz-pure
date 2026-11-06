@@ -198,8 +198,22 @@ impl Limits {
         self
     }
 
-    /// The largest single buffer whose size the input chooses (polygon vertices, dense
-    /// matrices, the raster pixmap), in bytes. Checked before the buffer is allocated.
+    /// The largest single buffer whose size the input chooses, in bytes: polygon vertices
+    /// (`peripheries`, `sides`), neato's dense `n × n` models (Kamada-Kawai, stress
+    /// majorization, SGD), dot's node and edge arenas, and the raster pixmap. Checked before
+    /// the buffer is allocated; past it, the call stops with the limit's error.
+    ///
+    /// dot's arenas are checked, with `Vec`'s growth, before the phases that grow them in bulk
+    /// (a virtual-node chain, position's auxiliary graph, `connect_graph`). Every other push
+    /// onto them checks the reallocation it causes and, past the limit, stops the call after
+    /// that one reallocation. The arenas' first fill from the parsed graph is bounded by
+    /// [`Self::max_nodes`] and [`Self::max_edges`] instead. Other buffers are not covered:
+    /// [`Self::heap_limit`] and an OS limit bound them.
+    ///
+    /// The port's own vertex budget comes first: `peripheries=2147483647` asks for more than
+    /// it allows, so the call fails with C's out-of-memory message, an error of kind
+    /// [`GraphvizErrorKind::Allocation`](crate::GraphvizErrorKind) whose
+    /// [`GraphvizError::limit`] is `None`, whatever this limit is.
     #[must_use]
     pub fn max_allocation(mut self, bytes: u64) -> Self {
         self.allocation = Some(bytes);
@@ -306,6 +320,15 @@ struct State {
     armed: u64,
     /// The limit reached in this `run`.
     trip: Option<GraphvizError>,
+    /// The allocation limit reached in the current call: it stops this call only, and
+    /// [`settle`] clears it.
+    call_trip: Option<GraphvizError>,
+}
+
+impl State {
+    fn tripped(&self) -> bool {
+        self.trip.is_some() || self.call_trip.is_some()
+    }
 }
 
 thread_local! {
@@ -319,7 +342,7 @@ thread_local! {
     static MAX_EDGES: Cell<u64> = const { Cell::new(u64::MAX) };
     static MAX_ALLOCATION: Cell<u64> = const { Cell::new(u64::MAX) };
     static STATE: RefCell<State> = const {
-        RefCell::new(State { frames: Vec::new(), steps: 0, armed: 0, trip: None })
+        RefCell::new(State { frames: Vec::new(), steps: 0, armed: 0, trip: None, call_trip: None })
     };
 }
 
@@ -362,7 +385,7 @@ fn arm(s: &mut State) {
         COUNTDOWN.set(u64::MAX);
         return;
     };
-    if s.trip.is_some() {
+    if s.tripped() {
         s.armed = 0;
         COUNTDOWN.set(0);
         return;
@@ -415,6 +438,7 @@ fn pop() {
         if s.frames.is_empty() {
             s.steps = 0;
             s.trip = None;
+            s.call_trip = None;
         }
         publish(s);
         arm(s);
@@ -428,17 +452,17 @@ fn evaluate() -> bool {
     // from inside `reached`. The nested evaluation reads nothing and reports the state as
     // it is, so the closure cannot recurse without end.
     if EVALUATING.get() {
-        return STATE.with_borrow(|s| s.trip.is_some());
+        return STATE.with_borrow(State::tripped);
     }
     let Some((limits, steps, cap)) = STATE.with_borrow_mut(|s| {
-        if s.trip.is_some() {
+        if s.tripped() {
             return None;
         }
         settle_count(s);
         let top = s.frames.last()?;
         Some((Rc::clone(&top.limits), s.steps, top.step_cap))
     }) else {
-        return STATE.with_borrow(|s| s.trip.is_some());
+        return STATE.with_borrow(State::tripped);
     };
     EVALUATING.set(true);
     let _guard = EvaluatingGuard;
@@ -448,7 +472,7 @@ fn evaluate() -> bool {
             s.trip = trip;
         }
         arm(s);
-        s.trip.is_some()
+        s.tripped()
     })
 }
 
@@ -509,7 +533,7 @@ fn slow_tick(units: u64) -> bool {
             COUNTDOWN.set(u64::MAX);
             return false;
         }
-        if s.trip.is_none() {
+        if !s.tripped() {
             settle_count(s);
             s.steps = s.steps.saturating_add(units);
             s.armed = 0;
@@ -520,16 +544,17 @@ fn slow_tick(units: u64) -> bool {
     in_run && evaluate()
 }
 
-/// Whether a limit was reached in this `run`, without counting work.
+/// Whether a limit stopped this call, without counting work.
 #[must_use]
 pub fn stopped() -> bool {
-    COUNTDOWN.get() == 0 && STATE.with_borrow(|s| s.trip.is_some())
+    COUNTDOWN.get() == 0 && STATE.with_borrow(State::tripped)
 }
 
-/// The error of the limit reached in this `run`, if one was.
+/// The error of the limit that stopped this call, if one did: a run-wide limit, or this
+/// call's allocation limit.
 #[must_use]
 pub fn error() -> Option<GraphvizError> {
-    STATE.with_borrow(|s| s.trip.clone())
+    STATE.with_borrow(|s| s.trip.clone().or_else(|| s.call_trip.clone()))
 }
 
 /// A checkpoint at the start of a library call: reads every limit now, and returns the
@@ -545,12 +570,23 @@ pub fn check() -> Result<(), GraphvizError> {
 }
 
 /// `result`, or the error of the limit reached during the call that produced it. A call that
-/// was stopped part way returns the limit's error, whatever its pipeline returned.
+/// was stopped part way returns the limit's error, whatever its pipeline returned. Ends the
+/// call: an allocation limit it reached does not stop the next call.
 pub fn settle<T>(result: Result<T, GraphvizError>) -> Result<T, GraphvizError> {
-    match error() {
+    match take_error() {
         Some(e) => Err(e),
         None => result,
     }
+}
+
+/// Ends the call, as [`settle`] does, and returns the error of the limit that stopped it.
+pub fn take_error() -> Option<GraphvizError> {
+    STATE.with_borrow_mut(|s| {
+        let call = s.call_trip.take();
+        let stop = s.trip.clone().or(call);
+        arm(s);
+        stop
+    })
 }
 
 /// [`Limits::max_input_bytes`] for a DOT source of `len` bytes.
@@ -590,14 +626,31 @@ pub fn check_edges(count: usize) -> Result<(), GraphvizError> {
     Ok(())
 }
 
-/// [`Limits::max_allocation`] for a buffer of `bytes`.
+/// Whether a [`Limits::max_allocation`] is in force, so a caller can skip estimating the size
+/// of a buffer when none is.
+#[must_use]
+pub fn allocation_limited() -> bool {
+    MAX_ALLOCATION.get() != u64::MAX
+}
+
+/// [`Limits::max_allocation`] for a buffer of `bytes`, before it is allocated. Past the
+/// limit, the current call stops: every later checkpoint in it reports the limit, and the
+/// library call returns its error. The caller skips the allocation and returns.
 pub fn check_allocation(bytes: u64) -> Result<(), GraphvizError> {
     let max = MAX_ALLOCATION.get();
     if bytes > max {
-        return Err(GraphvizError::limit_exceeded(
+        let err = GraphvizError::limit_exceeded(
             Limit::Allocation,
             format!("an allocation of {bytes} bytes is over the limit of {max}"),
-        ));
+        );
+        STATE.with_borrow_mut(|s| {
+            if !s.tripped() {
+                settle_count(s);
+                s.call_trip = Some(err.clone());
+                arm(s);
+            }
+        });
+        return Err(err);
     }
     Ok(())
 }
@@ -737,13 +790,21 @@ mod tests {
             assert!(check_nodes(2).is_ok());
             assert_eq!(check_nodes(3).unwrap_err().limit(), Some(Limit::Nodes));
             assert_eq!(check_edges(2).unwrap_err().limit(), Some(Limit::Edges));
+            // Not a run-wide stop.
+            assert!(!stopped());
+            assert!(check().is_ok());
             assert_eq!(
                 check_allocation(65).unwrap_err().limit(),
                 Some(Limit::Allocation)
             );
-            // Not a run-wide stop.
-            assert!(!stopped());
-            assert!(check().is_ok());
+            // The allocation limit stops the current call, until it settles.
+            assert!(stopped() && tick());
+            assert_eq!(
+                settle(Ok::<_, GraphvizError>(())).unwrap_err().limit(),
+                Some(Limit::Allocation)
+            );
+            assert!(!stopped() && !tick());
+            assert!(settle(Ok::<_, GraphvizError>(())).is_ok());
         });
         assert!(check_nodes(3).is_ok());
     }
@@ -802,6 +863,25 @@ mod tests {
             .run(|| ticks_until_stop(10_000));
         // 500 + 1,024 + 500 + 977 = 3,001.
         assert_eq!(stop, Some(2001));
+    }
+
+    #[test]
+    fn an_allocation_stop_inside_a_closure_stops_its_ticks() {
+        // A library call inside the closure reaches the allocation limit; its later ticks
+        // report the stop, as they would outside the closure.
+        let after = Arc::new(AtomicUsize::new(0));
+        let seen = Arc::clone(&after);
+        Limits::new()
+            .max_allocation(10)
+            .cancel_when(move || {
+                if check_allocation(11).is_err() && tick() {
+                    seen.fetch_add(1, Ordering::Relaxed);
+                }
+                let _ = settle(Ok::<_, GraphvizError>(()));
+                false
+            })
+            .run(|| {});
+        assert_eq!(after.load(Ordering::Relaxed), 1);
     }
 
     #[test]

@@ -110,9 +110,14 @@ impl Dot<'_> {
             self.set_ycoords(g)?;
         }
         // Not in C: the auxiliary graph and its network simplex start with the limits of
-        // the caller's `Limits::run`.
+        // the caller's `Limits::run`, and the arenas it grows are checked against
+        // `Limits::max_allocation` ([`Self::check_aux_graph_growth`]).
         super::check_limits()?;
+        if graphviz_pure_core::limits::allocation_limited() {
+            self.check_aux_graph_growth(g)?;
+        }
         self.create_aux_edges(g);
+
         if std::env::var_os("GVDUMP").is_some() {
             let nl = self.nlist_nodes(g);
             for (i, &n) in nl.iter().enumerate() {
@@ -141,6 +146,12 @@ impl Dot<'_> {
         }
         let it = self.nsiter2(g);
         if self.ns_rank(g, 2, it)? != 0 {
+            // Not in C: `connect_graph` adds up to a slack node and two edges per rank,
+            // checked against the caller's `Limits::max_allocation` first.
+            if graphviz_pure_core::limits::allocation_limited() {
+                let ranks = self.graphs.get(g).map_or(0, rank_span);
+                self.check_arena_growth(ranks, ranks.saturating_mul(2))?;
+            }
             self.connect_graph(g);
             let it = self.nsiter2(g);
             self.ns_rank(g, 2, it)?;
@@ -150,6 +161,87 @@ impl Dot<'_> {
         self.set_aspect(g);
         self.remove_aux_edges(g);
         Ok(())
+    }
+
+    /// Not in C: [`Self::check_arena_growth`] for what `create_aux_edges` adds:
+    ///
+    /// - `make_edge_pairs`: a slack node and two edges per edge;
+    /// - `make_lr_constraints`: a separation edge per pair of neighbours in a rank, and up to
+    ///   two per flat edge, in `flat_out` or `other` (a labelled flat edge whose ends are not
+    ///   adjacent gets two, for its label node, `ND_alg`); self-loops add none;
+    /// - `pos_clusters`, for each cluster: its two boundary nodes, up to four edges per rank
+    ///   it spans (`contain_nodes`, `keepout_othernodes`), up to four more (its boundary and
+    ///   label edges and `contain_subclust`'s pair), and one per pair of its sibling clusters
+    ///   (`separate_subclust`); plain subgraphs add nothing; and the root's boundary nodes;
+    /// - `compress_graph`, for `ratio=compress`: the root's boundary nodes, two edges per rank
+    ///   and one more.
+    ///
+    /// `connect_graph`, which runs only when the first network simplex fails, is checked
+    /// before it runs.
+    fn check_aux_graph_growth(&self, g: G) -> std::result::Result<(), String> {
+        let (nodes, edges) = self.aux_graph_growth(g);
+        self.check_arena_growth(nodes, edges)
+    }
+
+    /// The nodes and edges [`Self::check_aux_graph_growth`] counts: an upper bound on what
+    /// `create_aux_edges` adds to the arenas.
+    fn aux_graph_growth(&self, g: G) -> (usize, usize) {
+        let Some(graph) = self.graphs.get(g) else {
+            return (0, 0);
+        };
+        let (mut edges, mut other, mut flat) = (0usize, 0usize, 0usize);
+        let mut n = graph.nlist;
+        while let Some(node) = n.and_then(|x| self.nodes.get(x)) {
+            edges = edges.saturating_add(node.out.len());
+            other = other.saturating_add(node.other.len());
+            flat = flat.saturating_add(node.flat_out.len());
+            n = node.next;
+        }
+        let ranks = rank_span(graph);
+        let neighbours: usize = (graph.minrank..=graph.maxrank)
+            .map(|r| {
+                usize::try_from(self.rank_n(g, r))
+                    .unwrap_or(0)
+                    .saturating_sub(1)
+            })
+            .fold(0, usize::saturating_add);
+        // Every cluster under `g`, through the `clust` lists.
+        let (mut clusters, mut cluster_ranks, mut sibling_pairs) = (0usize, 0usize, 0usize);
+        let mut stack = vec![g];
+        while let Some(c) = stack.pop() {
+            let Some(cg) = self.graphs.get(c) else {
+                continue;
+            };
+            let k = cg.clust.len();
+            sibling_pairs = sibling_pairs.saturating_add(
+                k.saturating_mul(k.saturating_sub(1))
+                    .checked_div(2)
+                    .unwrap_or(0),
+            );
+            for &sub in &cg.clust {
+                if let Some(sg) = self.graphs.get(sub) {
+                    clusters = clusters.saturating_add(1);
+                    cluster_ranks = cluster_ranks.saturating_add(rank_span(sg));
+                    stack.push(sub);
+                }
+            }
+        }
+        let compress = if graph.drawing.ratio_kind == RatioKind::Compress {
+            ranks.saturating_mul(2).saturating_add(1)
+        } else {
+            0
+        };
+        let new_nodes = edges.saturating_add(clusters.saturating_add(1).saturating_mul(2));
+        let new_edges = edges
+            .saturating_mul(2)
+            .saturating_add(neighbours)
+            .saturating_add(other.saturating_mul(2))
+            .saturating_add(flat.saturating_mul(2))
+            .saturating_add(cluster_ranks.saturating_mul(4))
+            .saturating_add(clusters.saturating_mul(4))
+            .saturating_add(sibling_pairs)
+            .saturating_add(compress);
+        (new_nodes, new_edges)
     }
 
     fn nsiter2(&self, g: G) -> i32 {
@@ -978,4 +1070,14 @@ impl Dot<'_> {
         self.graphs[g].drawing.size = Point::new(b.x * xf, b.y * yf);
         true
     }
+}
+
+/// Not in C: the number of ranks `graph` spans, for the arena estimates.
+fn rank_span(graph: &GraphInfo) -> usize {
+    usize::try_from(
+        i64::from(graph.maxrank)
+            .saturating_sub(i64::from(graph.minrank))
+            .saturating_add(1),
+    )
+    .unwrap_or(0)
 }

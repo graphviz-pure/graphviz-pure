@@ -16,10 +16,20 @@ output contains `unsafe`.
 ## Untrusted input and output
 
 Like C Graphviz, layout cost can be superlinear and is unbounded. Services laying out
-untrusted DOT must impose their own input-size, time and memory limits, using an isolated
-worker or process that can be terminated on timeout. A finite but superlinear layout is not
-a vulnerability; an infinite loop, a panic or unbounded memory use on small input is. There
-are no built-in limits and no cancellation API; that work is planned after 1.0.
+untrusted DOT must impose their own time and memory limits, using an isolated worker or
+process that can be terminated on timeout.
+
+`graphviz_pure::Limits::run` (`docs/roadmap/limits.md`) adds cooperative limits for Rust
+callers: input and graph size, a deadline, a work budget, the size of some input-sized
+buffers, a heap reading taken from the caller's allocator, and cancellation. They are
+checked at checkpoints in the long loops, not continuously. Some phases have no checkpoint,
+some loops check only between long iterations, and a single allocation is not stopped by the
+heap limit, so a call can run for seconds or minutes past a limit and allocate past it. They
+reduce wasted work; they do not replace the worker or process limit. The JavaScript and
+command-line builds have no limits API.
+
+A finite but superlinear layout is not a vulnerability; an infinite loop, a panic or
+unbounded memory use on small input is.
 
 SVG from untrusted DOT is untrusted markup. As in C, escaping quotes and markup does not
 sanitise `URL`/`href` values or filter schemes: the output can contain `javascript:` links.

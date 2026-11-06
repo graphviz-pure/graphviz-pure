@@ -148,7 +148,7 @@ pub fn render_dot_all_partial(
         );
         (outs.into_iter().map(text).collect(), err.map(error_text))
     });
-    partial(outs, limits::error().or(err), diagnostics)
+    partial(outs, limits::take_error().or(err), diagnostics)
 }
 
 /// Lays out and renders every graph in `dot_source` as SVG, for raster output: each SVG comes
@@ -177,7 +177,7 @@ pub fn render_svg_all_partial(
             .collect();
         (outs, err.map(error_text))
     });
-    partial(outs, limits::error().or(err), diagnostics)
+    partial(outs, limits::take_error().or(err), diagnostics)
 }
 
 /// Parses the first graph in `dot_source`.

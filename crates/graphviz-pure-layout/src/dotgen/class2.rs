@@ -60,6 +60,16 @@ impl Dot<'_> {
         let mut u = from;
         let to_rank = self.nodes[to].rank;
         let mut r = self.nodes[from].rank + 1;
+        // Not in C: a large `minlen` asks for millions of virtual nodes. The node and edge
+        // arenas the chain grows are checked against the caller's `Limits::max_allocation`
+        // before it is built.
+        let links = usize::try_from(
+            i64::from(to_rank)
+                .saturating_sub(i64::from(r))
+                .saturating_add(1),
+        )
+        .unwrap_or(0);
+        self.check_arena_growth(links, links)?;
         while r <= to_rank {
             // Not in C: a limit of the caller's `Limits::run` stops the chain (a large
             // `minlen` asks for many virtual nodes).

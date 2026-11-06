@@ -362,3 +362,137 @@ fn each_engine_s_layout_stops_at_a_zero_budget() {
         assert_eq!(err.limit(), Some(Limit::Steps), "{engine:?}");
     }
 }
+
+#[test]
+fn the_work_budget_stops_rendering() {
+    // Laid out outside the run: only the renderer's checkpoints count.
+    let mut parsed = graphviz_pure::parse_dot(&fixture("unix.gv")).unwrap();
+    let _ = graphviz_pure::layout_graph(parsed.output_mut(), LayoutEngine::Dot).unwrap();
+    let err = Limits::new()
+        .max_steps(0)
+        .run(|| graphviz_pure::render_graph(parsed.output(), OutputFormat::Svg))
+        .unwrap_err();
+    assert_eq!(err.limit(), Some(Limit::Steps));
+}
+
+#[test]
+fn the_allocation_limit_stops_polygon_vertices() {
+    // A million peripheries and the outline (`outp`): two 16-byte vertices each, 32 MB.
+    let big = "digraph { node [peripheries=1000000]; a }";
+    Limits::new().max_allocation(1 << 20).run(|| {
+        let err = graphviz_pure::render_dot(big, "dot", "svg").unwrap_err();
+        assert_eq!(err.kind(), GraphvizErrorKind::LimitExceeded);
+        assert_eq!(err.limit(), Some(Limit::Allocation));
+        assert_eq!(
+            err.message(),
+            "an allocation of 32000032 bytes is over the limit of 1048576"
+        );
+        // It stops that call only.
+        assert!(graphviz_pure::render_dot("digraph { a -> b }", "dot", "svg").is_ok());
+    });
+}
+
+#[test]
+fn the_allocation_limit_stops_neato_s_dense_model() {
+    let mut src = String::from("graph {\n");
+    for i in 1..600 {
+        src.push_str(&format!("n{} -- n{i};\n", i / 2));
+    }
+    src.push('}');
+    let err = Limits::new()
+        .max_allocation(1 << 20)
+        .run(|| graphviz_pure::render_dot(&src, "neato", "svg"))
+        .unwrap_err();
+    assert_eq!(err.limit(), Some(Limit::Allocation));
+    // 600 nodes: 600 * 601 / 2 * 8 bytes of packed Laplacians.
+    assert_eq!(
+        err.message(),
+        "an allocation of 1442400 bytes is over the limit of 1048576"
+    );
+}
+
+#[test]
+fn an_allocation_limit_in_a_partial_render_ends_with_it() {
+    let src = "digraph one { a }\ndigraph two { node [peripheries=1000000]; b }\n";
+    Limits::new().max_allocation(1 << 20).run(|| {
+        let (outs, err) = graphviz_pure::render_dot_all_partial(
+            src,
+            "dot",
+            "svg",
+            &GlobalAttrs::default(),
+            LayoutOptions::default(),
+        );
+        assert_eq!(outs.output().len(), 1);
+        assert_eq!(err.unwrap().limit(), Some(Limit::Allocation));
+        // The next call is not stopped by it.
+        assert!(graphviz_pure::render_dot("digraph { a -> b }", "dot", "svg").is_ok());
+    });
+}
+
+#[test]
+fn the_allocation_limit_stops_a_long_virtual_node_chain() {
+    // 100 million virtual nodes: the arenas would grow to gigabytes.
+    let started = std::time::Instant::now();
+    let err = Limits::new()
+        .max_allocation(64 << 20)
+        .run(|| graphviz_pure::render_dot("digraph { a -> b [minlen=100000000] }", "dot", "svg"))
+        .unwrap_err();
+    assert_eq!(err.limit(), Some(Limit::Allocation));
+    assert!(started.elapsed() < std::time::Duration::from_secs(5));
+}
+
+#[test]
+fn each_periphery_counts_as_work() {
+    // Laid out outside the run: one node of 100,000 peripheries is drawn inside it.
+    let mut parsed =
+        graphviz_pure::parse_dot("digraph { a [shape=box, peripheries=100000] }").unwrap();
+    let _ = graphviz_pure::layout_graph(parsed.output_mut(), LayoutEngine::Dot).unwrap();
+    let err = Limits::new()
+        .max_steps(10_000)
+        .run(|| graphviz_pure::render_graph(parsed.output(), OutputFormat::Svg))
+        .unwrap_err();
+    assert_eq!(err.limit(), Some(Limit::Steps));
+}
+
+#[test]
+fn the_allocation_limit_bounds_dot_s_node_arena() {
+    // 79,000 virtual nodes, then a slack node per edge in position's auxiliary graph: the
+    // arena of 808-byte nodes would double to 262,144 slots (202 MiB).
+    let err = Limits::new()
+        .max_allocation(64 << 20)
+        .run(|| graphviz_pure::render_dot("digraph { a -> b [minlen=79000] }", "dot", "svg"))
+        .unwrap_err();
+    assert_eq!(err.limit(), Some(Limit::Allocation));
+    // 128 MiB: the chain's own growth (131,072 slots, 101 MiB) fits; the auxiliary graph's
+    // (262,144 slots) does not, and position checks it before it builds the graph.
+    let err = Limits::new()
+        .max_allocation(128 << 20)
+        .run(|| graphviz_pure::render_dot("digraph { a -> b [minlen=79000] }", "dot", "svg"))
+        .unwrap_err();
+    assert_eq!(err.limit(), Some(Limit::Allocation));
+    // A limit above the arena's growth lets it through, with the unlimited bytes.
+    let unlimited = graphviz_pure::render_dot("digraph { a -> b [minlen=79000] }", "dot", "svg");
+    let limited = Limits::new()
+        .max_allocation(256 << 20)
+        .run(|| graphviz_pure::render_dot("digraph { a -> b [minlen=79000] }", "dot", "svg"));
+    assert_eq!(limited.unwrap().output(), unlimited.unwrap().output());
+}
+
+#[test]
+fn plain_subgraphs_add_nothing_to_the_arena_estimate() {
+    // 100,000 empty subgraphs that are not clusters: position adds no node for them, so a
+    // small allocation limit lets `a -> b` through with the unlimited bytes.
+    let mut src = String::from("digraph { a -> b;\n");
+    for i in 0..100_000 {
+        src.push_str(&format!("subgraph s{i} {{}}\n"));
+    }
+    src.push('}');
+    let unlimited = graphviz_pure::render_dot(&src, "dot", "svg").unwrap();
+    for limit in [16u64 << 20, 256 << 20] {
+        let limited = Limits::new()
+            .max_allocation(limit)
+            .run(|| graphviz_pure::render_dot(&src, "dot", "svg"))
+            .unwrap();
+        assert_eq!(limited.output(), unlimited.output(), "under {limit} bytes");
+    }
+}
