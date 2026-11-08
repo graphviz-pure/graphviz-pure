@@ -35,5 +35,8 @@ parallel = []
 graphviz-pure-core.workspace = true
 graphviz-pure-geom.workspace = true
 
+[dev-dependencies]
+graphviz-pure-parser.workspace = true
+
 [lints]
 workspace = true
