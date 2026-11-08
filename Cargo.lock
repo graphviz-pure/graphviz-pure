@@ -304,6 +304,7 @@ version = "1.2.0"
 dependencies = [
  "graphviz-pure-core",
  "graphviz-pure-geom",
+ "graphviz-pure-parser",
 ]
 
 [[package]]

@@ -116,7 +116,22 @@ impl Dot<'_> {
         if graphviz_pure_core::limits::allocation_limited() {
             self.check_aux_graph_growth(g)?;
         }
+        // Not in C: the arenas grow once, to the size the auxiliary graph needs, rather than
+        // doubling past it (#832). Every edge from `aux_edges` on is an auxiliary edge.
+        let (aux_nodes, aux_edges) = self.aux_graph_reserve(g);
+        self.nodes.reserve_exact(aux_nodes);
+        self.edges.reserve_exact(aux_edges);
+        let (node_mark, edge_mark) = (self.nodes.len(), self.edges.len());
         self.create_aux_edges(g);
+        let added = (
+            self.nodes.len().saturating_sub(node_mark),
+            self.edges.len().saturating_sub(edge_mark),
+        );
+        debug_assert!(
+            added.0 <= aux_nodes && added.1 <= aux_edges,
+            "create_aux_edges added {added:?} nodes and edges, more than the {aux_nodes} and \
+             {aux_edges} reserved",
+        );
 
         if std::env::var_os("GVDUMP").is_some() {
             let nl = self.nlist_nodes(g);
@@ -160,6 +175,9 @@ impl Dot<'_> {
         self.set_xcoords(g);
         self.set_aspect(g);
         self.remove_aux_edges(g);
+        // C frees the auxiliary edges in `remove_aux_edges`; the port drops them here, so the
+        // edges spline routing adds take their room. No list refers to them any more.
+        self.edges.truncate(edge_mark);
         Ok(())
     }
 
@@ -186,62 +204,134 @@ impl Dot<'_> {
     /// The nodes and edges [`Self::check_aux_graph_growth`] counts: an upper bound on what
     /// `create_aux_edges` adds to the arenas.
     fn aux_graph_growth(&self, g: G) -> (usize, usize) {
-        let Some(graph) = self.graphs.get(g) else {
+        let Some(c) = self.aux_graph_counts(g) else {
             return (0, 0);
         };
-        let (mut edges, mut other, mut flat) = (0usize, 0usize, 0usize);
+        let new_nodes = c
+            .out_edges
+            .saturating_add(c.clusters.saturating_add(1).saturating_mul(2));
+        let new_edges = c
+            .out_edges
+            .saturating_mul(2)
+            .saturating_add(c.neighbours)
+            .saturating_add(c.other.saturating_mul(2))
+            .saturating_add(c.flat.saturating_mul(2))
+            .saturating_add(c.cluster_edges());
+        (new_nodes, new_edges)
+    }
+
+    /// Not in C: a tighter upper bound than [`Self::aux_graph_growth`] on the nodes and edges
+    /// `create_aux_edges` adds, which `dot_position` reserves before it runs, so the arenas
+    /// grow once, to their size, instead of doubling past it (#832). `make_lr_constraints`
+    /// adds two edges for a node with `ND_alg` and two or more out-edges, and at most one per
+    /// flat edge in `flat_out`; the root's boundary nodes exist only for clusters or
+    /// `ratio=compress`.
+    fn aux_graph_reserve(&self, g: G) -> (usize, usize) {
+        let Some(c) = self.aux_graph_counts(g) else {
+            return (0, 0);
+        };
+        let root_lrvn = if c.clusters > 0 || c.compress > 0 {
+            2
+        } else {
+            0
+        };
+        let new_nodes = c
+            .out_edges
+            .saturating_add(c.clusters.saturating_mul(2))
+            .saturating_add(root_lrvn);
+        let new_edges = c
+            .out_edges
+            .saturating_mul(2)
+            .saturating_add(c.neighbours)
+            .saturating_add(c.alg_pairs.saturating_mul(2))
+            .saturating_add(c.flat)
+            .saturating_add(c.cluster_aux_edges)
+            .saturating_add(c.compress);
+        (new_nodes, new_edges)
+    }
+
+    /// The counts over `g` that [`Self::aux_graph_growth`] and [`Self::aux_graph_reserve`]
+    /// bound `create_aux_edges` with.
+    fn aux_graph_counts(&self, g: G) -> Option<AuxCounts> {
+        let graph = self.graphs.get(g)?;
+        let mut c = AuxCounts::default();
         let mut n = graph.nlist;
         while let Some(node) = n.and_then(|x| self.nodes.get(x)) {
-            edges = edges.saturating_add(node.out.len());
-            other = other.saturating_add(node.other.len());
-            flat = flat.saturating_add(node.flat_out.len());
+            c.out_edges = c.out_edges.saturating_add(node.out.len());
+            c.other = c.other.saturating_add(node.other.len());
+            c.flat = c.flat.saturating_add(node.flat_out.len());
+            if node.alg.is_some() && node.out.len() >= 2 {
+                c.alg_pairs = c.alg_pairs.saturating_add(1);
+            }
             n = node.next;
         }
         let ranks = rank_span(graph);
-        let neighbours: usize = (graph.minrank..=graph.maxrank)
+        c.neighbours = (graph.minrank..=graph.maxrank)
             .map(|r| {
                 usize::try_from(self.rank_n(g, r))
                     .unwrap_or(0)
                     .saturating_sub(1)
             })
             .fold(0, usize::saturating_add);
-        // Every cluster under `g`, through the `clust` lists.
-        let (mut clusters, mut cluster_ranks, mut sibling_pairs) = (0usize, 0usize, 0usize);
-        let mut stack = vec![g];
-        while let Some(c) = stack.pop() {
-            let Some(cg) = self.graphs.get(c) else {
+        self.count_aux_clusters(graph, &mut c);
+        if graph.drawing.ratio_kind == RatioKind::Compress {
+            c.compress = ranks.saturating_mul(2).saturating_add(1);
+        }
+        Some(c)
+    }
+
+    /// Every cluster under `graph`, through the `clust` lists, as `pos_clusters` recurses.
+    ///
+    /// `cluster_aux_edges` bounds what `pos_clusters` adds for each cluster `c`, as a child of
+    /// `graph`: its label edge (`make_lrvn`, unless the root is flipped), two per rank where `c`
+    /// has nodes (`contain_nodes`), its compaction edge (`contain_clustnodes`), one per side
+    /// with nodes beside `c` in such a rank (`keepout_othernodes`), the two that
+    /// `contain_subclust` ties it to `graph` with, and one per sibling whose ranks overlap
+    /// its own (`separate_subclust`).
+    fn count_aux_clusters(&self, graph: &GraphInfo, c: &mut AuxCounts) {
+        let k = graph.clust.len();
+        c.sibling_pairs = c.sibling_pairs.saturating_add(
+            k.saturating_mul(k.saturating_sub(1))
+                .checked_div(2)
+                .unwrap_or(0),
+        );
+        let flip = self.graphs.first().is_some_and(GraphInfo::flip);
+        let mut rest = graph.clust.as_slice();
+        while let Some((&sub, siblings)) = rest.split_first() {
+            rest = siblings;
+            let Some(sg) = self.graphs.get(sub) else {
                 continue;
             };
-            let k = cg.clust.len();
-            sibling_pairs = sibling_pairs.saturating_add(
-                k.saturating_mul(k.saturating_sub(1))
-                    .checked_div(2)
-                    .unwrap_or(0),
-            );
-            for &sub in &cg.clust {
-                if let Some(sg) = self.graphs.get(sub) {
-                    clusters = clusters.saturating_add(1);
-                    cluster_ranks = cluster_ranks.saturating_add(rank_span(sg));
-                    stack.push(sub);
+            c.clusters = c.clusters.saturating_add(1);
+            c.cluster_ranks = c.cluster_ranks.saturating_add(rank_span(sg));
+            let mut edges: usize = if sg.label.is_some() && !flip { 4 } else { 3 };
+            for r in sg.minrank..=sg.maxrank {
+                let n = self.rank_n(sub, r);
+                if n == 0 {
+                    continue;
+                }
+                edges = edges.saturating_add(2);
+                if let Some(v) = self.rv(sub, r, 0) {
+                    let order = self.nodes.get(v).map_or(0, |nd| nd.order);
+                    if order > 0 {
+                        edges = edges.saturating_add(1);
+                    }
+                    if i64::from(order).saturating_add(i64::from(n)) < i64::from(self.rank_n(0, r))
+                    {
+                        edges = edges.saturating_add(1);
+                    }
                 }
             }
+            for &other in siblings {
+                if let Some(og) = self.graphs.get(other)
+                    && sg.minrank.max(og.minrank) <= sg.maxrank.min(og.maxrank)
+                {
+                    edges = edges.saturating_add(1);
+                }
+            }
+            c.cluster_aux_edges = c.cluster_aux_edges.saturating_add(edges);
+            self.count_aux_clusters(sg, c);
         }
-        let compress = if graph.drawing.ratio_kind == RatioKind::Compress {
-            ranks.saturating_mul(2).saturating_add(1)
-        } else {
-            0
-        };
-        let new_nodes = edges.saturating_add(clusters.saturating_add(1).saturating_mul(2));
-        let new_edges = edges
-            .saturating_mul(2)
-            .saturating_add(neighbours)
-            .saturating_add(other.saturating_mul(2))
-            .saturating_add(flat.saturating_mul(2))
-            .saturating_add(cluster_ranks.saturating_mul(4))
-            .saturating_add(clusters.saturating_mul(4))
-            .saturating_add(sibling_pairs)
-            .saturating_add(compress);
-        (new_nodes, new_edges)
     }
 
     fn nsiter2(&self, g: G) -> i32 {
@@ -581,6 +671,12 @@ impl Dot<'_> {
         while let Some(x) = n {
             let nnext = self.nodes[x].next;
             if self.nodes[x].node_type == SLACKNODE {
+                // C frees the slack node; the port keeps its record (`dot_compute_bb` reads
+                // the rank of a cluster's `ln` and `rn`) but not its auxiliary edges.
+                if let Some(nd) = self.nodes.get_mut(x) {
+                    nd.out = Vec::new();
+                    nd.in_ = Vec::new();
+                }
                 match nprev {
                     Some(p) => self.nodes[p].next = nnext,
                     None => self.graphs[g].nlist = nnext,
@@ -1072,6 +1168,41 @@ impl Dot<'_> {
     }
 }
 
+/// What [`Dot::aux_graph_counts`] counts over a graph and its clusters.
+#[derive(Default)]
+struct AuxCounts {
+    /// Out-edges of the nodes in `nlist`: `make_edge_pairs` adds a slack node and two edges
+    /// for each.
+    out_edges: usize,
+    /// Edges in the `other` lists.
+    other: usize,
+    /// Edges in the `flat_out` lists.
+    flat: usize,
+    /// Nodes with `ND_alg` and two or more out-edges.
+    alg_pairs: usize,
+    /// Pairs of neighbours in a rank.
+    neighbours: usize,
+    clusters: usize,
+    /// Ranks spanned by the clusters, summed.
+    cluster_ranks: usize,
+    sibling_pairs: usize,
+    /// A tighter bound than [`AuxCounts::cluster_edges`] on what `pos_clusters` adds.
+    cluster_aux_edges: usize,
+    /// `compress_graph`'s edges, for `ratio=compress`.
+    compress: usize,
+}
+
+impl AuxCounts {
+    /// The edges `pos_clusters` and `compress_graph` add, at most.
+    fn cluster_edges(&self) -> usize {
+        self.cluster_ranks
+            .saturating_mul(4)
+            .saturating_add(self.clusters.saturating_mul(4))
+            .saturating_add(self.sibling_pairs)
+            .saturating_add(self.compress)
+    }
+}
+
 /// Not in C: the number of ranks `graph` spans, for the arena estimates.
 fn rank_span(graph: &GraphInfo) -> usize {
     usize::try_from(
@@ -1080,4 +1211,56 @@ fn rank_span(graph: &GraphInfo) -> usize {
             .saturating_add(1),
     )
     .unwrap_or(0)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::super::{Dot, init::MeasuredNodes};
+
+    /// #832: `dot_position` reserves what `create_aux_edges` adds (`dot_position`'s debug
+    /// check fails when it adds more) and drops the auxiliary edges after
+    /// `remove_aux_edges`, so no list still names one. The graphs cover every source of
+    /// auxiliary edges: neighbours, edge pairs, flat edges with and without labels, nested and
+    /// sibling clusters with labels, and `ratio=compress`; flipped and not.
+    #[test]
+    fn aux_graph_fits_its_reservation_and_leaves_no_edge_behind() {
+        let flat = "a -> b; {rank=same; b -> c [label=l]; c -> d; d -> b} b -> b; e -> a";
+        let clusters = "subgraph cluster_0 { label=zero; a -> b; subgraph cluster_1 { label=one; \
+                        c; d } } subgraph cluster_2 { e -> f } b -> c; a -> f; x -> a; f -> y";
+        for (attrs, body) in [
+            ("", flat),
+            ("rankdir=LR;", flat),
+            ("", clusters),
+            ("rankdir=LR;", clusters),
+            ("ratio=compress; size=\"1,1\";", clusters),
+            ("", "a -> b -> c -> a; a -> c; a -> c"),
+        ] {
+            let src = format!("digraph G {{ phase=3; {attrs} {body} }}");
+            let mut graph = graphviz_pure_parser::parse_dot(&src).unwrap();
+            graphviz_pure_core::charset::begin_layout(graph.root_name(), None);
+            let measured =
+                graphviz_pure_core::diag::quietly(|| MeasuredNodes::measure(&mut graph)).unwrap();
+            let mut d = Dot::new(&graph);
+            d.measured = Some(measured);
+            d.graph_init();
+            graphviz_pure_core::diag::quietly(|| d.dot_layout()).unwrap();
+            let edges = d.edges.len();
+            let named = |e: &usize| *e < edges;
+            for (n, nd) in d.nodes.iter().enumerate() {
+                let lists = [&nd.in_, &nd.out, &nd.flat_in, &nd.flat_out, &nd.other];
+                assert!(lists.iter().all(|l| l.iter().all(named)), "{src}: node {n}");
+                let saved = [&nd.save_in, &nd.save_out];
+                assert!(
+                    saved.iter().flat_map(|l| l.iter().flatten()).all(named),
+                    "{src}: {n}"
+                );
+            }
+            for (e, ed) in d.edges.iter().enumerate() {
+                assert!(
+                    ed.to_orig.iter().chain(&ed.to_virt).all(named),
+                    "{src}: edge {e}"
+                );
+            }
+        }
+    }
 }
