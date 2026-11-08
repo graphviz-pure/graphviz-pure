@@ -9080,8 +9080,9 @@ fn ipsep_vpsc_cycle_error_ends_the_layout() {
         .write_all(src.as_bytes())
         .unwrap();
     // The output is under 1 KB, well under the pipe buffer, so polling cannot block. The capped
-    // layout takes about 2 s; the deadline is short because the runaway also grows memory.
-    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(20);
+    // layout executes about 44 G instructions (8 s of CPU on an idle core) and runs much longer
+    // on a loaded runner, so the deadline only catches the unbounded runaway (#824).
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(120);
     while child.try_wait().unwrap().is_none() {
         if std::time::Instant::now() > deadline {
             child.kill().unwrap();
