@@ -28,6 +28,30 @@ pub trait PortGraph: SplineGraph {
     fn port_node(&self, n: usize) -> &NodeData;
     /// Graph-level parameters of node sizing.
     fn port_env(&self) -> graphviz_pure_geom::NodeSizeEnv<'_>;
+    /// What the layout kept of real node `n`'s measurement, where measuring it again
+    /// quietly would give the same and write nothing.
+    fn port_measured(&self, _n: usize) -> Option<PortShape<'_>> {
+        None
+    }
+}
+
+/// What a port lookup reads of a node's measurement: `ND_shape_info` of a record and
+/// `ND_label(n)->u.html`.
+#[derive(Debug, Clone, Copy)]
+pub struct PortShape<'a> {
+    pub record: Option<&'a graphviz_pure_geom::RecordField>,
+    pub html_label: Option<&'a graphviz_pure_geom::html_label::HtmlLabel>,
+}
+
+impl PortShape<'_> {
+    /// Whether `fresh`, a new measurement of the node, gives these parts, by their `Debug`
+    /// forms (every float's shortest round-trip digits and sign). Debug builds check each
+    /// port lookup that reads a kept measurement.
+    fn is_part_of(&self, fresh: &graphviz_pure_geom::NodeGeometry) -> bool {
+        format!("{:?}", self.record) == format!("{:?}", fresh.record.as_ref())
+            && format!("{:?}", self.html_label)
+                == format!("{:?}", fresh.label.html_label.as_deref())
+    }
 }
 
 /// `cwrotatepf(p, cwrot)` (geom.c).
@@ -375,13 +399,36 @@ pub fn shape_port<S: PortGraph + ?Sized>(
     let compass = compass.unwrap_or("_");
     let all = BOTTOM | RIGHT | TOP | LEFT;
     let src = g.port_node(n);
-    // The node was sized, and its diagnostics reported, by common_init_node.
-    let geom = graphviz_pure_core::diag::quietly(|| {
-        graphviz_pure_geom::node_geometry(src, &g.port_env())
-    })?;
+    // The node was sized, and its diagnostics reported, by common_init_node: C reads
+    // ND_shape_info and ND_label. The port reads what the layout kept of it, or measures
+    // the node again.
+    let measured;
+    let PortShape { record, html_label } = match g.port_measured(n) {
+        Some(kept) => {
+            debug_assert!(
+                graphviz_pure_core::diag::quietly(|| graphviz_pure_geom::node_geometry(
+                    src,
+                    &g.port_env()
+                ))
+                .is_ok_and(|fresh| kept.is_part_of(&fresh)),
+                "node {} was measured differently by its layout",
+                src.name
+            );
+            kept
+        }
+        None => {
+            measured = graphviz_pure_core::diag::quietly(|| {
+                graphviz_pure_geom::node_geometry(src, &g.port_env())
+            })?;
+            PortShape {
+                record: measured.record.as_ref(),
+                html_label: measured.label.html_label.as_deref(),
+            }
+        }
+    };
     let mut rv = PortInfo::default();
     let is_record = g.shape(n).is_some_and(|s| s.inside == InsideFn::Record);
-    if is_record && let Some(rec) = geom.record.as_ref() {
+    if is_record && let Some(rec) = record {
         match rec.find_port(portname) {
             Some(f) => {
                 let (fb, sides) = (f.bbox, f.sides);
@@ -397,8 +444,7 @@ pub fn shape_port<S: PortGraph + ?Sized>(
         }
         return Ok(rv);
     }
-    if let Some(graphviz_pure_geom::html_label::HtmlLabel::Table(tbl)) =
-        geom.label.html_label.as_deref()
+    if let Some(graphviz_pure_geom::html_label::HtmlLabel::Table(tbl)) = html_label
         && let Some((bp, sides)) = port_to_tbl(tbl, portname)
     {
         if compass_port(g, n, Some(bp), &mut rv, compass, sides, false) {

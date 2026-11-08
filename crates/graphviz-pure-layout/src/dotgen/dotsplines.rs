@@ -1257,14 +1257,18 @@ impl Dot<'_> {
         // The aux graph's objects are measured afresh, as C's dot_init_node_edge(auxg) does.
         // Its diagnostics print there, below, through the symbols above: C repeats the
         // label diagnostics of the copies, but not `size too small for label` (N_fixed).
+        // The quiet measurement here gives the nodes their sizes first, and dot_init_node
+        // builds each node from it where its own would give the same and print nothing.
         let _fonts = graphviz_pure_core::font::textfont_other_graph();
         // htmlEntityUTF8 is called for auxg from here on: its invalid UTF-8 warning names
         // auxg, and can print again (lastg).
         let _charset = graphviz_pure_core::charset::enter_graph(&aux.name);
-        graphviz_pure_core::diag::quietly(|| graphviz_pure_geom::size_graph_nodes(&mut aux))
-            .map_err(super::fatal)?;
+        let measured =
+            graphviz_pure_core::diag::quietly(|| super::init::MeasuredNodes::measure(&mut aux))
+                .map_err(super::fatal)?;
 
         let mut d = Dot::new(&aux);
+        d.measured = Some(measured);
         d.graphs[0].rankdir = if flip { RANKDIR_TB } else { RANKDIR_LR };
         d.graphs[0].nodesep = self.graphs[0].nodesep;
         d.graphs[0].ranksep = self.graphs[0].ranksep;
@@ -1274,6 +1278,7 @@ impl Dot<'_> {
         d.et = et;
         d.dot_init_subg();
         d.dot_init_node_edge()?;
+        d.measured = None;
         d.dot_rank()?;
         d.dot_mincross()?;
         d.dot_position()?;

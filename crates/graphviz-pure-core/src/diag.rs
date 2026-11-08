@@ -43,6 +43,60 @@ thread_local! {
     static QUIET: Cell<u32> = const { Cell::new(0) };
     static SILENT: Cell<u32> = const { Cell::new(0) };
     static VERBOSE: Cell<i32> = const { Cell::new(0) };
+    /// What the innermost [`observe`] has seen so far.
+    static OBSERVED: Cell<Observed> = const { Cell::new(Observed { consulted: false, wrote: false }) };
+}
+
+/// What a computation did with diagnostics, as [`observe`] reports it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct Observed {
+    /// It asked whether diagnostics are reported ([`reporting`], [`reporting_ports`],
+    /// [`emit_once`]), so the same computation outside [`quietly`] may take another
+    /// path: print, or change the state that later diagnostics read.
+    pub consulted: bool,
+    /// It wrote or counted a message ([`agerr`], [`fprintf_stderr`], [`render_warning`],
+    /// [`dump`]), even one below the [`agseterr`] level or inside [`quietly`].
+    pub wrote: bool,
+}
+
+impl Observed {
+    /// Neither consulted nor wrote: a repeat of the computation, quiet or not, does
+    /// nothing with diagnostics either.
+    pub fn untouched(self) -> bool {
+        !self.consulted && !self.wrote
+    }
+}
+
+fn note(f: impl FnOnce(&mut Observed)) {
+    OBSERVED.with(|o| {
+        let mut seen = o.get();
+        f(&mut seen);
+        o.set(seen);
+    });
+}
+
+/// Runs `f` and reports what it did with diagnostics. A caller that keeps a result of
+/// `f` instead of computing it again uses this to know that skipping the repeat loses no
+/// message and no diagnostic state. An enclosing `observe` sees what `f` did too.
+pub fn observe<R>(f: impl FnOnce() -> R) -> (R, Observed) {
+    struct Guard(Observed);
+    impl Drop for Guard {
+        fn drop(&mut self) {
+            let outer = self.0;
+            OBSERVED.with(|o| {
+                let inner = o.get();
+                o.set(Observed {
+                    consulted: outer.consulted || inner.consulted,
+                    wrote: outer.wrote || inner.wrote,
+                });
+            });
+        }
+    }
+    let guard = Guard(OBSERVED.with(|o| o.replace(Observed::default())));
+    let result = f();
+    let seen = OBSERVED.with(Cell::get);
+    drop(guard);
+    (result, seen)
 }
 
 /// Increments `depth` for the life of the returned guard.
@@ -77,11 +131,13 @@ pub fn silently<R>(f: impl FnOnce() -> R) -> R {
 /// False inside [`quietly`] and [`silently`]: label and node sizing diagnostics are reported
 /// only outside them.
 pub fn reporting() -> bool {
+    note(|o| o.consulted = true);
     QUIET.with(|q| q.get() == 0) && reporting_ports()
 }
 
 /// False inside [`silently`]: port warnings are reported only outside it.
 pub fn reporting_ports() -> bool {
+    note(|o| o.consulted = true);
     SILENT.with(|q| q.get() == 0)
 }
 
@@ -92,6 +148,7 @@ pub fn reporting_ports() -> bool {
 /// call. The command line does not capture, and a key stays seen for the rest
 /// of the thread: C's once-per-process behaviour.
 pub fn emit_once(key: &str) -> bool {
+    note(|o| o.consulted = true);
     EMITTED.with(|e| e.borrow_mut().insert(key.to_string()))
 }
 
@@ -111,6 +168,7 @@ pub fn agerr(level: AgErrLevel, msg: &str) {
 /// `agerr_va`: updates the levels and the error count, and gives the bytes `out` writes, if
 /// the message is at or above the [`agseterr`] level.
 fn agerr_va(level: AgErrLevel, msg: &str) -> Option<Vec<u8>> {
+    note(|o| o.wrote = true);
     let lvl = match level {
         AgErrLevel::Prev => LAST.with(Cell::get),
         AgErrLevel::Max => AgErrLevel::Err,
@@ -294,12 +352,14 @@ pub use crate::cnum::fmt_f;
 /// Not a diagnostic. `-v` progress uses this, and it stays on the command line: a
 /// [`capture`] scope drops it instead of returning it.
 pub fn fprintf_stderr(msg: &str) {
+    note(|o| o.wrote = true);
     write_stderr(&crate::charset::encode(msg));
 }
 
 /// A renderer warning C writes with `fprintf(stderr, ...)`, returned by a capturing
 /// library call instead of filtered or prefixed like an `agerr` warning.
 pub fn render_warning(msg: &str) {
+    note(|o| o.wrote = true);
     let bytes = crate::charset::encode(msg);
     if capturing() {
         let message = String::from_utf8_lossy(&bytes).into_owned();
@@ -317,6 +377,7 @@ pub fn render_warning(msg: &str) {
 
 /// One line of a `GVDUMP` debugging trace. These have no C counterpart and are not diagnostics.
 pub fn dump(line: &str) {
+    note(|o| o.wrote = true);
     write_stderr(format!("{line}\n").as_bytes());
 }
 
@@ -530,6 +591,32 @@ mod tests {
         assert_eq!(fmt_f(0.125, 2), "0.12");
     }
     use super::*;
+
+    /// `observe` tells a computation that asked or wrote nothing from one that did, and
+    /// an enclosing `observe` sees what a nested one saw.
+    #[test]
+    fn observe_reports_consults_and_writes() {
+        let ((), seen) = observe(|| ());
+        assert!(seen.untouched());
+        let (_, seen) = observe(|| quietly(reporting));
+        assert_eq!(
+            seen,
+            Observed {
+                consulted: true,
+                wrote: false
+            }
+        );
+        let (((), inner), outer) = observe(|| {
+            observe(|| {
+                capture(|| agwarningf("observed\n"));
+            })
+        });
+        assert!(inner.wrote && !inner.consulted);
+        assert!(outer.wrote);
+        // The next observe starts afresh.
+        let ((), seen) = observe(|| ());
+        assert!(seen.untouched());
+    }
 
     fn out(level: AgErrLevel, msg: &str) -> Option<String> {
         agerr_va(level, msg).map(|b| String::from_utf8(b).unwrap())

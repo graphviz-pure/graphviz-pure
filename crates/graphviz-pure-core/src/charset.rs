@@ -284,15 +284,16 @@ pub fn enter_graph(graph_name: &str) -> impl Drop + use<> {
 
 /// The start of `htmlEntityUTF8`: a call for another graph than the last one (`lastg`)
 /// clears the once-per-graph warning flag. A repeat inside [`crate::diag::quietly`] is not a
-/// C call and leaves `lastg` alone.
+/// C call and leaves `lastg` alone. A call for the last graph changes nothing, so it does
+/// not ask (a kept measurement whose repeat would only make such calls skips no state:
+/// [`crate::diag::observe`]).
 pub(crate) fn enter_html_entity_utf8() {
-    if !crate::diag::reporting() {
+    let g = GRAPH.with(|g| g.borrow().0);
+    if LAST.with(Cell::get) == g || !crate::diag::reporting() {
         return;
     }
-    let g = GRAPH.with(|g| g.borrow().0);
-    if LAST.with(|l| l.replace(g)) != g {
-        WARNED.with(|w| w.set(false));
-    }
+    LAST.with(|l| l.set(g));
+    WARNED.with(|w| w.set(false));
 }
 
 /// `htmlEntityUTF8`'s warning: printed at most once per graph. A repeat inside

@@ -278,6 +278,10 @@ impl crate::common::ports::PortGraph for Dot<'_> {
     fn port_env(&self) -> graphviz_pure_geom::NodeSizeEnv<'_> {
         graphviz_pure_geom::NodeSizeEnv::from_graph(self.input)
     }
+    fn port_measured(&self, n: usize) -> Option<crate::common::ports::PortShape<'_>> {
+        let r = self.nodes.get(n)?.real?;
+        self.measured.as_ref()?.for_port(self.measured_index(r))
+    }
 }
 
 impl crate::ortho::OrthoGraph for Dot<'_> {
