@@ -663,7 +663,8 @@ pub fn do_dot(d: &mut Dot<'_>, graph: &Graph) -> Result<(), String> {
         any_splines |= c.splines_done;
         comps.push(comp);
     }
-    drop(measured);
+    // The renderer draws the nodes from it.
+    d.handoff = measured;
     // Every component laid out: doDot ends with agdelete(g, ccs[i]) (dotinit.c:503),
     // whether the layouts stopped at a `phase` or went on to be packed.
     d.cc_deleted = ccs.iter().filter_map(|c| c.user).collect();
