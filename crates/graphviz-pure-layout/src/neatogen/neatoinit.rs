@@ -778,10 +778,10 @@ fn user_spline(g: &mut LGraph<'_>, e: usize) -> bool {
         return false;
     };
     ed.spl = Some(spl);
-    set_label(ed.label.as_mut(), lp);
-    set_label(ed.xlabel.as_mut(), xlp);
-    set_label(ed.head_label.as_mut(), head_lp);
-    set_label(ed.tail_label.as_mut(), tail_lp);
+    set_label(ed.label.as_deref_mut(), lp);
+    set_label(ed.xlabel.as_deref_mut(), xlp);
+    set_label(ed.head_label.as_deref_mut(), head_lp);
+    set_label(ed.tail_label.as_deref_mut(), tail_lp);
     true
 }
 

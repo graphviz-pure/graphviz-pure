@@ -164,10 +164,14 @@ pub struct LEdge {
     pub count: i64,
     pub to_virt: Option<usize>,
     pub spl: Option<Vec<Bezier>>,
-    pub label: Option<TextLabel>,
-    pub xlabel: Option<TextLabel>,
-    pub head_label: Option<TextLabel>,
-    pub tail_label: Option<TextLabel>,
+    /// `ED_label`, `ED_xlabel`, `ED_head_label`, `ED_tail_label`. Boxed: most edges have
+    /// none, and an inline `TextLabel` is 96 B, kept for every edge through the layout.
+    /// Their `text` is empty: the measurement kept for the renderer
+    /// ([`LGraph::label_geometry`]) holds it, and [`LGraph::edge_label_text`] reads it.
+    pub label: Option<Box<TextLabel>>,
+    pub xlabel: Option<Box<TextLabel>>,
+    pub head_label: Option<Box<TextLabel>>,
+    pub tail_label: Option<Box<TextLabel>>,
     pub tail_port: PortInfo,
     pub head_port: PortInfo,
     /// `ED_path`, from the visibility-graph shortest path.
@@ -262,8 +266,8 @@ pub struct LGraph<'a> {
     /// What [`Self::nodes`]' measurements leave for the renderer (`ND_label`,
     /// `ND_shape_info`), one per node of [`Self::src`]; the write-back gives it to the graph.
     pub node_geometry: Vec<Option<graphviz_pure_geom::LaidOutNode>>,
-    /// What the clusters' label measurements leave for the renderer (`GD_label`), by index
-    /// into [`Self::src`]; the write-back gives it to the graph.
+    /// What the edge and cluster label measurements leave for the renderer (`ED_label`,
+    /// `GD_label`), by index into [`Self::src`]; the write-back gives it to the graph.
     pub label_geometry: graphviz_pure_geom::LaidOutLabels,
     pub edges: Vec<LEdge>,
     /// Out-edges of each node ordered by (head, edge) sequence.

@@ -63,8 +63,8 @@ pub fn make_self_arcs(g: &mut LGraph<'_>, e: usize, stepx: f64) {
     let cnt = g.edges[e].count.max(0) as usize;
     if cnt == 1 || g.concentrate {
         make_self_edge(g, &[e], stepx, stepx);
-        if let Some(l) = g.edges[e].label.clone() {
-            add_label_bb(&mut g.bb, &l, false);
+        if let Some(l) = &g.edges[e].label {
+            add_label_bb(&mut g.bb, l, false);
         }
         make_port_labels(g, e);
     } else if cnt > 1 {
@@ -77,8 +77,8 @@ pub fn make_self_arcs(g: &mut LGraph<'_>, e: usize, stepx: f64) {
         }
         make_self_edge(g, &edges, stepx, stepx);
         for &e in &edges {
-            if let Some(l) = g.edges[e].label.clone() {
-                add_label_bb(&mut g.bb, &l, false);
+            if let Some(l) = &g.edges[e].label {
+                add_label_bb(&mut g.bb, l, false);
             }
             make_port_labels(g, e);
         }
