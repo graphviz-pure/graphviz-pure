@@ -75,7 +75,7 @@ impl MeasuredNode {
     /// Whether `fresh`, a new measurement of the node, gives this one bit for bit: the
     /// `Debug` forms show every float's shortest round-trip digits and sign. Debug builds
     /// check each node `dot_init_node` takes from here.
-    #[cfg(debug_assertions)]
+    #[cfg(any(debug_assertions, test))]
     fn is_measurement(&self, fresh: &graphviz_pure_geom::NodeGeometry) -> bool {
         let bits = |a: f64, b: f64| a.to_bits() == b.to_bits();
         bits(self.width, fresh.width)
