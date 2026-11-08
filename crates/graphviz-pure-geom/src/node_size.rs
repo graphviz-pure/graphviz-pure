@@ -252,6 +252,25 @@ impl<'a> NodeSizeEnv<'a> {
         }
     }
 
+    /// Whether a node measured in `self` and in `other` gets the same geometry: every
+    /// field is the same, `quantum` bit for bit.
+    pub fn measures_as(&self, other: &Self) -> bool {
+        let Self {
+            graph_name,
+            realflip,
+            quantum,
+            charset,
+            graph_name_buffer,
+            local_node_names_kept,
+        } = *self;
+        graph_name == other.graph_name
+            && realflip == other.realflip
+            && quantum.to_bits() == other.quantum.to_bits()
+            && charset == other.charset
+            && graph_name_buffer == other.graph_name_buffer
+            && local_node_names_kept == other.local_node_names_kept
+    }
+
     /// `rankdir`, `quantum` and `charset` from `attrs`, for a graph named `graph_name`.
     fn from_attrs(graph_name: &'a str, attrs: &AttrMap) -> Self {
         Self {
@@ -596,13 +615,19 @@ impl NodeGeometry {
     /// `gv_nodesize`: `(ND_lw, ND_rw, ND_ht)` in points. `flip` is `GD_flip(g)` (rankdir
     /// `LR`/`RL` in dot).
     pub fn nodesize(&self, flip: bool) -> (f64, f64, f64) {
-        if flip {
-            let w = inch2ps(self.height);
-            (w / 2.0, w / 2.0, inch2ps(self.width))
-        } else {
-            let w = inch2ps(self.width);
-            (w / 2.0, w / 2.0, inch2ps(self.height))
-        }
+        nodesize(self.width, self.height, flip)
+    }
+}
+
+/// `gv_nodesize` of a node `width` × `height` inches: `(ND_lw, ND_rw, ND_ht)` in points.
+/// `flip` is `GD_flip(g)`.
+pub fn nodesize(width: f64, height: f64, flip: bool) -> (f64, f64, f64) {
+    if flip {
+        let w = inch2ps(height);
+        (w / 2.0, w / 2.0, inch2ps(width))
+    } else {
+        let w = inch2ps(width);
+        (w / 2.0, w / 2.0, inch2ps(height))
     }
 }
 
@@ -764,7 +789,7 @@ fn node_geometry_measured(node: &NodeData, env: &NodeSizeEnv<'_>) -> Result<Node
     // `ND_shape(n)->usershape`: `custom`, by shapefile or by name.
     let usershape = custom || shape_name == "custom";
     // (once, as C binds each node's shape once: not in the port's repeat sizings)
-    if graphviz_pure_core::diag::reporting() {
+    if (usershape || unknown) && graphviz_pure_core::diag::reporting() {
         if usershape {
             usershape::register_user_shape("custom");
         } else if unknown {
@@ -1092,24 +1117,6 @@ pub fn edge_label_geometry(
             attrs.get("labelfloat").map_or("false", String::as_str),
         )),
     }
-}
-
-/// Sizes every node of `graph` (sets `NodeData::width`/`height` to `ND_width`/`ND_height`),
-/// reading `rankdir`, `quantum` and `charset` from the root graph.
-pub fn size_graph_nodes(graph: &mut Graph) -> Result<()> {
-    let env_attrs = graph.graph_attrs.clone();
-    let name = graph.root_name().to_string();
-    let env = NodeSizeEnv {
-        graph_name_buffer: graph.agnameof(graphviz_pure_core::Obj::Root).buffer,
-        local_node_names_kept: graph.local_node_names_kept,
-        ..NodeSizeEnv::from_attrs(&name, &env_attrs)
-    };
-    for node in &mut graph.nodes {
-        let geom = node_geometry(node, &env)?;
-        node.width = geom.width;
-        node.height = geom.height;
-    }
-    Ok(())
 }
 
 // ---------------------------------------------------------------------------------------------

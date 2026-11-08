@@ -102,6 +102,10 @@ pub struct Dot<'a> {
     pub cg_in_id_packed: bool,
     /// Root node index of each input node, when `input` is a pack component.
     pub cg_root_node: Option<Vec<usize>>,
+    /// What [`init::MeasuredNodes::measure`] measured of `root_input`'s nodes, by root
+    /// node index, while the nodes are initialised (when this graph measures its nodes as
+    /// `root_input` does).
+    pub measured: Option<init::MeasuredNodes>,
     pub nodes: Vec<NodeInfo>,
     pub edges: Vec<EdgeInfo>,
     pub graphs: Vec<GraphInfo>,
@@ -170,6 +174,7 @@ impl<'a> Dot<'a> {
             cg_in_id_hits: std::cell::RefCell::new(Vec::new()),
             cg_in_id_packed: false,
             cg_root_node: None,
+            measured: None,
             nodes: Vec::new(),
             edges: Vec::new(),
             graphs: Vec::new(),
@@ -308,6 +313,10 @@ impl<'a> Dot<'a> {
         }
         self.dot_init_subg();
         self.dot_init_node_edge()?;
+        // A pack component's caller takes the measurement back for the next component.
+        if !self.comp {
+            self.measured = None;
+        }
         // Not in C: each phase starts with the limits of the caller's `Limits::run`.
         check_limits()?;
         graphviz_pure_core::gv_info!("dotinit.c", 305, "Starting phase 1 [dot_rank]");
@@ -364,10 +373,11 @@ impl<'a> Dot<'a> {
 /// Lays out `graph` with the dotgen port.
 pub fn layout_dot(graph: &mut Graph) -> Result<()> {
     // dot_init_node's common_init_node reports the node diagnostics, in C's place.
-    graphviz_pure_core::diag::quietly(|| graphviz_pure_geom::size_graph_nodes(graph))?;
+    let measured = graphviz_pure_core::diag::quietly(|| init::MeasuredNodes::measure(graph))?;
     let aborted;
     let result = {
         let mut d = Dot::new(graph);
+        d.measured = Some(measured);
         d.graph_init();
         let maxphase = utils::late_int(d.agget(0, "phase"), -1, 1);
         // dot_layout: doDot only when there are nodes; dotneato_postprocess always.

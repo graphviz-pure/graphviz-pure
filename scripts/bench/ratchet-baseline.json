@@ -20,115 +20,115 @@
    "heap_blocks": 128687,
    "heap_bytes": 8506608,
    "heap_peak_bytes": 2855773,
-   "instructions": 113569387
+   "instructions": 113581419
   },
   "laid/tests/wild/gv16_graphs_b29_d1e4db.gv -Tsvg -Knop2": {
    "heap_blocks": 88138,
    "heap_bytes": 6722347,
    "heap_peak_bytes": 2137119,
-   "instructions": 97719843
+   "instructions": 97727581
   },
   "synth/dot_components_1000.gv -Tsvg": {
-   "heap_blocks": 168755,
-   "heap_bytes": 31781881,
+   "heap_blocks": 162752,
+   "heap_bytes": 32020325,
    "heap_peak_bytes": 9318926,
-   "instructions": 361327596
+   "instructions": 349726738
   },
   "synth/dot_dag_1000.gv -Tsvg": {
-   "heap_blocks": 170387,
-   "heap_bytes": 42301573,
+   "heap_blocks": 167384,
+   "heap_bytes": 42419550,
    "heap_peak_bytes": 12522933,
-   "instructions": 738648013
+   "instructions": 729822188
   },
   "synth/dot_par_10_500.gv -Tsvg": {
-   "heap_blocks": 123644,
-   "heap_bytes": 119534529,
+   "heap_blocks": 123578,
+   "heap_bytes": 119536946,
    "heap_peak_bytes": 59807299,
-   "instructions": 1442913390
+   "instructions": 1442510718
   },
   "synth/nop2_subgraph_10000.gv -Tcanon -Knop2": {
    "heap_blocks": 600299,
    "heap_bytes": 53680054,
    "heap_peak_bytes": 23601364,
-   "instructions": 717978556
+   "instructions": 718182037
   },
   "synth/twopi_pairs_1000.gv -Tsvg": {
    "heap_blocks": 100120,
    "heap_bytes": 70740535,
    "heap_peak_bytes": 15340622,
-   "instructions": 596490286
+   "instructions": 596549403
   },
   "synth/twopi_tree_5000.gv -Tsvg": {
    "heap_blocks": 295779,
    "heap_bytes": 45883542,
    "heap_peak_bytes": 20903348,
-   "instructions": 379091339
+   "instructions": 379249904
   },
   "tests/circo/wild_gv16_directed_sdh_29b016.gv -Tsvg": {
    "heap_blocks": 15889,
    "heap_bytes": 1928201,
    "heap_peak_bytes": 869458,
-   "instructions": 25247082
+   "instructions": 25253607
   },
   "tests/fdp/wild_gv16_graphs_b69_4b5b48.gv -Tsvg": {
    "heap_blocks": 177444,
    "heap_bytes": 8250679,
    "heap_peak_bytes": 1082733,
-   "instructions": 2629811195
+   "instructions": 2629814108
   },
   "tests/fixtures/unix.gv -Tpng": {
-   "heap_blocks": 18897,
-   "heap_bytes": 12621295,
+   "heap_blocks": 18771,
+   "heap_bytes": 12625485,
    "heap_peak_bytes": 6058927,
-   "instructions": 136527087
+   "instructions": 136281802
   },
   "tests/fixtures/unix.gv -Tsvg": {
-   "heap_blocks": 6060,
-   "heap_bytes": 1571265,
+   "heap_blocks": 5934,
+   "heap_bytes": 1575455,
    "heap_peak_bytes": 519942,
-   "instructions": 16787614
+   "instructions": 16543404
   },
   "tests/neato/hw2_random_120.gv -Tsvg": {
    "heap_blocks": 10827,
    "heap_bytes": 2397935,
    "heap_peak_bytes": 602591,
-   "instructions": 2282694922
+   "instructions": 2282697721
   },
   "tests/osage/wild_gv16_graphs_b51_33bcb0.gv -Tsvg": {
    "heap_blocks": 11239,
    "heap_bytes": 1668044,
    "heap_peak_bytes": 748292,
-   "instructions": 18547353
+   "instructions": 18547163
   },
   "tests/patchwork/wild_gv16_graphs_b51_33bcb0.gv -Tsvg": {
    "heap_blocks": 7212,
    "heap_bytes": 1459064,
    "heap_peak_bytes": 699232,
-   "instructions": 11223394
+   "instructions": 11225021
   },
   "tests/sfdp/gen_grid20x20.gv -Tsvg": {
    "heap_blocks": 37711,
    "heap_bytes": 6687566,
    "heap_peak_bytes": 2392886,
-   "instructions": 610056552
+   "instructions": 610077534
   },
   "tests/twopi/fx_arrows.gv -Tsvg": {
    "heap_blocks": 15681,
    "heap_bytes": 6494229,
    "heap_peak_bytes": 827462,
-   "instructions": 549050538
+   "instructions": 549049869
   },
   "tests/wild/gv16_graphs_b143_5416de.gv -Tplain": {
-   "heap_blocks": 90408,
-   "heap_bytes": 23209834,
+   "heap_blocks": 89871,
+   "heap_bytes": 23202632,
    "heap_peak_bytes": 8280289,
-   "instructions": 753435975
+   "instructions": 751769800
   },
   "tests/wild/gv16_graphs_b143_5416de.gv -Tsvg": {
-   "heap_blocks": 97778,
-   "heap_bytes": 24059950,
+   "heap_blocks": 97241,
+   "heap_bytes": 24052748,
    "heap_peak_bytes": 8280285,
-   "instructions": 760587477
+   "instructions": 758922362
   }
  },
  "reference": {
@@ -152,5 +152,5 @@
   "name": "0.2.2"
  },
  "target": "x86_64-unknown-linux-musl",
- "wasm_bytes": 4322566
+ "wasm_bytes": 4326039
 }

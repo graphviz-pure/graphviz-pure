@@ -19,6 +19,128 @@ pub fn pad(d: Point) -> Point {
 
 pub use crate::common::ports::{ccwrotatepf, cwrotatepf};
 
+/// What `common_init_node` measured of each node of a graph that dot's own initialisation
+/// reads, by input node: C keeps it in `ND_shape_info`, `ND_label` and `ND_xlabel`.
+///
+/// C measures each node once, in `dot_init_node`. The port measures the input's nodes
+/// before it builds dot's records ([`MeasuredNodes::measure`], quietly), for their sizes.
+/// `dot_init_node` and the port lookups of `common_init_edge` then take the measurement
+/// from here instead of measuring again, wherever a repeat would give the same result and
+/// do nothing more ([`graphviz_pure_core::diag::observe`]). It is dropped once the nodes
+/// are initialised, before the layout's own peak: the renderer measures the nodes again
+/// (#833).
+pub struct MeasuredNodes(Vec<MeasuredNode>);
+
+/// [`MeasuredNodes`] of one node.
+struct MeasuredNode {
+    /// `ND_width`, `ND_height` in inches.
+    width: f64,
+    height: f64,
+    /// `ND_outline_width`, `ND_outline_height` in inches.
+    outline: (f64, f64),
+    /// `ND_shape_info` of a polygon. `dot_init_node` moves the vertices into the shape.
+    polygon: Option<graphviz_pure_geom::PolygonGeometry>,
+    /// `ND_shape_info` of a record.
+    record: Option<Box<graphviz_pure_geom::RecordField>>,
+    /// `ND_xlabel`.
+    xlabel: Option<Box<graphviz_pure_geom::LabelGeometry>>,
+    /// `ND_label(n)->u.html`, whose cells port lookups read.
+    html_label: Option<Box<graphviz_pure_geom::html_label::HtmlLabel>>,
+    /// The measurement wrote no diagnostic, so a quiet repeat (a port lookup) would give
+    /// it and write nothing either.
+    quiet: bool,
+    /// The measurement neither consulted nor wrote diagnostics, so `dot_init_node`'s
+    /// reported one would give it and do nothing more.
+    reported: bool,
+}
+
+impl MeasuredNode {
+    fn new(
+        geom: graphviz_pure_geom::NodeGeometry,
+        seen: graphviz_pure_core::diag::Observed,
+    ) -> Self {
+        Self {
+            width: geom.width,
+            height: geom.height,
+            outline: (geom.outline_width, geom.outline_height),
+            polygon: geom.polygon,
+            record: geom.record.map(Box::new),
+            xlabel: geom.xlabel.map(Box::new),
+            html_label: geom.label.html_label,
+            quiet: !seen.wrote,
+            reported: seen.untouched(),
+        }
+    }
+
+    /// Whether `fresh`, a new measurement of the node, gives this one bit for bit: the
+    /// `Debug` forms show every float's shortest round-trip digits and sign. Debug builds
+    /// check each node `dot_init_node` takes from here.
+    #[cfg(any(debug_assertions, test))]
+    fn is_measurement(&self, fresh: &graphviz_pure_geom::NodeGeometry) -> bool {
+        let bits = |a: f64, b: f64| a.to_bits() == b.to_bits();
+        bits(self.width, fresh.width)
+            && bits(self.height, fresh.height)
+            && bits(self.outline.0, fresh.outline_width)
+            && bits(self.outline.1, fresh.outline_height)
+            && format!("{:?}", self.polygon) == format!("{:?}", fresh.polygon)
+            && format!("{:?}", self.record.as_deref()) == format!("{:?}", fresh.record.as_ref())
+            && format!("{:?}", self.xlabel.as_deref()) == format!("{:?}", fresh.xlabel.as_ref())
+            && format!("{:?}", self.html_label.as_deref())
+                == format!("{:?}", fresh.label.html_label.as_deref())
+    }
+}
+
+impl MeasuredNodes {
+    /// Measures every node of `graph` and sets each one's `ND_width` and `ND_height`
+    /// (`size_graph_nodes`). The caller makes it quiet (`diag::quietly`): C's one
+    /// measurement is `dot_init_node`'s. A node that fails stops the measurement, with
+    /// the nodes before it sized.
+    pub fn measure(graph: &mut Graph) -> graphviz_pure_core::Result<Self> {
+        let mut nodes = Vec::with_capacity(graph.nodes.len());
+        let mut failed = None;
+        let env = graphviz_pure_geom::NodeSizeEnv::from_graph(graph);
+        for nd in &graph.nodes {
+            let (geom, seen) =
+                graphviz_pure_core::diag::observe(|| graphviz_pure_geom::node_geometry(nd, &env));
+            match geom {
+                Ok(geom) => nodes.push(MeasuredNode::new(geom, seen)),
+                Err(e) => {
+                    failed = Some(e);
+                    break;
+                }
+            }
+        }
+        for (nd, m) in graph.nodes.iter_mut().zip(&nodes) {
+            nd.width = m.width;
+            nd.height = m.height;
+        }
+        match failed {
+            Some(e) => Err(e),
+            None => Ok(Self(nodes)),
+        }
+    }
+
+    /// The measurement of input node `i` for `dot_init_node`, where its own reported
+    /// measurement would give the same and do nothing more. It is taken once: the shape
+    /// takes its vertices, and a node that two pack components share (a node of two
+    /// non-nested clusters) is measured again by the second.
+    fn for_init(&mut self, i: usize) -> Option<&mut MeasuredNode> {
+        let m = self.0.get_mut(i).filter(|m| m.reported)?;
+        m.reported = false;
+        Some(m)
+    }
+
+    /// What a port lookup reads of input node `i`'s measurement, where a quiet repeat
+    /// would give the same and write nothing.
+    pub fn for_port(&self, i: usize) -> Option<crate::common::ports::PortShape<'_>> {
+        let m = self.0.get(i).filter(|m| m.quiet)?;
+        Some(crate::common::ports::PortShape {
+            record: m.record.as_deref(),
+            html_label: m.html_label.as_deref(),
+        })
+    }
+}
+
 impl<'a> Dot<'a> {
     /// Builds the arenas from the (already node-sized) input graph.
     pub fn new(input: &'a Graph) -> Self {
@@ -250,9 +372,10 @@ impl<'a> Dot<'a> {
 
     /// `dot_init_node_edge`
     pub fn dot_init_node_edge(&mut self) -> Result<(), String> {
-        let flip = self.graphs[0].flip();
+        let input = self.input;
+        let env = graphviz_pure_geom::NodeSizeEnv::from_graph(input);
         for n in self.nodes_of(0) {
-            self.dot_init_node(n, flip)?;
+            self.dot_init_node(n, &env)?;
         }
         for n in self.nodes_of(0) {
             for e in self.out_edges(0, n) {
@@ -262,39 +385,125 @@ impl<'a> Dot<'a> {
         Ok(())
     }
 
-    fn dot_init_node(&mut self, n: N, flip: bool) -> Result<(), String> {
+    /// `dot_init_node`, whose `common_init_node` measures the node in `env` (the graph's
+    /// [`graphviz_pure_geom::NodeSizeEnv`]), or takes what [`MeasuredNodes::measure`]
+    /// measured where that is the same.
+    fn dot_init_node(
+        &mut self,
+        n: N,
+        env: &graphviz_pure_geom::NodeSizeEnv<'_>,
+    ) -> Result<(), String> {
         let r = self.nodes[n].real.unwrap();
-        let nd = &self.input.nodes[r];
-        let env = graphviz_pure_geom::NodeSizeEnv::from_graph(self.input);
-        let mut geom = graphviz_pure_geom::node_geometry(nd, &env).map_err(super::fatal)?;
-        // lp->text, which addXLabels' -v trace prints
-        let xlabel_text = geom.xlabel.as_ref().map(|xl| {
-            graphviz_pure_geom::label_text(xl, nd.attrs.get("xlabel").map_or("", String::as_str))
-        });
-        let (lw, rw, ht) = geom.nodesize(flip);
+        let input = self.input;
+        let nd = &input.nodes[r];
+        let i = self.measured_index(r);
+        if let Some(mut measured) = self.measured.take() {
+            let taken = measured
+                .for_init(i)
+                .map(|m| self.init_node_measured(n, nd, env, m));
+            self.measured = Some(measured);
+            if let Some(result) = taken {
+                return result;
+            }
+        }
+        let mut geom = graphviz_pure_geom::node_geometry(nd, env).map_err(super::fatal)?;
         let shape =
             crate::common::shapes::NodeShape::from_geometry(nd, &mut geom).map_err(super::fatal)?;
-        let rec_fields = geom
-            .record
-            .as_ref()
+        self.init_node_from(
+            n,
+            nd,
+            shape,
+            (geom.width, geom.height),
+            geom.record.as_ref(),
+            geom.xlabel.as_ref(),
+        );
+        Ok(())
+    }
+
+    /// [`Self::dot_init_node`] from the node's measurement `m`, whose vertices the shape
+    /// takes.
+    fn init_node_measured(
+        &mut self,
+        n: N,
+        nd: &graphviz_pure_core::NodeData,
+        env: &graphviz_pure_geom::NodeSizeEnv<'_>,
+        m: &mut MeasuredNode,
+    ) -> Result<(), String> {
+        #[cfg(debug_assertions)]
+        debug_assert!(
+            graphviz_pure_core::diag::quietly(|| graphviz_pure_geom::node_geometry(nd, env))
+                .is_ok_and(|fresh| m.is_measurement(&fresh)),
+            "node {} was measured differently before dot_init_node",
+            nd.name
+        );
+        #[cfg(not(debug_assertions))]
+        let _ = env;
+        let vertices = m.polygon.as_mut().map(|p| std::mem::take(&mut p.vertices));
+        let shape = crate::common::shapes::NodeShape::from_parts(
+            nd,
+            m.width,
+            m.height,
+            m.outline,
+            m.polygon.as_ref().zip(vertices),
+            m.record.as_ref().map(|r| r.bbox),
+        )
+        .map_err(super::fatal)?;
+        self.init_node_from(
+            n,
+            nd,
+            shape,
+            (m.width, m.height),
+            m.record.as_deref(),
+            m.xlabel.as_deref(),
+        );
+        Ok(())
+    }
+
+    /// The rest of `dot_init_node` for a measured node: `ND_shape`, its record fields,
+    /// `ND_width`/`ND_height` (`(width, height)`), `ND_lw`/`ND_rw`/`ND_ht` (`gv_nodesize`)
+    /// and `ND_xlabel`.
+    fn init_node_from(
+        &mut self,
+        n: N,
+        nd: &graphviz_pure_core::NodeData,
+        shape: crate::common::shapes::NodeShape,
+        (width, height): (f64, f64),
+        record: Option<&graphviz_pure_geom::RecordField>,
+        xlabel: Option<&graphviz_pure_geom::LabelGeometry>,
+    ) {
+        let (lw, rw, ht) =
+            graphviz_pure_geom::node_size::nodesize(width, height, self.graphs[0].flip());
+        // lp->text, which addXLabels' -v trace prints
+        let xlabel_text = xlabel.map(|xl| {
+            graphviz_pure_geom::label_text(xl, nd.attrs.get("xlabel").map_or("", String::as_str))
+        });
+        let rec_fields = record
             .map(|r| r.children.iter().map(|f| f.bbox).collect())
             .unwrap_or_default();
         let info = &mut self.nodes[n];
         info.shape = Some(shape);
         info.rec_fields = rec_fields;
-        info.width = geom.width;
-        info.height = geom.height;
-        info.is_record = geom.record.is_some();
+        info.width = width;
+        info.height = height;
+        info.is_record = record.is_some();
         info.lw = lw;
         info.rw = rw;
         info.ht = ht;
         info.uf_size = 1;
-        if let Some(xl) = &geom.xlabel {
+        if let Some(xl) = xlabel {
             let l = self.push_label_text(xl, xlabel_text.unwrap_or_default());
             self.nodes[n].xlabel = Some(l);
             self.graphs[0].has_labels |= NODE_XLABEL;
         }
-        Ok(())
+    }
+
+    /// The index in [`Dot::measured`] of input node `r`: the root graph's node, when the
+    /// input is a pack component.
+    pub(crate) fn measured_index(&self, r: usize) -> usize {
+        self.cg_root_node
+            .as_ref()
+            .and_then(|m| m.get(r).copied())
+            .unwrap_or(r)
     }
 
     fn dot_init_edge(&mut self, e: E) -> Result<(), String> {
@@ -441,4 +650,59 @@ fn getdoubles2ptf(p: Option<&str>) -> (Option<Point>, bool) {
         );
     }
     (None, false)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::MeasuredNodes;
+    use graphviz_pure_core::{Graph, GraphKind};
+
+    /// The measurement keeps every node, and marks which repeats it can stand in for: an
+    /// ordinary node for all of them, a node whose measurement asks whether to report (an
+    /// unknown shape, an HTML label) only for the quiet ones.
+    #[test]
+    fn measured_nodes_stand_in_where_a_repeat_does_nothing_more() {
+        let mut graph = Graph::new("G", GraphKind::Directed, false);
+        graph.graph_attrs.set("rankdir", "LR".to_owned(), false);
+        for (name, attrs, html) in [
+            ("a", &[][..], false),
+            ("b", &[("label", "two\\nlines"), ("xlabel", "x")][..], false),
+            (
+                "c",
+                &[("shape", "record"), ("label", "<p>l|{m|r}")][..],
+                false,
+            ),
+            ("d", &[("shape", "nosuchshape")][..], false),
+            (
+                "e",
+                &[("label", "<TABLE><TR><TD PORT=\"p\">t</TD></TR></TABLE>")][..],
+                true,
+            ),
+        ] {
+            let id = graph.ensure_node(name);
+            let a = &mut graph.nodes[id.0 as usize].attrs;
+            for &(key, value) in attrs {
+                a.set(key, value.to_owned(), html && key == "label");
+            }
+        }
+        graphviz_pure_core::charset::begin_layout(graph.root_name(), None);
+        let mut measured =
+            graphviz_pure_core::diag::quietly(|| MeasuredNodes::measure(&mut graph)).unwrap();
+        let env = graphviz_pure_geom::NodeSizeEnv::from_graph(&graph);
+        for (i, nd) in graph.nodes.iter().enumerate() {
+            let fresh = graphviz_pure_geom::node_geometry(nd, &env).unwrap();
+            assert!(measured.0[i].is_measurement(&fresh), "{}", nd.name);
+            assert_eq!((nd.width, nd.height), (fresh.width, fresh.height));
+            assert!(measured.for_port(i).is_some(), "{}", nd.name);
+        }
+        let port = |i: usize| measured.for_port(i).unwrap();
+        assert!(port(2).record.is_some() && port(4).html_label.is_some());
+        let reported: Vec<_> = (0..graph.nodes.len())
+            .map(|i| measured.for_init(i).is_some())
+            .collect();
+        assert_eq!(reported, [true, true, true, false, false]);
+        // Taken once.
+        assert!(measured.for_init(0).is_none());
+        assert!(measured.for_port(0).is_some());
+    }
 }

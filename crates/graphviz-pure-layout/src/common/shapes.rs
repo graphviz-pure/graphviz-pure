@@ -604,9 +604,43 @@ impl NodeShape {
         node: &NodeData,
         geom: &mut graphviz_pure_geom::node_size::NodeGeometry,
     ) -> Result<Self, AllocFailure> {
-        let Some(polygon) = &mut geom.polygon else {
-            let mut shape = Self::new_with_size(node, geom.width, geom.height)?;
-            shape.apply_geometry(geom);
+        let vertices = geom
+            .polygon
+            .as_mut()
+            .map(|p| std::mem::take(&mut p.vertices));
+        Self::from_parts(
+            node,
+            geom.width,
+            geom.height,
+            (geom.outline_width, geom.outline_height),
+            geom.polygon.as_ref().zip(vertices),
+            geom.record.as_ref().map(|r| r.bbox),
+        )
+    }
+
+    /// [`Self::from_geometry`] of a measurement's parts: `width` × `height` and `outline`
+    /// (`ND_outline_width`, `ND_outline_height`) in inches, the polygon and the vertices
+    /// the shape takes, and a record's box.
+    /// C: lib/common/shapes.c:poly_init, point_init, record_init, epsf_init
+    pub(crate) fn from_parts(
+        node: &NodeData,
+        width: f64,
+        height: f64,
+        outline: (f64, f64),
+        polygon: Option<(
+            &graphviz_pure_geom::PolygonGeometry,
+            graphviz_pure_geom::node_size::PolygonVertices,
+        )>,
+        record_box: Option<graphviz_pure_core::BoundingBox>,
+    ) -> Result<Self, AllocFailure> {
+        let Some((polygon, vertices)) = polygon else {
+            let mut shape = Self::new_with_size(node, width, height)?;
+            // apply_geometry of a measurement without a polygon
+            shape.outline_width = outline.0 * 72.0;
+            shape.outline_height = outline.1 * 72.0;
+            if let Some(b) = record_box {
+                shape.record_box = Some(b);
+            }
             return Ok(shape);
         };
         let name = node
@@ -616,8 +650,8 @@ impl NodeShape {
             .filter(|s| !s.is_empty())
             .unwrap_or("ellipse");
         let desc = describe(name);
-        let width = geom.width * 72.0;
-        let height = geom.height * 72.0;
+        let width = width * 72.0;
+        let height = height * 72.0;
         let penwidth = late_double(node, "penwidth", DEFAULT_NODEPENWIDTH, 0.0);
         Ok(NodeShape {
             inside: desc.inside,
@@ -628,18 +662,18 @@ impl NodeShape {
             distortion: polygon.distortion,
             skew: polygon.skew,
             regular: polygon.regular,
-            vertices: std::mem::take(&mut polygon.vertices),
+            vertices,
             width,
             height,
-            outline_width: geom.outline_width * 72.0,
-            outline_height: geom.outline_height * 72.0,
+            outline_width: outline.0 * 72.0,
+            outline_height: outline.1 * 72.0,
             penwidth,
             no_clip: false,
             fixedshape: node
                 .attrs
                 .get("fixedsize")
                 .is_some_and(|v| v.eq_ignore_ascii_case("shape")),
-            record_box: geom.record.as_ref().map(|r| r.bbox),
+            record_box,
         })
     }
 

@@ -584,6 +584,8 @@ pub fn do_dot(d: &mut Dot<'_>, graph: &Graph) -> Result<(), String> {
         return Ok(());
     }
     pinfo.do_splines = true;
+    // What the root measured, lent to each component while it initialises its nodes.
+    let mut measured = d.measured.take();
     // original subgraph index -> root graph id
     let mut clust_of_sub: Vec<Option<G>> = vec![None; graph.subgraphs.len()];
     for (g, gi) in d.graphs.iter().enumerate() {
@@ -610,10 +612,20 @@ pub fn do_dot(d: &mut Dot<'_>, graph: &Graph) -> Result<(), String> {
             ));
         }
         let mut c = Dot::new_component(&cg.graph, graph, d);
+        // The component's nodes are the root's, measured as there unless the component's
+        // own values (a user `_cc_<i>`) or names measure them otherwise.
+        let lend = graphviz_pure_geom::NodeSizeEnv::from_graph(&cg.graph)
+            .measures_as(&graphviz_pure_geom::NodeSizeEnv::from_graph(graph));
+        if lend {
+            c.measured = measured.take();
+        }
         c.comp_index = ci;
         c.cg_in_id_packed = true;
         c.cg_root_node = Some(cg.nodes.clone());
         c.dot_layout()?;
+        if lend {
+            measured = c.measured.take();
+        }
         // dotLayout(sg) stops at the component's own `phase` (agget(sg)) with
         // attach_phase_attrs (`phase=3` attaches as 2); a layout that failed returned first.
         let phase = super::utils::late_int(c.agget(0, "phase"), -1, 1);
@@ -650,6 +662,7 @@ pub fn do_dot(d: &mut Dot<'_>, graph: &Graph) -> Result<(), String> {
         any_splines |= c.splines_done;
         comps.push(comp);
     }
+    drop(measured);
     // Every component laid out: doDot ends with agdelete(g, ccs[i]) (dotinit.c:503),
     // whether the layouts stopped at a `phase` or went on to be packed.
     d.cc_deleted = ccs.iter().filter_map(|c| c.user).collect();
