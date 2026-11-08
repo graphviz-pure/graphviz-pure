@@ -62,7 +62,7 @@ impl SplineGraph for Dot<'_> {
         self.nodes[n].ht
     }
     fn shape(&self, n: usize) -> Option<&NodeShape> {
-        self.nodes[n].shape.as_ref()
+        self.cold(n).shape.as_ref()
     }
     fn rankdir(&self) -> i32 {
         self.graphs[0].rankdir
@@ -174,8 +174,8 @@ impl SplineGraph for Dot<'_> {
     }
     /// `record_path(n, prt, side, rv, &k)`; polygons (`poly_path`) have none.
     fn pboxfn(&self, n: usize, prt: &Port, side: u8) -> Option<(u8, Option<Vec<BoxF>>)> {
-        let nd = &self.nodes[n];
-        if !nd.is_record || nd.rec_fields.is_empty() {
+        let (nd, cold) = (&self.nodes[n], self.cold(n));
+        if !cold.is_record || cold.rec_fields.is_empty() {
             return None;
         }
         if !prt.defined {
@@ -183,7 +183,7 @@ impl SplineGraph for Dot<'_> {
         }
         let p = prt.p;
         let flip = self.graphs[0].flip();
-        for f in &nd.rec_fields {
+        for f in &cold.rec_fields {
             let (ls, rs) = if flip {
                 (f.ll.y, f.ur.y)
             } else {
@@ -273,13 +273,13 @@ impl crate::common::xlabels::XLabelGraph for Dot<'_> {
 
 impl crate::common::ports::PortGraph for Dot<'_> {
     fn port_node(&self, n: usize) -> &graphviz_pure_core::NodeData {
-        &self.input.nodes[self.nodes[n].real.expect("port on a virtual node")]
+        &self.input.nodes[self.cold(n).real.expect("port on a virtual node")]
     }
     fn port_env(&self) -> graphviz_pure_geom::NodeSizeEnv<'_> {
         graphviz_pure_geom::NodeSizeEnv::from_graph(self.input)
     }
     fn port_measured(&self, n: usize) -> Option<crate::common::ports::PortShape<'_>> {
-        let r = self.nodes.get(n)?.real?;
+        let r = self.cold(n).real?;
         self.measured.as_ref()?.for_port(self.measured_index(r))
     }
 }
@@ -298,6 +298,6 @@ impl crate::ortho::OrthoGraph for Dot<'_> {
         n
     }
     fn xl_name(&self, n: usize) -> String {
-        self.nodes[n].name.clone()
+        self.nodes[n].name.to_string()
     }
 }

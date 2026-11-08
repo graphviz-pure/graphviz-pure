@@ -172,12 +172,12 @@ impl Dot<'_> {
         for n in self.nodes_of(g) {
             for e in self.out_edges(g, n) {
                 let h = self.edges[e].head;
-                if self.nodes[h].weight_class <= 2 {
-                    self.nodes[h].weight_class += 1;
+                if self.mc_nodes[h].weight_class <= 2 {
+                    self.mc_nodes[h].weight_class += 1;
                 }
                 let t = self.edges[e].tail;
-                if self.nodes[t].weight_class <= 2 {
-                    self.nodes[t].weight_class += 1;
+                if self.mc_nodes[t].weight_class <= 2 {
+                    self.mc_nodes[t].weight_class += 1;
                 }
             }
         }

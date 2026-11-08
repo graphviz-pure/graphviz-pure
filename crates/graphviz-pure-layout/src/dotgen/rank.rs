@@ -757,7 +757,7 @@ impl Dot<'_> {
     /// Live `agnxtout(g, e)` for an edge of `v` (sequence order).
     fn live_next_out(&self, g: G, v: N, e: E) -> Option<E> {
         let k = self.out_key(e);
-        self.nodes[v]
+        self.cold(v)
             .cg_out
             .iter()
             .copied()

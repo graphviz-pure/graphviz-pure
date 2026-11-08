@@ -125,7 +125,12 @@ fn visible(d: &Dot<'_>, g: G) -> Visible {
         .zip(store.order.iter().zip(&store.mval))
         .map(|(&n, (&order, &mval))| {
             let node = &d.nodes[n];
-            (order, node.order, mval.to_bits(), node.mval.to_bits())
+            (
+                order,
+                node.order,
+                mval.to_bits(),
+                d.mc_nodes[n].mval.to_bits(),
+            )
         })
         .collect();
     Visible { ranks, slots }
@@ -176,7 +181,7 @@ fn restore(d: &mut Dot<'_>, g: G, before: Before) {
         d.mincross_store.order[slot] = order;
         d.mincross_store.mval[slot] = f64::from_bits(mval);
         d.nodes[n].order = arena;
-        d.nodes[n].mval = f64::from_bits(arena_mval);
+        d.mc_nodes[n].mval = f64::from_bits(arena_mval);
     }
     d.mincross_store.nodes = nodes;
     d.mincross_store.crossings.order = before.crossing_orders;

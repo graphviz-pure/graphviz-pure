@@ -179,17 +179,18 @@ impl AdjMatrix {
     }
 }
 
-/// `Agnodeinfo_t` plus cgraph node identity.
+/// `Agnodeinfo_t` plus cgraph node identity: the fields most phases read.
+///
+/// Not in C: C keeps every node field in one `Agnodeinfo_t`. The port splits it four ways
+/// (technique T6, `docs/roadmap/post-1.0.md`), each part in its own arena of
+/// [`super::Dot`] with the same index: this one ([`super::Dot::nodes`]), the network-simplex
+/// part [`NodeNs`] ([`super::Dot::ns_nodes`]), the mincross part [`NodeMincross`]
+/// ([`super::Dot::mc_nodes`]) and the cold, cgraph-only part [`NodeCold`]
+/// ([`super::Dot::cold`]), which virtual and slack nodes do not carry.
 #[derive(Debug, Clone, Default)]
 pub struct NodeInfo {
-    /// Index of the input node, for real nodes of the main graph.
-    pub real: Option<usize>,
-    pub name: String,
-    /// cgraph root this node belongs to (`None` for virtual nodes).
-    pub cg_root: Option<G>,
-    /// cgraph out/in edges in the node's root graph, in sequence order.
-    pub cg_out: Vec<E>,
-    pub cg_in: Vec<E>,
+    /// `agnameof(n)`; `"virtual"` for the nodes of `virtual_node`, without an allocation.
+    pub name: std::borrow::Cow<'static, str>,
 
     pub coord: Point,
     pub width: f64,
@@ -200,7 +201,6 @@ pub struct NodeInfo {
     pub label: Option<L>,
     pub xlabel: Option<L>,
     pub alg: Option<E>,
-    pub state: i32,
     pub id: i32,
     pub hops: i32,
     pub has_port: bool,
@@ -210,7 +210,6 @@ pub struct NodeInfo {
     pub mark: usize,
     pub onstack: bool,
     pub ranktype: u8,
-    pub weight_class: u8,
     pub next: Option<N>,
     pub prev: Option<N>,
     pub in_: Vec<E>,
@@ -223,19 +222,67 @@ pub struct NodeInfo {
     pub uf_parent: Option<N>,
     pub rank: i32,
     pub order: i32,
-    pub mval: f64,
-    /// Slot in the current mincross view; validated against its node identity before use.
-    pub(super) mincross_index: u32,
     pub save_in: Option<Vec<E>>,
     pub save_out: Option<Vec<E>>,
-    pub tree_in: Vec<E>,
-    pub tree_out: Vec<E>,
-    pub par: Option<E>,
+    /// Not in C: the node `mergevirtual` merged this virtual node into, when
+    /// `dot_concentrate` deleted it (see `make_regular_edge`).
+    pub conc_merged_into: Option<N>,
+}
+
+/// The network-simplex part of `Agnodeinfo_t` (see [`NodeInfo`]): what `rank2` keeps of a
+/// node between runs. A run works on its own copy (`dotgen::ns`). `ND_tree_in` and
+/// `ND_tree_out` are not kept: C frees them when a run ends (`freeTreeList`), and nothing
+/// after a run reads them.
+#[derive(Debug, Clone, Copy)]
+pub struct NodeNs {
+    /// `ND_low`, `ND_lim` (mincross reads them too: `postorder`, `flat_search`).
     pub low: i32,
     pub lim: i32,
     pub priority: i32,
-    /// `ND_subtree` (feasible_tree borrows `ND_par` for it in C).
-    pub subtree: Option<usize>,
+    /// `ND_par`, an edge index; [`NodeNs::NONE`] for none.
+    pub par: u32,
+    /// `ND_subtree` (feasible_tree borrows `ND_par` for it in C); [`NodeNs::NONE`] for none.
+    pub subtree: u32,
+}
+
+impl NodeNs {
+    /// No `ND_par` or `ND_subtree`.
+    pub const NONE: u32 = u32::MAX;
+}
+
+impl Default for NodeNs {
+    fn default() -> Self {
+        NodeNs {
+            low: 0,
+            lim: 0,
+            priority: 0,
+            par: Self::NONE,
+            subtree: Self::NONE,
+        }
+    }
+}
+
+/// The mincross part of `Agnodeinfo_t` (see [`NodeInfo`]).
+#[derive(Debug, Clone, Copy, Default)]
+pub struct NodeMincross {
+    /// `ND_mval` (position and the splines also borrow it).
+    pub mval: f64,
+    pub state: i32,
+    /// Slot in the current mincross view; validated against its node identity before use.
+    pub(super) mincross_index: u32,
+    pub weight_class: u8,
+}
+
+/// The cold part of `Agnodeinfo_t` (see [`NodeInfo`]): what only cgraph nodes have.
+/// [`super::Dot::cold`] covers the arena only up to the last cgraph node, so the virtual
+/// nodes behind it carry none of it.
+#[derive(Debug, Clone, Default)]
+pub struct NodeCold {
+    /// Index of the input node, for real nodes of the main graph.
+    pub real: Option<usize>,
+    /// cgraph out/in edges in the node's root graph, in sequence order.
+    pub cg_out: Vec<E>,
+    pub cg_in: Vec<E>,
     /// Input node shape is a record (`shapeOf(n) == SH_RECORD`).
     pub is_record: bool,
     /// `ND_shape(n)` data used by the `insidefn` clipping (real nodes only).
@@ -243,10 +290,17 @@ pub struct NodeInfo {
     /// Boxes of the top-level record fields (`ND_shape_info(n)->fld[i]->b`),
     /// in drawing orientation relative to the node centre (`record_path`).
     pub rec_fields: Vec<BoxF>,
-    /// Not in C: the node `mergevirtual` merged this virtual node into, when
-    /// `dot_concentrate` deleted it (see `make_regular_edge`).
-    pub conc_merged_into: Option<N>,
 }
+
+/// The [`NodeCold`] of a node that has none (a virtual node).
+pub static NO_COLD: NodeCold = NodeCold {
+    real: None,
+    cg_out: Vec::new(),
+    cg_in: Vec::new(),
+    is_record: false,
+    shape: None,
+    rec_fields: Vec::new(),
+};
 
 /// `Agedgeinfo_t` plus cgraph edge identity.
 #[derive(Debug, Clone, Default)]

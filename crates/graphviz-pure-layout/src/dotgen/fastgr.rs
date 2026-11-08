@@ -163,10 +163,9 @@ impl Dot<'_> {
     }
 
     pub fn virtual_node(&mut self, g: G) -> N {
-        let n = self.nodes.len();
         self.note_node_push();
-        self.nodes.push(NodeInfo {
-            name: "virtual".to_string(),
+        let n = self.push_node(NodeInfo {
+            name: std::borrow::Cow::Borrowed("virtual"),
             node_type: VIRTUAL,
             lw: 1.0,
             rw: 1.0,
@@ -184,7 +183,7 @@ impl Dot<'_> {
     pub(super) fn note_node_push(&self) {
         let n = self.nodes.len();
         if n == self.nodes.capacity() {
-            let bytes = arena_growth_bytes(n, n, 1, size_of::<NodeInfo>());
+            let bytes = arena_growth_bytes(n, n, 1, Self::NODE_BYTES);
             let _ = graphviz_pure_core::limits::check_allocation(bytes);
         }
     }
@@ -210,7 +209,7 @@ impl Dot<'_> {
             self.nodes.len(),
             self.nodes.capacity(),
             nodes,
-            size_of::<NodeInfo>(),
+            Self::NODE_BYTES,
         );
         let e = arena_growth_bytes(
             self.edges.len(),

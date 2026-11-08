@@ -106,7 +106,13 @@ pub struct Dot<'a> {
     /// node index, while the nodes are initialised (when this graph measures its nodes as
     /// `root_input` does).
     pub measured: Option<init::MeasuredNodes>,
+    /// The node arenas, one per part of `Agnodeinfo_t` ([`NodeInfo`]), indexed alike.
+    /// [`Self::push_node`] grows the first three together.
     pub nodes: Vec<NodeInfo>,
+    pub ns_nodes: Vec<NodeNs>,
+    pub mc_nodes: Vec<NodeMincross>,
+    /// Up to the last cgraph node only ([`Self::cold`]).
+    cold: Vec<NodeCold>,
     pub edges: Vec<EdgeInfo>,
     pub graphs: Vec<GraphInfo>,
     ns_scratch: ns::NsScratch,
@@ -159,6 +165,54 @@ pub struct Dot<'a> {
     pub stale_ends: dotsplines::StaleEnds,
 }
 
+impl Dot<'_> {
+    /// Appends a node to the node arenas: `info`, and the default network-simplex and
+    /// mincross parts. Its cold part stays empty until [`Self::cold_mut`] writes one.
+    pub(super) fn push_node(&mut self, info: NodeInfo) -> N {
+        let n = self.nodes.len();
+        self.nodes.push(info);
+        self.ns_nodes.push(NodeNs::default());
+        self.mc_nodes.push(NodeMincross::default());
+        n
+    }
+
+    /// `Vec::reserve_exact` on the node arenas that [`Self::push_node`] grows.
+    pub(super) fn reserve_nodes_exact(&mut self, additional: usize) {
+        self.nodes.reserve_exact(additional);
+        self.ns_nodes.reserve_exact(additional);
+        self.mc_nodes.reserve_exact(additional);
+    }
+
+    /// Bytes of one node in the arenas [`Self::push_node`] grows.
+    pub(super) const NODE_BYTES: usize =
+        size_of::<NodeInfo>() + size_of::<NodeNs>() + size_of::<NodeMincross>();
+
+    /// The cold part of node `n`: [`NO_COLD`] for a node that has none.
+    pub fn cold(&self, n: N) -> &NodeCold {
+        self.cold.get(n).unwrap_or(&NO_COLD)
+    }
+
+    /// The cold part of node `n`, for writing. It covers the arena up to `n` from now on.
+    pub fn cold_mut(&mut self, n: N) -> &mut NodeCold {
+        if self.cold.len() <= n {
+            self.cold
+                .resize_with(n.saturating_add(1), NodeCold::default);
+        }
+        // In bounds: the arena reaches `n` now.
+        &mut self.cold[n]
+    }
+
+    /// Not in C: `count` default nodes in every node arena, for tests that build a graph
+    /// by hand.
+    #[cfg(test)]
+    pub(super) fn reset_nodes_for_test(&mut self, count: usize) {
+        self.nodes = vec![NodeInfo::default(); count];
+        self.ns_nodes = vec![NodeNs::default(); count];
+        self.mc_nodes = vec![NodeMincross::default(); count];
+        self.cold.clear();
+    }
+}
+
 impl<'a> Dot<'a> {
     fn empty(input: &'a Graph) -> Self {
         Dot {
@@ -176,6 +230,9 @@ impl<'a> Dot<'a> {
             cg_root_node: None,
             measured: None,
             nodes: Vec::new(),
+            ns_nodes: Vec::new(),
+            mc_nodes: Vec::new(),
+            cold: Vec::new(),
             edges: Vec::new(),
             graphs: Vec::new(),
             ns_scratch: ns::NsScratch::default(),

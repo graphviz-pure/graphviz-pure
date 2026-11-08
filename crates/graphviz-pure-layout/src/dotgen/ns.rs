@@ -1,9 +1,10 @@
 //! dot's binding of `lib/common/ns.c` (network simplex, `rank`/`rank2`).
 //!
 //! The algorithm lives in [`crate::common::ns`], generic over [`NsGraph`].
-//! This adapter copies each ranked graph's hot `NodeInfo`/`EdgeInfo` fields
+//! This adapter copies each ranked graph's hot `NodeInfo`/`NodeNs`/`EdgeInfo` fields
 //! into reusable flat arrays, numbered locally to the run, and gives the mutable
-//! tree lists fixed-capacity storage. It writes the results back when `rank2` returns.
+//! tree lists fixed-capacity storage. It writes the results back when `rank2` returns,
+//! except the tree lists: no later run or phase reads them (C frees them, `freeTreeList`).
 
 use super::Dot;
 use super::types::*;
@@ -124,8 +125,8 @@ impl Adjacency {
     }
 }
 
-/// An edge or subtree index in a `u32` column.
-const NONE: u32 = u32::MAX;
+/// An edge or subtree index in a `u32` column, as [`NodeNs`] stores them.
+const NONE: u32 = NodeNs::NONE;
 /// `ND_par` when the run began, if it names an edge outside this graph. C only overwrites it.
 const FOREIGN: u32 = u32::MAX - 1;
 
@@ -310,12 +311,13 @@ impl<'x, 'a> DotNs<'x, 'a> {
                 scratch.out_lists.offsets.push(0);
                 continue;
             };
+            let ns = d.ns_nodes.get(x).copied().unwrap_or_default();
             scratch.rank.push(node.rank);
             scratch.mark.push(node.mark);
-            scratch.priority.push(node.priority);
-            scratch.low.push(node.low);
-            scratch.lim.push(node.lim);
-            scratch.subtree.push(pack(node.subtree));
+            scratch.priority.push(ns.priority);
+            scratch.low.push(ns.low);
+            scratch.lim.push(ns.lim);
+            scratch.subtree.push(ns.subtree);
             scratch.incoming.prepare(local, node.in_.len());
             scratch.outgoing.prepare(local, node.out.len());
             for &e in &node.in_ {
@@ -385,7 +387,7 @@ impl<'x, 'a> DotNs<'x, 'a> {
             }
         }
         for &x in &scratch.nodes {
-            let old = d.nodes.get(x).and_then(|node| node.par);
+            let old = d.ns_nodes.get(x).and_then(|ns| unpack(ns.par));
             scratch.par.push(match old {
                 None => NONE,
                 Some(e) => {
@@ -409,9 +411,8 @@ impl<'x, 'a> DotNs<'x, 'a> {
     fn finish(self) {
         let scratch = &*self.scratch;
         for (local, &x) in scratch.nodes.iter().enumerate() {
-            let tree_in = scratch.incoming.edges(local);
-            let tree_out = scratch.outgoing.edges(local);
-            let Some(node) = self.d.nodes.get_mut(x) else {
+            let (Some(node), Some(ns)) = (self.d.nodes.get_mut(x), self.d.ns_nodes.get_mut(x))
+            else {
                 debug_assert!(false, "NS node out of bounds");
                 continue;
             };
@@ -434,20 +435,14 @@ impl<'x, 'a> DotNs<'x, 'a> {
             ) {
                 node.rank = rank;
                 node.mark = mark;
-                node.priority = priority;
-                node.low = low;
-                node.lim = lim;
+                ns.priority = priority;
+                ns.low = low;
+                ns.lim = lim;
                 if par != FOREIGN {
-                    node.par = unpack(par).and_then(|e| scratch.edges.get(e).copied());
+                    ns.par = pack(unpack(par).and_then(|e| scratch.edges.get(e).copied()));
                 }
-                node.subtree = unpack(subtree);
+                ns.subtree = subtree;
             }
-            node.tree_in.clear();
-            node.tree_in
-                .extend(tree_in.iter().filter_map(|&e| scratch.edges.get(e)));
-            node.tree_out.clear();
-            node.tree_out
-                .extend(tree_out.iter().filter_map(|&e| scratch.edges.get(e)));
         }
         for (local, &e) in scratch.edges.iter().enumerate() {
             let Some(edge) = self.d.edges.get_mut(e) else {
@@ -476,11 +471,11 @@ impl NsGraph for DotNs<'_, '_> {
     }
     fn dump_name(&self, n: usize) -> String {
         self.arena_node(n)
-            .map_or_else(String::new, |x| x.name.clone())
+            .map_or_else(String::new, |x| x.name.to_string())
     }
     fn err_name(&self, n: usize) -> String {
         match self.arena_node(n) {
-            Some(node) if node.node_type == NORMAL => node.name.clone(),
+            Some(node) if node.node_type == NORMAL => node.name.to_string(),
             _ => "%0".to_string(),
         }
     }
@@ -651,7 +646,7 @@ mod tests {
         for i in (1..count).rev() {
             order.swap(i, below(i + 1));
         }
-        d.nodes = vec![NodeInfo::default(); count * 3 / 2 + 3];
+        d.reset_nodes_for_test(count * 3 / 2 + 3);
         d.graphs[0].nlist = Some(order[0]);
         for (a, b) in order.iter().zip(order.iter().skip(1)) {
             d.nodes[*a].next = Some(*b);
@@ -659,7 +654,7 @@ mod tests {
         for &n in &order {
             d.nodes[n].node_type = NORMAL;
             // left by an earlier run, on an edge of no graph: C overwrites it unread
-            d.nodes[n].par = Some(1);
+            d.ns_nodes[n].par = 1;
         }
         let mut data = ns::NsData {
             nodes: vec![ns::NsNode::default(); d.nodes.len()],
@@ -715,15 +710,12 @@ mod tests {
                 let b = ns::rank2(&mut data, balance, i32::MAX, SEARCHSIZE);
                 assert_eq!(a, b, "seed {seed}, balance {balance}");
                 for &n in &data.nlist {
-                    let (node, other) = (&d.nodes[n], &data.nodes[n]);
+                    let (node, ns, other) = (&d.nodes[n], &d.ns_nodes[n], &data.nodes[n]);
                     assert_eq!(node.rank, other.rank, "rank of {n}, seed {seed}");
-                    assert_eq!(node.low, other.low, "low of {n}, seed {seed}");
-                    assert_eq!(node.lim, other.lim, "lim of {n}, seed {seed}");
-                    assert_eq!(node.tree_in, other.tree_in, "tree_in of {n}, seed {seed}");
-                    assert_eq!(
-                        node.tree_out, other.tree_out,
-                        "tree_out of {n}, seed {seed}"
-                    );
+                    assert_eq!(ns.low, other.low, "low of {n}, seed {seed}");
+                    assert_eq!(ns.lim, other.lim, "lim of {n}, seed {seed}");
+                    assert!(other.tree_in.is_empty(), "tree_in of {n}, seed {seed}");
+                    assert!(other.tree_out.is_empty(), "tree_out of {n}, seed {seed}");
                 }
                 for (e, other) in data.edges.iter().enumerate().skip(2) {
                     assert_eq!(d.edges[e].cutvalue, other.cutvalue, "edge {e}, seed {seed}");
@@ -747,10 +739,14 @@ mod tests {
                     edge.weight = weight;
                 }
                 let _ = d.rank2(0, balance, i32::MAX, SEARCHSIZE);
-                for (n, node) in d.nodes.iter().enumerate() {
-                    assert!(node.tree_in.is_empty(), "tree_in of {n}, balance {balance}");
+                let scratch = &d.ns_scratch;
+                for n in 0..scratch.nodes.len() {
                     assert!(
-                        node.tree_out.is_empty(),
+                        scratch.incoming.edges(n).is_empty(),
+                        "tree_in of {n}, balance {balance}"
+                    );
+                    assert!(
+                        scratch.outgoing.edges(n).is_empty(),
                         "tree_out of {n}, balance {balance}"
                     );
                 }
@@ -766,16 +762,16 @@ mod tests {
             nlist: Some(1),
             ..GraphInfo::default()
         });
-        d.nodes = vec![NodeInfo::default(); 3];
+        d.reset_nodes_for_test(3);
         d.edges = vec![EdgeInfo::default(); 8];
         d.nodes[1].node_type = NORMAL;
-        d.nodes[1].par = Some(7);
+        d.ns_nodes[1].par = 7;
         // maxiter 0 with one node: the run writes nothing into the parent pointer
         let mut scratch = NsScratch::default();
         let ns = DotNs::new(&mut d, 0, &mut scratch);
         assert_eq!(ns.scratch.par[0], FOREIGN);
         ns.finish();
-        assert_eq!(d.nodes[1].par, Some(7));
+        assert_eq!(d.ns_nodes[1].par, 7);
     }
 
     #[test]
@@ -786,7 +782,7 @@ mod tests {
             nlist: Some(0),
             ..GraphInfo::default()
         });
-        d.nodes = vec![NodeInfo::default(); 4];
+        d.reset_nodes_for_test(4);
         for (i, node) in d.nodes.iter_mut().enumerate() {
             node.node_type = NORMAL;
             node.next = (i < 3).then_some(i + 1);
@@ -810,13 +806,11 @@ mod tests {
         let result = d.rank2(0, 0, i32::MAX, SEARCHSIZE);
         assert_eq!(result, Err(ns::OVERFLOW_EDGE_WEIGHT_SUM.to_string()));
         assert!(d.nodes.iter().any(|node| node.rank != 0));
-        for (i, node) in d.nodes.iter().enumerate() {
+        for (i, (node, ns)) in d.nodes.iter().zip(&d.ns_nodes).enumerate() {
             assert_eq!(node.rank, d.ns_scratch.rank[i]);
-            assert_eq!(node.low, d.ns_scratch.low[i]);
-            assert_eq!(node.lim, d.ns_scratch.lim[i]);
-            assert_eq!(node.par, unpack(d.ns_scratch.par[i]));
-            assert_eq!(node.tree_in.as_slice(), d.ns_scratch.incoming.edges(i));
-            assert_eq!(node.tree_out.as_slice(), d.ns_scratch.outgoing.edges(i));
+            assert_eq!(ns.low, d.ns_scratch.low[i]);
+            assert_eq!(ns.lim, d.ns_scratch.lim[i]);
+            assert_eq!(unpack(ns.par), unpack(d.ns_scratch.par[i]));
         }
         for (i, edge) in d.edges.iter().enumerate() {
             assert_eq!(edge.cutvalue, d.ns_scratch.cutvalue[i]);

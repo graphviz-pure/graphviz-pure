@@ -234,7 +234,7 @@ impl<'a> Dot<'a> {
                 nodes: c
                     .nodes_of(lg)
                     .into_iter()
-                    .filter_map(|n| c.nodes[n].real.map(|r| cg.nodes[r]))
+                    .filter_map(|n| c.cold(n).real.map(|r| cg.nodes[r]))
                     .collect(),
             });
             local.insert(lg, me);
@@ -269,9 +269,10 @@ impl<'a> Dot<'a> {
             d.rank = s.rank;
             d.order = s.order;
             d.has_port = s.has_port;
-            d.is_record = s.is_record;
-            d.shape = s.shape.clone();
-            d.rec_fields = s.rec_fields.clone();
+            let (sc, dc) = (c.cold(li), self.cold_mut(ri));
+            dc.is_record = sc.is_record;
+            dc.shape = sc.shape.clone();
+            dc.rec_fields = sc.rec_fields.clone();
             nclust[ri] = s.clust.map(|g| match local.get(&g) {
                 Some(&k) => PkClust::Clust(k),
                 None => PkClust::Graph(ci),
@@ -347,7 +348,7 @@ fn projected_membership(c: &Dot<'_>, cg: &CompGraph, cc: &CComp) -> Vec<Option<M
             nodes: s
                 .nodes
                 .iter()
-                .filter_map(|&n| c.nodes.get(n)?.real.and_then(|r| cg.nodes.get(r)))
+                .filter_map(|&n| c.cold(n).real.and_then(|r| cg.nodes.get(r)))
                 .copied()
                 .collect(),
             edges: s
@@ -420,7 +421,7 @@ impl DotPack<'_, '_> {
                 &BoundingBox::new(p.x - s2.x, p.y - s2.y, p.x + s2.x, p.y + s2.y),
             );
             lbb(&mut bb, nd.xlabel);
-            for &e in &nd.cg_out {
+            for &e in &d.cold(n).cg_out {
                 if edges.is_some_and(|edges| !edges.contains(&e)) {
                     continue;
                 }
@@ -494,7 +495,7 @@ impl PackGraph for DotPack<'_, '_> {
         Point::new(nd.lw + nd.rw, nd.ht)
     }
     fn pk_root_outs(&self, n: usize) -> Vec<usize> {
-        self.d.nodes[n].cg_out.clone()
+        self.d.cold(n).cg_out.clone()
     }
     fn pk_head(&self, e: usize) -> usize {
         self.d.edges[e].head
