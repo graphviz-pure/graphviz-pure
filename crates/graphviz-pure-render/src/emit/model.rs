@@ -20,8 +20,8 @@ use graphviz_pure_core::{
 };
 use graphviz_pure_geom::html_label::HtmlLabel;
 use graphviz_pure_geom::node_size::{
-    LABEL_AT_LEFT, LABEL_AT_RIGHT, LABEL_AT_TOP, LabelGeometry, NodeGeometry, NodeSizeEnv,
-    graph_label_geometry_in, node_geometry,
+    LABEL_AT_LEFT, LABEL_AT_RIGHT, LABEL_AT_TOP, LabelGeometry, LaidOutNode, LaidOutNodes,
+    NodeGeometry, NodeSizeEnv, graph_label_geometry_in, node_geometry,
 };
 use graphviz_pure_geom::shapes::{RecordField, ShapeKind};
 
@@ -308,6 +308,21 @@ impl<'g> Model<'g> {
     }
 }
 
+/// Debug builds measure each node the layout measured again and compare the two, bit
+/// for bit (the `Debug` form shows every float's shortest round-trip digits and sign), so
+/// that the test corpus checks that the layout's measurement is the one the renderer
+/// would make from the graph as it is now.
+#[cfg(debug_assertions)]
+fn check_laid_out(n: &graphviz_pure_core::NodeData, env: &NodeSizeEnv<'_>, geom: &LaidOutNode) {
+    let again = node_geometry(n, env).map(|g| format!("{:?}", LaidOutNode::from(g)));
+    debug_assert_eq!(
+        again.as_deref().ok(),
+        Some(format!("{geom:?}").as_str()),
+        "node {} was measured differently by the layout",
+        n.name
+    );
+}
+
 /// `is_a_cluster(g)` for a subgraph (`lib/common/utils.c`).
 pub(crate) fn is_a_cluster(name: &str, attrs: &AttrMap) -> bool {
     graphviz_pure_core::has_cluster_prefix(name) || Attrs(attrs).mapbool("cluster")
@@ -361,7 +376,9 @@ impl<'g> Model<'g> {
         self.root_attrs().mapbool("center")
     }
 
-    /// The render model of `g`. Its node, edge and cluster labels are sized again here
+    /// The render model of `g`. Its nodes' labels and shapes are those the layout measured
+    /// (`ND_label`, `ND_shape_info`), the first time the graph is drawn after its layout;
+    /// other nodes, and the edge and cluster labels, are sized again here
     /// (`diag::quietly`): C made them in layout, and reported their diagnostics there.
     pub fn build(g: &'g Graph) -> graphviz_pure_core::Result<Self> {
         // The labels were measured by layout; measure them again as C measured them then.
@@ -379,27 +396,55 @@ impl<'g> Model<'g> {
 
         let mut has_labels = 0u32;
         let mut nodes = Vec::with_capacity(g.nodes.len());
+        // What the layout measured, one per node; a later drawing measures again.
+        let mut laid_out = g
+            .layout
+            .node_geometry
+            .take::<LaidOutNodes>()
+            .map(|l| l.0)
+            .filter(|l| l.len() == g.nodes.len())
+            .unwrap_or_default()
+            .into_iter();
         for n in &g.nodes {
-            let NodeGeometry {
-                shape,
-                width,
-                height,
-                label: label_geometry,
-                xlabel: xlabel_geometry,
-                polygon,
-                record,
-                epsf,
-                usershape,
-                ..
-            } = node_geometry(n, &env)?;
-            let geom = ShapeGeometry {
-                shape,
-                width,
-                height,
-                polygon,
-                record,
-                epsf,
-                usershape,
+            let (label_geometry, xlabel_geometry, geom) = match laid_out.next().flatten() {
+                Some(laid) => {
+                    #[cfg(debug_assertions)]
+                    check_laid_out(n, &env, &laid);
+                    let geom = ShapeGeometry {
+                        shape: laid.shape,
+                        width: laid.width,
+                        height: laid.height,
+                        polygon: laid.polygon,
+                        record: laid.record.map(|r| *r),
+                        epsf: laid.epsf,
+                        usershape: laid.usershape,
+                    };
+                    (laid.label, laid.xlabel.map(|x| *x), geom)
+                }
+                None => {
+                    let NodeGeometry {
+                        shape,
+                        width,
+                        height,
+                        label,
+                        xlabel,
+                        polygon,
+                        record,
+                        epsf,
+                        usershape,
+                        ..
+                    } = node_geometry(n, &env)?;
+                    let geom = ShapeGeometry {
+                        shape,
+                        width,
+                        height,
+                        polygon,
+                        record,
+                        epsf,
+                        usershape,
+                    };
+                    (label, xlabel, geom)
+                }
             };
             let a = Attrs(&n.attrs);
             let fontcolor = a.late_nnstring("fontcolor", "black");
@@ -432,6 +477,8 @@ impl<'g> Model<'g> {
                 ht: n.height * 72.0,
             });
         }
+        // Its labels and shapes moved to `nodes`; the array is released now.
+        drop(laid_out);
 
         let no_edge_init = g.layout.no_edge_init;
         let mut edges = Vec::with_capacity(g.edges.len());
@@ -811,6 +858,70 @@ mod ownership_tests {
         let font = TextFont::new(name, 12.0, 0);
         assert_eq!(font.name.as_ptr(), ptr);
         assert!(matches!(font.name, Cow::Borrowed(_)));
+    }
+
+    const LAID_OUT_SOURCE: &str = r#"digraph G { rankdir=LR
+        a [shape=record label="{<p> left|right}|\N" fontsize=11]
+        b [shape=polygon sides=7 peripheries=3 skew=0.3 label="poly\nline" xlabel="x\L"]
+        c [shape=Mrecord label="m|{n|o}"]
+        d [label=<<B>bold</B> <I>it</I>> shape=doublecircle]
+        e [shape=star fixedsize=shape width=1.5 label="fixed"]
+        f [shape=point]
+        g [label=<<TABLE><TR><TD>t</TD></TR></TABLE>> shape=plain]
+        a -> b -> c -> d -> e -> f -> g; a -> d; b -> g
+    }"#;
+
+    /// The layout's measurement is what a second drawing, which measures again, draws.
+    #[test]
+    fn a_drawing_from_the_layout_measurement_equals_a_measured_one() {
+        use graphviz_pure_layout::LayoutEngine;
+        for engine in [
+            LayoutEngine::Osage,
+            LayoutEngine::Patchwork,
+            LayoutEngine::Twopi,
+            LayoutEngine::Neato,
+            LayoutEngine::Circo,
+            LayoutEngine::Sfdp,
+            LayoutEngine::Fdp,
+            LayoutEngine::Nop2,
+        ] {
+            let mut graph = graphviz_pure_parser::parse_dot(LAID_OUT_SOURCE).unwrap();
+            if engine == LayoutEngine::Nop2 {
+                graphviz_pure_layout::layout_graph(&mut graph, LayoutEngine::Neato).unwrap();
+                let positioned = crate::render_graph(&graph, crate::OutputFormat::Dot).unwrap();
+                graph = graphviz_pure_parser::parse_dot(&positioned).unwrap();
+            }
+            graphviz_pure_layout::layout_graph(&mut graph, engine).unwrap();
+            assert!(graph.layout.node_geometry.is_set(), "{engine:?}");
+            let first = crate::render_graph(&graph, crate::OutputFormat::Svg).unwrap();
+            assert!(!graph.layout.node_geometry.is_set(), "{engine:?}");
+            let again = crate::render_graph(&graph, crate::OutputFormat::Svg).unwrap();
+            assert_eq!(first, again, "{engine:?}");
+            // A clone starts without the measurement, and is drawn the same.
+            graphviz_pure_layout::layout_graph(&mut graph, engine).unwrap();
+            let clone = graph.clone();
+            assert!(!clone.layout.node_geometry.is_set());
+            assert_eq!(
+                crate::render_graph(&clone, crate::OutputFormat::Svg).unwrap(),
+                first,
+                "{engine:?}"
+            );
+        }
+    }
+
+    /// A node changed after its layout is not drawn from the layout's measurement without
+    /// the debug check noticing.
+    #[cfg(debug_assertions)]
+    #[test]
+    #[should_panic(expected = "was measured differently by the layout")]
+    fn the_debug_check_catches_a_node_changed_after_layout() {
+        let mut graph = graphviz_pure_parser::parse_dot(LAID_OUT_SOURCE).unwrap();
+        graphviz_pure_layout::layout_graph(&mut graph, graphviz_pure_layout::LayoutEngine::Osage)
+            .unwrap();
+        graph.nodes[1]
+            .attrs
+            .set("label", "another label".to_string(), false);
+        let _ = Model::build(&graph);
     }
 
     #[test]

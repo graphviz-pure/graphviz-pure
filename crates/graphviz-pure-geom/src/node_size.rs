@@ -606,6 +606,46 @@ impl NodeGeometry {
     }
 }
 
+/// What the renderer draws of a node's [`NodeGeometry`] (`ND_label`, `ND_shape_info`), as
+/// the layout keeps it for every node until the render: the parts most nodes lack are
+/// boxed, so that a node without them keeps less.
+#[derive(Debug, Clone, PartialEq)]
+pub struct LaidOutNode {
+    pub shape: ShapeKind,
+    /// `ND_width`, `ND_height` in inches.
+    pub width: f64,
+    pub height: f64,
+    pub label: LabelGeometry,
+    pub xlabel: Option<Box<LabelGeometry>>,
+    pub polygon: Option<PolygonGeometry>,
+    pub record: Option<Box<RecordField>>,
+    pub epsf: Option<(Point, i32)>,
+    pub usershape: bool,
+}
+
+impl From<NodeGeometry> for LaidOutNode {
+    fn from(g: NodeGeometry) -> Self {
+        Self {
+            shape: g.shape,
+            width: g.width,
+            height: g.height,
+            label: g.label,
+            xlabel: g.xlabel.map(Box::new),
+            polygon: g.polygon,
+            record: g.record.map(Box::new),
+            epsf: g.epsf,
+            usershape: g.usershape,
+        }
+    }
+}
+
+/// The geometry a layout measured for each node of the graph it laid out, by node index:
+/// what C keeps in `ND_shape_info` and `ND_label` from `common_init_node` to the end of
+/// the render. The layout leaves it in [`graphviz_pure_core::GraphLayout::node_geometry`]
+/// and the renderer takes it there instead of measuring the nodes again.
+#[derive(Debug, Default)]
+pub struct LaidOutNodes(pub Vec<Option<LaidOutNode>>);
+
 /// `getPenColor` (htmltable.c): the object's `pencolor`, else its `color`.
 fn get_pen_color(attrs: &AttrMap) -> Option<&str> {
     ["pencolor", "color"]

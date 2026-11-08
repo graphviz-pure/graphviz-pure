@@ -33,6 +33,6 @@ pub use font::{
 pub use geom::{BezierSegment, BoundingBox, Point, Spline};
 pub use graph::{
     AgName, AttrDicts, AttrMap, AttrSym, ClusterReg, EdgeData, EdgeId, EdgeLayout, Graph,
-    GraphKind, GraphLayout, LabelPlace, NodeData, NodeId, NodeLayout, Obj, Port, PortNames,
-    SubgraphData, SubgraphId, agnameof_buffer, has_cluster_prefix, node_name_is_buffer,
+    GraphKind, GraphLayout, LabelPlace, LayoutHandoff, NodeData, NodeId, NodeLayout, Obj, Port,
+    PortNames, SubgraphData, SubgraphId, agnameof_buffer, has_cluster_prefix, node_name_is_buffer,
 };

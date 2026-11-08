@@ -274,6 +274,8 @@ fn derived_lgraph<'s>(src: &'s Graph, g: &LGraph<'_>, orign: &[usize]) -> LGraph
     LGraph {
         src,
         nodes,
+        // a derived graph: the renderer measures nothing of it
+        node_geometry: Vec::new(),
         edges,
         out,
         inn,
