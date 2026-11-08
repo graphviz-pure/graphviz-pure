@@ -33,6 +33,8 @@ pub enum EdgeType {
 /// `textlabel_t`.
 #[derive(Debug, Clone, Default)]
 pub struct TextLabel {
+    /// `lp->text`; empty in an [`LEdge`]'s labels, whose text [`LGraph::edge_label_text`]
+    /// reads from the kept measurement.
     pub text: String,
     /// Size in points.
     pub dimen: Point,

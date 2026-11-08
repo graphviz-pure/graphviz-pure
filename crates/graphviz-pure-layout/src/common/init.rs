@@ -272,7 +272,7 @@ impl<'a> LGraph<'a> {
     /// `lp->text` of the label `kind` of edge `e`, from the measurement `common_init_edge`
     /// kept for the renderer; empty when the edge has no such label.
     /// C: lib/common/labels.c:make_label
-    pub(crate) fn edge_label_text(&self, e: usize, kind: super::splines::LabelKind) -> String {
+    pub fn edge_label_text(&self, e: usize, kind: super::splines::LabelKind) -> String {
         use super::splines::LabelKind;
         let edges = &self.label_geometry.edges;
         let found = edges.binary_search_by_key(&e, |&(i, _)| i).ok();
