@@ -560,6 +560,80 @@ pub struct GraphLayout {
     pub usershapes: crate::usershape::UserShapes,
     /// Root only: `GD_drawing(g)->xdots`, the `_background` ops `graph_init` parsed.
     pub background: Option<crate::xdot::Background>,
+    /// Root only: what the layout measured for each node (`ND_shape_info`, `ND_label`),
+    /// which the renderer takes instead of measuring the nodes again. As in C, the
+    /// renderer then draws each node as the layout measured it. Code that changes a node's
+    /// attributes or name, or the root's `rankdir`, `quantum` or `charset`, after the layout
+    /// and before a render must [`LayoutHandoff::clear`] it, so that the renderer measures
+    /// the graph as it is now. Debug builds check this on every render.
+    pub node_geometry: LayoutHandoff,
+}
+
+/// A value a layout leaves for the renderer of the same graph, which takes it once.
+///
+/// Its type belongs to a crate that depends on this one (the node geometry of
+/// `graphviz-pure-geom`), so it is stored without one. The value is a cache of what the
+/// renderer would otherwise compute again from the graph: a clone of the graph starts
+/// without it, and it never makes two graphs unequal.
+#[derive(Default)]
+pub struct LayoutHandoff(std::sync::Mutex<Option<Box<dyn std::any::Any + Send>>>);
+
+impl LayoutHandoff {
+    /// Leaves `value`, replacing what was left before.
+    pub fn put<T: std::any::Any + Send>(&mut self, value: T) {
+        *self.slot() = Some(Box::new(value));
+    }
+
+    /// Takes the value, if one of type `T` was left. Later calls return `None`.
+    pub fn take<T: std::any::Any + Send>(&self) -> Option<T> {
+        let mut guard = self
+            .0
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let value = guard.take()?.downcast::<T>().ok()?;
+        Some(*value)
+    }
+
+    /// Drops the value: what the layout measured no longer holds for the graph.
+    pub fn clear(&mut self) {
+        *self.slot() = None;
+    }
+
+    /// Whether a value is left.
+    pub fn is_set(&self) -> bool {
+        self.0
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .is_some()
+    }
+
+    fn slot(&mut self) -> &mut Option<Box<dyn std::any::Any + Send>> {
+        self.0
+            .get_mut()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+    }
+}
+
+impl Clone for LayoutHandoff {
+    fn clone(&self) -> Self {
+        Self::default()
+    }
+}
+
+impl PartialEq for LayoutHandoff {
+    fn eq(&self, _: &Self) -> bool {
+        true
+    }
+}
+
+impl std::fmt::Debug for LayoutHandoff {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(if self.is_set() {
+            "LayoutHandoff(set)"
+        } else {
+            "LayoutHandoff(empty)"
+        })
+    }
 }
 
 /// A cgraph object, as [`Graph::agnameof`] takes it: the root graph, a subgraph (by index)

@@ -8,6 +8,7 @@ use super::utils::{late_double, map_bool, mapbool};
 use graphviz_pure_core::font::{LabelSubstContext, measure_multiline_label_with_context};
 use graphviz_pure_core::strtod::{atof, sscanf};
 use graphviz_pure_core::{AttrMap, BoundingBox, Graph, GraphKind, NodeData, Point, Result};
+use graphviz_pure_geom::LaidOutNode;
 
 pub const DEFAULT_FONTSIZE: f64 = 14.0;
 pub const MIN_FONTSIZE: f64 = 1.0;
@@ -130,14 +131,26 @@ pub fn do_graph_label(g: &mut LGraph<'_>, c: usize) {
     cl.label_pos = label_pos;
 }
 
-/// Consumes a measurement, retaining only the fields used during layout.
+/// Nodes an engine measured before [`LGraph`] (patchwork's `finishNode`), by node index:
+/// the layout's records and what the renderer draws of each.
+type Measured = (Vec<Option<LNode>>, Vec<Option<LaidOutNode>>);
+
+/// Consumes a measurement, retaining only the fields used during layout. The rest of it,
+/// the label and shape geometry C keeps in `ND_label` and `ND_shape_info` for the
+/// renderer, comes back with the layout's node.
 /// C: lib/common/utils.c:common_init_node
 pub(crate) fn node_from_geometry(
     nd: &NodeData,
     mut geom: graphviz_pure_geom::node_size::NodeGeometry,
     ndim: usize,
-) -> Result<LNode> {
+) -> Result<(LNode, LaidOutNode)> {
+    // The layout's shape takes the vertices; the renderer draws the same ones. A four- or
+    // eight-point array is shared, so only other lengths are copied.
+    let vertices = geom.polygon.as_ref().map(|p| p.vertices.clone());
     let shape = NodeShape::from_geometry(nd, &mut geom)?;
+    if let (Some(polygon), Some(vertices)) = (geom.polygon.as_mut(), vertices) {
+        polygon.vertices = vertices;
+    }
     let (lw, rw, ht) = geom.nodesize(false);
     let xlabel = geom.xlabel.as_ref().map(|l| TextLabel {
         // lp->text: what addXLabels' `-v2` trace prints
@@ -167,7 +180,7 @@ pub(crate) fn node_from_geometry(
         clust: None,
         lim: -1,
     };
-    Ok(node)
+    Ok((node, geom.into()))
 }
 
 impl<'a> LGraph<'a> {
@@ -251,8 +264,15 @@ impl<'a> LGraph<'a> {
         ndim: usize,
         default_edge_type: EdgeType,
         initialized: Vec<Option<LNode>>,
+        node_geometry: Vec<Option<LaidOutNode>>,
     ) -> Result<Self> {
-        Self::new_unported_with(graph, ndim, default_edge_type, |_, _| {}, Some(initialized))
+        Self::new_unported_with(
+            graph,
+            ndim,
+            default_edge_type,
+            |_, _| {},
+            Some((initialized, node_geometry)),
+        )
     }
 
     fn new_unported_with(
@@ -260,7 +280,7 @@ impl<'a> LGraph<'a> {
         ndim: usize,
         default_edge_type: EdgeType,
         mut node_init: impl FnMut(&NodeData, &mut LNode),
-        initialized: Option<Vec<Option<LNode>>>,
+        initialized: Option<Measured>,
     ) -> Result<Self> {
         let gattrs = &graph.graph_attrs;
         // `GD_nodesep = POINTS(…)`, an `int`: 1e300 inches saturates at INT_MAX points.
@@ -304,15 +324,25 @@ impl<'a> LGraph<'a> {
         };
 
         let env = graphviz_pure_geom::NodeSizeEnv::from_graph_attrs(graph, gattrs);
-        let nodes = if let Some(mut initialized) = initialized {
-            for (nd, slot) in graph.nodes.iter().zip(&mut initialized) {
+        let (nodes, node_geometry) = if let Some((mut initialized, mut node_geometry)) = initialized
+        {
+            for ((nd, slot), kept) in graph
+                .nodes
+                .iter()
+                .zip(&mut initialized)
+                .zip(&mut node_geometry)
+            {
                 let node = match slot {
                     Some(node) => node,
-                    None => slot.insert(node_from_geometry(
-                        nd,
-                        graphviz_pure_geom::node_geometry(nd, &env)?,
-                        ndim,
-                    )?),
+                    None => {
+                        let (node, geom) = node_from_geometry(
+                            nd,
+                            graphviz_pure_geom::node_geometry(nd, &env)?,
+                            ndim,
+                        )?;
+                        *kept = Some(geom);
+                        slot.insert(node)
+                    }
                 };
                 node_init(nd, node);
             }
@@ -323,16 +353,18 @@ impl<'a> LGraph<'a> {
                 .into_iter()
                 .filter_map(std::convert::identity)
                 .collect();
-            nodes
+            (nodes, node_geometry)
         } else {
             let mut nodes = Vec::with_capacity(graph.nodes.len());
+            let mut node_geometry = Vec::with_capacity(graph.nodes.len());
             for nd in &graph.nodes {
-                let mut node =
+                let (mut node, geom) =
                     node_from_geometry(nd, graphviz_pure_geom::node_geometry(nd, &env)?, ndim)?;
                 node_init(nd, &mut node);
                 nodes.push(node);
+                node_geometry.push(Some(geom));
             }
-            nodes
+            (nodes, node_geometry)
         };
 
         let mut out = vec![Vec::new(); graph.nodes.len()];
@@ -382,6 +414,7 @@ impl<'a> LGraph<'a> {
         Ok(LGraph {
             src: graph,
             nodes,
+            node_geometry,
             edges,
             out,
             inn,
@@ -408,6 +441,7 @@ impl<'a> LGraph<'a> {
         LayoutResult {
             odim: self.odim,
             nodes: self.nodes,
+            node_geometry: self.node_geometry,
             edges: self.edges,
             bb: self.bb,
             clusters: self.clusters,
@@ -417,10 +451,11 @@ impl<'a> LGraph<'a> {
 
     /// Writes positions, splines, label positions and bounding boxes back
     /// into `graph` (points, with the final translation already applied).
-    pub fn write_back(&self, graph: &mut Graph) {
+    pub fn write_back(&mut self, graph: &mut Graph) {
         LayoutResultView {
             odim: self.odim,
             nodes: &self.nodes,
+            node_geometry: std::mem::take(&mut self.node_geometry),
             edges: &self.edges,
             bb: self.bb,
             clusters: &self.clusters,
@@ -436,6 +471,7 @@ impl<'a> LGraph<'a> {
 pub(crate) struct LayoutResult {
     odim: usize,
     nodes: Vec<LNode>,
+    node_geometry: Vec<Option<LaidOutNode>>,
     edges: Vec<LEdge>,
     bb: BoundingBox,
     clusters: Vec<LCluster>,
@@ -449,6 +485,7 @@ impl LayoutResult {
         LayoutResultView {
             odim: self.odim,
             nodes: &self.nodes,
+            node_geometry: self.node_geometry,
             edges: &self.edges,
             bb: self.bb,
             clusters: &self.clusters,
@@ -463,6 +500,7 @@ impl LayoutResult {
 struct LayoutResultView<'a> {
     odim: usize,
     nodes: &'a [LNode],
+    node_geometry: Vec<Option<LaidOutNode>>,
     edges: &'a [LEdge],
     bb: BoundingBox,
     clusters: &'a [LCluster],
@@ -471,7 +509,7 @@ struct LayoutResultView<'a> {
 
 impl LayoutResultView<'_> {
     /// C: lib/common/postproc.c:gv_postprocess
-    fn write_back(&self, graph: &mut Graph) {
+    fn write_back(self, graph: &mut Graph) {
         graph.layout.odim = self.odim;
         for (i, n) in self.nodes.iter().enumerate() {
             let nd = &mut graph.nodes[i];
@@ -545,6 +583,14 @@ impl LayoutResultView<'_> {
             if let Some(l) = c.label.as_ref().filter(|l| l.set) {
                 graph.subgraphs[c.subgraph].layout.label_pos = Some(l.pos);
             }
+        }
+        // ND_label and ND_shape_info stay on the nodes for the renderer. The nodes are
+        // those positioned above, one measurement per node of the graph.
+        if self.node_geometry.len() == graph.nodes.len() {
+            graph
+                .layout
+                .node_geometry
+                .put(graphviz_pure_geom::LaidOutNodes(self.node_geometry));
         }
     }
 }
@@ -628,20 +674,38 @@ mod tests {
         }
         let env = graphviz_pure_geom::NodeSizeEnv::from_graph(&graph);
         let mut initialized = vec![None; graph.nodes.len()];
+        let mut kept = vec![None; graph.nodes.len()];
         // A walk differing from insertion order, with a node outside the walk.
         for i in [2, 0, 1] {
-            initialized[i] = Some(
-                node_from_geometry(
-                    &graph.nodes[i],
-                    graphviz_pure_geom::node_geometry(&graph.nodes[i], &env).unwrap(),
-                    2,
-                )
-                .unwrap(),
-            );
+            let (node, geom) = node_from_geometry(
+                &graph.nodes[i],
+                graphviz_pure_geom::node_geometry(&graph.nodes[i], &env).unwrap(),
+                2,
+            )
+            .unwrap();
+            initialized[i] = Some(node);
+            kept[i] = Some(geom);
         }
         let expected = LGraph::new_unported(&graph, 2, EdgeType::Line).unwrap();
         let actual =
-            LGraph::new_unported_from_nodes(&graph, 2, EdgeType::Line, initialized).unwrap();
+            LGraph::new_unported_from_nodes(&graph, 2, EdgeType::Line, initialized, kept).unwrap();
+        // Every node's measurement is kept for the renderer, the unvisited one's too.
+        for (i, (actual, expected)) in actual
+            .node_geometry
+            .iter()
+            .zip(&expected.node_geometry)
+            .enumerate()
+        {
+            let remeasured = LaidOutNode::from(
+                graphviz_pure_geom::node_geometry(&graph.nodes[i], &env).unwrap(),
+            );
+            let actual = actual.as_ref().unwrap();
+            assert_eq!(format!("{actual:?}"), format!("{remeasured:?}"));
+            assert_eq!(
+                format!("{actual:?}"),
+                format!("{:?}", expected.as_ref().unwrap())
+            );
+        }
         for (actual, expected) in actual.nodes.iter().zip(&expected.nodes) {
             assert_eq!(actual.shape, expected.shape);
             match (&actual.xlabel, &expected.xlabel) {

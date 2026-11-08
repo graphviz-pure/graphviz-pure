@@ -259,6 +259,9 @@ impl Sub {
 pub struct LGraph<'a> {
     pub src: &'a Graph,
     pub nodes: Vec<LNode>,
+    /// What [`Self::nodes`]' measurements leave for the renderer (`ND_label`,
+    /// `ND_shape_info`), one per node of [`Self::src`]; the write-back gives it to the graph.
+    pub node_geometry: Vec<Option<graphviz_pure_geom::LaidOutNode>>,
     pub edges: Vec<LEdge>,
     /// Out-edges of each node ordered by (head, edge) sequence.
     pub out: Vec<Vec<usize>>,

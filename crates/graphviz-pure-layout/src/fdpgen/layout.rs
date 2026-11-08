@@ -382,6 +382,8 @@ pub fn with_lgraph<R>(
     let mut lg = LGraph {
         src: &src,
         nodes,
+        // a derived graph: the renderer measures nothing of it
+        node_geometry: Vec::new(),
         edges: ledges,
         out,
         inn,
@@ -1304,7 +1306,7 @@ pub fn fdp_layout(graph: &mut Graph) -> Result<()> {
         f.set_clust_nodes();
         f.eval_positions(None);
     }
-    let finish = |g: &LGraph<'_>, graph: &mut Graph| match &ce {
+    let finish = |g: &mut LGraph<'_>, graph: &mut Graph| match &ce {
         Some(c) => {
             let mut w = c.work.clone();
             g.write_back(&mut w);
@@ -1325,7 +1327,7 @@ pub fn fdp_layout(graph: &mut Graph) -> Result<()> {
             .copied()
             .zip(f.labeled.iter().copied())
             .collect();
-        finish(&g, graph);
+        finish(&mut g, graph);
         let origin = Point::default();
         let mark = |gr: &mut Graph| {
             gr.layout.label_pos = Some(origin);
@@ -1372,7 +1374,7 @@ pub fn fdp_layout(graph: &mut Graph) -> Result<()> {
         fdp_splines(&mut g, ce.is_some(), &hier);
     }
     gv_postprocess(&mut g, false);
-    finish(&g, graph);
+    finish(&mut g, graph);
     Ok(())
 }
 
