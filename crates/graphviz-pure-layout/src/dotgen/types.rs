@@ -274,8 +274,9 @@ pub struct NodeMincross {
 }
 
 /// The cold part of `Agnodeinfo_t` (see [`NodeInfo`]): what only cgraph nodes have.
-/// [`super::Dot::cold`] covers the arena only up to the last cgraph node, so the virtual
-/// nodes behind it carry none of it.
+/// [`super::Dot::cold`] covers the arena only up to the last node whose cold part was
+/// written. The real nodes come first, so the virtual nodes behind them carry none of it
+/// (unless a cgraph node made later, such as mincross's anonymous `agnode`, gets one).
 #[derive(Debug, Clone, Default)]
 pub struct NodeCold {
     /// Index of the input node, for real nodes of the main graph.

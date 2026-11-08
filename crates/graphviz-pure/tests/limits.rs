@@ -459,8 +459,9 @@ fn the_allocation_limit_bounds_dot_s_node_arena() {
     // 79,000 virtual nodes, then a slack node per edge in position's auxiliary graph: the
     // arenas of 460-byte nodes (416 + 20 + 24 bytes in three parts) would double to 262,144
     // slots (115 MiB).
+    // 48 MiB: the chain's own growth (131,072 slots, 57.5 MiB) does not fit.
     let err = Limits::new()
-        .max_allocation(64 << 20)
+        .max_allocation(48 << 20)
         .run(|| graphviz_pure::render_dot("digraph { a -> b [minlen=79000] }", "dot", "svg"))
         .unwrap_err();
     assert_eq!(err.limit(), Some(Limit::Allocation));

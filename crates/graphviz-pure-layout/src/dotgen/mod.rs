@@ -111,7 +111,7 @@ pub struct Dot<'a> {
     pub nodes: Vec<NodeInfo>,
     pub ns_nodes: Vec<NodeNs>,
     pub mc_nodes: Vec<NodeMincross>,
-    /// Up to the last cgraph node only ([`Self::cold`]).
+    /// Up to the last node whose cold part was written ([`Self::cold`], [`Self::cold_mut`]).
     cold: Vec<NodeCold>,
     pub edges: Vec<EdgeInfo>,
     pub graphs: Vec<GraphInfo>,
@@ -192,11 +192,21 @@ impl Dot<'_> {
         self.cold.get(n).unwrap_or(&NO_COLD)
     }
 
-    /// The cold part of node `n`, for writing. It covers the arena up to `n` from now on.
+    /// The cold part of node `n`, for writing. It covers the arena up to `n` from now on,
+    /// with empty cold parts for the nodes before `n` that had none.
     pub fn cold_mut(&mut self, n: N) -> &mut NodeCold {
-        if self.cold.len() <= n {
-            self.cold
-                .resize_with(n.saturating_add(1), NodeCold::default);
+        let (len, need) = (self.cold.len(), n.saturating_add(1));
+        if len < need {
+            // Not in C: checked against `Limits::max_allocation` like the other node arenas
+            // ([`Self::note_node_push`]); past the limit the layout stops at its next check.
+            let bytes = fastgr::arena_growth_bytes(
+                len,
+                self.cold.capacity(),
+                need.saturating_sub(len),
+                size_of::<NodeCold>(),
+            );
+            let _ = graphviz_pure_core::limits::check_allocation(bytes);
+            self.cold.resize_with(need, NodeCold::default);
         }
         // In bounds: the arena reaches `n` now.
         &mut self.cold[n]
