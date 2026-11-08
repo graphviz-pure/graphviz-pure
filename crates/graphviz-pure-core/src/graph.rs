@@ -1,6 +1,6 @@
 use crate::geom::{BoundingBox, Point, Spline};
 use std::borrow::Cow;
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct NodeId(pub u32);
@@ -635,7 +635,10 @@ pub struct Graph {
     pub node_defaults: AttrMap,
     pub edge_defaults: AttrMap,
     pub nodes: Vec<NodeData>,
-    pub node_lookup: BTreeMap<String, NodeId>,
+    /// Node by [`Graph::node_key`]: cgraph's name lookup (`agfindnode_by_name`). It is only
+    /// looked up, never iterated, so a hash map's order cannot reach the output; a node
+    /// statement costs one hash instead of a string comparison per tree level.
+    pub node_lookup: HashMap<String, NodeId>,
     pub edges: Vec<EdgeData>,
     pub subgraphs: Vec<SubgraphData>,
     pub bb: BoundingBox,
@@ -719,7 +722,7 @@ impl Graph {
             node_defaults: AttrMap::new(),
             edge_defaults: AttrMap::new(),
             nodes: Vec::new(),
-            node_lookup: BTreeMap::new(),
+            node_lookup: HashMap::new(),
             edges: Vec::new(),
             subgraphs: Vec::new(),
             bb: BoundingBox::default(),
