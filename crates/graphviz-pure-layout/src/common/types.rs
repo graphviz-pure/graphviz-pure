@@ -262,6 +262,9 @@ pub struct LGraph<'a> {
     /// What [`Self::nodes`]' measurements leave for the renderer (`ND_label`,
     /// `ND_shape_info`), one per node of [`Self::src`]; the write-back gives it to the graph.
     pub node_geometry: Vec<Option<graphviz_pure_geom::LaidOutNode>>,
+    /// What the clusters' label measurements leave for the renderer (`GD_label`), by index
+    /// into [`Self::src`]; the write-back gives it to the graph.
+    pub label_geometry: graphviz_pure_geom::LaidOutLabels,
     pub edges: Vec<LEdge>,
     /// Out-edges of each node ordered by (head, edge) sequence.
     pub out: Vec<Vec<usize>>,

@@ -567,6 +567,12 @@ pub struct GraphLayout {
     /// and before a render must [`LayoutHandoff::clear`] it, so that the renderer measures
     /// the graph as it is now. Debug builds check this on every render.
     pub node_geometry: LayoutHandoff,
+    /// Root only: what the layout measured for the edge, cluster and root labels
+    /// (`ED_label`, `ED_xlabel`, `ED_head_label`, `ED_tail_label`, `GD_label`), which the
+    /// renderer takes instead of measuring them again. The rule of [`Self::node_geometry`]
+    /// holds for it too: code that changes an edge's, a cluster's or the root's attributes
+    /// or a node's name after the layout must [`LayoutHandoff::clear`] it.
+    pub label_geometry: LayoutHandoff,
 }
 
 /// A value a layout leaves for the renderer of the same graph, which takes it once.

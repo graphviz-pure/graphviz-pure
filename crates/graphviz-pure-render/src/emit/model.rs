@@ -20,8 +20,10 @@ use graphviz_pure_core::{
 };
 use graphviz_pure_geom::html_label::HtmlLabel;
 use graphviz_pure_geom::node_size::{
-    LABEL_AT_LEFT, LABEL_AT_RIGHT, LABEL_AT_TOP, LabelGeometry, LaidOutNode, LaidOutNodes,
-    NodeGeometry, NodeSizeEnv, graph_label_geometry_in, node_geometry,
+    EdgeLabelGeometry, GraphLabelGeometry, LABEL_AT_LEFT, LABEL_AT_RIGHT, LABEL_AT_TOP,
+    LabelGeometry, LaidOutEdge, LaidOutLabels, LaidOutNode, LaidOutNodes, NodeGeometry,
+    NodeSizeEnv, edge_has_labels, graph_label_geometry_in, labelled_edge_label_geometry,
+    node_geometry,
 };
 use graphviz_pure_geom::shapes::{RecordField, ShapeKind};
 
@@ -324,6 +326,18 @@ fn check_laid_out(n: &graphviz_pure_core::NodeData, env: &NodeSizeEnv<'_>, geom:
     );
 }
 
+/// Debug builds measure each edge, cluster or root label the layout measured again and
+/// compare the two bit for bit, as [`check_laid_out`] does for nodes.
+#[cfg(debug_assertions)]
+fn check_laid_out_label<T: std::fmt::Debug>(what: std::fmt::Arguments<'_>, kept: &T, again: &T) {
+    debug_assert_eq!(
+        format!("{again:?}"),
+        format!("{kept:?}"),
+        "{what} was measured differently by the layout: a change to the graph after its \
+         layout must clear `GraphLayout::label_geometry`"
+    );
+}
+
 /// `is_a_cluster(g)` for a subgraph (`lib/common/utils.c`).
 pub(crate) fn is_a_cluster(name: &str, attrs: &AttrMap) -> bool {
     graphviz_pure_core::has_cluster_prefix(name) || Attrs(attrs).mapbool("cluster")
@@ -377,10 +391,11 @@ impl<'g> Model<'g> {
         self.root_attrs().mapbool("center")
     }
 
-    /// The render model of `g`. Its nodes' labels and shapes are those the layout measured
-    /// (`ND_label`, `ND_shape_info`), the first time the graph is drawn after its layout;
-    /// other nodes, and the edge and cluster labels, are sized again here
-    /// (`diag::quietly`): C made them in layout, and reported their diagnostics there.
+    /// The render model of `g`. Its nodes' labels and shapes, and its edge, cluster and root
+    /// labels, are those the layout measured (`ND_label`, `ND_shape_info`, `ED_label`,
+    /// `GD_label`), the first time the graph is drawn after its layout; what the layout
+    /// left none for is sized again here (`diag::quietly`): C made it in layout, and
+    /// reported its diagnostics there.
     pub fn build(g: &'g Graph) -> graphviz_pure_core::Result<Self> {
         // The labels were measured by layout; measure them again as C measured them then.
         graphviz_pure_core::font::textfont_remeasuring(|| Self::build_measured(g))
@@ -396,6 +411,17 @@ impl<'g> Model<'g> {
         let ga = Attrs(&g.graph_attrs);
 
         let mut has_labels = 0u32;
+        // What the layout measured of the labels; a later drawing measures again.
+        let LaidOutLabels {
+            root: laid_out_root,
+            edges: laid_out_edges,
+            clusters: mut laid_out_clusters,
+        } = g
+            .layout
+            .label_geometry
+            .take::<LaidOutLabels>()
+            .unwrap_or_default();
+        let mut laid_out_edges = laid_out_edges.into_iter().peekable();
         let mut nodes = Vec::with_capacity(g.nodes.len());
         // What the layout measured, one per node; a later drawing measures again.
         let mut laid_out = g
@@ -502,17 +528,31 @@ impl<'g> Model<'g> {
                 .collect();
             let tname = &g.nodes[e.tail.0 as usize].name;
             let hname = &g.nodes[e.head.0 as usize].name;
-            let lg = if no_edge_init {
-                graphviz_pure_geom::node_size::EdgeLabelGeometry::default()
+            while laid_out_edges.next_if(|&(i, _)| i < ei).is_some() {}
+            let measure = || {
+                let id = u64::from(e.id.0);
+                labelled_edge_label_geometry(id, &e.attrs, tname, hname, directed, &env)
+            };
+            // Without a label, every label of the measurement is `None`.
+            let lg = if no_edge_init || !edge_has_labels(&e.attrs) {
+                EdgeLabelGeometry::default()
+            } else if let Some((_, kept)) = laid_out_edges.next_if(|&(i, _)| i == ei) {
+                #[cfg(debug_assertions)]
+                check_laid_out_label(
+                    format_args!("edge {tname}->{hname}"),
+                    &Some(&kept),
+                    &LaidOutEdge::of(measure()).as_ref(),
+                );
+                EdgeLabelGeometry {
+                    label: kept.label.map(|l| *l),
+                    xlabel: kept.xlabel.map(|l| *l),
+                    head_label: kept.head_label.map(|l| *l),
+                    tail_label: kept.tail_label.map(|l| *l),
+                    // `ED_label_ontop`, which the layout read; nothing here does
+                    label_float: false,
+                }
             } else {
-                graphviz_pure_geom::node_size::edge_label_geometry_of(
-                    u64::from(e.id.0),
-                    &e.attrs,
-                    tname,
-                    hname,
-                    directed,
-                    &env,
-                )
+                measure()
             };
             let fontcolor = a.late_nnstring("fontcolor", "black");
             let lfontcolor = a.late_nnstring("labelfontcolor", fontcolor);
@@ -581,6 +621,9 @@ impl<'g> Model<'g> {
             });
         }
 
+        // Its labels moved to `edges`; the array is released now.
+        drop(laid_out_edges);
+
         // `agfstout`/`agnxtout` order: by head node id (cgraph `agedgeseqcmpf`), then by edge
         // sequence. Node ids follow the interning of their names, approximated by creation order.
         for list in &mut out_edges {
@@ -597,6 +640,7 @@ impl<'g> Model<'g> {
         let mut clusters: Vec<RCluster<'g>> = Vec::new();
         let mut root_clusters = Vec::new();
         let flip = false;
+        #[allow(clippy::too_many_arguments)]
         fn dfs<'g>(
             g: &'g Graph,
             sid: usize,
@@ -605,6 +649,7 @@ impl<'g> Model<'g> {
             has_labels: &mut u32,
             env: &NodeSizeEnv<'_>,
             flip: bool,
+            laid_out: &mut [(usize, Option<GraphLabelGeometry>)],
         ) {
             let s = &g.subgraphs[sid];
             let drawn = match s.layout.reg {
@@ -615,10 +660,25 @@ impl<'g> Model<'g> {
             if is_a_cluster(&s.name, &s.graph_attrs) && drawn {
                 let a = Attrs(&s.graph_attrs);
                 let name = g.subgraph_name(sid);
+                let measure = || {
+                    graph_label_geometry_in(&name, s.html_name, &s.graph_attrs, false, flip, env)
+                };
+                let kept = laid_out
+                    .binary_search_by_key(&sid, |&(i, _)| i)
+                    .ok()
+                    .and_then(|k| laid_out[k].1.take());
                 let label = if s.layout.no_label {
                     None
+                } else if let Some(kept) = kept {
+                    #[cfg(debug_assertions)]
+                    check_laid_out_label(
+                        format_args!("cluster {name}"),
+                        &Some(&kept),
+                        &measure().as_ref(),
+                    );
+                    Some(kept)
                 } else {
-                    graph_label_geometry_in(&name, s.html_name, &s.graph_attrs, false, flip, env)
+                    measure()
                 };
                 let label = label.map(|gl| {
                     *has_labels |= GRAPH_LABEL;
@@ -661,12 +721,30 @@ impl<'g> Model<'g> {
                 out.push(idx);
                 let mut kids = Vec::new();
                 for c in &s.subgraphs {
-                    dfs(g, c.0 as usize, &mut kids, clusters, has_labels, env, flip);
+                    dfs(
+                        g,
+                        c.0 as usize,
+                        &mut kids,
+                        clusters,
+                        has_labels,
+                        env,
+                        flip,
+                        laid_out,
+                    );
                 }
                 clusters[idx].children = kids;
             } else {
                 for c in &s.subgraphs {
-                    dfs(g, c.0 as usize, out, clusters, has_labels, env, flip);
+                    dfs(
+                        g,
+                        c.0 as usize,
+                        out,
+                        clusters,
+                        has_labels,
+                        env,
+                        flip,
+                        laid_out,
+                    );
                 }
             }
         }
@@ -680,6 +758,7 @@ impl<'g> Model<'g> {
                     &mut has_labels,
                     &env,
                     flip,
+                    &mut laid_out_clusters,
                 );
             }
         }
@@ -735,8 +814,20 @@ impl<'g> Model<'g> {
         }
 
         let bb = g.bb;
-        let root_label =
-            graph_label_geometry_in(g.root_name(), false, &g.graph_attrs, true, flip, &env);
+        let measure_root =
+            || graph_label_geometry_in(g.root_name(), false, &g.graph_attrs, true, flip, &env);
+        let root_label = match laid_out_root {
+            Some(kept) => {
+                #[cfg(debug_assertions)]
+                check_laid_out_label(
+                    format_args!("the root label"),
+                    &Some(&kept),
+                    &measure_root().as_ref(),
+                );
+                Some(kept)
+            }
+            None => measure_root(),
+        };
         let label = root_label.map(|gl| {
             has_labels |= GRAPH_LABEL;
             let label_dimen = gl.label.dimen;
@@ -939,6 +1030,168 @@ mod ownership_tests {
         assert!(!graph.layout.node_geometry.is_set());
         let first = crate::render_graph(&graph, crate::OutputFormat::Svg).unwrap();
         assert!(first.contains(">another label</text>"));
+        assert_eq!(
+            crate::render_graph(&graph, crate::OutputFormat::Svg).unwrap(),
+            first
+        );
+    }
+
+    const LAID_OUT_LABELS_SOURCE: &str = r#"digraph G { label="root \G" labelloc=t fontsize=20
+        subgraph cluster_a { label=<<B>a</B> cluster> labeljust=r x; y }
+        subgraph cluster_b { label="b\nlines" labelloc=b fontname=Courier z
+            subgraph cluster_c { label="inner \G" w }
+        }
+        x -> y [label="xy \E" fontsize=9]
+        y -> z [xlabel="side" headlabel=<<I>h</I>> taillabel="t\T" labelfontsize=8]
+        z -> w; w -> x [label="back \L"]
+    }"#;
+
+    const LABEL_ENGINES: [graphviz_pure_layout::LayoutEngine; 9] = {
+        use graphviz_pure_layout::LayoutEngine;
+        [
+            LayoutEngine::Dot,
+            LayoutEngine::Osage,
+            LayoutEngine::Patchwork,
+            LayoutEngine::Twopi,
+            LayoutEngine::Neato,
+            LayoutEngine::Circo,
+            LayoutEngine::Sfdp,
+            LayoutEngine::Fdp,
+            LayoutEngine::Nop2,
+        ]
+    };
+
+    /// [`LAID_OUT_LABELS_SOURCE`] laid out by `engine`; `-n2` reads neato's positions.
+    fn labels_laid_out(engine: graphviz_pure_layout::LayoutEngine, rankdir: &str) -> Graph {
+        use graphviz_pure_layout::LayoutEngine;
+        let mut graph = graphviz_pure_parser::parse_dot(LAID_OUT_LABELS_SOURCE).unwrap();
+        graph.graph_attrs.set("rankdir", rankdir.to_string(), false);
+        if engine == LayoutEngine::Nop2 {
+            graphviz_pure_layout::layout_graph(&mut graph, LayoutEngine::Neato).unwrap();
+            let positioned = crate::render_graph(&graph, crate::OutputFormat::Dot).unwrap();
+            graph = graphviz_pure_parser::parse_dot(&positioned).unwrap();
+        }
+        graphviz_pure_layout::layout_graph(&mut graph, engine).unwrap();
+        graph
+    }
+
+    /// The layout's edge, cluster and root labels are what a second drawing, which
+    /// measures them again, draws; with `rankdir=LR`, dot measures its clusters flipped.
+    #[test]
+    fn a_drawing_from_the_layout_labels_equals_a_measured_one() {
+        for (engine, rankdir) in LABEL_ENGINES
+            .into_iter()
+            .flat_map(|e| [(e, "TB"), (e, "LR")])
+        {
+            let mut graph = labels_laid_out(engine, rankdir);
+            assert!(graph.layout.label_geometry.is_set(), "{engine:?}");
+            let first = crate::render_graph(&graph, crate::OutputFormat::Svg).unwrap();
+            assert!(!graph.layout.label_geometry.is_set(), "{engine:?}");
+            assert!(first.contains(">root G</text>"), "{engine:?}");
+            let again = crate::render_graph(&graph, crate::OutputFormat::Svg).unwrap();
+            assert_eq!(first, again, "{engine:?}");
+            graphviz_pure_layout::layout_graph(&mut graph, engine).unwrap();
+            let clone = graph.clone();
+            assert!(!clone.layout.label_geometry.is_set());
+            assert_eq!(
+                crate::render_graph(&clone, crate::OutputFormat::Svg).unwrap(),
+                first,
+                "{engine:?}"
+            );
+        }
+    }
+
+    /// Which labels each engine leaves: dot its edges', and the engines that register
+    /// clusters (dot, osage, fdp, neato, nop) their clusters'; every engine leaves the
+    /// root's.
+    #[test]
+    fn the_layout_leaves_the_labels_it_measured() {
+        use graphviz_pure_layout::LayoutEngine;
+        for engine in LABEL_ENGINES {
+            let graph = labels_laid_out(engine, "TB");
+            let labels = graph.layout.label_geometry.take::<LaidOutLabels>().unwrap();
+            assert!(labels.root.is_some(), "{engine:?}");
+            let edges: Vec<usize> = labels.edges.iter().map(|&(i, _)| i).collect();
+            let clusters: Vec<usize> = labels.clusters.iter().map(|&(i, _)| i).collect();
+            let want_edges: &[usize] = match engine {
+                LayoutEngine::Dot => &[0, 1, 3],
+                // not kept by the `LGraph` engines yet (#836)
+                _ => &[],
+            };
+            let want_clusters: &[usize] = match engine {
+                LayoutEngine::Dot
+                | LayoutEngine::Osage
+                | LayoutEngine::Fdp
+                | LayoutEngine::Nop2 => &[0, 1, 2],
+                // neato registers the root's top-level clusters only
+                LayoutEngine::Neato => &[0, 1],
+                _ => &[],
+            };
+            assert_eq!(edges, want_edges, "{engine:?}");
+            assert_eq!(clusters, want_clusters, "{engine:?}");
+        }
+    }
+
+    /// An edge label changed after its layout is not drawn from the layout's measurement
+    /// without the debug check noticing.
+    #[cfg(debug_assertions)]
+    #[test]
+    #[should_panic(expected = "edge x->y was measured differently by the layout")]
+    fn the_debug_check_catches_an_edge_label_changed_after_layout() {
+        let mut graph = graphviz_pure_parser::parse_dot(LAID_OUT_LABELS_SOURCE).unwrap();
+        graphviz_pure_layout::layout_graph(&mut graph, graphviz_pure_layout::LayoutEngine::Dot)
+            .unwrap();
+        graph.edges[0]
+            .attrs
+            .set("label", "another label".to_string(), false);
+        let _ = Model::build(&graph);
+    }
+
+    /// A cluster label changed after its layout, likewise.
+    #[cfg(debug_assertions)]
+    #[test]
+    #[should_panic(expected = "cluster cluster_b was measured differently by the layout")]
+    fn the_debug_check_catches_a_cluster_label_changed_after_layout() {
+        let mut graph = graphviz_pure_parser::parse_dot(LAID_OUT_LABELS_SOURCE).unwrap();
+        graphviz_pure_layout::layout_graph(&mut graph, graphviz_pure_layout::LayoutEngine::Osage)
+            .unwrap();
+        graph.subgraphs[1]
+            .graph_attrs
+            .set("fontsize", "30".to_string(), false);
+        let _ = Model::build(&graph);
+    }
+
+    /// The root label changed after the layout, likewise, for every engine.
+    #[cfg(debug_assertions)]
+    #[test]
+    #[should_panic(expected = "the root label was measured differently by the layout")]
+    fn the_debug_check_catches_a_root_label_changed_after_layout() {
+        let mut graph = graphviz_pure_parser::parse_dot(LAID_OUT_LABELS_SOURCE).unwrap();
+        graphviz_pure_layout::layout_graph(&mut graph, graphviz_pure_layout::LayoutEngine::Dot)
+            .unwrap();
+        graph
+            .graph_attrs
+            .set("label", "another label".to_string(), false);
+        let _ = Model::build(&graph);
+    }
+
+    /// Labels changed after the layout, with the measurement cleared as the change requires,
+    /// are drawn as they are now, the same by every drawing.
+    #[test]
+    fn cleared_labels_draw_the_changed_graph() {
+        let mut graph = graphviz_pure_parser::parse_dot(LAID_OUT_LABELS_SOURCE).unwrap();
+        graphviz_pure_layout::layout_graph(&mut graph, graphviz_pure_layout::LayoutEngine::Osage)
+            .unwrap();
+        graph.edges[0]
+            .attrs
+            .set("label", "another edge".to_string(), false);
+        graph.subgraphs[0]
+            .graph_attrs
+            .set("label", "another cluster".to_string(), false);
+        graph.layout.label_geometry.clear();
+        let first = crate::render_graph(&graph, crate::OutputFormat::Svg).unwrap();
+        assert!(first.contains(">another edge</text>"));
+        assert!(first.contains(">another cluster</text>"));
         assert_eq!(
             crate::render_graph(&graph, crate::OutputFormat::Svg).unwrap(),
             first

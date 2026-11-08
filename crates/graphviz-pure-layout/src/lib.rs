@@ -253,8 +253,8 @@ fn layout_in_run(graph: &mut Graph, engine: LayoutEngine, options: LayoutOptions
     clear_layout_results(graph);
     // graph_init's do_graph_label(g) (lib/common/input.c:711) makes the root label before
     // any engine's node and edge init, so its diagnostics come first; the engines' own
-    // calls do not repeat them.
-    let _ = graphviz_pure_geom::graph_label_geometry_in(
+    // calls do not repeat them. The renderer draws it (GD_label).
+    let root_label = graphviz_pure_geom::graph_label_geometry_in(
         graph.root_name(),
         false,
         &graph.graph_attrs,
@@ -286,6 +286,14 @@ fn layout_in_run(graph: &mut Graph, engine: LayoutEngine, options: LayoutOptions
     };
     // what the renderers draw the images and epsf shapes from
     graph.layout.usershapes = graphviz_pure_core::usershape::layout_result();
+    if let Some(root) = root_label {
+        let handoff = &mut graph.layout.label_geometry;
+        let mut labels = handoff
+            .take::<graphviz_pure_geom::LaidOutLabels>()
+            .unwrap_or_default();
+        labels.root = Some(root);
+        handoff.put(labels);
+    }
     result
 }
 
