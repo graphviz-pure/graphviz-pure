@@ -561,7 +561,11 @@ pub struct GraphLayout {
     /// Root only: `GD_drawing(g)->xdots`, the `_background` ops `graph_init` parsed.
     pub background: Option<crate::xdot::Background>,
     /// Root only: what the layout measured for each node (`ND_shape_info`, `ND_label`),
-    /// which the renderer takes instead of measuring the nodes again.
+    /// which the renderer takes instead of measuring the nodes again. As in C, the
+    /// renderer then draws each node as the layout measured it. Code that changes a node's
+    /// attributes or name, or the root's `rankdir`, `quantum` or `charset`, after the layout
+    /// and before a render must [`LayoutHandoff::clear`] it, so that the renderer measures
+    /// the graph as it is now. Debug builds check this on every render.
     pub node_geometry: LayoutHandoff,
 }
 
@@ -588,6 +592,11 @@ impl LayoutHandoff {
             .unwrap_or_else(std::sync::PoisonError::into_inner);
         let value = guard.take()?.downcast::<T>().ok()?;
         Some(*value)
+    }
+
+    /// Drops the value: what the layout measured no longer holds for the graph.
+    pub fn clear(&mut self) {
+        *self.slot() = None;
     }
 
     /// Whether a value is left.

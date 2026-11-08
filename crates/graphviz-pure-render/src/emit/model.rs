@@ -318,7 +318,8 @@ fn check_laid_out(n: &graphviz_pure_core::NodeData, env: &NodeSizeEnv<'_>, geom:
     debug_assert_eq!(
         again.as_deref().ok(),
         Some(format!("{geom:?}").as_str()),
-        "node {} was measured differently by the layout",
+        "node {} was measured differently by the layout: a change to the graph after its \
+         layout must clear `GraphLayout::node_geometry`",
         n.name
     );
 }
@@ -922,6 +923,26 @@ mod ownership_tests {
             .attrs
             .set("label", "another label".to_string(), false);
         let _ = Model::build(&graph);
+    }
+
+    /// A node changed after its layout, with the measurement cleared as the change
+    /// requires, is drawn as it is now, the same by every drawing.
+    #[test]
+    fn a_cleared_measurement_draws_the_changed_node() {
+        let mut graph = graphviz_pure_parser::parse_dot(LAID_OUT_SOURCE).unwrap();
+        graphviz_pure_layout::layout_graph(&mut graph, graphviz_pure_layout::LayoutEngine::Osage)
+            .unwrap();
+        graph.nodes[1]
+            .attrs
+            .set("label", "another label".to_string(), false);
+        graph.layout.node_geometry.clear();
+        assert!(!graph.layout.node_geometry.is_set());
+        let first = crate::render_graph(&graph, crate::OutputFormat::Svg).unwrap();
+        assert!(first.contains(">another label</text>"));
+        assert_eq!(
+            crate::render_graph(&graph, crate::OutputFormat::Svg).unwrap(),
+            first
+        );
     }
 
     #[test]
