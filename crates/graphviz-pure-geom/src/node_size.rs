@@ -12,7 +12,7 @@
 
 use crate::html_label::HtmlLabel;
 use graphviz_pure_core::alloc::{MAX_VERTICES, element_count, gv_calloc_budget, gv_calloc_vec};
-use graphviz_pure_core::cnum::{is_exactly_equal, is_exactly_zero};
+use graphviz_pure_core::cnum::{self, is_exactly_equal, is_exactly_zero};
 use graphviz_pure_core::math;
 use graphviz_pure_core::strtod::{sscanf, strtod};
 use graphviz_pure_core::usershape;
@@ -63,7 +63,13 @@ fn ps2inch(x: f64) -> f64 {
 
 /// `late_double` from `lib/common/utils.c`.
 pub fn late_double(attrs: &AttrMap, key: &str, default: f64, minimum: f64) -> f64 {
-    let Some(p) = attrs.get(key).filter(|p| !p.is_empty()) else {
+    late_double_of(attrs.get(key).map(String::as_str), default, minimum)
+}
+
+/// [`late_double`] of an attribute's value `p` (`None`: the object has no value).
+/// C: lib/common/utils.c:late_double
+fn late_double_of(p: Option<&str>, default: f64, minimum: f64) -> f64 {
+    let Some(p) = p.filter(|p| !p.is_empty()) else {
         return default;
     };
     let (rv, used) = strtod(p);
@@ -80,11 +86,99 @@ pub fn late_int(attrs: &AttrMap, key: &str, default: i32, minimum: i32) -> i32 {
 
 /// `late_nnstring` from `lib/common/utils.c`.
 pub fn late_nnstring<'a>(attrs: &'a AttrMap, key: &str, default: &'a str) -> &'a str {
-    attrs
-        .get(key)
-        .map(String::as_str)
-        .filter(|s| !s.is_empty())
-        .unwrap_or(default)
+    late_nnstring_of(attrs.get(key).map(String::as_str), default)
+}
+
+/// [`late_nnstring`] of an attribute's value `p` (`None`: the object has no value).
+/// C: lib/common/utils.c:late_nnstring
+fn late_nnstring_of<'a>(p: Option<&'a str>, default: &'a str) -> &'a str {
+    p.filter(|s| !s.is_empty()).unwrap_or(default)
+}
+
+/// The values of the attributes that sizing a node reads (`common_init_node` and the shape
+/// `initfn`s), found in one pass over the node's map instead of one search per read. C reads
+/// each through its symbol (`N_width`, ...), an index into the node's value array; the
+/// interned store of #536 would make these reads indexed, and then only [`NodeAttrs::of`]
+/// changes. `None` is a value the node does not have, as [`AttrMap::get`] returns it.
+/// C: lib/common/utils.c:common_init_node
+#[derive(Debug, Default, Clone, Copy)]
+struct NodeAttrs<'a> {
+    shape: Option<&'a str>,
+    shapefile: Option<&'a str>,
+    width: Option<&'a str>,
+    height: Option<&'a str>,
+    fontname: Option<&'a str>,
+    fontsize: Option<&'a str>,
+    fontcolor: Option<&'a str>,
+    label: Option<&'a str>,
+    xlabel: Option<&'a str>,
+    pencolor: Option<&'a str>,
+    color: Option<&'a str>,
+    regular: Option<&'a str>,
+    peripheries: Option<&'a str>,
+    orientation: Option<&'a str>,
+    skew: Option<&'a str>,
+    sides: Option<&'a str>,
+    distortion: Option<&'a str>,
+    margin: Option<&'a str>,
+    image: Option<&'a str>,
+    labelloc: Option<&'a str>,
+    fixedsize: Option<&'a str>,
+    nojustify: Option<&'a str>,
+    penwidth: Option<&'a str>,
+}
+
+impl<'a> NodeAttrs<'a> {
+    /// The values in `attrs`, each the one `attrs.get(name)` returns.
+    fn of(attrs: &'a AttrMap) -> Self {
+        let mut a = Self::default();
+        for (k, v) in attrs.iter() {
+            // By length first, so most names take one comparison.
+            let slot = match k.len() {
+                4 if k == "skew" => &mut a.skew,
+                5 => match k.as_str() {
+                    "shape" => &mut a.shape,
+                    "width" => &mut a.width,
+                    "label" => &mut a.label,
+                    "color" => &mut a.color,
+                    "sides" => &mut a.sides,
+                    "image" => &mut a.image,
+                    _ => continue,
+                },
+                6 => match k.as_str() {
+                    "height" => &mut a.height,
+                    "xlabel" => &mut a.xlabel,
+                    "margin" => &mut a.margin,
+                    _ => continue,
+                },
+                7 if k == "regular" => &mut a.regular,
+                8 => match k.as_str() {
+                    "fontname" => &mut a.fontname,
+                    "fontsize" => &mut a.fontsize,
+                    "pencolor" => &mut a.pencolor,
+                    "labelloc" => &mut a.labelloc,
+                    "penwidth" => &mut a.penwidth,
+                    _ => continue,
+                },
+                9 => match k.as_str() {
+                    "shapefile" => &mut a.shapefile,
+                    "fontcolor" => &mut a.fontcolor,
+                    "fixedsize" => &mut a.fixedsize,
+                    "nojustify" => &mut a.nojustify,
+                    _ => continue,
+                },
+                10 if k == "distortion" => &mut a.distortion,
+                11 => match k.as_str() {
+                    "peripheries" => &mut a.peripheries,
+                    "orientation" => &mut a.orientation,
+                    _ => continue,
+                },
+                _ => continue,
+            };
+            *slot = Some(v.as_str());
+        }
+        a
+    }
 }
 
 pub use graphviz_pure_core::cnum::{map_bool, mapbool};
@@ -729,10 +823,18 @@ impl LaidOutLabels {
 
 /// `getPenColor` (htmltable.c): the object's `pencolor`, else its `color`.
 fn get_pen_color(attrs: &AttrMap) -> Option<&str> {
-    ["pencolor", "color"]
+    get_pen_color_of(
+        attrs.get("pencolor").map(String::as_str),
+        attrs.get("color").map(String::as_str),
+    )
+}
+
+/// [`get_pen_color`] of the object's `pencolor` and `color` values.
+/// C: lib/common/htmltable.c:getPenColor
+fn get_pen_color_of<'a>(pencolor: Option<&'a str>, color: Option<&'a str>) -> Option<&'a str> {
+    [pencolor, color]
         .into_iter()
-        .filter_map(|k| attrs.get(k))
-        .map(String::as_str)
+        .flatten()
         .find(|s| !s.is_empty())
 }
 
@@ -830,15 +932,11 @@ pub fn node_geometry(node: &NodeData, env: &NodeSizeEnv<'_>) -> Result<NodeGeome
 
 fn node_geometry_measured(node: &NodeData, env: &NodeSizeEnv<'_>) -> Result<NodeGeometry> {
     let attrs = &node.attrs;
-    let shape_name = late_nnstring(attrs, "shape", "ellipse");
+    let na = NodeAttrs::of(attrs);
+    let shape_name = late_nnstring_of(na.shape, "ellipse");
     // bind_shape: a `shapefile` that `safefile` accepts (except with epsf) makes the shape
     // `custom`, a user shape that copies `Shapes[0]` (box).
-    let custom = usershape::binds_custom(
-        &node.name,
-        node.html_name,
-        shape_name,
-        attrs.get("shapefile").map(String::as_str),
-    );
+    let custom = usershape::binds_custom(&node.name, node.html_name, shape_name, na.shapefile);
     let unknown = !custom
         && ShapeKind::parse(shape_name) == ShapeKind::Box
         && !matches!(shape_name, "box" | "rect" | "rectangle");
@@ -869,16 +967,18 @@ fn node_geometry_measured(node: &NodeData, env: &NodeSizeEnv<'_>) -> Result<Node
         ShapeKind::parse(shape_name)
     };
     let (init, desc) = shape.shape_desc();
-    let nd_width = late_double(attrs, "width", DEFAULT_NODEWIDTH, MIN_NODEWIDTH);
-    let nd_height = late_double(attrs, "height", DEFAULT_NODEHEIGHT, MIN_NODEHEIGHT);
-    let (font_name, font_size) = node_font(attrs);
-    let label_str = attrs.get("label").map_or("\\N", String::as_str);
+    let nd_width = late_double_of(na.width, DEFAULT_NODEWIDTH, MIN_NODEWIDTH);
+    let nd_height = late_double_of(na.height, DEFAULT_NODEHEIGHT, MIN_NODEHEIGHT);
+    // node_font
+    let font_name = late_nnstring_of(na.fontname, DEFAULT_FONT_NAME);
+    let font_size = late_double_of(na.fontsize, DEFAULT_FONT_SIZE, MIN_FONT_SIZE);
+    let label_str = na.label.unwrap_or("\\N");
     let obj = LabelSubstContext::for_node(&node.name);
     let obj = LabelSubstContext {
         graph_name: env.graph_name,
         in_buffer: env.names_in_buffer(&node.name, "", ""),
-        pen_color: get_pen_color(attrs),
-        font_color: Some(late_nnstring(attrs, "fontcolor", "black")),
+        pen_color: get_pen_color_of(na.pencolor, na.color),
+        font_color: Some(late_nnstring_of(na.fontcolor, "black")),
         ..obj
     };
 
@@ -907,7 +1007,7 @@ fn node_geometry_measured(node: &NodeData, env: &NodeSizeEnv<'_>) -> Result<Node
         )
     };
     // common_init_node makes ND_label first, so the xlabel's `\L` is its text.
-    let xlabel = attrs.get("xlabel").filter(|s| !s.is_empty()).map(|s| {
+    let xlabel = na.xlabel.filter(|s| !s.is_empty()).map(|s| {
         let xobj = LabelSubstContext {
             label_text: label_l_text(&label, label_str, init == ShapeInit::Record),
             has_label: true,
@@ -933,17 +1033,17 @@ fn node_geometry_measured(node: &NodeData, env: &NodeSizeEnv<'_>) -> Result<Node
     match init {
         ShapeInit::Poly => {
             let desc = desc.unwrap_or(pd(false, 1, 4));
-            poly_init(node, shape, desc, usershape, env, &mut geom)?;
+            poly_init(node, &na, shape, desc, usershape, env, &mut geom)?;
         }
-        ShapeInit::Epsf => epsf_init(node, &mut geom),
-        ShapeInit::Point => point_init(node, desc.map_or(1, |d| d.peripheries), &mut geom)?,
+        ShapeInit::Epsf => epsf_init(node, &na, &mut geom),
+        ShapeInit::Point => point_init(&na, desc.map_or(1, |d| d.peripheries), &mut geom)?,
         ShapeInit::Record => {
             let xobj = LabelSubstContext {
                 label_text: label_str,
                 has_label: true,
                 ..obj
             };
-            record_init(node, label_str, &xobj, env, &mut geom);
+            record_init(&na, label_str, &xobj, env, &mut geom);
         }
     }
     Ok(geom)
@@ -1303,8 +1403,9 @@ fn quant(val: f64, q: f64) -> f64 {
 
 /// Applies the node `margin` (or `PAD`) to a label size, as `poly_init` and `size_reclbl` do.
 /// `clamp` reproduces poly_init's `fmax(margin, 0)` (record fields do not clamp).
-fn pad_dimen(attrs: &AttrMap, mut dimen: Point, clamp: bool) -> Point {
-    let margin = attrs.get("margin").map(String::as_str).unwrap_or("");
+/// `margin` is the node's value of the attribute.
+fn pad_dimen(margin: Option<&str>, mut dimen: Point, clamp: bool) -> Point {
+    let margin = margin.unwrap_or("");
     let r = sscanf(margin, "%lf,%lf");
     let (i, [mut mx, mut my, ..]) = (r.count, r.values);
     if clamp {
@@ -1329,9 +1430,8 @@ fn pad_dimen(attrs: &AttrMap, mut dimen: Point, clamp: bool) -> Point {
 /// `epsf_init`: a node whose `shapefile` has a `%%BoundingBox` takes its size, and the
 /// offset `epsf_gencode` draws it at; otherwise it keeps `width` and `height` and no shape
 /// information.
-fn epsf_init(node: &NodeData, geom: &mut NodeGeometry) {
-    let sfile = node.attrs.get("shapefile").map(String::as_str);
-    let Some(us) = usershape::epsf_init(sfile, &node.name) else {
+fn epsf_init(node: &NodeData, na: &NodeAttrs<'_>, geom: &mut NodeGeometry) {
+    let Some(us) = usershape::epsf_init(na.shapefile, &node.name) else {
         return;
     };
     let [lx, ly, ux, uy] = us.bb;
@@ -1349,13 +1449,13 @@ fn epsf_init(node: &NodeData, geom: &mut NodeGeometry) {
 
 fn poly_init(
     node: &NodeData,
+    na: &NodeAttrs<'_>,
     shape: ShapeKind,
     desc: PolygonDesc,
     usershape: bool,
     env: &NodeSizeEnv<'_>,
     geom: &mut NodeGeometry,
 ) -> Result<()> {
-    let attrs = &node.attrs;
     let is_plain = shape == ShapeKind::Plain;
     let mut regular = desc.regular;
     let mut peripheries = desc.peripheries;
@@ -1363,7 +1463,7 @@ fn poly_init(
     let mut orientation = desc.orientation;
     let mut skew = desc.skew;
     let mut distortion = desc.distortion;
-    regular |= mapbool(attrs.get("regular").map(String::as_str));
+    regular |= mapbool(na.regular);
 
     let (mut width, mut height);
     if is_plain {
@@ -1371,8 +1471,8 @@ fn poly_init(
         height = 0.0;
     } else if regular {
         // userSize
-        let w = late_double(attrs, "width", 0.0, MIN_NODEWIDTH);
-        let h = late_double(attrs, "height", 0.0, MIN_NODEHEIGHT);
+        let w = late_double_of(na.width, 0.0, MIN_NODEWIDTH);
+        let h = late_double_of(na.height, 0.0, MIN_NODEHEIGHT);
         let sz = inch2ps(w.max(h));
         if sz > 0.0 {
             width = sz;
@@ -1386,18 +1486,18 @@ fn poly_init(
         height = inch2ps(geom.height);
     }
 
-    peripheries = late_int(attrs, "peripheries", peripheries as i32, 0) as usize;
-    orientation += late_double(attrs, "orientation", 0.0, -360.0);
+    peripheries = cnum::late_int(na.peripheries, peripheries as i32, 0) as usize;
+    orientation += late_double_of(na.orientation, 0.0, -360.0);
     if sides == 0 {
-        skew = late_double(attrs, "skew", 0.0, -100.0);
-        sides = late_int(attrs, "sides", 4, 0) as usize;
-        distortion = late_double(attrs, "distortion", 0.0, -100.0);
+        skew = late_double_of(na.skew, 0.0, -100.0);
+        sides = cnum::late_int(na.sides, 4, 0) as usize;
+        distortion = late_double_of(na.distortion, 0.0, -100.0);
     }
 
     let label_dimen = geom.label.dimen;
     let mut dimen = label_dimen;
     if (dimen.x > 0.0 || dimen.y > 0.0) && !is_plain {
-        dimen = pad_dimen(attrs, dimen, true);
+        dimen = pad_dimen(na.margin, dimen, true);
     }
     let spacex = dimen.x - label_dimen.x;
 
@@ -1430,11 +1530,8 @@ fn poly_init(
     };
     let imagesize = if usershape {
         // custom requires a shapefile
-        image(
-            usershape::agget_shapefile(attrs.get("shapefile").map(String::as_str)),
-            "shapefile",
-        )
-    } else if let Some(sfile) = attrs.get("image").filter(|f| !f.is_empty()) {
+        image(usershape::agget_shapefile(na.shapefile), "shapefile")
+    } else if let Some(sfile) = na.image.filter(|f| !f.is_empty()) {
         image(Some(sfile), "image")
     } else {
         Point::new(0.0, 0.0)
@@ -1445,7 +1542,7 @@ fn poly_init(
         sides = 120;
     }
 
-    let valign = match attrs.get("labelloc").and_then(|p| p.bytes().next()) {
+    let valign = match na.labelloc.and_then(|p| p.bytes().next()) {
         Some(b't') => 't',
         Some(b'b') => 'b',
         _ => 'c',
@@ -1484,7 +1581,7 @@ fn poly_init(
 
     let min_bb = bb;
     let mut fixedshape = false;
-    let fxd = attrs.get("fixedsize").map_or("false", String::as_str);
+    let fxd = na.fixedsize.unwrap_or("false");
     if fxd == "shape" {
         bb = Point::new(width, height);
         fixedshape = true;
@@ -1524,7 +1621,7 @@ fn poly_init(
         bb = Point::new(m, m);
     }
 
-    if !mapbool(Some(attrs.get("nojustify").map_or("false", String::as_str))) {
+    if !mapbool(Some(na.nojustify.unwrap_or("false"))) {
         if is_box {
             geom.label.space.x = dimen.x.max(bb.x) - spacex;
         } else if dimen.y < bb.y {
@@ -1544,7 +1641,7 @@ fn poly_init(
         geom.label.space.y = dimen.y + temp;
     }
 
-    let penwidth = late_double(attrs, "penwidth", DEFAULT_NODEPENWIDTH, MIN_NODEPENWIDTH);
+    let penwidth = late_double_of(na.penwidth, DEFAULT_NODEPENWIDTH, MIN_NODEPENWIDTH);
     let mut outp = peripheries.max(1);
     if peripheries >= 1 && penwidth > 0.0 {
         outp += 1;
@@ -1731,10 +1828,13 @@ fn poly_init(
 // point_init
 // ---------------------------------------------------------------------------------------------
 
-fn point_init(node: &NodeData, default_peripheries: usize, geom: &mut NodeGeometry) -> Result<()> {
-    let attrs = &node.attrs;
-    let w = late_double(attrs, "width", f64::MAX, MIN_NODEWIDTH);
-    let h = late_double(attrs, "height", f64::MAX, MIN_NODEHEIGHT);
+fn point_init(
+    na: &NodeAttrs<'_>,
+    default_peripheries: usize,
+    geom: &mut NodeGeometry,
+) -> Result<()> {
+    let w = late_double_of(na.width, f64::MAX, MIN_NODEWIDTH);
+    let h = late_double_of(na.height, f64::MAX, MIN_NODEHEIGHT);
     let wm = w.min(h);
     let nd = if w == f64::MAX && h == f64::MAX {
         DEF_POINT
@@ -1744,10 +1844,10 @@ fn point_init(node: &NodeData, default_peripheries: usize, geom: &mut NodeGeomet
         wm
     };
     let mut sz = nd * 72.0;
-    let peripheries = late_int(attrs, "peripheries", default_peripheries as i32, 0) as usize;
+    let peripheries = cnum::late_int(na.peripheries, default_peripheries as i32, 0) as usize;
     let mut outp = peripheries.max(1);
     let sides = 2;
-    let penwidth = late_double(attrs, "penwidth", DEFAULT_NODEPENWIDTH, MIN_NODEPENWIDTH);
+    let penwidth = late_double_of(na.penwidth, DEFAULT_NODEPENWIDTH, MIN_NODEPENWIDTH);
     if peripheries >= 1 && penwidth > 0.0 {
         outp += 1;
     }
@@ -2025,18 +2125,19 @@ impl RecParser<'_> {
 }
 
 /// `size_reclbl` from `shapes.c`.
-fn size_reclbl(attrs: &AttrMap, f: &mut Field) -> Point {
+/// `margin` is the node's value of the attribute.
+fn size_reclbl(margin: Option<&str>, f: &mut Field) -> Point {
     let d = if let Some(lp) = &f.lp {
         let mut dimen = lp.dimen;
         if dimen.x > 0.0 || dimen.y > 0.0 {
-            dimen = pad_dimen(attrs, dimen, false);
+            dimen = pad_dimen(margin, dimen, false);
         }
         dimen
     } else {
         let mut d = Point::new(0.0, 0.0);
         let lr = f.lr;
         for sub in &mut f.flds {
-            let d0 = size_reclbl(attrs, sub);
+            let d0 = size_reclbl(margin, sub);
             if lr {
                 d.x += d0.x;
                 d.y = d.y.max(d0.y);
@@ -2153,25 +2254,24 @@ fn parse_record_label(
 }
 
 fn record_init(
-    node: &NodeData,
+    na: &NodeAttrs<'_>,
     label: &str,
     obj: &LabelSubstContext<'_>,
     env: &NodeSizeEnv<'_>,
     geom: &mut NodeGeometry,
 ) {
-    let attrs = &node.attrs;
     let flip = !env.realflip;
     let html = geom.label.html;
     let (font_name, font_size) = (&geom.label.font_name, geom.label.font_size);
     let measure = |text: &str| make_label(text, html, obj, font_name, font_size, env.charset);
     let mut info = parse_record_label(label, html, flip, &measure);
-    size_reclbl(attrs, &mut info);
+    size_reclbl(na.margin, &mut info);
     let mut sz = Point::new(inch2ps(geom.width), inch2ps(geom.height));
-    if !mapbool(Some(attrs.get("fixedsize").map_or("false", String::as_str))) {
+    if !mapbool(Some(na.fixedsize.unwrap_or("false"))) {
         sz.x = info.size.x.max(sz.x);
         sz.y = info.size.y.max(sz.y);
     }
-    let nojustify = mapbool(Some(attrs.get("nojustify").map_or("false", String::as_str)));
+    let nojustify = mapbool(Some(na.nojustify.unwrap_or("false")));
     resize_reclbl(&mut info, sz, nojustify);
     let ul = Point::new(-sz.x / 2.0, sz.y / 2.0);
     pos_reclbl(&mut info, ul, 0b1111);
@@ -2302,6 +2402,103 @@ mod tests {
         assert_eq!(late_double(&a, "w", 7.0, 0.0), 7.0);
         a.insert("w".into(), "-3".into());
         assert_eq!(late_double(&a, "w", 7.0, 0.01), 0.01);
+    }
+
+    /// Every value [`NodeAttrs::of`] finds is the one `AttrMap::get` returns, for maps in
+    /// both storage forms and with names that differ from a read one by length or a byte.
+    #[test]
+    fn node_attrs_are_the_maps_values() {
+        let read = [
+            "shape",
+            "shapefile",
+            "width",
+            "height",
+            "fontname",
+            "fontsize",
+            "fontcolor",
+            "label",
+            "xlabel",
+            "pencolor",
+            "color",
+            "regular",
+            "peripheries",
+            "orientation",
+            "skew",
+            "sides",
+            "distortion",
+            "margin",
+            "image",
+            "labelloc",
+            "fixedsize",
+            "nojustify",
+            "penwidth",
+        ];
+        let others = [
+            "",
+            "s",
+            "shapes",
+            "Shape",
+            "widtH",
+            "colorscheme",
+            "skev",
+            "labeljust",
+            "xlp",
+            "style",
+            "fillcolor",
+            "sidesx",
+            "imagepos",
+            "peripherie",
+            "orientations",
+        ];
+        fn fields<'a>(a: &NodeAttrs<'a>) -> [Option<&'a str>; 23] {
+            [
+                a.shape,
+                a.shapefile,
+                a.width,
+                a.height,
+                a.fontname,
+                a.fontsize,
+                a.fontcolor,
+                a.label,
+                a.xlabel,
+                a.pencolor,
+                a.color,
+                a.regular,
+                a.peripheries,
+                a.orientation,
+                a.skew,
+                a.sides,
+                a.distortion,
+                a.margin,
+                a.image,
+                a.labelloc,
+                a.fixedsize,
+                a.nojustify,
+                a.penwidth,
+            ]
+        }
+        let names: Vec<&str> = read.iter().chain(&others).copied().collect();
+        let mut state = 0x2545_f491_4f6c_dd1d_u64;
+        for case in 0..400 {
+            let mut attrs = AttrMap::new();
+            // up to all 38 names, so larger maps take the tree form
+            let count = case % (names.len() + 1);
+            for _ in 0..count {
+                state = state
+                    .wrapping_mul(6364136223846793005)
+                    .wrapping_add(1442695040888963407);
+                let name = names[(state >> 33) as usize % names.len()];
+                attrs.set(name, format!("{name}={case}"), state & 1 == 0);
+            }
+            let found = fields(&NodeAttrs::of(&attrs));
+            for (name, value) in read.iter().zip(found) {
+                assert_eq!(
+                    value,
+                    attrs.get(*name).map(String::as_str),
+                    "{name}, case {case}"
+                );
+            }
+        }
     }
 
     #[test]
