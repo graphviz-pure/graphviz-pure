@@ -2,6 +2,7 @@
 """Temporary measurement helper for the x86-64 CPU-tuning workflow (#825).
 
   candidates                           print the builds this runner's CPU can run (Linux)
+  flags LABEL                          print a build's RUSTFLAGS
   manifest BINARY --out M.json         hash SVG (whole corpus) and PNG (every 10th input) output
   compare REF.json OTHER.json ...      fail unless every manifest equals REF
   bench --set S --synth-dir D --out R.json LABEL=BINARY ...
@@ -41,7 +42,6 @@ V4 = V3 + ["avx512f", "avx512bw", "avx512cd", "avx512dq", "avx512vl"]
 ZEN3 = V3 + ["adx", "sha_ni", "vaes", "vpclmulqdq", "sse4a"]
 ZEN4 = ZEN3 + V4[len(V3):] + ["avx512ifma", "avx512vbmi", "avx512_vbmi2", "avx512_vnni",
                                "avx512_bitalg", "avx512_vpopcntdq", "avx512_bf16", "gfni"]
-ZEN5 = ZEN4 + ["avx512_vp2intersect", "avx_vnni"]
 
 
 def cpuinfo():
@@ -55,28 +55,51 @@ def cpuinfo():
     return fields
 
 
+# Builds: label -> rustc flags. -b is a second, independently trained build of the same flags (the
+# A/A pair); -ng keeps LLVM from emitting AVX-512 gathers and scatters (unstable LLVM features that
+# rustc passes through with a warning).
+NO_GATHER = "-C target-feature=+prefer-no-gather,+prefer-no-scatter"
+BUILDS = {
+    "x86-64-v3": "-C target-cpu=x86-64-v3",
+    "x86-64-v3-b": "-C target-cpu=x86-64-v3",
+    "znver3": "-C target-cpu=znver3",
+    "x86-64-v4": "-C target-cpu=x86-64-v4",
+    "x86-64-v4-ng": f"-C target-cpu=x86-64-v4 {NO_GATHER}",
+    "znver4": "-C target-cpu=znver4",
+    "znver4-ng": f"-C target-cpu=znver4 {NO_GATHER}",
+    "znver5": "-C target-cpu=znver5",
+}
+
+
 def cmd_candidates(args):
     info = cpuinfo()
     flags = set(info.get("flags", "").split())
     amd = info.get("vendor_id") == "AuthenticAMD"
     family = int(info.get("cpu family", "0"))
-    want = {"x86-64-v3": V3, "x86-64-v3-b": V3, "znver3": ZEN3, "x86-64-v4": V4,
-            "znver4": ZEN4, "znver5": ZEN5}
+    need = {"x86-64-v3": V3, "x86-64-v3-b": V3, "znver3": ZEN3, "x86-64-v4": V4,
+            "x86-64-v4-ng": V4, "znver4": ZEN4, "znver4-ng": ZEN4, "znver5": ZEN4}
     # The znver builds are measured only on AMD Zen (family 0x19 = Zen 3/4, 0x1a = Zen 5): their
     # scheduling models describe those cores, and a Zen tuning on an Intel core answers no question.
+    # GitHub has no Zen 5 runners, so znver5 also runs on Zen 4 when the build uses none of the
+    # Zen 5 additions (the workflow checks the disassembly): that measures its code generation and
+    # scheduling model on the previous core, not a Zen 5.
     zen = {"znver3": amd and family >= 0x19, "znver4": amd and family >= 0x19,
-           "znver5": amd and family >= 0x1a}
+           "znver4-ng": amd and family >= 0x19, "znver5": amd and family >= 0x19}
     chosen, lines = [], [f"model: {info.get('model name')}", f"vendor: {info.get('vendor_id')}",
                          f"family: {family:#x} model: {int(info.get('model', '0')):#x}"]
-    for cpu, need in want.items():
-        missing = [f for f in need if f not in flags]
-        if missing or not zen.get(cpu, True):
-            lines.append(f"skip {cpu}: " + (f"missing {' '.join(missing)}" if missing else "not a Zen core"))
+    for label, required in need.items():
+        missing = [f for f in required if f not in flags]
+        if missing or not zen.get(label, True):
+            lines.append(f"skip {label}: " + (f"missing {' '.join(missing)}" if missing else "not a Zen core"))
         else:
-            chosen.append(cpu)
-            lines.append(f"run {cpu}")
+            chosen.append(label)
+            lines.append(f"run {label}")
     pathlib.Path(args.report).write_text("\n".join(lines) + "\n")
     print(" ".join(chosen))
+
+
+def cmd_flags(args):
+    print(BUILDS[args.label])
 
 
 def cmd_manifest(args):
@@ -261,6 +284,8 @@ def main():
     sub = parser.add_subparsers(dest="cmd", required=True)
     p = sub.add_parser("candidates")
     p.add_argument("--report", required=True)
+    p = sub.add_parser("flags")
+    p.add_argument("label", choices=list(BUILDS))
     p = sub.add_parser("manifest")
     p.add_argument("binary")
     p.add_argument("--out", required=True)
@@ -281,7 +306,7 @@ def main():
     if args.cmd == "summary":
         print(summarize(json.loads(pathlib.Path(args.result).read_text())))
     else:
-        {"candidates": cmd_candidates, "manifest": cmd_manifest, "compare": cmd_compare, "bench": cmd_bench}[args.cmd](args)
+        {"candidates": cmd_candidates, "flags": cmd_flags, "manifest": cmd_manifest, "compare": cmd_compare, "bench": cmd_bench}[args.cmd](args)
 
 
 if __name__ == "__main__":

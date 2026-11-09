@@ -5,7 +5,8 @@ name: x86-64 tuning (temporary, #825)
 # Xeon). It reads /proc/cpuinfo, builds with release.yml's PGO every candidate -C target-cpu that
 # this CPU can run (two independently trained x86-64-v3 builds as an A/A pair), then on that same
 # runner: whole-corpus output hashes, an a*b+c contraction probe, math unit tests and interleaved
-# timing on full.tsv. A last job compares every build's hashes with the x86-64 v1 build's.
+# timing on full.tsv. Run 2 adds builds without AVX-512 gathers/scatters (-ng) and znver5 on
+# Zen 4. A last job compares every build's hashes with the x86-64 v1 build's.
 # COST: $0 a run (estimated): GitHub-hosted runners, free for this public repository; no paid model.
 # COST-BOUND: one run per push to this branch that changes the measurement itself.
 
@@ -54,7 +55,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4, 5, 6, 7, 8]
+        shard: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -74,29 +75,35 @@ jobs:
       - name: Build with profile-guided optimisation (as release.yml)
         run: |
           built=()
-          for cpu in $CPUS; do
-            # x86-64-v3-b is a second, independently trained build of x86-64-v3 (the A/A pair).
-            flag=${cpu%-b}
+          for label in $CPUS; do
             start=$SECONDS
-            if RUSTFLAGS="-C target-cpu=$flag" python3 scripts/build-pgo.py --target "$TARGET" \
-                --target-dir "target-$cpu" --profiles "$RUNNER_TEMP/pgo-$cpu"; then
-              cp "target-$cpu/$TARGET/release/graphviz-pure" "bins/$cpu"
-              cp "$RUNNER_TEMP/pgo-$cpu/build-info.json" "results/build-info-$cpu.json"
-              built+=("$cpu")
+            if RUSTFLAGS="$(python3 -I scripts/bench/x86_tuning.py flags "$label")" python3 scripts/build-pgo.py \
+                --target "$TARGET" --target-dir "target-$label" --profiles "$RUNNER_TEMP/pgo-$label"; then
+              # Same basename as the reference build: diagnostics start with argv[0]'s basename.
+              mkdir -p "bins/$label"
+              cp "target-$label/$TARGET/release/graphviz-pure" "bins/$label/graphviz-pure"
+              cp "$RUNNER_TEMP/pgo-$label/build-info.json" "results/build-info-$label.json"
+              if [ "$label" = znver5 ] && objdump -d --no-show-raw-insn "bins/$label/graphviz-pure" \
+                  | grep -qE '\s(vp2intersect|\{vex\} vpdp|movdiri|movdir64b|prefetchit)'; then
+                echo "znver5: uses a Zen 5 instruction; not run on this core" | tee -a results/build-failures.txt
+                rm -rf "bins/$label"
+              else
+                built+=("$label")
+              fi
             else
-              echo "$cpu: PGO build or training failed" | tee -a results/build-failures.txt
+              echo "$label: PGO build or training failed" | tee -a results/build-failures.txt
             fi
-            echo "$cpu $((SECONDS - start)) s" | tee -a results/build-times.txt
-            rm -rf "target-$cpu" "$RUNNER_TEMP/pgo-$cpu"
+            echo "$label $((SECONDS - start)) s" | tee -a results/build-times.txt
+            rm -rf "target-$label" "$RUNNER_TEMP/pgo-$label"
           done
-          (cd bins && sha256sum * && ls -l && for f in *; do echo "$f gzip $(gzip -9c "$f" | wc -c) xz $(xz -9c "$f" | wc -c)"; done) | tee results/binaries.txt
+          (cd bins && sha256sum */graphviz-pure && ls -l */graphviz-pure && for f in */graphviz-pure; do echo "$f gzip $(gzip -9c "$f" | wc -c) xz $(xz -9c "$f" | wc -c)"; done) | tee results/binaries.txt
           echo "BUILT=${built[*]}" >> "$GITHUB_ENV"
-      - name: Math unit tests with each CPU's flags
+      - name: Math unit tests with each build's flags
         run: |
-          for cpu in $BUILT; do
-            [ "$cpu" = x86-64-v3-b ] && continue
-            echo "::group::$cpu"
-            RUSTFLAGS="-C target-cpu=$cpu" CARGO_TARGET_DIR=target-test \
+          for label in $BUILT; do
+            [ "$label" = x86-64-v3-b ] && continue
+            echo "::group::$label"
+            RUSTFLAGS="$(python3 -I scripts/bench/x86_tuning.py flags "$label")" CARGO_TARGET_DIR=target-test \
               cargo test --release --locked --target "$TARGET" -p graphviz-pure-core --lib math
             echo "::endgroup::"
           done
@@ -111,9 +118,9 @@ jobs:
           #[unsafe(no_mangle)] pub fn sum(x: &[f64]) -> f64 { x.iter().sum() }
           #[unsafe(no_mangle)] pub fn fused(a: f64, b: f64, c: f64) -> f64 { a.mul_add(b, c) }
           EOF
-          for cpu in x86-64-v3 x86-64-v4 znver3 znver4 znver5; do
+          for cpu in x86-64-v3 znver3 x86-64-v4 x86-64-v4-ng znver4 znver4-ng znver5; do
             rustc --edition=2024 --crate-type=lib --emit=asm -C opt-level=3 --target "$TARGET" \
-              -C target-cpu=$cpu "$RUNNER_TEMP/probe.rs" -o "results/probe-$cpu.s"
+              $(python3 -I scripts/bench/x86_tuning.py flags $cpu) "$RUNNER_TEMP/probe.rs" -o "results/probe-$cpu.s"
             n=$(grep -cE '^\s+vf(n)?m(add|sub)' "results/probe-$cpu.s" || true)
             z=$(grep -c zmm "results/probe-$cpu.s" || true)
             echo "$cpu: $n fused instructions (expected 1, from mul_add); $z zmm operands" | tee -a results/probe.txt
@@ -121,8 +128,8 @@ jobs:
           done
       - name: Hash the corpus output of every build
         run: |
-          for cpu in $BUILT; do
-            python3 -I scripts/bench/x86_tuning.py manifest "bins/$cpu" --out "results/manifest-$cpu.json"
+          for label in $BUILT; do
+            python3 -I scripts/bench/x86_tuning.py manifest "bins/$label/graphviz-pure" --out "results/manifest-$label.json"
           done
       - name: perf counters available?
         id: perf
@@ -140,7 +147,7 @@ jobs:
         run: |
           python3 -I scripts/bench/synth.py --out "$RUNNER_TEMP/synth" > /dev/null
           builds=()
-          for cpu in $BUILT; do builds+=("$cpu=bins/$cpu"); done
+          for label in $BUILT; do builds+=("$label=bins/$label/graphviz-pure"); done
           python3 -I scripts/bench/x86_tuning.py bench --set scripts/bench/sets/full.tsv \
             --synth-dir "$RUNNER_TEMP/synth" --out results/bench.json $PERF_FLAG "${builds[@]}"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
