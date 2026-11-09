@@ -5,15 +5,16 @@ within reach of the 5% bar, and the AVX-512 builds that LLVM produces by default
 
 - **`x86-64-v4`, `znver4` and `znver5` (AVX-512) are 4–7% slower** than the shipped v3 build on
   Zen 4 and Zen 5 (geometric mean of 72 `full.tsv` cases, PGO on every build), and `x86-64-v4` is
-  **16% slower on Ice Lake**. The loss is neato's, whose largest inputs run up to 1.9× (Zen 4) and
-  3.2× (Ice Lake) slower: with AVX-512, LLVM vectorizes neato's hottest loop with gathers.
-- **Without gathers and scatters the AVX-512 builds are at most 1.2% faster** by geomean, and
-  their sums of medians are 1.4% faster to 0.8% slower. That is far too little to pay for a third
-  binary per x86 target and a CPU check that CI could not exercise.
+  **16% slower on Ice Lake**. The loss is neato's, whose largest inputs run about 1.6–1.7× (Zen 4)
+  and 3.2× (Ice Lake) slower: with AVX-512, LLVM vectorizes neato's hottest loop with gathers.
+- **Without gathers and scatters the AVX-512 builds are at most 1.2% faster** by geomean; their
+  sums of medians (1.4% faster to 0.8% slower) are within the noise. The one sizeable gain is
+  Zen 4 only: neato's largest inputs run about 10% faster there. That is far too little to pay
+  for a third binary per x86 target and a CPU check that CI could not exercise.
 - **`znver3` is no faster on any core**: geomean 1.0000–1.0009, and its sum of medians is 1.1–1.9%
   higher than v3's.
-- Every build, on every runner, wrote **the same bytes as the x86-64 v1 build** on all 2,939
-  corpus outputs, and rustc contracted no `a * b + c` for any CPU.
+- Every build of runs 2 and 3, on every runner, wrote **the same bytes as the x86-64 v1 build**
+  on all 2,939 corpus outputs, and rustc contracted no `a * b + c` for any CPU.
 
 Geometric mean over the 72 cases of the median wall time against the shipped `x86-64-v3` build on
 the same runner; when a CPU type got several runners, the geometric mean of their geomeans and
@@ -56,14 +57,15 @@ The candidates differ from v3 in what they let LLVM emit (rustc 1.99.1, LLVM 23.
 | `znver5` | `znver4`'s, plus `avx512vp2intersect`, `avxvnni` | 512-bit |
 
 The vector width comes from the contraction probe (§6): its `axpy` loop uses `ymm` registers
-under `x86-64-v4` and `zmm` under `znver4` and `znver5`.
+under `x86-64-v4` and `zmm` under `znver4` and `znver5`. It is a preference for data, not a rule:
+v4 code still uses `zmm` where it needs 64-bit indexes for eight lanes, as in §4's gathers.
 
 ## 2. Method
 
 Three runs of a temporary workflow (§9) on GitHub's `ubuntu-24.04` runners, Rust 1.99.1
 (release.yml's `RUST_VERSION`), target `x86_64-unknown-linux-musl` (the Linux release target).
-All three built master's product source at `d4f2d84a`; the runs add only the workflow, its
-helper script and this documentation.
+All three built master's product source at `d4f2d84a`; the measured commits add only the
+workflow and its helper script.
 
 - **Shards.** A job cannot choose its machine: a `ubuntu-24.04` job lands on whatever Azure VM is
   free. So each run started 8 or 12 identical jobs ("shards"). Each one read `/proc/cpuinfo`
@@ -92,8 +94,9 @@ helper script and this documentation.
 
 ### Runners
 
-32 shards in three runs, every one usable: each timed the A/A pair and every candidate its CPU
-could run. Most `ubuntu-24.04` jobs land on Zen 3; 17 of 32 had AVX-512.
+32 shards in three runs, every one usable: each timed the A/A pair and the candidates its CPU
+could run (run 2's Zen 5 shards skipped `znver5` by an over-strict check, fixed in run 3). About
+half of the `ubuntu-24.04` jobs landed on Zen 3; 17 of 32 had AVX-512.
 
 | runner CPU | run 1 | run 2 | run 3 | builds timed besides `x86-64-v3` |
 | :-- | --: | --: | --: | :-- |
@@ -128,18 +131,24 @@ for the builds that answer the question; the data file has every build:
 | sum of medians | 1.019 | 1.095 | 0.987 | 1.068 | 1.007 | 1.260 | 0.986 |
 
 The A/A pairs give the noise floor: their geomeans stay within 0.994–1.003 on every runner, with a
-per-case standard deviation of the log ratio of 0.008–0.012 on average, and their sums of medians within
-0.997–1.009. Against that:
+per-case standard deviation of the log ratio of 0.008–0.012 on average. Sums of medians are much
+noisier, because a few large inputs dominate them: per runner the A/A sum ranges from 0.981 to
+1.024 (0.997–1.009 pooled per CPU type). Against that:
 
 - **AVX-512 as LLVM emits it by default loses** on every AMD core and on Ice Lake, by 4–16%, and
   only breaks even on Emerald Rapids (0.9965).
-- **The `-ng` builds win by 0.6–1.2% by geomean** on the AMD cores and Emerald Rapids, a few
-  times the A/A spread, so probably real but small. Their sums of medians, which the largest
-  inputs dominate, range from 1.4% faster (Ice Lake, Zen 4) to 0.8% slower (Zen 5). The gain is
-  in small and medium cases (twopi and circo on Zen 5, neato on Zen 4); the slowest inputs gain
-  nothing.
+- **The `-ng` builds win by 0.6–1.2% by geomean** on the AMD cores and Emerald Rapids: on Zen 4
+  and for `znver4-ng`/`znver5-ng` on Zen 5 that is clear of the A/A range, for `x86-64-v4-ng` on
+  Zen 5 (0.9936) it is not. Their sums of medians, 1.3–1.4% faster (Ice Lake, Zen 4) to 0.8%
+  slower (Zen 5), are within the sums' noise.
+- **One real gain, on Zen 4 only:** `x86-64-v4-ng` runs neato's three largest inputs
+  (`neato_sparse_1000`, `neato_sparse_2000`, neato's `badvoro`) about 10% faster (0.89–0.91, on
+  all three Zen 4 runners that timed it; `znver4-ng` 0.91–0.93), and neato's geomean there is
+  0.932. The same build gains 1–2% on those inputs on Zen 5 and loses 1–4% on Emerald Rapids,
+  so it is a Zen 4 effect, not a better algorithm; which instructions cause it was not
+  established. Even so, the Zen 4 geomean over all engines is 0.988.
 - **No case anywhere is more than 12% faster** than v3 with any candidate (the best single ratio
-  is 0.888, `x86-64-v4` on Emerald Rapids for a small dot input).
+  is 0.888, `x86-64-v4` on Emerald Rapids for a small circo input).
 
 ## 4. AVX-512 builds: slower, because of gathers
 
@@ -147,34 +156,37 @@ The plain `x86-64-v4`, `znver4` and `znver5` builds lose on every AVX-512 machin
 Emerald Rapids, and the loss is neato's: neato's geomean is 1.26–1.39 on Zen 4 and Zen 5 and 2.40
 on Ice Lake, while dot loses 2–7% and the other engines stay within 4% of 1. The worst cases
 are neato's stress-majorization inputs (`synth/neato_sparse_*`, `hw3_vpsc_random200`, `badvoro`),
-up to 1.95× slower on Zen 4, 1.56× on Zen 5 and 3.2× on Ice Lake.
+about 1.6–1.7× slower on Zen 4 (one outlier shard: 1.95×), 1.4–1.5× on Zen 5 and 3.0–3.2× on
+Ice Lake.
 
 The cause is the hottest function in neato. On `synth/neato_sparse_1000.gv`,
-`neatogen::matrix_ops::right_mult_with_vector_ff` (a packed symmetric matrix times a vector, the
-inner step of the conjugate-gradient solve) takes 61% of the time and
+`neatogen::matrix_ops::right_mult_with_vector_ff` (a packed symmetric `f32` matrix times a vector,
+the inner step of the conjugate-gradient solve) takes 61% of the time and
 `stress_majorization_kd_mkernel` 28% (`perf record` of a v3 build). That function processes eight
 matrix rows at a time, each row its own sequential `fma` chain. With AVX-512's gather
 instructions available, LLVM vectorizes *across* the eight rows: one 8-lane chain whose every step
 loads `A[r][k]` for the eight rows `r` with a `vgatherqps` (eight addresses, one per row). Every
 lane keeps its own row's operation order, so the result is bit-identical, but a gather costs far
-more than eight scalar loads feeding eight independent chains: a gather issues as many
-micro-ops at a fraction of a plain load's rate on Zen 4 and Zen 5, and on Ice Lake it is slower
-still (consistent with the microcode mitigation for
+more than the eight plain loads it replaces, and the eight independent scalar chains, which
+the core could overlap, become one chain that waits for a gather at every step. On Ice Lake the
+loss is larger still (consistent with the microcode mitigation for
 Gather Data Sampling, which Emerald Rapids does not need). Under AVX2 LLVM does not consider
 gathers cheap, so the v3 build has none.
 
-The gathers and scatters are in the shipped-style PGO binaries of run 2: 258 gathers and 198
-scatters in `x86-64-v4`, 372 and 335 in `znver4`, none in any v3 or `znver3` build. A
-symbolized build of the same code (v4, trained with a v3 profile) puts 9 of its 90 gathers in
-`right_mult_with_vector_ff`; the rest are in `neatogen::voronoi::adjust`, the spline routers and
-font code.
+The gathers and scatters are in the shipped-style PGO binaries of run 2: 334 gathers and 348
+scatters in `x86-64-v4` (258 and 198 of them floating-point), 496 and 524 in `znver4`, none in
+any v3 or `znver3` build. A symbolized build of the same code (v4, trained with a v3 profile, so
+its counts differ) puts 9 of its 90 floating-point gathers in `right_mult_with_vector_ff`; most
+of the rest are in `neatogen::voronoi::adjust` (34) and usvg's
+`Group::calculate_bounding_boxes` (40).
 
 `prefer-no-gather` and `prefer-no-scatter` are LLVM target features that tell the vectorizer not
 to use them; rustc passes them through with a warning that they are unstable. The `-ng` builds
 (runs 2 and 3) have no gathers or scatters left, and neato is no longer slower: the whole set
 comes out 0.988–1.001 (§3) instead of 1.04–1.16. That is what AVX-512 is worth to this code base
-today, and it is far from 5%: the port's hot loops are scalar `f64` code with data-dependent branches, and LLVM may not
-vectorize a floating-point reduction by reordering it.
+today, and it is far from 5%: outside this one kernel the port's hot loops are scalar
+floating-point code with data-dependent branches, and LLVM may not vectorize a floating-point
+reduction by reordering it.
 
 ## 5. `znver3` and `znver5`
 
@@ -182,40 +194,45 @@ vectorize a floating-point reduction by reordering it.
 SHA, carry-less multiply, `sse4a`). On 15 Zen 3 runners its geomean is 1.0009 (0.998–1.003), as on
 Zen 4 and Zen 5, and its sum of medians is 1.1–1.9% *higher* than v3's on all three AMD types.
 Nearly all of that is fdp (engine geomean 1.018–1.024): its three largest inputs (`badvoro`,
-`fdp_sparse_1000`, `fdp_sparse_500`) are about 3% slower. It runs 0.2% fewer instructions (§7), which
+`fdp_sparse_1000`, `fdp_sparse_500`) are about 3% slower. It runs 0.2% fewer instructions (§7),
+which
 buys nothing. Its binary is also 0.7% larger gzipped.
 
 **`znver5`** ran on 5 Zen 5 runners in run 3. On Zen 4 it can't run at all: its instrumented
 build dies with `SIGILL` in PGO training (run 2), so a `znver5` binary would need a Zen 5 check in
 the launcher. On Zen 5 it behaves like `znver4`: 1.0415 with gathers and 0.9895 without
-(`znver4-ng` on the same runners: 0.9917), and the sum of medians of `znver5-ng` is 0.7% slower
-than v3's. Zen 5's full 512-bit data paths do not change the picture: the hot code is scalar.
+(`znver4-ng` on the same five runners: 0.9923), and the sum of medians of `znver5-ng` is 0.7% slower
+than v3's. Zen 5's full 512-bit data paths do not change the picture: once the gathers are gone,
+little of the hot code vectorizes.
 
 ## 6. Fused multiply-add and floating point
 
 Two things decide whether a CPU flag can move the port's floating-point bits, and neither does:
 
-1. **rustc never contracts `a * b + c` on its own, for any CPU.** It emits plain `fmul`/`fadd`
-   with no `contract` flag and never `llvm.fmuladd`, so LLVM's default fusion
-   (`FPOpFusion::Standard`) fuses nothing; only `f64::mul_add` becomes `llvm.fma`, and nothing
-   carries `reassoc` or other fast-math flags, so no sum is reordered. Every shard compiled
-   `a * b + c`, `c - a * b`, a four-term dot product, an `axpy` loop, a slice sum and one
-   `mul_add` for `x86-64-v3`, `znver3`, `x86-64-v4`, `znver4` and `znver5` (runs 2 and 3: the
-   `-ng` variants too) and counted the fused instructions in the assembly: exactly one, the `mul_add`,
-   every time. The IR of the same probe (checked locally) has no `contract`, `reassoc` or `fast`
-   flag for any CPU. Wider vectors (the `axpy` loop in `zmm`) compute each element with the same
-   operations, and the slice sum stays a scalar chain under every CPU.
+1. **rustc never contracts `a * b + c` on its own, for any CPU.** It emits plain `fmul`/`fadd` with
+   no `contract` flag and never `llvm.fmuladd`, so LLVM's default fusion (`FPOpFusion::Standard`)
+   fuses nothing; only `f64::mul_add` becomes `llvm.fma`, and nothing carries `reassoc` or other
+   fast-math flags, so no sum is reordered. Every shard compiled `a * b + c`, `c - a * b`, a
+   four-term dot product, an `axpy` loop, a slice sum and one `mul_add` for `x86-64-v3`, `znver3`,
+   `x86-64-v4`, `znver4` and `znver5` (runs 2 and 3: the `-ng` variants too) and counted the fused
+   instructions in the assembly: exactly one, the `mul_add`, every time. The IR of the same probe
+   (checked locally) has no `contract`, `reassoc` or `fast` flag for any CPU. Wider vectors (the
+   `axpy` loop in `zmm`) compute each element with the same operations, and the slice sum stays a
+   scalar chain under every CPU.
 2. **`graphviz_pure_core::math` takes the same path for every candidate.** Its only CPU switch is
    `target_feature = "fma"` (`math::fma` uses `f64::mul_add`, `cbrt` the CORE-MATH copy), and
    every candidate has `fma`, as v3 does. The `libm` crate's x86 code (`sqrt`, `fma`) is exact
-   whatever the CPU. Among the other dependencies, the crates with x86 feature paths
+   whatever the CPU. The vendored `tiny-skia` picks its `f32x8`/`i32x8` raster paths with
+   `target_feature = "avx"`, `"avx2"` and `"sse4.1"`, which v3 and every candidate share; it has
+   no AVX-512 or FMA path. Among the other dependencies, the crates with x86 feature paths
    (`crc32fast`, `simd-adler32`, `memchr`, `base64`, `jpeg-encoder`, `bytemuck`) compute integers
    (checksums, byte searches) or detect the CPU at run time, so their results don't depend on the
    flag.
 
 Each shard also ran `math`'s unit tests with each build's flags (all passed), and the corpus
 hashes matched for every one of the 125 builds of runs 2 and 3: 2,939 identical outputs each.
-(Run 1's hash check first reported three PNG differences for every PGO build, v3 included. Those were the
+(Run 1's hash check first reported three PNG differences for every PGO build, v3 included. Those
+were the
 binaries' file names: the PNG warning `… graph is too large for cairo-renderer bitmaps` starts
 with the basename of `argv[0]`, and run 1 named each binary after its CPU. Runs 2 and 3 name
 every binary `graphviz-pure`, and everything matched.)
@@ -248,13 +265,14 @@ compiler or code change made an AVX-512 build pay, a `v4` tier would need:
   third whole-corpus comparison per target, on three targets. The Linux binary is 13.6 MB, 6.7 MB
   gzipped; each x86 release would grow by about 20 MB (a third archive per target, or a bigger
   default archive), and so would the x86-64 wheels, the amd64 container, Homebrew and Scoop.
-- **Tests that CI cannot run.** `ci.yml`'s `cpu-fidelity` job runs v3's fidelity ratchets
-  natively and tests the launcher's choices under `qemu-x86_64` CPU models. QEMU's emulator has
-  no AVX-512 (QEMU 10.0's `-cpu max` stops a v4 binary with `SIGILL`), and most `ubuntu-24.04`
-  runners lack it too (15 of the 32 shards here were Zen 3), as does the self-hosted CI runner, so a v4 fidelity job could run only on whichever runners happen to have
-  AVX-512, and the launcher's v4 branch could not be tested at all.
+- **Tests that CI cannot run.** `ci.yml`'s `cpu-fidelity` job runs v3's fidelity ratchets natively
+  and tests the launcher's choices under `qemu-x86_64` CPU models. QEMU's emulator has no AVX-512
+  (QEMU 10.0's `-cpu max` stops a v4 binary with `SIGILL`), and most `ubuntu-24.04` runners lack it
+  too (15 of the 32 shards here were Zen 3), as does the self-hosted CI runner, so a v4 fidelity job
+  could run only on whichever runners happen to have AVX-512, and the launcher's v4 branch could not
+  be tested at all.
 - **macOS Intel** would gain little: among Intel Macs only the iMac Pro, the 2019 Mac Pro and the
-  2020 Ice Lake MacBook Air and 13-inch MacBook Pro have AVX-512.
+  2020 Ice Lake MacBook Air and four-port 13-inch MacBook Pro have AVX-512.
 
 ## 9. Reproducing
 
@@ -266,7 +284,7 @@ The workflow lived on the PR branch only, as `.github/workflows/x86-tuning.yml` 
 ran at `4bfd47cc`, `d5dee29b` and `11f5cb18`, on top of `d4f2d84a`. The branch was then rebased
 onto a newer master; the rebased commits `60adc315`, `21d5f53e` and `f901d74c` carry the same
 workflow and helper files, byte for byte, and after the squash merge they stay reachable with
-`git fetch origin pull/<PR>/head`. The
+`git fetch origin pull/844/head`. The
 `results-*` artifacts (raw samples, CPU info, manifests, probe assembly) expire on 2027-02-07; the
 binaries (`bins-*`) on 2026-12-09. The per-case medians of all three runs are in
 [data/x86-tuning.tsv](data/x86-tuning.tsv): one row per run, shard and case, with the runner's
