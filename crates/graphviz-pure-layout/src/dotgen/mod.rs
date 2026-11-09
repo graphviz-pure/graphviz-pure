@@ -481,7 +481,11 @@ pub fn layout_dot(graph: &mut Graph) -> Result<()> {
             // agdelete renumbers the subgraphs the clusters' labels are keyed by
             labels.clusters.clear();
         }
-        (output::Output::collect(&d, phase_attrs), labels.sorted(), d.handoff.take())
+        (
+            output::Output::collect(&d, phase_attrs),
+            labels.sorted(),
+            d.handoff.take(),
+        )
     };
     result.apply(graph);
     // ED_label and GD_label stay on the input's edges and clusters for the renderer.
