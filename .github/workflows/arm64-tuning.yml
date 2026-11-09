@@ -66,7 +66,7 @@ jobs:
       TARGET: ${{ matrix.target }}
       # release.yml's flags, plus the candidate CPU.
       RUSTFLAGS: ${{ format('{0} {1}', matrix.cpu != 'default' && format('-C target-cpu={0}', matrix.cpu) || '', contains(matrix.target, 'windows') && '-C target-feature=+crt-static' || '') }}
-      PYTHON: ${{ runner.os == 'Windows' && 'python' || 'python3' }}
+      PYTHON: ${{ contains(matrix.target, 'windows') && 'python' || 'python3' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -113,7 +113,7 @@ jobs:
     env:
       TARGET: ${{ matrix.target }}
       CPUS: ${{ matrix.cpus }}
-      PYTHON: ${{ runner.os == 'Windows' && 'python' || 'python3' }}
+      PYTHON: ${{ contains(matrix.target, 'windows') && 'python' || 'python3' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
