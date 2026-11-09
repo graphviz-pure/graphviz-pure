@@ -211,9 +211,19 @@ struct TextFontDict {
 }
 
 enum Scope {
-    /// The object's place in [`FontObjects::sizes`], and the sizes so far.
-    Record(usize, FontSizes),
+    /// Where the object's sizes go when its measurement ends, and the sizes so far.
+    Record(RecordAt, FontSizes),
     Replay(FontSizes, usize),
+}
+
+/// Where an open recording's sizes go.
+enum RecordAt {
+    /// This place in the current [`FontObjects::sizes`].
+    Slot(usize),
+    /// The object of this tag in the records current when the measurement ends: a
+    /// recording whose records were cleared or swapped while it ran
+    /// ([`FontObjects::detach`]).
+    Tag(String),
 }
 
 /// [`TextFontDict::objects`]. Rust-only: one search of a tag finds a recorded object or
@@ -231,6 +241,42 @@ impl FontObjects {
     fn clear(&mut self) {
         self.index.clear();
         self.sizes.clear();
+    }
+
+    /// Before these records are cleared or swapped out: the open recordings in `scopes`
+    /// name their objects by tag, so each ends in the records current then, as a record
+    /// kept by tag alone would. No open recording is the usual case, which costs nothing.
+    fn detach(&self, scopes: &mut [Scope]) {
+        for scope in scopes {
+            if let Scope::Record(at, _) = scope
+                && let RecordAt::Slot(slot) = *at
+                && let Some((tag, _)) = self.index.iter().find(|&(_, &i)| i == slot)
+            {
+                *at = RecordAt::Tag(tag.clone());
+            }
+        }
+    }
+
+    /// Keeps the sizes of a recording that ended.
+    fn record(&mut self, at: RecordAt, sizes: FontSizes) {
+        match at {
+            RecordAt::Slot(slot) => {
+                if let Some(s) = self.sizes.get_mut(slot) {
+                    *s = Some(sizes);
+                }
+            }
+            RecordAt::Tag(tag) => match self.index.entry(tag) {
+                std::collections::hash_map::Entry::Occupied(e) => {
+                    if let Some(s) = self.sizes.get_mut(*e.get()) {
+                        *s = Some(sizes);
+                    }
+                }
+                std::collections::hash_map::Entry::Vacant(e) => {
+                    self.sizes.push(Some(sizes));
+                    e.insert(self.sizes.len() - 1);
+                }
+            },
+        }
     }
 }
 
@@ -391,32 +437,31 @@ pub fn textfont_other_graph() -> impl Drop {
             // The request may have changed since: look its names up again.
             log.last = None;
             TEXTFONT_DT.with(|d| {
-                let mut d = d.borrow_mut();
+                let d = &mut *d.borrow_mut();
+                d.objects.detach(&mut d.scopes);
                 d.objects = objects;
                 d.log = log;
             });
         }
     }
     Guard(Some(TEXTFONT_DT.with(|d| {
-        let mut d = d.borrow_mut();
+        let d = &mut *d.borrow_mut();
+        d.objects.detach(&mut d.scopes);
         (std::mem::take(&mut d.objects), std::mem::take(&mut d.log))
     })))
 }
 
 /// Runs `f`, layout's first measurement of the labels of an object outside any replay:
 /// fonts are interned, and the sizes they get are kept at `at` in
-/// [`TextFontDict::objects`] for [`textfont_replaying`]. No measurement swaps the objects
-/// ([`textfont_other_graph`]) while it runs.
+/// [`TextFontDict::objects`] for [`textfont_replaying`].
 fn textfont_recording<R>(at: usize, f: impl FnOnce() -> R) -> R {
     struct Guard;
     impl Drop for Guard {
         fn drop(&mut self) {
             TEXTFONT_DT.with(|d| {
                 let d = &mut *d.borrow_mut();
-                if let Some(Scope::Record(at, sizes)) = d.scopes.pop()
-                    && let Some(slot) = d.objects.sizes.get_mut(at)
-                {
-                    *slot = Some(sizes);
+                if let Some(Scope::Record(at, sizes)) = d.scopes.pop() {
+                    d.objects.record(at, sizes);
                 }
             });
         }
@@ -424,7 +469,7 @@ fn textfont_recording<R>(at: usize, f: impl FnOnce() -> R) -> R {
     TEXTFONT_DT.with(|d| {
         d.borrow_mut()
             .scopes
-            .push(Scope::Record(at, FontSizes::default()))
+            .push(Scope::Record(RecordAt::Slot(at), FontSizes::default()))
     });
     let _guard = Guard;
     f()
@@ -479,8 +524,9 @@ pub fn textfont_layout_begin() {
 /// nodes), whose records are reserved once instead of grown.
 pub fn textfont_layout_begin_for(objects: usize) {
     TEXTFONT_DT.with(|d| {
-        let mut d = d.borrow_mut();
+        let d = &mut *d.borrow_mut();
         d.log.clear();
+        d.objects.detach(&mut d.scopes);
         d.objects.clear();
         d.objects.index.reserve(objects);
         d.objects.sizes.reserve(objects);
@@ -1557,6 +1603,46 @@ mod tests {
             assert_eq!(textfont_intern(None, None, 1, 99.0), 10.0);
             assert_eq!(textfont_intern(None, None, 1, 99.0), 99.0);
         });
+        textfont_dict_reset();
+    }
+
+    /// A recording whose records are cleared or swapped while it runs ends in the records
+    /// current then, by its tag, and never in another object's place.
+    #[test]
+    fn a_recording_outliving_its_records_keeps_its_tag() {
+        textfont_dict_reset();
+        let font = Some("Times-Roman");
+        textfont_object("a".into(), || {
+            assert_eq!(textfont_intern(font, None, 0, 10.0), 10.0);
+            textfont_layout_begin();
+            textfont_object("b".into(), || {
+                assert_eq!(textfont_intern(font, None, 0, 20.0), 20.0);
+            });
+        });
+        // both are in the new layout's records
+        textfont_object("b".into(), || {
+            assert_eq!(textfont_intern(None, None, 1, 99.0), 20.0);
+        });
+        textfont_object("a".into(), || {
+            assert_eq!(textfont_intern(None, None, 1, 99.0), 10.0);
+        });
+        // swapped out and back while "c" records: "c" ends in the records restored
+        textfont_layout_begin();
+        let other = textfont_other_graph();
+        textfont_object("c".into(), || {
+            assert_eq!(textfont_intern(font, None, 0, 30.0), 30.0);
+            drop(other);
+        });
+        textfont_object("c".into(), || {
+            assert_eq!(textfont_intern(None, None, 1, 99.0), 30.0);
+        });
+        // ... and not in the other graph's
+        {
+            let _other = textfont_other_graph();
+            textfont_object("c".into(), || {
+                assert_eq!(textfont_intern(font, None, 0, 40.0), 40.0);
+            });
+        }
         textfont_dict_reset();
     }
 
