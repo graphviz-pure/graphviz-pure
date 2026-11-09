@@ -25,6 +25,9 @@ Ordinary x86-64 Linux musl, macOS Intel and Windows archives use
 on its inner directory. Never use `target-cpu=native`. ARM64 and WASM are unchanged: the macOS
 arm64 target already compiles for `apple-m1`, and tuned Linux and Windows arm64 builds measured
 no faster ([perf/arm64-tuning.md](perf/arm64-tuning.md)).
+No tier above v3 ships: `x86-64-v4`, `znver3`, `znver4` and `znver5` builds are no more than
+1.2% faster, and AVX-512 builds without `prefer-no-gather` are slower
+([perf/x86-tuning.md](perf/x86-tuning.md)).
 
 The default x86-64 archives also carry a baseline `graphviz-pure-launcher` executable.
 The six wheels retain their platform tags; x86-64 wheels carry the launcher
