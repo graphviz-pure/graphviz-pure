@@ -22,7 +22,9 @@ A dry run, or a check that fails, never asks for the `release` environment. A re
 Ordinary x86-64 Linux musl, macOS Intel and Windows archives use
 `-C target-cpu=x86-64-v3` (AVX2/FMA). Each also has an x86-64-v1 archive,
 `graphviz-pure-X.Y.Z-TARGET-compat.tar.gz` (Windows: `.zip`), with the same suffix
-on its inner directory. Never use `target-cpu=native`. ARM64 and WASM are unchanged.
+on its inner directory. Never use `target-cpu=native`. ARM64 and WASM are unchanged: the macOS
+arm64 target already compiles for `apple-m1`, and tuned Linux and Windows arm64 builds measured
+no faster ([perf/arm64-tuning.md](perf/arm64-tuning.md)).
 
 The default x86-64 archives also carry a baseline `graphviz-pure-launcher` executable.
 The six wheels retain their platform tags; x86-64 wheels carry the launcher
