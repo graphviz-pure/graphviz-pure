@@ -5,8 +5,8 @@ name: x86-64 tuning (temporary, #825)
 # Xeon). It reads /proc/cpuinfo, builds with release.yml's PGO every candidate -C target-cpu that
 # this CPU can run (two independently trained x86-64-v3 builds as an A/A pair), then on that same
 # runner: whole-corpus output hashes, an a*b+c contraction probe, math unit tests and interleaved
-# timing on full.tsv. Run 2 adds builds without AVX-512 gathers/scatters (-ng) and znver5 on
-# Zen 4. A last job compares every build's hashes with the x86-64 v1 build's.
+# timing on full.tsv. Runs 2 and 3 add builds without AVX-512 gathers/scatters (-ng); run 3
+# runs znver5 on the Zen 5 runners. A last job compares every build's hashes with the x86-64 v1 build's.
 # COST: $0 a run (estimated): GitHub-hosted runners, free for this public repository; no paid model.
 # COST-BOUND: one run per push to this branch that changes the measurement itself.
 
@@ -83,13 +83,7 @@ jobs:
               mkdir -p "bins/$label"
               cp "target-$label/$TARGET/release/graphviz-pure" "bins/$label/graphviz-pure"
               cp "$RUNNER_TEMP/pgo-$label/build-info.json" "results/build-info-$label.json"
-              if [ "$label" = znver5 ] && objdump -d --no-show-raw-insn "bins/$label/graphviz-pure" \
-                  | grep -qE '\s(vp2intersect|\{vex\} vpdp|movdiri|movdir64b|prefetchit)'; then
-                echo "znver5: uses a Zen 5 instruction; not run on this core" | tee -a results/build-failures.txt
-                rm -rf "bins/$label"
-              else
-                built+=("$label")
-              fi
+              built+=("$label")
             else
               echo "$label: PGO build or training failed" | tee -a results/build-failures.txt
             fi
@@ -118,7 +112,7 @@ jobs:
           #[unsafe(no_mangle)] pub fn sum(x: &[f64]) -> f64 { x.iter().sum() }
           #[unsafe(no_mangle)] pub fn fused(a: f64, b: f64, c: f64) -> f64 { a.mul_add(b, c) }
           EOF
-          for cpu in x86-64-v3 znver3 x86-64-v4 x86-64-v4-ng znver4 znver4-ng znver5; do
+          for cpu in x86-64-v3 znver3 x86-64-v4 x86-64-v4-ng znver4 znver4-ng znver5 znver5-ng; do
             rustc --edition=2024 --crate-type=lib --emit=asm -C opt-level=3 --target "$TARGET" \
               $(python3 -I scripts/bench/x86_tuning.py flags $cpu) "$RUNNER_TEMP/probe.rs" -o "results/probe-$cpu.s"
             n=$(grep -cE '^\s+vf(n)?m(add|sub)' "results/probe-$cpu.s" || true)

@@ -42,6 +42,7 @@ V4 = V3 + ["avx512f", "avx512bw", "avx512cd", "avx512dq", "avx512vl"]
 ZEN3 = V3 + ["adx", "sha_ni", "vaes", "vpclmulqdq", "sse4a"]
 ZEN4 = ZEN3 + V4[len(V3):] + ["avx512ifma", "avx512vbmi", "avx512_vbmi2", "avx512_vnni",
                                "avx512_bitalg", "avx512_vpopcntdq", "avx512_bf16", "gfni"]
+ZEN5 = ZEN4 + ["avx512_vp2intersect", "avx_vnni"]
 
 
 def cpuinfo():
@@ -68,6 +69,7 @@ BUILDS = {
     "znver4": "-C target-cpu=znver4",
     "znver4-ng": f"-C target-cpu=znver4 {NO_GATHER}",
     "znver5": "-C target-cpu=znver5",
+    "znver5-ng": f"-C target-cpu=znver5 {NO_GATHER}",
 }
 
 
@@ -77,14 +79,13 @@ def cmd_candidates(args):
     amd = info.get("vendor_id") == "AuthenticAMD"
     family = int(info.get("cpu family", "0"))
     need = {"x86-64-v3": V3, "x86-64-v3-b": V3, "znver3": ZEN3, "x86-64-v4": V4,
-            "x86-64-v4-ng": V4, "znver4": ZEN4, "znver4-ng": ZEN4, "znver5": ZEN4}
+            "x86-64-v4-ng": V4, "znver4": ZEN4, "znver4-ng": ZEN4, "znver5": ZEN5, "znver5-ng": ZEN5}
     # The znver builds are measured only on AMD Zen (family 0x19 = Zen 3/4, 0x1a = Zen 5): their
     # scheduling models describe those cores, and a Zen tuning on an Intel core answers no question.
-    # GitHub has no Zen 5 runners, so znver5 also runs on Zen 4 when the build uses none of the
-    # Zen 5 additions (the workflow checks the disassembly): that measures its code generation and
-    # scheduling model on the previous core, not a Zen 5.
+    # (Run 2 tried znver5 on Zen 4: its instrumented build stops with SIGILL during PGO training.)
     zen = {"znver3": amd and family >= 0x19, "znver4": amd and family >= 0x19,
-           "znver4-ng": amd and family >= 0x19, "znver5": amd and family >= 0x19}
+           "znver4-ng": amd and family >= 0x19, "znver5": amd and family >= 0x1a,
+           "znver5-ng": amd and family >= 0x1a}
     chosen, lines = [], [f"model: {info.get('model name')}", f"vendor: {info.get('vendor_id')}",
                          f"family: {family:#x} model: {int(info.get('model', '0')):#x}"]
     for label, required in need.items():
