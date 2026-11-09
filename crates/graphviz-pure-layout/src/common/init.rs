@@ -239,27 +239,56 @@ impl<'a> LGraph<'a> {
                 directed,
                 &env,
             );
-            let conv = |key: &str, l: &Option<graphviz_pure_geom::node_size::LabelGeometry>| {
-                l.as_ref().map(|l| TextLabel {
-                    text: graphviz_pure_geom::label_text(l, a.get(key).map_or("", String::as_str)),
-                    dimen: l.dimen,
-                    pos: Point::default(),
-                    set: false,
-                    fontsize: l.font_size,
-                    fontname: l.font_name.clone(),
+            // The text (`lp->text`) stays in the measurement kept below, which
+            // `Self::edge_label_text` reads.
+            let conv = |l: &Option<graphviz_pure_geom::node_size::LabelGeometry>| {
+                l.as_ref().map(|l| {
+                    Box::new(TextLabel {
+                        text: String::new(),
+                        dimen: l.dimen,
+                        pos: Point::default(),
+                        set: false,
+                        fontsize: l.font_size,
+                        fontname: l.font_name.clone(),
+                    })
                 })
             };
             let e = &mut self.edges[ei];
-            e.label = conv("label", &lg.label);
-            e.xlabel = conv("xlabel", &lg.xlabel);
-            e.head_label = conv("headlabel", &lg.head_label);
-            e.tail_label = conv("taillabel", &lg.tail_label);
-            // Not kept for the renderer as C keeps ED_label (dot keeps it): alive through
-            // the layout beside the LEdge's own labels, it raised the peak heap of these
-            // engines by 5-8% on label-heavy graphs (#836).
+            e.label = conv(&lg.label);
+            e.xlabel = conv(&lg.xlabel);
+            e.head_label = conv(&lg.head_label);
+            e.tail_label = conv(&lg.tail_label);
+            // Kept for the renderer, as C keeps ED_label and the edge's other labels.
+            if let Some(kept) = graphviz_pure_geom::LaidOutEdge::of(lg) {
+                self.label_geometry.edges.push((ei, kept));
+            }
             super::ports::resolve_edge_ports(self, ei)?;
         }
+        // by edge index, for `edge_label_text` (each edge is measured once)
+        self.label_geometry.edges.sort_by_key(|&(i, _)| i);
         Ok(())
+    }
+
+    /// `lp->text` of the label `kind` of edge `e`, from the measurement `common_init_edge`
+    /// kept for the renderer; empty when the edge has no such label.
+    /// C: lib/common/labels.c:make_label
+    pub fn edge_label_text(&self, e: usize, kind: super::splines::LabelKind) -> String {
+        use super::splines::LabelKind;
+        let edges = &self.label_geometry.edges;
+        let found = edges.binary_search_by_key(&e, |&(i, _)| i).ok();
+        let Some((_, kept)) = found.and_then(|at| edges.get(at)) else {
+            return String::new();
+        };
+        let (label, key) = match kind {
+            LabelKind::Main => (&kept.label, "label"),
+            LabelKind::Xlabel => (&kept.xlabel, "xlabel"),
+            LabelKind::Head => (&kept.head_label, "headlabel"),
+            LabelKind::Tail => (&kept.tail_label, "taillabel"),
+        };
+        let raw = self.src.edges.get(e).and_then(|ed| ed.attrs.get(key));
+        label.as_deref().map_or_else(String::new, |l| {
+            graphviz_pure_geom::label_text(l, raw.map_or("", String::as_str))
+        })
     }
 
     /// Keeps a cluster label `do_graph_label` measured for the subgraph `subgraph` of
@@ -554,8 +583,8 @@ impl LayoutResultView<'_> {
             nd.layout.xlabel = n.xlabel.as_ref().filter(|l| l.set).map(|l| l.pos);
             nd.layout.higher_dims = higher_dims(&n.pos, self.odim);
         }
-        let place = |l: &Option<TextLabel>| {
-            l.as_ref().map(|l| graphviz_pure_core::LabelPlace {
+        let place = |l: Option<&TextLabel>| {
+            l.map(|l| graphviz_pure_core::LabelPlace {
                 pos: l.pos,
                 set: l.set,
             })
@@ -584,8 +613,8 @@ impl LayoutResultView<'_> {
             ed.label_pos = e.label.as_ref().map(|l| l.pos);
             ed.label_unplaced = e.label.as_ref().is_some_and(|l| !l.set);
             ed.layout.xlabel = e.xlabel.as_ref().filter(|l| l.set).map(|l| l.pos);
-            ed.layout.head_label = place(&e.head_label);
-            ed.layout.tail_label = place(&e.tail_label);
+            ed.layout.head_label = place(e.head_label.as_deref());
+            ed.layout.tail_label = place(e.tail_label.as_deref());
         }
         graph.bb = self.bb;
         // Clusters the layout did not register keep the `bb` they were given,
@@ -627,9 +656,8 @@ impl LayoutResultView<'_> {
                 .node_geometry
                 .put(graphviz_pure_geom::LaidOutNodes(self.node_geometry));
         }
-        // GD_label likewise, for the clusters written above (and ED_label for the edges, of
-        // which none is kept yet, #836). The root's label is the one `graph_init` made
-        // (`layout_graph_with_options`).
+        // GD_label and ED_label likewise, for the clusters and edges written above. The
+        // root's label is the one `graph_init` made (`layout_graph_with_options`).
         let labels = self.label_geometry.sorted();
         let fits = self.edges.len() == graph.edges.len()
             && labels
@@ -777,6 +805,43 @@ mod tests {
                 assert_eq!(actual.to_bits(), expected.to_bits());
             }
         }
+    }
+
+    /// The edges' labels keep their text in the measurement kept for the renderer, by edge
+    /// index, though `common_init_edge` visits them in out-edge order.
+    #[test]
+    fn edge_label_text_reads_the_kept_measurement() {
+        use crate::common::splines::LabelKind;
+        let mut graph = Graph::new("G", GraphKind::Directed, false);
+        let a = graph.ensure_node("a");
+        let b = graph.ensure_node("b");
+        let attrs = |pairs: &[(&str, &str)]| {
+            let mut m = AttrMap::new();
+            for &(k, v) in pairs {
+                m.set(k, v.to_owned(), false);
+            }
+            m
+        };
+        graph.add_edge(b, a, attrs(&[("label", "zero \\E")]));
+        let mut html = attrs(&[("headlabel", "h")]);
+        html.set("xlabel", "<b>x</b>".to_owned(), true);
+        graph.add_edge(a, b, html);
+        graph.add_edge(a, a, AttrMap::new());
+        let layout = LGraph::new(&graph, 2, EdgeType::Line).unwrap();
+        let kept: Vec<usize> = layout
+            .label_geometry
+            .edges
+            .iter()
+            .map(|&(i, _)| i)
+            .collect();
+        assert_eq!(kept, [0, 1]);
+        assert_eq!(layout.edge_label_text(0, LabelKind::Main), "zero b->a");
+        assert_eq!(layout.edge_label_text(1, LabelKind::Head), "h");
+        assert_eq!(layout.edge_label_text(1, LabelKind::Xlabel), "<b>x</b>");
+        assert_eq!(layout.edge_label_text(1, LabelKind::Main), "");
+        assert_eq!(layout.edge_label_text(2, LabelKind::Main), "");
+        assert!(layout.edges[1].head_label.as_ref().unwrap().text.is_empty());
+        assert!(layout.edges[2].label.is_none());
     }
 
     #[test]

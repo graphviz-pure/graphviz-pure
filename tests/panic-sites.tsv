@@ -27,7 +27,7 @@ layout/common/shapes.rs	0	0	75	35
 layout/common/splines.rs	2	1	94	46
 layout/common/types.rs	0	0	13	0
 layout/common/utils.rs	0	0	6	0
-layout/common/xlabels.rs	6	1	103	32
+layout/common/xlabels.rs	6	1	102	32
 layout/cutil.rs	1	0	185	179
 layout/dotgen/acyclic.rs	0	0	23	1
 layout/dotgen/cg.rs	0	0	43	3

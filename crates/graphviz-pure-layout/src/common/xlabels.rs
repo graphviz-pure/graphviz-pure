@@ -1029,15 +1029,7 @@ impl XLabelGraph for LGraph<'_> {
             .unwrap_or_default()
     }
     fn xl_label_text(&self, e: usize, k: LabelKind) -> String {
-        let ed = &self.edges[e];
-        match k {
-            LabelKind::Main => ed.label.as_ref(),
-            LabelKind::Head => ed.head_label.as_ref(),
-            LabelKind::Tail => ed.tail_label.as_ref(),
-            LabelKind::Xlabel => ed.xlabel.as_ref(),
-        }
-        .map(|l| l.text.clone())
-        .unwrap_or_default()
+        self.edge_label_text(e, k)
     }
     fn xl_nodes(&self) -> Vec<usize> {
         (0..self.nodes.len()).collect()

@@ -1101,9 +1101,9 @@ mod ownership_tests {
         }
     }
 
-    /// Which labels each engine leaves: dot its edges', and the engines that register
-    /// clusters (dot, osage, fdp, neato, nop) their clusters'; every engine leaves the
-    /// root's.
+    /// Which labels each engine leaves: every engine but patchwork its edges', and the
+    /// engines that register clusters (dot, osage, fdp, neato, nop) their clusters'; every
+    /// engine leaves the root's.
     #[test]
     fn the_layout_leaves_the_labels_it_measured() {
         use graphviz_pure_layout::LayoutEngine;
@@ -1114,9 +1114,9 @@ mod ownership_tests {
             let edges: Vec<usize> = labels.edges.iter().map(|&(i, _)| i).collect();
             let clusters: Vec<usize> = labels.clusters.iter().map(|&(i, _)| i).collect();
             let want_edges: &[usize] = match engine {
-                LayoutEngine::Dot => &[0, 1, 3],
-                // not kept by the `LGraph` engines yet (#836)
-                _ => &[],
+                // `patchwork_init_edge` measures no edge label
+                LayoutEngine::Patchwork => &[],
+                _ => &[0, 1, 3],
             };
             let want_clusters: &[usize] = match engine {
                 LayoutEngine::Dot
