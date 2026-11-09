@@ -1,0 +1,182 @@
+name: x86-64 tuning (temporary, #825)
+
+# Temporary measurement for docs/perf/x86-tuning.md; removed before the PR is ready.
+# Each shard lands on whatever x86 runner GitHub assigns (AMD EPYC Zen 3 or Zen 4, or Intel
+# Xeon). It reads /proc/cpuinfo, builds with release.yml's PGO every candidate -C target-cpu that
+# this CPU can run (two independently trained x86-64-v3 builds as an A/A pair), then on that same
+# runner: whole-corpus output hashes, an a*b+c contraction probe, math unit tests and interleaved
+# timing on full.tsv. A last job compares every build's hashes with the x86-64 v1 build's.
+# COST: $0 a run (estimated): GitHub-hosted runners, free for this public repository; no paid model.
+# COST-BOUND: one run per push to this branch that changes the measurement itself.
+
+# workflow_dispatch only finds workflows on the default branch, so a push to this branch with a
+# change to the measurement itself starts it.
+on:
+  push:
+    branches: ["perf/825-x86-tuning"]
+    paths: [".github/workflows/x86-tuning.yml", "scripts/bench/x86_tuning.py"]
+
+permissions:
+  contents: read
+
+env:
+  RUST_VERSION: "1.99.1"
+  TARGET: x86_64-unknown-linux-musl
+
+jobs:
+  x86-reference:
+    name: x86-64 v1 reference hashes
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install Rust
+        run: |
+          rustup toolchain install "$RUST_VERSION" --profile minimal --target "$TARGET"
+          rustup default "$RUST_VERSION"
+      - name: Build v1 (the plain compat build)
+        run: cargo build --release --locked --target "$TARGET" -p graphviz-pure-cli --bin graphviz-pure
+      - name: Hash the corpus output
+        run: python3 -I scripts/bench/x86_tuning.py manifest "target/$TARGET/release/graphviz-pure" --out "$RUNNER_TEMP/x86-v1.json"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: manifest-x86-v1
+          path: ${{ runner.temp }}/x86-v1.json
+          if-no-files-found: error
+          retention-days: 90
+
+  measure:
+    name: Runner ${{ matrix.shard }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 300
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4, 5, 6, 7, 8]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install Rust
+        run: |
+          rustup toolchain install "$RUST_VERSION" --profile minimal --component llvm-tools --target "$TARGET"
+          rustup default "$RUST_VERSION"
+      - name: Runner CPU and the builds it can run
+        run: |
+          mkdir -p results bins
+          lscpu | tee results/lscpu.txt
+          cp /proc/cpuinfo results/cpuinfo.txt
+          cpus=$(python3 -I scripts/bench/x86_tuning.py candidates --report results/candidates.txt)
+          cat results/candidates.txt
+          echo "CPUS=$cpus" >> "$GITHUB_ENV"
+      - name: Build with profile-guided optimisation (as release.yml)
+        run: |
+          built=()
+          for cpu in $CPUS; do
+            # x86-64-v3-b is a second, independently trained build of x86-64-v3 (the A/A pair).
+            flag=${cpu%-b}
+            start=$SECONDS
+            if RUSTFLAGS="-C target-cpu=$flag" python3 scripts/build-pgo.py --target "$TARGET" \
+                --target-dir "target-$cpu" --profiles "$RUNNER_TEMP/pgo-$cpu"; then
+              cp "target-$cpu/$TARGET/release/graphviz-pure" "bins/$cpu"
+              cp "$RUNNER_TEMP/pgo-$cpu/build-info.json" "results/build-info-$cpu.json"
+              built+=("$cpu")
+            else
+              echo "$cpu: PGO build or training failed" | tee -a results/build-failures.txt
+            fi
+            echo "$cpu $((SECONDS - start)) s" | tee -a results/build-times.txt
+            rm -rf "target-$cpu" "$RUNNER_TEMP/pgo-$cpu"
+          done
+          (cd bins && sha256sum * && ls -l && for f in *; do echo "$f gzip $(gzip -9c "$f" | wc -c) xz $(xz -9c "$f" | wc -c)"; done) | tee results/binaries.txt
+          echo "BUILT=${built[*]}" >> "$GITHUB_ENV"
+      - name: Math unit tests with each CPU's flags
+        run: |
+          for cpu in $BUILT; do
+            [ "$cpu" = x86-64-v3-b ] && continue
+            echo "::group::$cpu"
+            RUSTFLAGS="-C target-cpu=$cpu" CARGO_TARGET_DIR=target-test \
+              cargo test --release --locked --target "$TARGET" -p graphviz-pure-core --lib math
+            echo "::endgroup::"
+          done
+          rm -rf target-test
+      - name: rustc does not contract a*b+c for any candidate CPU
+        run: |
+          cat > "$RUNNER_TEMP/probe.rs" <<'EOF'
+          #[unsafe(no_mangle)] pub fn madd(a: f64, b: f64, c: f64) -> f64 { a * b + c }
+          #[unsafe(no_mangle)] pub fn msub(a: f64, b: f64, c: f64) -> f64 { c - a * b }
+          #[unsafe(no_mangle)] pub fn dot(a: &[f64; 4], b: &[f64; 4]) -> f64 { a[0] * b[0] + a[1] * b[1] + a[2] * b[2] + a[3] * b[3] }
+          #[unsafe(no_mangle)] pub fn axpy(a: f64, x: &[f64], y: &mut [f64]) { for (yi, xi) in y.iter_mut().zip(x) { *yi += a * *xi; } }
+          #[unsafe(no_mangle)] pub fn sum(x: &[f64]) -> f64 { x.iter().sum() }
+          #[unsafe(no_mangle)] pub fn fused(a: f64, b: f64, c: f64) -> f64 { a.mul_add(b, c) }
+          EOF
+          for cpu in x86-64-v3 x86-64-v4 znver3 znver4 znver5; do
+            rustc --edition=2024 --crate-type=lib --emit=asm -C opt-level=3 --target "$TARGET" \
+              -C target-cpu=$cpu "$RUNNER_TEMP/probe.rs" -o "results/probe-$cpu.s"
+            n=$(grep -cE '^\s+vf(n)?m(add|sub)' "results/probe-$cpu.s" || true)
+            z=$(grep -c zmm "results/probe-$cpu.s" || true)
+            echo "$cpu: $n fused instructions (expected 1, from mul_add); $z zmm operands" | tee -a results/probe.txt
+            [ "$n" = 1 ]
+          done
+      - name: Hash the corpus output of every build
+        run: |
+          for cpu in $BUILT; do
+            python3 -I scripts/bench/x86_tuning.py manifest "bins/$cpu" --out "results/manifest-$cpu.json"
+          done
+      - name: perf counters available?
+        id: perf
+        run: |
+          sudo apt-get install -y "linux-tools-$(uname -r)" linux-tools-common > /dev/null 2>&1 || true
+          cat /proc/sys/kernel/perf_event_paranoid | tee results/perf-probe.txt
+          sudo sysctl -w kernel.perf_event_paranoid=1 || true
+          if perf stat -x , -e instructions:u,cycles:u -- true 2>> results/perf-probe.txt && grep -q '^[0-9]' results/perf-probe.txt; then
+            echo "flag=--perf" >> "$GITHUB_OUTPUT"
+          fi
+          cat results/perf-probe.txt || true
+      - name: Interleaved timing on full.tsv
+        env:
+          PERF_FLAG: ${{ steps.perf.outputs.flag }}
+        run: |
+          python3 -I scripts/bench/synth.py --out "$RUNNER_TEMP/synth" > /dev/null
+          builds=()
+          for cpu in $BUILT; do builds+=("$cpu=bins/$cpu"); done
+          python3 -I scripts/bench/x86_tuning.py bench --set scripts/bench/sets/full.tsv \
+            --synth-dir "$RUNNER_TEMP/synth" --out results/bench.json $PERF_FLAG "${builds[@]}"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: results-${{ matrix.shard }}
+          path: results/
+          retention-days: 90
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: bins-${{ matrix.shard }}
+          path: bins/
+          retention-days: 30
+
+  identity:
+    name: Every build byte-identical with x86-64 v1
+    needs: [x86-reference, measure]
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: manifest-x86-v1
+          path: ref
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: results-*
+          path: results
+      - name: Compare
+        run: |
+          for d in results/results-*; do
+            echo "$d: $(sed -n 1p "$d/candidates.txt")" | tee -a "$GITHUB_STEP_SUMMARY"
+          done
+          python3 -I scripts/bench/x86_tuning.py compare ref/x86-v1.json results/results-*/manifest-*.json
