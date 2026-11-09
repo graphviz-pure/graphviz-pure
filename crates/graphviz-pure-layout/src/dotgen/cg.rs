@@ -84,9 +84,9 @@ impl Dot<'_> {
     /// Out-edges of `n` in `g` (`agfstout`/`agnxtout` order).
     pub fn out_edges(&self, g: G, n: N) -> Vec<E> {
         if self.is_root(g) {
-            self.nodes[n].cg_out.clone()
+            self.cold(n).cg_out.clone()
         } else {
-            self.nodes[n]
+            self.cold(n)
                 .cg_out
                 .iter()
                 .copied()
@@ -98,9 +98,9 @@ impl Dot<'_> {
     /// In-edges of `n` in `g` (`agfstin`/`agnxtin` order).
     pub fn in_edges(&self, g: G, n: N) -> Vec<E> {
         if self.is_root(g) {
-            self.nodes[n].cg_in.clone()
+            self.cold(n).cg_in.clone()
         } else {
-            self.nodes[n]
+            self.cold(n)
                 .cg_in
                 .iter()
                 .copied()
@@ -111,7 +111,7 @@ impl Dot<'_> {
 
     /// `agfstout(g, n)`
     pub fn agfstout(&self, g: G, n: N) -> Option<E> {
-        self.nodes[n]
+        self.cold(n)
             .cg_out
             .iter()
             .copied()
@@ -120,7 +120,7 @@ impl Dot<'_> {
 
     /// `agfstin(g, n)`
     pub fn agfstin(&self, g: G, n: N) -> Option<E> {
-        self.nodes[n]
+        self.cold(n)
             .cg_in
             .iter()
             .copied()
@@ -173,10 +173,11 @@ impl Dot<'_> {
         self.subtree_postorder(g, &mut gs);
         for s in gs {
             if self.graphs[s].nodes.remove(&n) {
-                let inc: Vec<E> = self.nodes[n]
+                let inc: Vec<E> = self
+                    .cold(n)
                     .cg_out
                     .iter()
-                    .chain(self.nodes[n].cg_in.iter())
+                    .chain(self.cold(n).cg_in.iter())
                     .copied()
                     .collect();
                 for e in inc {
@@ -198,8 +199,8 @@ impl Dot<'_> {
         }
         if self.is_root(g) {
             let (t, h) = (self.edges[e].tail, self.edges[e].head);
-            self.nodes[t].cg_out.retain(|&x| x != e);
-            self.nodes[h].cg_in.retain(|&x| x != e);
+            self.cold_mut(t).cg_out.retain(|&x| x != e);
+            self.cold_mut(h).cg_in.retain(|&x| x != e);
         }
     }
 
@@ -232,12 +233,9 @@ impl Dot<'_> {
 
     /// `agnode(g, name, 1)` creating a new cgraph node in `g`'s root.
     pub fn cg_new_node(&mut self, g: G, name: &str) -> N {
-        let root = self.graphs[g].root;
-        let n = self.nodes.len();
         self.note_node_push();
-        self.nodes.push(NodeInfo {
-            name: name.to_string(),
-            cg_root: Some(root),
+        let n = self.push_node(NodeInfo {
+            name: name.to_string().into(),
             ..NodeInfo::default()
         });
         self.agsubnode(g, n);
@@ -282,7 +280,7 @@ impl Dot<'_> {
     /// semantics cgraph also matches `h -> t`; dot's private graphs are
     /// strict directed, so only `t -> h` is searched.
     pub fn cg_find_edge(&self, g: G, t: N, h: N) -> Option<E> {
-        self.nodes[t]
+        self.cold(t)
             .cg_out
             .iter()
             .copied()
@@ -395,21 +393,19 @@ impl Dot<'_> {
                 d.find(&|&x: &E| k.cmp(&key(x)));
             };
             let real = self.input.edges.len();
-            let node = self.nodes.get(h);
-            let mut ins: Vec<E> = node
-                .map(|n| n.cg_in.iter().copied().filter(|&e| e < real).collect())
-                .unwrap_or_default();
+            let node = self.cold(h);
+            let mut ins: Vec<E> = node.cg_in.iter().copied().filter(|&e| e < real).collect();
             ins.sort_by_key(|&e| self.edges.get(e).map(|ed| ed.seq));
             let undirected = self.root_input.kind != graphviz_pure_core::GraphKind::Directed;
             // Named edges from `h`, probed the other way round in an undirected graph.
-            let mut outs: Vec<E> = match node {
-                Some(n) if undirected => n
-                    .cg_out
+            let mut outs: Vec<E> = if undirected {
+                node.cg_out
                     .iter()
                     .copied()
                     .filter(|&e| e < real && self.cg_keyed(e) && self.cg_head(e) != Some(h))
-                    .collect(),
-                _ => Vec::new(),
+                    .collect()
+            } else {
+                Vec::new()
             };
             outs.sort_by_key(|&e| self.edges.get(e).map(|ed| ed.seq));
             let mut events: Vec<(E, bool)> = ins.iter().map(|&e| (e, true)).collect();
@@ -497,21 +493,23 @@ impl Dot<'_> {
 
     fn cg_insert_out(&mut self, t: N, e: E) {
         let k = self.out_key(e);
-        let pos = self.nodes[t]
+        let pos = self
+            .cold(t)
             .cg_out
             .iter()
             .position(|&x| self.out_key(x) > k)
-            .unwrap_or(self.nodes[t].cg_out.len());
-        self.nodes[t].cg_out.insert(pos, e);
+            .unwrap_or(self.cold(t).cg_out.len());
+        self.cold_mut(t).cg_out.insert(pos, e);
     }
 
     fn cg_insert_in(&mut self, h: N, e: E) {
         let k = (self.edges[e].tail, self.edges[e].seq);
-        let pos = self.nodes[h]
+        let pos = self
+            .cold(h)
             .cg_in
             .iter()
             .position(|&x| (self.edges[x].tail, self.edges[x].seq) > k)
-            .unwrap_or(self.nodes[h].cg_in.len());
-        self.nodes[h].cg_in.insert(pos, e);
+            .unwrap_or(self.cold(h).cg_in.len());
+        self.cold_mut(h).cg_in.insert(pos, e);
     }
 }

@@ -420,8 +420,7 @@ impl Dot<'_> {
     /// `resetRW(g)`.
     fn reset_rw(&mut self) {
         for n in self.nodes_of(0) {
-            let nd = &mut self.nodes[n];
-            std::mem::swap(&mut nd.rw, &mut nd.mval);
+            std::mem::swap(&mut self.nodes[n].rw, &mut self.mc_nodes[n].mval);
         }
     }
 
@@ -547,8 +546,7 @@ impl Dot<'_> {
                 }
                 // ND_other(n).list is allocated for every real node.
                 if self.nodes[n].node_type == NORMAL {
-                    let nd = &mut self.nodes[n];
-                    std::mem::swap(&mut nd.rw, &mut nd.mval);
+                    std::mem::swap(&mut self.nodes[n].rw, &mut self.mc_nodes[n].mval);
                 }
                 for e in self.nodes[n].other.clone() {
                     self.setflags(e, 0, 0, AUXGRAPH);
@@ -1051,7 +1049,7 @@ impl Dot<'_> {
     /// `make_flat_adj_edges(g, edges, ind, cnt, e0, et)`.
     fn make_flat_adj_edges(&mut self, edges: &[E], e0: E, et: EdgeType) -> Result<(), String> {
         let (tn, hn) = (self.edges[e0].tail, self.edges[e0].head);
-        if self.nodes[tn].is_record || self.nodes[hn].is_record {
+        if self.cold(tn).is_record || self.cold(hn).is_record {
             // dotsplines.c:1144-1151: C's `static atomic_flag` warns once per process.
             // [`diag::emit_once`] does that on the command line and again on the next
             // library call.
@@ -1155,7 +1153,7 @@ impl Dot<'_> {
         let (tn, hn) = if flip { (hn0, tn0) } else { (tn0, hn0) };
         // cloneNode: agcopyattr copies every attribute of the main node.
         let clone_node = |aux: &mut graphviz_pure_core::Graph, n: N| {
-            let src = &input.nodes[self.nodes[n].real.unwrap()];
+            let src = &input.nodes[self.cold(n).real.unwrap()];
             let id = aux.ensure_node_html(&src.name, src.html_name);
             aux.nodes[id.0 as usize].attrs = src.attrs.clone();
             id
@@ -2338,7 +2336,7 @@ impl Dot<'_> {
                 self.graphs[lc].bb.ur.x + sp.splinesep
             } else {
                 let l = &self.nodes[left];
-                let mut nb = l.coord.x + l.mval;
+                let mut nb = l.coord.x + self.mc_nodes[left].mval;
                 if l.node_type == NORMAL {
                     nb += nodesep / 2.0;
                 } else {

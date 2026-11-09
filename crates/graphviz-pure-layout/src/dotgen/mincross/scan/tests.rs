@@ -153,11 +153,10 @@ fn random_ranks<'a>(rng: &mut Rng, input: &'a Graph, shape: Shape) -> Dot<'a> {
         let width = 1 + rng.below(14) as usize;
         let mut level = Vec::new();
         for order in 0..width {
-            let v = d.nodes.len();
-            d.nodes.push(NodeInfo::default());
+            let v = d.push_node(NodeInfo::default());
             d.nodes[v].rank = r;
             d.nodes[v].order = order as i32;
-            d.nodes[v].low = order as i32;
+            d.ns_nodes[v].low = order as i32;
             if shape.constrained && rng.below(4) == 0 {
                 d.nodes[v].clust = Some(1 + rng.below(2) as usize);
             }
@@ -420,7 +419,7 @@ fn issue_682_ranks<'a>(
     even_penalty: i32,
 ) -> Dot<'a> {
     let mut d = Dot::empty(input);
-    d.nodes.resize_with(8, NodeInfo::default);
+    d.reset_nodes_for_test(8);
     for (order, (&a, &b)) in top.iter().zip(&bottom).enumerate() {
         d.nodes[a].order = order as i32;
         d.nodes[4 + b].rank = 1;

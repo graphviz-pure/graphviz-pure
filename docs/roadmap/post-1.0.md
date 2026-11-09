@@ -573,8 +573,9 @@ Filed on 2026-10-27 in the `post-1.0` milestone, in this order, as #530–#540 (
    writers keep their iteration order and how typed values are cached without moving warnings.
 8. **layout: typed index newtypes for dot's `N`, `E`, `G` and `L`** (T5; mechanical, unlocks T6
    and T7).
-9. **dotgen: split `NodeInfo` (832 B) into network-simplex, mincross and cold parts** (T6;
-   profile-driven, NS first).
+9. **Completed (#837): dotgen: split `NodeInfo` (832 B) into network-simplex, mincross and cold parts** (T6;
+   profile-driven, NS first). 808 B became 416 + 20 + 24 B per node, plus a 272 B cold part
+   for cgraph nodes only; dot's peak heap fell 6–18% on the ratchet's dot cases.
 10. **docs: replace "Follow the C" in CONTRIBUTING.md with provenance tags and a C-mirror module
     list** plus a script that reports C functions without a provenance tag
     (completed: the CONTRIBUTING.md text landed with #514, the script with #542 for #539).

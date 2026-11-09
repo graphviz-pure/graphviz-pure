@@ -470,17 +470,21 @@ impl Dot<'_> {
         store.crossings.clear();
         store.crossings.reserve(arc_capacity);
         for (slot, &v) in store.nodes.iter().enumerate() {
-            if let Some(n) = self.nodes.get_mut(v) {
+            if let (Some(n), Some(mc), Some(ns)) = (
+                self.nodes.get(v),
+                self.mc_nodes.get_mut(v),
+                self.ns_nodes.get(v),
+            ) {
                 let Ok(index) = u32::try_from(slot) else {
                     self.mincross_store = store;
                     return Ok(());
                 };
-                n.mincross_index = index;
+                mc.mincross_index = index;
                 store.order.push(n.order);
-                store.mval.push(n.mval);
+                store.mval.push(mc.mval);
                 store.meta.push(MinCrossMeta {
                     rank: n.rank,
-                    low: n.low,
+                    low: ns.low,
                     cluster: n.clust,
                     ranktype: n.ranktype,
                     node_type: n.node_type,
@@ -493,7 +497,9 @@ impl Dot<'_> {
         for r in minrank..=maxrank {
             for i in 0..self.rank_n(g, r) {
                 let Some(v) = self.rv(g, r, i) else { continue };
-                let Some(n) = self.nodes.get(v) else { continue };
+                let (Some(n), Some(n_mc)) = (self.nodes.get(v), self.mc_nodes.get(v)) else {
+                    continue;
+                };
                 store.constrained |= n.clust.is_some()
                     || n.rank
                         .checked_add(1)
@@ -515,7 +521,9 @@ impl Dot<'_> {
                         } else {
                             (e.tail, &e.tail_port)
                         };
-                        let Some(other) = self.nodes.get(other) else {
+                        let (Some(other), Some(other_mc)) =
+                            (self.nodes.get(other), self.mc_nodes.get(other))
+                        else {
                             valid = false;
                             break;
                         };
@@ -527,22 +535,22 @@ impl Dot<'_> {
                         };
                         snapshot_adjacent &= Some(other.rank) == expected;
                         store.edges.push(MinCrossEdge {
-                            other: other.mincross_index as usize,
+                            other: other_mc.mincross_index as usize,
                             port_order: port.order as i32,
                         });
                         store.crossings.push(
-                            compact_order(&store.order, other.mincross_index as usize),
+                            compact_order(&store.order, other_mc.mincross_index as usize),
                             e.xpenalty,
                             port.p.x,
                         );
                     }
                 }
                 if valid {
-                    if let Some(meta) = store.meta.get_mut(n.mincross_index as usize) {
+                    if let Some(meta) = store.meta.get_mut(n_mc.mincross_index as usize) {
                         meta.snapshot_valid = snapshot_valid;
                         meta.snapshot_adjacent = snapshot_adjacent;
                     }
-                    if let Some(span) = store.adjacency.get_mut(n.mincross_index as usize) {
+                    if let Some(span) = store.adjacency.get_mut(n_mc.mincross_index as usize) {
                         let mid = start.saturating_add(n.in_.len());
                         *span = Some([
                             CrossingSpan::new(start, mid, &store.crossings)?,
@@ -565,7 +573,7 @@ impl Dot<'_> {
     fn mincross_slot(&self, v: N) -> Option<usize> {
         let store = &self.mincross_store;
         store.graph?;
-        let slot = self.nodes.get(v)?.mincross_index as usize;
+        let slot = self.mc_nodes.get(v)?.mincross_index as usize;
         (store.nodes.get(slot) == Some(&v)).then_some(slot)
     }
 
@@ -582,7 +590,7 @@ impl Dot<'_> {
     #[inline]
     fn mc_rank_node(&self, global: N) -> MinCrossNode {
         let slot = if self.mincross_store.graph.is_some() {
-            self.nodes[global].mincross_index as usize
+            self.mc_nodes[global].mincross_index as usize
         } else {
             usize::MAX
         };
@@ -612,7 +620,7 @@ impl Dot<'_> {
             .mval
             .get(v.slot)
             .copied()
-            .unwrap_or_else(|| self.nodes[v.global].mval)
+            .unwrap_or_else(|| self.mc_nodes[v.global].mval)
     }
 
     #[inline]
@@ -620,7 +628,7 @@ impl Dot<'_> {
         if let Some(value) = self.mincross_store.mval.get_mut(v.slot) {
             *value = mval;
         }
-        self.nodes[v.global].mval = mval;
+        self.mc_nodes[v.global].mval = mval;
     }
 
     #[inline]
@@ -703,7 +711,7 @@ impl Dot<'_> {
 
     fn get_comp(&mut self, g: G, n: N, comp: G, indices: &mut Vec<i32>) -> i32 {
         let mut backedge = 0;
-        self.nodes[n].state = 1;
+        self.mc_nodes[n].state = 1;
         let k = self.agnnodes(comp);
         if indices.len() <= k {
             indices.resize(k + 1, 0);
@@ -715,7 +723,7 @@ impl Dot<'_> {
                 backedge += 1;
             }
             let h = self.edges[e].head;
-            if self.nodes[h].state == 0 {
+            if self.mc_nodes[h].state == 0 {
                 backedge += self.get_comp(g, h, comp, indices);
             }
         }
@@ -724,7 +732,7 @@ impl Dot<'_> {
                 backedge += 1;
             }
             let t = self.edges[e].tail;
-            if self.nodes[t].state == 0 {
+            if self.mc_nodes[t].state == 0 {
                 backedge += self.get_comp(g, t, comp, indices);
             }
         }
@@ -736,10 +744,10 @@ impl Dot<'_> {
         let ns = self.nodes_of(lg);
         for (i, &n) in ns.iter().enumerate() {
             for &v in &ns[i + 1..] {
-                if self.nodes[v].lim <= self.nodes[n].low {
+                if self.ns_nodes[v].lim <= self.ns_nodes[n].low {
                     have_backedge = true;
                     self.cg_edge(lg, v, n);
-                } else if self.nodes[n].lim <= self.nodes[v].low {
+                } else if self.ns_nodes[n].lim <= self.ns_nodes[v].low {
                     self.cg_edge(lg, n, v);
                 }
             }
@@ -750,7 +758,7 @@ impl Dot<'_> {
         let sg = self.cg_subg(lg, "comp");
         let mut indices: Vec<i32> = vec![0; self.agnnodes(lg)];
         for n in self.nodes_of(lg) {
-            if self.nodes[n].state != 0 || self.agdegree(lg, n, true, true) == 0 {
+            if self.mc_nodes[n].state != 0 || self.agdegree(lg, n, true, true) == 0 {
                 continue;
             }
             if self.get_comp(lg, n, sg, &mut indices) != 0 {
@@ -788,10 +796,10 @@ impl Dot<'_> {
                     if lo > hi {
                         std::mem::swap(&mut lo, &mut hi);
                     }
-                    self.nodes[n].low = lo;
-                    self.nodes[n].lim = hi;
+                    self.ns_nodes[n].low = lo;
+                    self.ns_nodes[n].lim = hi;
                     self.nodes[n].rep = Some(u);
-                    self.nodes[n].state = 0;
+                    self.mc_nodes[n].state = 0;
                 }
             }
             if let Some(l) = lg
@@ -939,7 +947,7 @@ impl Dot<'_> {
                 } else if !o.is_empty() {
                     graphviz_pure_core::diag::agerrorf(&format!(
                         "ordering '{o}' not recognized for node '{}'.\n",
-                        self.nodes.get(n).map_or("", |d| d.name.as_str())
+                        self.nodes.get(n).map_or("", |d| &*d.name)
                     ));
                 }
             }
@@ -1020,10 +1028,11 @@ impl Dot<'_> {
 
     fn left2right_arena(&self, g: G, v: N, w: N) -> bool {
         let load = |n: N| {
+            let low = self.ns_nodes.get(n).map_or(0, |ns| ns.low);
             let n = &self.nodes[n];
             MinCrossMeta {
                 rank: n.rank,
-                low: n.low,
+                low,
                 cluster: n.clust,
                 ranktype: n.ranktype,
                 node_type: n.node_type,
@@ -1329,8 +1338,13 @@ impl Dot<'_> {
     fn write_crossing_orders(&mut self, rank: RankWindow) -> Result<(), &'static str> {
         for i in 0..rank.n {
             let n = rank.node(self, i).ok_or("mincross: missing rank node")?;
+            let slot = self
+                .mc_nodes
+                .get(n)
+                .ok_or("mincross: missing node")?
+                .mincross_index;
             let node = self.nodes.get_mut(n).ok_or("mincross: missing node")?;
-            node.order = compact_order(&self.mincross_store.order, node.mincross_index as usize);
+            node.order = compact_order(&self.mincross_store.order, slot as usize);
         }
         Ok(())
     }
@@ -1899,7 +1913,10 @@ impl Dot<'_> {
             }
             let r = self.nodes[cur].rank;
             if self.nodes[eh].onstack {
-                let (a, b) = (self.nodes[eh].low as usize, self.nodes[et].low as usize);
+                let (a, b) = (
+                    self.ns_nodes[eh].low as usize,
+                    self.ns_nodes[et].low as usize,
+                );
                 if let Some(m) = self.rk_mut(g, r).flat.as_mut() {
                     m.set(a, b);
                 }
@@ -1910,7 +1927,10 @@ impl Dot<'_> {
                 }
                 self.flat_rev(g, e);
             } else {
-                let (a, b) = (self.nodes[et].low as usize, self.nodes[eh].low as usize);
+                let (a, b) = (
+                    self.ns_nodes[et].low as usize,
+                    self.ns_nodes[eh].low as usize,
+                );
                 if let Some(m) = self.rk_mut(g, r).flat.as_mut() {
                     m.set(a, b);
                 }
@@ -1932,7 +1952,7 @@ impl Dot<'_> {
                 let v = self.rv(g, r, i).unwrap();
                 self.nodes[v].mark = 0;
                 self.nodes[v].onstack = false;
-                self.nodes[v].low = i;
+                self.ns_nodes[v].low = i;
                 if !self.nodes[v].flat_out.is_empty() && !flat {
                     self.rk_mut(g, r).flat = Some(AdjMatrix::new(n as usize, n as usize));
                     flat = true;
@@ -2606,7 +2626,7 @@ impl Dot<'_> {
         if self.nodes[n].node_type == VIRTUAL {
             return 2;
         }
-        if self.nodes[n].weight_class <= 1 {
+        if self.mc_nodes[n].weight_class <= 1 {
             return 1;
         }
         0
@@ -2665,7 +2685,7 @@ mod tests {
 
     fn sparse_window(input: &Graph) -> Dot<'_> {
         let mut d = Dot::empty(input);
-        d.nodes.resize_with(2_000, NodeInfo::default);
+        d.reset_nodes_for_test(2_000);
         for (rank, ns) in [(0, &[17, 1_900, 4][..]), (1, &[1_988, 2][..])] {
             for (order, &v) in ns.iter().enumerate() {
                 d.nodes[v].rank = rank;
@@ -2794,7 +2814,7 @@ mod tests {
             d.rcross(0, 0),
         );
         d.mc_set_mval(d.mc_node(17), 12.5);
-        assert_eq!(d.nodes[17].mval, 12.5);
+        assert_eq!(d.mc_nodes[17].mval, 12.5);
         d.mincross_store.graph = None;
         assert_eq!(
             (
@@ -2995,8 +3015,8 @@ mod tests {
         d.remincross = true;
         assert!(d.left2right(1, d.mc_node(17), d.mc_node(1_900)));
         d.nodes[1_900].clust = Some(1);
-        d.nodes[17].low = 0;
-        d.nodes[1_900].low = 1;
+        d.ns_nodes[17].low = 0;
+        d.ns_nodes[1_900].low = 1;
         let mut matrix = AdjMatrix::new(2, 2);
         matrix.set(0, 1);
         d.rk_mut(1, 0).flat = Some(matrix);

@@ -156,12 +156,16 @@ impl<'a> Dot<'a> {
             bound: true,
             ..GraphInfo::default()
         });
+        d.reserve_nodes_exact(nn);
+        d.cold.reserve_exact(nn);
         for (i, n) in input.nodes.iter().enumerate() {
-            d.nodes.push(NodeInfo {
-                real: Some(i),
-                name: n.name.clone(),
-                cg_root: Some(0),
+            d.push_node(NodeInfo {
+                name: n.name.clone().into(),
                 ..NodeInfo::default()
+            });
+            d.cold.push(NodeCold {
+                real: Some(i),
+                ..NodeCold::default()
             });
             d.graphs[0].nodes.insert(i);
         }
@@ -174,20 +178,20 @@ impl<'a> Dot<'a> {
                 seq: (i + 1) as u64,
                 ..EdgeInfo::default()
             });
-            d.nodes[t].cg_out.push(i);
-            d.nodes[h].cg_in.push(i);
+            d.cold_mut(t).cg_out.push(i);
+            d.cold_mut(h).cg_in.push(i);
             d.graphs[0].edges.insert(i);
         }
         d.edge_seq = ne as u64;
         // cgraph orders a node's out-edges by (head seq, edge seq) and its in-edges by
         // (tail seq, edge seq) (`agedgeseqcmpf`).
         for n in 0..nn {
-            let mut o = std::mem::take(&mut d.nodes[n].cg_out);
+            let mut o = std::mem::take(&mut d.cold_mut(n).cg_out);
             o.sort_by_key(|&e| (d.edges[e].head, d.edges[e].seq));
-            d.nodes[n].cg_out = o;
-            let mut i = std::mem::take(&mut d.nodes[n].cg_in);
+            d.cold_mut(n).cg_out = o;
+            let mut i = std::mem::take(&mut d.cold_mut(n).cg_in);
             i.sort_by_key(|&e| (d.edges[e].tail, d.edges[e].seq));
-            d.nodes[n].cg_in = i;
+            d.cold_mut(n).cg_in = i;
         }
         d.n_real_nodes = nn;
         // Subgraphs: create in input order, then wire the hierarchy.
@@ -393,7 +397,7 @@ impl<'a> Dot<'a> {
         n: N,
         env: &graphviz_pure_geom::NodeSizeEnv<'_>,
     ) -> Result<(), String> {
-        let r = self.nodes[n].real.unwrap();
+        let r = self.cold(n).real.unwrap();
         let input = self.input;
         let nd = &input.nodes[r];
         let i = self.measured_index(r);
@@ -480,12 +484,13 @@ impl<'a> Dot<'a> {
         let rec_fields = record
             .map(|r| r.children.iter().map(|f| f.bbox).collect())
             .unwrap_or_default();
+        let cold = self.cold_mut(n);
+        cold.shape = Some(shape);
+        cold.rec_fields = rec_fields;
+        cold.is_record = record.is_some();
         let info = &mut self.nodes[n];
-        info.shape = Some(shape);
-        info.rec_fields = rec_fields;
         info.width = width;
         info.height = height;
-        info.is_record = record.is_some();
         info.lw = lw;
         info.rw = rw;
         info.ht = ht;
@@ -514,9 +519,8 @@ impl<'a> Dot<'a> {
         let hg = self.node_attr(h, "group").unwrap_or("");
         // `tailgroup == headgroup` compares interned strings, so the HTML flag counts.
         let html = |n: N| {
-            self.nodes
-                .get(n)
-                .and_then(|nd| nd.real)
+            self.cold(n)
+                .real
                 .and_then(|r| self.input.nodes.get(r))
                 .is_some_and(|nd| nd.attrs.is_html("group"))
         };

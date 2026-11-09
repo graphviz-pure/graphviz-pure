@@ -119,7 +119,7 @@ impl Dot<'_> {
         // Not in C: the arenas grow once, to the size the auxiliary graph needs, rather than
         // doubling past it (#832). Every edge from `aux_edges` on is an auxiliary edge.
         let (aux_nodes, aux_edges) = self.aux_graph_reserve(g);
-        self.nodes.reserve_exact(aux_nodes);
+        self.reserve_nodes_exact(aux_nodes);
         self.edges.reserve_exact(aux_edges);
         let (node_mark, edge_mark) = (self.nodes.len(), self.edges.len());
         self.create_aux_edges(g);
@@ -136,24 +136,25 @@ impl Dot<'_> {
         if std::env::var_os("GVDUMP").is_some() {
             let nl = self.nlist_nodes(g);
             for (i, &n) in nl.iter().enumerate() {
-                self.nodes[n].low = i as i32;
+                self.ns_nodes[n].low = i as i32;
             }
             for &n in &nl {
                 let nm = if self.nodes[n].node_type == NORMAL {
-                    self.nodes[n].name.as_str()
+                    &*self.nodes[n].name
                 } else {
                     "_"
                 };
                 let nd = &self.nodes[n];
+                let low = self.ns_nodes.get(n).map_or(0, |ns| ns.low);
                 let mut l = format!(
                     "A {} {} r={} o={} t={} rw={} lw={}:",
-                    nd.low, nm, nd.rank, nd.order, nd.node_type, nd.rw, nd.lw
+                    low, nm, nd.rank, nd.order, nd.node_type, nd.rw, nd.lw
                 );
                 for &e in &self.nodes[n].out {
                     let ed = &self.edges[e];
                     l.push_str(&format!(
                         " {}/{}/{}",
-                        self.nodes[ed.head].low, ed.minlen, ed.weight
+                        self.ns_nodes[ed.head].low, ed.minlen, ed.weight
                     ));
                 }
                 graphviz_pure_core::diag::dump(&l);
@@ -392,7 +393,7 @@ impl Dot<'_> {
             let ns = sep[(i & 1) as usize];
             for j in 0..n {
                 let u = self.rv(g, i, j).unwrap();
-                self.nodes[u].mval = self.nodes[u].rw;
+                self.mc_nodes[u].mval = self.nodes[u].rw;
                 if !self.nodes[u].other.is_empty() {
                     let mut sw = 0.0;
                     for k in 0..self.nodes[u].other.len() {

@@ -52,7 +52,7 @@ impl Dot<'_> {
 
     /// `agxget(n, sym)` for a node.
     pub fn node_attr(&self, n: N, name: &str) -> Option<&str> {
-        let r = self.nodes[n].real?;
+        let r = self.cold(n).real?;
         self.input.nodes[r].attrs.get(name).map(String::as_str)
     }
 
