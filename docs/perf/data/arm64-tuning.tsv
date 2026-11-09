@@ -1,4 +1,3 @@
-# Per-case medians from docs/perf/arm64-tuning.md: run 1 = actions run 42579158206 (CPU candidates), run 2 = 42582816610 (A/A and no-PGO).
 run	target	input	format	runs	build	wall_median_ms	wall_min_ms	wall_max_ms	cpu_median_ms	ratio_vs_default
 1	aarch64-apple-darwin	tests/fixtures/unix.gv	svg	5	default	7.6	5.4	10.4	6.4	1.0000
 1	aarch64-apple-darwin	tests/fixtures/unix.gv	svg	5	apple-m1	7.0	5.7	10.3	5.5	0.9203

@@ -4,12 +4,12 @@
 rustc's default CPU for `aarch64-apple-darwin`, and the flag changes neither IR nor assembly. On
 Linux and Windows arm64, `neoverse-n1` and `neoverse-v2` are **0.2–0.8% slower** than the shipped
 generic build (geometric mean of 72 `full.tsv` cases, PGO on every build, on Neoverse N2 runners).
-Two independently trained builds of the shipped configuration differ by only 0.02–0.11% on the
-same runners, so the slowdown is probably real, but it is tiny either way. A tuned build would
-have to win by 5% to justify a second binary and a launcher, and neither CPU runs on every arm64
-machine people use. PGO, which every arm64 release already uses, is worth **5.6–7.3%**: builds
-without it are that much slower. Every build wrote the same bytes as the x86-64 v1 build on all
-2,939 corpus outputs, and rustc contracted no `a * b + c` for any CPU.
+Two independently trained builds of the shipped configuration differ by only 0.02–0.11% on the same
+runner types (in a second run), so the slowdown is probably real, but it is tiny either way. A tuned
+build would have to win by 5% to justify a second binary and a launcher, and neither CPU runs on
+every arm64 machine people use. PGO, which every arm64 release already uses, is worth **5.6–7.3%**:
+builds without it are that much slower. Every build wrote the same bytes as the x86-64 v1 build on
+all 2,939 corpus outputs, and rustc contracted no `a * b + c` for any CPU.
 
 | target | candidate | runner CPU | wall vs shipped | CPU time vs shipped | outputs identical to x86-64 v1 |
 | :-- | :-- | :-- | --: | --: | --: |
@@ -51,12 +51,13 @@ instructions, a subset of what `neoverse-n1` enables, so it was not measured sep
 ## 2. Method
 
 Two runs of a temporary workflow (§6) on GitHub's arm64 runners, with Rust 1.99.1 (release.yml's
-`RUST_VERSION`). Both built commits whose product tree is master's `9f940ba0`; they only add the
-workflow and its helper script.
+`RUST_VERSION`). Both built commits whose product source (crates, Cargo files, build scripts) is
+master's `9f940ba0`; they add only the workflow, its helper script and this documentation.
 
 - **Run 1** built, per target, the shipped configuration and each candidate CPU.
 - **Run 2** built, per target, the shipped configuration twice (two independent PGO trainings, an
-  A/A pair that measures the noise of the method on that runner) and once without PGO.
+  A/A pair that measures the noise of the method on that runner type) and once without PGO (`cargo
+  build --release` with release.yml's `RUSTFLAGS`).
 
 - **Builds.** One job per target and CPU ran `scripts/build-pgo.py` exactly as `release.yml` does,
   with release.yml's `RUSTFLAGS` (`+crt-static` on Windows) plus the candidate `-C target-cpu`. Each
@@ -112,13 +113,15 @@ counts.
 
 No case is more than 6.1% faster with either CPU (the best is Linux `neoverse-n1` on
 `sfdp_sparse_20000`, 0.939, the only case over 5%). Run 2 measured the method's noise on the same
-runners: two independently trained PGO builds of the shipped configuration differ by a geomean of
-1.0002 (Linux) and 0.9989 (Windows), with a per-case log standard deviation of 0.010 and 0.009. The
-candidates' per-case spread is 0.014–0.016, and their geomeans sit 1.4 (`neoverse-v2`) to 5
-(`neoverse-n1` on Windows) standard errors above 1. So `neoverse-n1` is probably a little slower on
-N2, and `neoverse-v2` is indistinguishable from the shipped build; neither comes near 5%. The sums
-of median times agree: 53.2 s for both the generic and `neoverse-n1` builds on Linux, 54.0 s for
-`neoverse-v2`; on Windows 50.9 s generic and 51.4 s for each tuned build.
+runner types, on fresh VMs: two independently trained PGO builds of the shipped configuration differ
+by a geomean of 1.0002 (Linux) and 0.9989 (Windows), with a per-case log standard deviation of 0.010
+and 0.009. The candidates' per-case spread is 0.014–0.016, and their geomeans sit 1.3 (Linux
+`neoverse-v2`) to 5 (Windows `neoverse-n1`) standard errors above 1. The two runs used different
+VMs, so this compares spreads, not one side-by-side measurement; on macOS the A/A spread was 0.062
+in run 1 and 0.021 in run 2. So `neoverse-n1` is probably a little slower on N2, and `neoverse-v2`
+is indistinguishable from the shipped build; neither comes near 5%. The sums of median times agree:
+53.2 s for both the generic and `neoverse-n1` builds on Linux, 54.0 s for `neoverse-v2`; on Windows
+50.9 s generic and 51.4 s for each tuned build.
 
 The likely reason: PGO already gives LLVM the block frequencies and layout that matter, and the
 port's hot loops are scalar `f64` code with data-dependent branches that `dotprod`, `lse` or SVE
@@ -138,9 +141,10 @@ against the same flags without PGO, on each target's runner:
 | `aarch64-unknown-linux-musl` | 1.0002 | 1.0734 | 53.2 s → 61.8 s |
 | `aarch64-pc-windows-msvc` | 0.9989 | 1.0626 | 51.4 s → 57.8 s |
 
-Without PGO, fdp and sfdp lose the most (1.13–1.20 on Linux and Windows) and dot, neato and twopi
-the least (0.99–1.05). On x86-64 neato gains much more from PGO (`docs/perf/pgo.md`). PGO is applied
-on arm64, and it is worth an order of magnitude more than either CPU.
+Without PGO, fdp and sfdp lose the most (1.13–1.20 on Linux and Windows) and dot, neato and circo
+the least (1.01–1.04). On Windows the no-PGO build also links with MSVC `link.exe`, where
+`build-pgo.py` uses `rust-lld` for both PGO phases, so its 1.0626 includes any linker difference.
+PGO is applied on arm64, and it is worth an order of magnitude more than either CPU.
 
 **Recommendation: ship neither CPU.** The shipped generic builds stay. A tuned arm64 Linux or
 Windows binary would also need a launcher, because neither CPU runs everywhere (next section).
@@ -199,10 +203,12 @@ aarch64 always has `fmadd`. Two things decide whether the port's floating-point 
 1. **rustc never contracts `a * b + c` on its own.** It emits plain `fmul`/`fadd` with no `contract`
    fast-math flag, never emits `llvm.fmuladd`, and leaves LLVM's floating-point fusion at its
    default (`FPOpFusion::Standard`), which fuses only `llvm.fmuladd` and `contract`-flagged
-   operations. Only `f64::mul_add` becomes `llvm.fma`. None of this depends on the CPU. The
-   measurement workflow compiled `a * b + c`, `c - a * b`, a four-term dot product and one `mul_add`
-   for every candidate CPU and counted the fused scalar and NEON instructions in the assembly (run 2
-   also matched SVE's forms): exactly one, the `mul_add`, for every CPU on all three targets.
+   operations. Only `f64::mul_add` becomes `llvm.fma`. None of this depends on the CPU. Run 1
+   compiled `a * b + c`, `c - a * b`, a four-term dot product and one `mul_add` for every candidate
+   CPU on all three targets and counted the fused scalar and NEON instructions in the assembly:
+   exactly one, the `mul_add`, every time. Counting again over run 1's saved `neoverse-n1` and
+   `neoverse-v2` assembly with SVE's fused forms added (`fmad`, `fmsb`, `fnmla`, ...) also gives
+   one.
 2. **`graphviz_pure_core::math` takes the same path for every arm64 CPU.**
    - `math::fma` calls `f64::mul_add` on every `aarch64` target (its `portable::fma` branch is only
      for `wasm` and x86-64 musl without `target_feature = "fma"`). That is the `fmadd` instruction,
@@ -230,4 +236,6 @@ After the squash merge those commits stay reachable with `git fetch origin pull/
 [42582816610](https://github.com/graphviz-pure/graphviz-pure/actions/runs/42582816610). Run 1's
 `results-*` artifacts (raw samples, per-build manifests) expire on 2026-12-09 and its binaries and
 x86-64 reference hashes on 2026-11-16; run 2 keeps every artifact until 2027-02-07. The per-case
-medians of both runs are in [data/arm64-tuning.tsv](data/arm64-tuning.tsv).
+medians of both runs are in [data/arm64-tuning.tsv](data/arm64-tuning.tsv), whose `run`
+column is 1 or 2.
+
