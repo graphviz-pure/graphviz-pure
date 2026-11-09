@@ -1,0 +1,1225 @@
+run	target	input	format	runs	build	wall_median_ms	wall_min_ms	wall_max_ms	cpu_median_ms	ratio_vs_default
+1	aarch64-apple-darwin	tests/fixtures/unix.gv	svg	5	default	7.6	5.4	10.4	6.4	1.0000
+1	aarch64-apple-darwin	tests/fixtures/unix.gv	svg	5	apple-m1	7.0	5.7	10.3	5.5	0.9203
+1	aarch64-apple-darwin	tests/fixtures/unix.gv	plain	5	default	6.7	5.3	9.9	5.3	1.0000
+1	aarch64-apple-darwin	tests/fixtures/unix.gv	plain	5	apple-m1	9.4	6.4	14.5	7.3	1.3939
+1	aarch64-apple-darwin	tests/fixtures/unix.gv	png	5	default	22.0	19.6	26.3	20.6	1.0000
+1	aarch64-apple-darwin	tests/fixtures/unix.gv	png	5	apple-m1	20.8	19.2	26.2	19.6	0.9480
+1	aarch64-apple-darwin	tests/wild/gv16_graphs_b29_d1e4db.gv	svg	5	default	157.3	147.7	196.9	155.3	1.0000
+1	aarch64-apple-darwin	tests/wild/gv16_graphs_b29_d1e4db.gv	svg	5	apple-m1	154.7	148.8	163.4	150.4	0.9830
+1	aarch64-apple-darwin	tests/wild/gv16_graphs_b29_d1e4db.gv	plain	5	default	157.4	144.8	160.5	154.2	1.0000
+1	aarch64-apple-darwin	tests/wild/gv16_graphs_b29_d1e4db.gv	plain	5	apple-m1	159.0	140.0	168.6	154.9	1.0102
+1	aarch64-apple-darwin	tests/wild/gv16_graphs_b29_d1e4db.gv	png	5	default	916.8	853.1	1002.4	895.8	1.0000
+1	aarch64-apple-darwin	tests/wild/gv16_graphs_b29_d1e4db.gv	png	5	apple-m1	860.3	827.2	957.8	848.5	0.9384
+1	aarch64-apple-darwin	tests/wild/gv16_graphs_b143_5416de.gv	svg	5	default	81.2	56.8	95.2	77.9	1.0000
+1	aarch64-apple-darwin	tests/wild/gv16_graphs_b143_5416de.gv	svg	5	apple-m1	81.8	57.4	90.2	75.6	1.0068
+1	aarch64-apple-darwin	tests/wild/gv16_graphs_b143_5416de.gv	plain	5	default	78.0	72.6	112.7	70.0	1.0000
+1	aarch64-apple-darwin	tests/wild/gv16_graphs_b143_5416de.gv	plain	5	apple-m1	81.9	73.4	98.6	78.0	1.0504
+1	aarch64-apple-darwin	tests/wild/gv16_graphs_b143_5416de.gv	png	5	default	849.3	727.8	950.7	790.8	1.0000
+1	aarch64-apple-darwin	tests/wild/gv16_graphs_b143_5416de.gv	png	5	apple-m1	755.9	722.2	824.9	751.8	0.8900
+1	aarch64-apple-darwin	tests/wild/gv16_graphs_b106_471493.gv	svg	5	default	58.9	43.2	82.9	51.4	1.0000
+1	aarch64-apple-darwin	tests/wild/gv16_graphs_b106_471493.gv	svg	5	apple-m1	53.9	49.0	71.5	50.4	0.9151
+1	aarch64-apple-darwin	tests/wild/gv16_graphs_badvoro_2e8cb8.gv	svg	5	default	150.2	118.0	176.8	141.8	1.0000
+1	aarch64-apple-darwin	tests/wild/gv16_graphs_badvoro_2e8cb8.gv	svg	5	apple-m1	122.3	117.5	209.2	117.0	0.8141
+1	aarch64-apple-darwin	tests/wild/gv16_graphs_b124_4440e1.gv	svg	5	default	34.6	27.1	42.0	30.6	1.0000
+1	aarch64-apple-darwin	tests/wild/gv16_graphs_b124_4440e1.gv	svg	5	apple-m1	33.1	30.7	44.6	30.1	0.9567
+1	aarch64-apple-darwin	synth/dot_dag_1000.gv	svg	5	default	107.9	85.4	125.8	105.2	1.0000
+1	aarch64-apple-darwin	synth/dot_dag_1000.gv	svg	5	apple-m1	110.8	72.4	125.9	109.1	1.0267
+1	aarch64-apple-darwin	synth/dot_dag_1000.gv	plain	5	default	109.0	83.4	112.8	104.7	1.0000
+1	aarch64-apple-darwin	synth/dot_dag_1000.gv	plain	5	apple-m1	107.7	85.3	122.2	105.7	0.9879
+1	aarch64-apple-darwin	synth/dot_dag_5000.gv	svg	5	default	399.8	361.5	420.1	396.2	1.0000
+1	aarch64-apple-darwin	synth/dot_dag_5000.gv	svg	5	apple-m1	397.5	389.8	432.0	395.3	0.9942
+1	aarch64-apple-darwin	synth/dot_dag_5000.gv	plain	5	default	463.1	415.1	505.0	457.0	1.0000
+1	aarch64-apple-darwin	synth/dot_dag_5000.gv	plain	5	apple-m1	458.6	411.8	580.3	453.8	0.9904
+1	aarch64-apple-darwin	synth/dot_dag_20000.gv	svg	3	default	2305.4	2233.1	2359.0	2252.0	1.0000
+1	aarch64-apple-darwin	synth/dot_dag_20000.gv	svg	3	apple-m1	2147.4	2100.6	2279.5	2088.5	0.9315
+1	aarch64-apple-darwin	tests/neato/wild_gv16_graphs_badvoro_2e8cb8.gv	svg	3	default	1377.5	1331.4	1451.9	1373.2	1.0000
+1	aarch64-apple-darwin	tests/neato/wild_gv16_graphs_badvoro_2e8cb8.gv	svg	3	apple-m1	1377.6	1318.8	1744.0	1374.8	1.0001
+1	aarch64-apple-darwin	tests/neato/hw3_vpsc_random200.gv	svg	5	default	36.3	35.9	39.1	35.1	1.0000
+1	aarch64-apple-darwin	tests/neato/hw3_vpsc_random200.gv	svg	5	apple-m1	38.0	36.1	43.8	36.5	1.0474
+1	aarch64-apple-darwin	tests/neato/hw3_vpsc_random200.gv	plain	5	default	38.0	37.6	39.0	36.5	1.0000
+1	aarch64-apple-darwin	tests/neato/hw3_vpsc_random200.gv	plain	5	apple-m1	38.8	37.4	74.0	36.4	1.0200
+1	aarch64-apple-darwin	tests/neato/hw3_vpsc_random200.gv	png	5	default	111.6	109.8	115.8	110.0	1.0000
+1	aarch64-apple-darwin	tests/neato/hw3_vpsc_random200.gv	png	5	apple-m1	114.3	110.3	117.7	112.9	1.0246
+1	aarch64-apple-darwin	tests/neato/hw2_random_120.gv	svg	5	default	22.8	22.3	23.2	21.7	1.0000
+1	aarch64-apple-darwin	tests/neato/hw2_random_120.gv	svg	5	apple-m1	22.3	22.2	26.7	21.3	0.9797
+1	aarch64-apple-darwin	tests/neato/fx_NaN.gv	svg	5	default	13.0	12.2	15.8	11.6	1.0000
+1	aarch64-apple-darwin	tests/neato/fx_NaN.gv	svg	5	apple-m1	12.7	12.5	15.2	11.6	0.9781
+1	aarch64-apple-darwin	tests/neato/wild_gv16_graphs_b69_4b5b48.gv	svg	5	default	10.7	10.4	12.1	9.3	1.0000
+1	aarch64-apple-darwin	tests/neato/wild_gv16_graphs_b69_4b5b48.gv	svg	5	apple-m1	10.6	10.3	12.3	9.4	0.9916
+1	aarch64-apple-darwin	synth/neato_sparse_250.gv	svg	5	default	63.4	63.2	64.9	62.1	1.0000
+1	aarch64-apple-darwin	synth/neato_sparse_250.gv	svg	5	apple-m1	63.5	62.7	65.7	62.5	1.0011
+1	aarch64-apple-darwin	synth/neato_sparse_500.gv	svg	5	default	255.1	250.8	324.4	253.1	1.0000
+1	aarch64-apple-darwin	synth/neato_sparse_500.gv	svg	5	apple-m1	278.3	249.9	317.4	276.1	1.0912
+1	aarch64-apple-darwin	synth/neato_sparse_1000.gv	svg	3	default	1299.5	1225.2	1410.5	1264.6	1.0000
+1	aarch64-apple-darwin	synth/neato_sparse_1000.gv	svg	3	apple-m1	1258.2	1193.2	1833.7	1193.0	0.9682
+1	aarch64-apple-darwin	synth/neato_sparse_2000.gv	svg	3	default	5526.4	5350.0	6006.0	5494.2	1.0000
+1	aarch64-apple-darwin	synth/neato_sparse_2000.gv	svg	3	apple-m1	5439.9	5256.2	5801.3	5409.9	0.9843
+1	aarch64-apple-darwin	tests/fdp/wild_gv16_graphs_badvoro_2e8cb8.gv	svg	3	default	13483.7	12919.3	14323.7	13155.6	1.0000
+1	aarch64-apple-darwin	tests/fdp/wild_gv16_graphs_badvoro_2e8cb8.gv	svg	3	apple-m1	14143.3	13233.0	15556.7	13976.8	1.0489
+1	aarch64-apple-darwin	tests/fdp/wild_gv16_graphs_viewport_651d5b.gv	svg	5	default	235.3	233.8	253.2	234.2	1.0000
+1	aarch64-apple-darwin	tests/fdp/wild_gv16_graphs_viewport_651d5b.gv	svg	5	apple-m1	253.5	235.0	281.8	251.6	1.0776
+1	aarch64-apple-darwin	tests/fdp/wild_gv16_graphs_viewport_651d5b.gv	plain	5	default	243.9	241.8	248.2	241.4	1.0000
+1	aarch64-apple-darwin	tests/fdp/wild_gv16_graphs_viewport_651d5b.gv	plain	5	apple-m1	247.7	242.9	285.7	241.0	1.0157
+1	aarch64-apple-darwin	tests/fdp/wild_gv16_undirected_ngk10_4_793340.gv	svg	5	default	67.4	65.3	113.9	65.5	1.0000
+1	aarch64-apple-darwin	tests/fdp/wild_gv16_undirected_ngk10_4_793340.gv	svg	5	apple-m1	65.6	65.0	82.2	64.5	0.9740
+1	aarch64-apple-darwin	tests/fdp/wild_gv16_graphs_b69_4b5b48.gv	svg	5	default	39.6	39.3	46.1	38.7	1.0000
+1	aarch64-apple-darwin	tests/fdp/wild_gv16_graphs_b69_4b5b48.gv	svg	5	apple-m1	39.5	39.1	41.1	38.5	0.9963
+1	aarch64-apple-darwin	synth/fdp_sparse_250.gv	svg	5	default	460.9	450.5	594.4	459.5	1.0000
+1	aarch64-apple-darwin	synth/fdp_sparse_250.gv	svg	5	apple-m1	453.2	451.2	474.8	452.1	0.9833
+1	aarch64-apple-darwin	synth/fdp_sparse_500.gv	svg	3	default	1908.7	1903.2	2148.9	1904.8	1.0000
+1	aarch64-apple-darwin	synth/fdp_sparse_500.gv	svg	3	apple-m1	1969.0	1960.0	1998.6	1965.9	1.0316
+1	aarch64-apple-darwin	synth/fdp_sparse_1000.gv	svg	3	default	7247.2	7190.6	7264.8	7242.8	1.0000
+1	aarch64-apple-darwin	synth/fdp_sparse_1000.gv	svg	3	apple-m1	7200.1	7195.8	7227.4	7195.9	0.9935
+1	aarch64-apple-darwin	tests/sfdp/gen_rnd2000.gv	svg	5	default	179.2	171.8	180.9	178.1	1.0000
+1	aarch64-apple-darwin	tests/sfdp/gen_rnd2000.gv	svg	5	apple-m1	179.9	169.9	180.6	178.7	1.0036
+1	aarch64-apple-darwin	tests/sfdp/gen_rnd2000.gv	plain	5	default	180.9	170.7	181.6	179.7	1.0000
+1	aarch64-apple-darwin	tests/sfdp/gen_rnd2000.gv	plain	5	apple-m1	179.8	171.5	183.2	178.7	0.9940
+1	aarch64-apple-darwin	tests/sfdp/gen_rnd2000.gv	png	5	default	232.3	221.4	234.0	231.2	1.0000
+1	aarch64-apple-darwin	tests/sfdp/gen_rnd2000.gv	png	5	apple-m1	234.0	220.7	234.9	232.7	1.0072
+1	aarch64-apple-darwin	tests/sfdp/gen_tree9.gv	svg	5	default	107.8	101.8	112.8	106.5	1.0000
+1	aarch64-apple-darwin	tests/sfdp/gen_tree9.gv	svg	5	apple-m1	108.0	105.4	113.4	106.6	1.0012
+1	aarch64-apple-darwin	tests/sfdp/gen_powerlaw1000.gv	svg	5	default	89.9	89.7	92.0	88.9	1.0000
+1	aarch64-apple-darwin	tests/sfdp/gen_powerlaw1000.gv	svg	5	apple-m1	90.2	89.3	90.6	89.2	1.0042
+1	aarch64-apple-darwin	tests/sfdp/attr_quadtree_none.gv	svg	5	default	9.4	9.1	10.0	8.5	1.0000
+1	aarch64-apple-darwin	tests/sfdp/attr_quadtree_none.gv	svg	5	apple-m1	9.4	9.2	9.5	8.5	0.9943
+1	aarch64-apple-darwin	tests/sfdp/gen_grid20x20.gv	svg	5	default	23.9	21.7	24.9	22.2	1.0000
+1	aarch64-apple-darwin	tests/sfdp/gen_grid20x20.gv	svg	5	apple-m1	22.6	21.5	24.9	21.3	0.9475
+1	aarch64-apple-darwin	synth/sfdp_sparse_1000.gv	svg	5	default	75.8	74.7	80.0	74.8	1.0000
+1	aarch64-apple-darwin	synth/sfdp_sparse_1000.gv	svg	5	apple-m1	76.3	75.4	77.1	75.2	1.0063
+1	aarch64-apple-darwin	synth/sfdp_sparse_5000.gv	svg	3	default	523.8	513.5	524.9	522.6	1.0000
+1	aarch64-apple-darwin	synth/sfdp_sparse_5000.gv	svg	3	apple-m1	531.2	522.9	541.7	529.9	1.0141
+1	aarch64-apple-darwin	synth/sfdp_sparse_20000.gv	svg	3	default	2973.3	2935.5	3386.0	2952.0	1.0000
+1	aarch64-apple-darwin	synth/sfdp_sparse_20000.gv	svg	3	apple-m1	2951.7	2640.2	2964.8	2912.5	0.9928
+1	aarch64-apple-darwin	tests/circo/wild_gv16_graphs_badvoro_2e8cb8.gv	svg	3	default	21.5	21.5	26.5	20.4	1.0000
+1	aarch64-apple-darwin	tests/circo/wild_gv16_graphs_badvoro_2e8cb8.gv	svg	3	apple-m1	22.6	22.1	23.3	21.3	1.0487
+1	aarch64-apple-darwin	tests/circo/wild_gv16_linux_x86_dotsplines_dot1_3910e3.gv	svg	5	default	54.6	53.2	55.3	53.5	1.0000
+1	aarch64-apple-darwin	tests/circo/wild_gv16_linux_x86_dotsplines_dot1_3910e3.gv	svg	5	apple-m1	53.6	52.7	54.4	52.3	0.9820
+1	aarch64-apple-darwin	tests/circo/wild_gv16_linux_x86_neatosplines_neato_c2c6f6.gv	svg	5	default	47.1	46.4	49.0	46.0	1.0000
+1	aarch64-apple-darwin	tests/circo/wild_gv16_linux_x86_neatosplines_neato_c2c6f6.gv	svg	5	apple-m1	47.8	47.2	48.4	46.6	1.0142
+1	aarch64-apple-darwin	tests/circo/wild_gv16_directed_sdh_29b016.gv	svg	5	default	5.5	5.5	5.8	4.6	1.0000
+1	aarch64-apple-darwin	tests/circo/wild_gv16_directed_sdh_29b016.gv	svg	5	apple-m1	5.8	5.6	6.7	4.7	1.0538
+1	aarch64-apple-darwin	synth/circo_sparse_100.gv	svg	5	default	5.4	5.3	6.0	4.4	1.0000
+1	aarch64-apple-darwin	synth/circo_sparse_100.gv	svg	5	apple-m1	5.4	5.0	6.4	4.4	1.0055
+1	aarch64-apple-darwin	synth/circo_sparse_200.gv	svg	5	default	7.9	7.5	8.8	6.8	1.0000
+1	aarch64-apple-darwin	synth/circo_sparse_200.gv	svg	5	apple-m1	7.7	7.3	7.9	6.6	0.9842
+1	aarch64-apple-darwin	synth/circo_sparse_400.gv	svg	3	default	12.8	12.4	13.2	11.6	1.0000
+1	aarch64-apple-darwin	synth/circo_sparse_400.gv	svg	3	apple-m1	13.1	12.1	13.3	11.9	1.0246
+1	aarch64-apple-darwin	tests/twopi/wild_gv16_undirected_ngk10_4_793340.gv	svg	5	default	58.3	56.7	62.6	57.2	1.0000
+1	aarch64-apple-darwin	tests/twopi/wild_gv16_undirected_ngk10_4_793340.gv	svg	5	apple-m1	59.1	57.2	62.7	58.0	1.0145
+1	aarch64-apple-darwin	tests/twopi/fx_arrows.gv	svg	5	default	21.9	21.6	28.4	20.7	1.0000
+1	aarch64-apple-darwin	tests/twopi/fx_arrows.gv	svg	5	apple-m1	22.6	21.7	27.0	21.3	1.0318
+1	aarch64-apple-darwin	tests/twopi/wild_gv16_linux_x86_arrows_dot_1ce23f.gv	svg	5	default	22.5	22.0	23.1	21.5	1.0000
+1	aarch64-apple-darwin	tests/twopi/wild_gv16_linux_x86_arrows_dot_1ce23f.gv	svg	5	apple-m1	22.7	22.0	25.6	21.6	1.0119
+1	aarch64-apple-darwin	synth/twopi_tree_1000.gv	svg	5	default	7.9	7.7	9.5	6.8	1.0000
+1	aarch64-apple-darwin	synth/twopi_tree_1000.gv	svg	5	apple-m1	7.8	7.5	9.3	6.8	0.9842
+1	aarch64-apple-darwin	synth/twopi_tree_5000.gv	svg	5	default	28.8	26.0	31.7	27.6	1.0000
+1	aarch64-apple-darwin	synth/twopi_tree_5000.gv	svg	5	apple-m1	27.1	25.7	30.5	25.8	0.9408
+1	aarch64-apple-darwin	synth/twopi_tree_20000.gv	svg	5	default	118.9	111.5	134.8	116.8	1.0000
+1	aarch64-apple-darwin	synth/twopi_tree_20000.gv	svg	5	apple-m1	127.4	111.9	132.8	125.2	1.0717
+1	aarch64-apple-darwin	synth/twopi_tree_20000.gv	plain	5	default	186.0	141.8	225.9	181.9	1.0000
+1	aarch64-apple-darwin	synth/twopi_tree_20000.gv	plain	5	apple-m1	175.0	153.4	235.9	171.1	0.9406
+1	aarch64-apple-darwin	tests/osage/wild_gv16_graphs_b51_33bcb0.gv	svg	5	default	4.8	4.6	5.1	3.9	1.0000
+1	aarch64-apple-darwin	tests/osage/wild_gv16_graphs_b51_33bcb0.gv	svg	5	apple-m1	4.8	4.6	5.2	3.8	0.9801
+1	aarch64-apple-darwin	tests/osage/wild_gv16_graphs_b15_8c212e.gv	svg	5	default	5.5	5.3	6.1	4.5	1.0000
+1	aarch64-apple-darwin	tests/osage/wild_gv16_graphs_b15_8c212e.gv	svg	5	apple-m1	5.6	5.5	6.1	4.6	1.0062
+1	aarch64-apple-darwin	synth/osage_clustered_1000.gv	svg	5	default	6.9	6.6	7.2	5.8	1.0000
+1	aarch64-apple-darwin	synth/osage_clustered_1000.gv	svg	5	apple-m1	6.8	6.5	7.1	5.7	0.9789
+1	aarch64-apple-darwin	synth/osage_clustered_5000.gv	svg	5	default	18.8	17.4	19.9	17.6	1.0000
+1	aarch64-apple-darwin	synth/osage_clustered_5000.gv	svg	5	apple-m1	18.1	17.6	19.0	16.9	0.9646
+1	aarch64-apple-darwin	synth/osage_clustered_20000.gv	svg	5	default	66.2	64.7	94.8	64.5	1.0000
+1	aarch64-apple-darwin	synth/osage_clustered_20000.gv	svg	5	apple-m1	67.5	66.3	97.3	65.5	1.0193
+1	aarch64-apple-darwin	synth/osage_clustered_20000.gv	plain	5	default	70.7	67.9	98.5	69.1	1.0000
+1	aarch64-apple-darwin	synth/osage_clustered_20000.gv	plain	5	apple-m1	80.2	69.3	102.3	78.5	1.1352
+1	aarch64-apple-darwin	tests/patchwork/wild_gv16_graphs_b51_33bcb0.gv	svg	5	default	4.4	3.8	4.6	3.3	1.0000
+1	aarch64-apple-darwin	tests/patchwork/wild_gv16_graphs_b51_33bcb0.gv	svg	5	apple-m1	3.9	3.7	4.1	3.1	0.9012
+1	aarch64-apple-darwin	tests/patchwork/wild_gv16_infosrc_plugins_1a797f.gv	svg	5	default	3.7	3.5	4.1	2.9	1.0000
+1	aarch64-apple-darwin	tests/patchwork/wild_gv16_infosrc_plugins_1a797f.gv	svg	5	apple-m1	3.7	3.5	4.5	2.9	0.9946
+1	aarch64-apple-darwin	synth/patchwork_clustered_1000.gv	svg	5	default	6.4	6.2	6.5	5.4	1.0000
+1	aarch64-apple-darwin	synth/patchwork_clustered_1000.gv	svg	5	apple-m1	6.3	6.0	6.7	5.3	0.9819
+1	aarch64-apple-darwin	synth/patchwork_clustered_5000.gv	svg	5	default	18.1	18.0	18.9	17.1	1.0000
+1	aarch64-apple-darwin	synth/patchwork_clustered_5000.gv	svg	5	apple-m1	18.7	18.0	19.0	17.6	1.0295
+1	aarch64-apple-darwin	synth/patchwork_clustered_20000.gv	svg	5	default	69.1	67.8	73.4	67.5	1.0000
+1	aarch64-apple-darwin	synth/patchwork_clustered_20000.gv	svg	5	apple-m1	70.4	67.3	73.3	68.6	1.0190
+1	aarch64-apple-darwin	synth/patchwork_clustered_20000.gv	plain	5	default	75.0	74.1	75.6	73.6	1.0000
+1	aarch64-apple-darwin	synth/patchwork_clustered_20000.gv	plain	5	apple-m1	74.6	73.7	75.0	73.1	0.9949
+1	aarch64-pc-windows-msvc	tests/fixtures/unix.gv	svg	5	default	9.7	9.6	10.3		1.0000
+1	aarch64-pc-windows-msvc	tests/fixtures/unix.gv	svg	5	neoverse-n1	9.6	9.2	9.9		0.9942
+1	aarch64-pc-windows-msvc	tests/fixtures/unix.gv	svg	5	neoverse-v2	9.8	9.5	10.1		1.0132
+1	aarch64-pc-windows-msvc	tests/fixtures/unix.gv	plain	5	default	9.6	9.5	10.2		1.0000
+1	aarch64-pc-windows-msvc	tests/fixtures/unix.gv	plain	5	neoverse-n1	9.7	9.6	10.4		1.0048
+1	aarch64-pc-windows-msvc	tests/fixtures/unix.gv	plain	5	neoverse-v2	9.6	9.4	9.7		0.9937
+1	aarch64-pc-windows-msvc	tests/fixtures/unix.gv	png	5	default	25.6	25.3	26.1		1.0000
+1	aarch64-pc-windows-msvc	tests/fixtures/unix.gv	png	5	neoverse-n1	26.4	25.7	28.1		1.0289
+1	aarch64-pc-windows-msvc	tests/fixtures/unix.gv	png	5	neoverse-v2	25.5	25.4	29.1		0.9945
+1	aarch64-pc-windows-msvc	tests/wild/gv16_graphs_b29_d1e4db.gv	svg	5	default	147.8	145.4	148.5		1.0000
+1	aarch64-pc-windows-msvc	tests/wild/gv16_graphs_b29_d1e4db.gv	svg	5	neoverse-n1	147.7	146.9	148.6		0.9996
+1	aarch64-pc-windows-msvc	tests/wild/gv16_graphs_b29_d1e4db.gv	svg	5	neoverse-v2	148.7	146.0	149.9		1.0057
+1	aarch64-pc-windows-msvc	tests/wild/gv16_graphs_b29_d1e4db.gv	plain	5	default	146.9	145.8	148.9		1.0000
+1	aarch64-pc-windows-msvc	tests/wild/gv16_graphs_b29_d1e4db.gv	plain	5	neoverse-n1	148.5	147.2	149.4		1.0106
+1	aarch64-pc-windows-msvc	tests/wild/gv16_graphs_b29_d1e4db.gv	plain	5	neoverse-v2	147.7	146.8	150.5		1.0053
+1	aarch64-pc-windows-msvc	tests/wild/gv16_graphs_b29_d1e4db.gv	png	5	default	780.4	778.3	782.6		1.0000
+1	aarch64-pc-windows-msvc	tests/wild/gv16_graphs_b29_d1e4db.gv	png	5	neoverse-n1	797.9	793.9	801.3		1.0224
+1	aarch64-pc-windows-msvc	tests/wild/gv16_graphs_b29_d1e4db.gv	png	5	neoverse-v2	791.2	790.1	791.5		1.0138
+1	aarch64-pc-windows-msvc	tests/wild/gv16_graphs_b143_5416de.gv	svg	5	default	57.7	57.4	59.1		1.0000
+1	aarch64-pc-windows-msvc	tests/wild/gv16_graphs_b143_5416de.gv	svg	5	neoverse-n1	57.6	56.9	57.8		0.9984
+1	aarch64-pc-windows-msvc	tests/wild/gv16_graphs_b143_5416de.gv	svg	5	neoverse-v2	58.1	57.8	58.3		1.0070
+1	aarch64-pc-windows-msvc	tests/wild/gv16_graphs_b143_5416de.gv	plain	5	default	56.9	56.4	57.6		1.0000
+1	aarch64-pc-windows-msvc	tests/wild/gv16_graphs_b143_5416de.gv	plain	5	neoverse-n1	57.6	56.8	57.9		1.0125
+1	aarch64-pc-windows-msvc	tests/wild/gv16_graphs_b143_5416de.gv	plain	5	neoverse-v2	57.8	57.6	58.5		1.0152
+1	aarch64-pc-windows-msvc	tests/wild/gv16_graphs_b143_5416de.gv	png	5	default	759.8	758.1	764.5		1.0000
+1	aarch64-pc-windows-msvc	tests/wild/gv16_graphs_b143_5416de.gv	png	5	neoverse-n1	775.8	773.1	786.8		1.0211
+1	aarch64-pc-windows-msvc	tests/wild/gv16_graphs_b143_5416de.gv	png	5	neoverse-v2	773.1	771.8	775.4		1.0175
+1	aarch64-pc-windows-msvc	tests/wild/gv16_graphs_b106_471493.gv	svg	5	default	45.6	45.4	46.2		1.0000
+1	aarch64-pc-windows-msvc	tests/wild/gv16_graphs_b106_471493.gv	svg	5	neoverse-n1	46.2	45.7	46.6		1.0114
+1	aarch64-pc-windows-msvc	tests/wild/gv16_graphs_b106_471493.gv	svg	5	neoverse-v2	45.9	45.3	46.1		1.0049
+1	aarch64-pc-windows-msvc	tests/wild/gv16_graphs_badvoro_2e8cb8.gv	svg	5	default	116.1	115.9	116.3		1.0000
+1	aarch64-pc-windows-msvc	tests/wild/gv16_graphs_badvoro_2e8cb8.gv	svg	5	neoverse-n1	115.8	114.7	117.2		0.9975
+1	aarch64-pc-windows-msvc	tests/wild/gv16_graphs_badvoro_2e8cb8.gv	svg	5	neoverse-v2	115.9	114.6	116.9		0.9983
+1	aarch64-pc-windows-msvc	tests/wild/gv16_graphs_b124_4440e1.gv	svg	5	default	28.9	28.8	29.8		1.0000
+1	aarch64-pc-windows-msvc	tests/wild/gv16_graphs_b124_4440e1.gv	svg	5	neoverse-n1	29.4	28.7	30.0		1.0165
+1	aarch64-pc-windows-msvc	tests/wild/gv16_graphs_b124_4440e1.gv	svg	5	neoverse-v2	29.1	28.7	30.4		1.0050
+1	aarch64-pc-windows-msvc	synth/dot_dag_1000.gv	svg	5	default	68.6	67.2	69.5		1.0000
+1	aarch64-pc-windows-msvc	synth/dot_dag_1000.gv	svg	5	neoverse-n1	67.7	67.2	68.7		0.9866
+1	aarch64-pc-windows-msvc	synth/dot_dag_1000.gv	svg	5	neoverse-v2	67.9	67.2	68.7		0.9896
+1	aarch64-pc-windows-msvc	synth/dot_dag_1000.gv	plain	5	default	67.6	66.2	68.5		1.0000
+1	aarch64-pc-windows-msvc	synth/dot_dag_1000.gv	plain	5	neoverse-n1	66.4	66.4	68.2		0.9827
+1	aarch64-pc-windows-msvc	synth/dot_dag_1000.gv	plain	5	neoverse-v2	66.7	66.2	67.3		0.9876
+1	aarch64-pc-windows-msvc	synth/dot_dag_5000.gv	svg	5	default	381.9	377.0	383.8		1.0000
+1	aarch64-pc-windows-msvc	synth/dot_dag_5000.gv	svg	5	neoverse-n1	379.8	375.6	385.9		0.9944
+1	aarch64-pc-windows-msvc	synth/dot_dag_5000.gv	svg	5	neoverse-v2	383.3	376.3	385.5		1.0037
+1	aarch64-pc-windows-msvc	synth/dot_dag_5000.gv	plain	5	default	379.6	369.6	384.0		1.0000
+1	aarch64-pc-windows-msvc	synth/dot_dag_5000.gv	plain	5	neoverse-n1	376.5	373.5	389.3		0.9919
+1	aarch64-pc-windows-msvc	synth/dot_dag_5000.gv	plain	5	neoverse-v2	382.2	377.6	385.3		1.0067
+1	aarch64-pc-windows-msvc	synth/dot_dag_20000.gv	svg	3	default	1840.9	1833.7	1846.4		1.0000
+1	aarch64-pc-windows-msvc	synth/dot_dag_20000.gv	svg	3	neoverse-n1	1850.4	1832.2	1891.5		1.0051
+1	aarch64-pc-windows-msvc	synth/dot_dag_20000.gv	svg	3	neoverse-v2	1845.1	1834.6	1847.2		1.0023
+1	aarch64-pc-windows-msvc	tests/neato/wild_gv16_graphs_badvoro_2e8cb8.gv	svg	3	default	1326.0	1325.5	1328.5		1.0000
+1	aarch64-pc-windows-msvc	tests/neato/wild_gv16_graphs_badvoro_2e8cb8.gv	svg	3	neoverse-n1	1350.6	1348.8	1355.3		1.0186
+1	aarch64-pc-windows-msvc	tests/neato/wild_gv16_graphs_badvoro_2e8cb8.gv	svg	3	neoverse-v2	1281.3	1279.4	1281.5		0.9663
+1	aarch64-pc-windows-msvc	tests/neato/hw3_vpsc_random200.gv	svg	5	default	40.6	40.0	41.0		1.0000
+1	aarch64-pc-windows-msvc	tests/neato/hw3_vpsc_random200.gv	svg	5	neoverse-n1	41.6	41.0	42.0		1.0257
+1	aarch64-pc-windows-msvc	tests/neato/hw3_vpsc_random200.gv	svg	5	neoverse-v2	40.1	39.9	40.6		0.9875
+1	aarch64-pc-windows-msvc	tests/neato/hw3_vpsc_random200.gv	plain	5	default	41.0	40.6	41.2		1.0000
+1	aarch64-pc-windows-msvc	tests/neato/hw3_vpsc_random200.gv	plain	5	neoverse-n1	41.4	41.1	42.0		1.0082
+1	aarch64-pc-windows-msvc	tests/neato/hw3_vpsc_random200.gv	plain	5	neoverse-v2	40.2	40.1	40.6		0.9801
+1	aarch64-pc-windows-msvc	tests/neato/hw3_vpsc_random200.gv	png	5	default	119.1	118.4	119.5		1.0000
+1	aarch64-pc-windows-msvc	tests/neato/hw3_vpsc_random200.gv	png	5	neoverse-n1	120.7	120.3	121.0		1.0131
+1	aarch64-pc-windows-msvc	tests/neato/hw3_vpsc_random200.gv	png	5	neoverse-v2	119.5	118.6	120.4		1.0037
+1	aarch64-pc-windows-msvc	tests/neato/hw2_random_120.gv	svg	5	default	26.3	25.9	26.7		1.0000
+1	aarch64-pc-windows-msvc	tests/neato/hw2_random_120.gv	svg	5	neoverse-n1	27.0	26.7	27.5		1.0263
+1	aarch64-pc-windows-msvc	tests/neato/hw2_random_120.gv	svg	5	neoverse-v2	26.0	25.9	26.4		0.9883
+1	aarch64-pc-windows-msvc	tests/neato/fx_NaN.gv	svg	5	default	17.8	17.5	17.9		1.0000
+1	aarch64-pc-windows-msvc	tests/neato/fx_NaN.gv	svg	5	neoverse-n1	18.0	17.7	18.3		1.0136
+1	aarch64-pc-windows-msvc	tests/neato/fx_NaN.gv	svg	5	neoverse-v2	17.4	17.4	18.3		0.9791
+1	aarch64-pc-windows-msvc	tests/neato/wild_gv16_graphs_b69_4b5b48.gv	svg	5	default	16.6	16.2	17.9		1.0000
+1	aarch64-pc-windows-msvc	tests/neato/wild_gv16_graphs_b69_4b5b48.gv	svg	5	neoverse-n1	16.9	16.6	17.8		1.0208
+1	aarch64-pc-windows-msvc	tests/neato/wild_gv16_graphs_b69_4b5b48.gv	svg	5	neoverse-v2	16.7	16.4	18.1		1.0077
+1	aarch64-pc-windows-msvc	synth/neato_sparse_250.gv	svg	5	default	66.3	65.8	66.7		1.0000
+1	aarch64-pc-windows-msvc	synth/neato_sparse_250.gv	svg	5	neoverse-n1	67.2	66.9	67.6		1.0142
+1	aarch64-pc-windows-msvc	synth/neato_sparse_250.gv	svg	5	neoverse-v2	65.3	64.8	65.3		0.9850
+1	aarch64-pc-windows-msvc	synth/neato_sparse_500.gv	svg	5	default	262.3	261.7	266.0		1.0000
+1	aarch64-pc-windows-msvc	synth/neato_sparse_500.gv	svg	5	neoverse-n1	267.3	266.9	270.3		1.0192
+1	aarch64-pc-windows-msvc	synth/neato_sparse_500.gv	svg	5	neoverse-v2	255.8	254.8	256.5		0.9755
+1	aarch64-pc-windows-msvc	synth/neato_sparse_1000.gv	svg	3	default	1157.9	1155.5	1164.5		1.0000
+1	aarch64-pc-windows-msvc	synth/neato_sparse_1000.gv	svg	3	neoverse-n1	1178.2	1175.1	1182.1		1.0175
+1	aarch64-pc-windows-msvc	synth/neato_sparse_1000.gv	svg	3	neoverse-v2	1122.5	1119.5	1125.2		0.9694
+1	aarch64-pc-windows-msvc	synth/neato_sparse_2000.gv	svg	3	default	4475.3	4474.1	4494.4		1.0000
+1	aarch64-pc-windows-msvc	synth/neato_sparse_2000.gv	svg	3	neoverse-n1	4570.6	4562.8	4595.4		1.0213
+1	aarch64-pc-windows-msvc	synth/neato_sparse_2000.gv	svg	3	neoverse-v2	4314.2	4302.1	4324.1		0.9640
+1	aarch64-pc-windows-msvc	tests/fdp/wild_gv16_graphs_badvoro_2e8cb8.gv	svg	3	default	17173.0	17172.2	17175.3		1.0000
+1	aarch64-pc-windows-msvc	tests/fdp/wild_gv16_graphs_badvoro_2e8cb8.gv	svg	3	neoverse-n1	17362.1	17348.8	17362.6		1.0110
+1	aarch64-pc-windows-msvc	tests/fdp/wild_gv16_graphs_badvoro_2e8cb8.gv	svg	3	neoverse-v2	17589.3	17583.8	17602.6		1.0242
+1	aarch64-pc-windows-msvc	tests/fdp/wild_gv16_graphs_viewport_651d5b.gv	svg	5	default	358.0	357.7	358.3		1.0000
+1	aarch64-pc-windows-msvc	tests/fdp/wild_gv16_graphs_viewport_651d5b.gv	svg	5	neoverse-n1	362.9	362.6	363.0		1.0138
+1	aarch64-pc-windows-msvc	tests/fdp/wild_gv16_graphs_viewport_651d5b.gv	svg	5	neoverse-v2	368.0	367.1	368.8		1.0281
+1	aarch64-pc-windows-msvc	tests/fdp/wild_gv16_graphs_viewport_651d5b.gv	plain	5	default	357.7	357.2	360.6		1.0000
+1	aarch64-pc-windows-msvc	tests/fdp/wild_gv16_graphs_viewport_651d5b.gv	plain	5	neoverse-n1	362.4	362.2	364.1		1.0132
+1	aarch64-pc-windows-msvc	tests/fdp/wild_gv16_graphs_viewport_651d5b.gv	plain	5	neoverse-v2	367.6	367.1	368.6		1.0276
+1	aarch64-pc-windows-msvc	tests/fdp/wild_gv16_undirected_ngk10_4_793340.gv	svg	5	default	74.3	74.0	74.5		1.0000
+1	aarch64-pc-windows-msvc	tests/fdp/wild_gv16_undirected_ngk10_4_793340.gv	svg	5	neoverse-n1	75.0	74.7	76.7		1.0083
+1	aarch64-pc-windows-msvc	tests/fdp/wild_gv16_undirected_ngk10_4_793340.gv	svg	5	neoverse-v2	75.9	75.6	76.9		1.0214
+1	aarch64-pc-windows-msvc	tests/fdp/wild_gv16_graphs_b69_4b5b48.gv	svg	5	default	60.3	59.9	61.0		1.0000
+1	aarch64-pc-windows-msvc	tests/fdp/wild_gv16_graphs_b69_4b5b48.gv	svg	5	neoverse-n1	61.3	61.0	61.5		1.0162
+1	aarch64-pc-windows-msvc	tests/fdp/wild_gv16_graphs_b69_4b5b48.gv	svg	5	neoverse-v2	61.6	60.9	65.8		1.0215
+1	aarch64-pc-windows-msvc	synth/fdp_sparse_250.gv	svg	5	default	644.2	643.5	645.3		1.0000
+1	aarch64-pc-windows-msvc	synth/fdp_sparse_250.gv	svg	5	neoverse-n1	652.7	652.3	653.0		1.0132
+1	aarch64-pc-windows-msvc	synth/fdp_sparse_250.gv	svg	5	neoverse-v2	659.5	659.2	661.1		1.0238
+1	aarch64-pc-windows-msvc	synth/fdp_sparse_500.gv	svg	3	default	2703.3	2701.6	2706.3		1.0000
+1	aarch64-pc-windows-msvc	synth/fdp_sparse_500.gv	svg	3	neoverse-n1	2737.1	2732.5	2738.6		1.0125
+1	aarch64-pc-windows-msvc	synth/fdp_sparse_500.gv	svg	3	neoverse-v2	2766.9	2765.4	2785.6		1.0235
+1	aarch64-pc-windows-msvc	synth/fdp_sparse_1000.gv	svg	3	default	10334.5	10329.9	10337.6		1.0000
+1	aarch64-pc-windows-msvc	synth/fdp_sparse_1000.gv	svg	3	neoverse-n1	10455.3	10449.1	10459.8		1.0117
+1	aarch64-pc-windows-msvc	synth/fdp_sparse_1000.gv	svg	3	neoverse-v2	10586.1	10581.1	10618.6		1.0243
+1	aarch64-pc-windows-msvc	tests/sfdp/gen_rnd2000.gv	svg	5	default	202.9	202.5	203.7		1.0000
+1	aarch64-pc-windows-msvc	tests/sfdp/gen_rnd2000.gv	svg	5	neoverse-n1	203.5	202.7	205.1		1.0028
+1	aarch64-pc-windows-msvc	tests/sfdp/gen_rnd2000.gv	svg	5	neoverse-v2	202.1	201.1	203.1		0.9962
+1	aarch64-pc-windows-msvc	tests/sfdp/gen_rnd2000.gv	plain	5	default	203.7	202.4	204.1		1.0000
+1	aarch64-pc-windows-msvc	tests/sfdp/gen_rnd2000.gv	plain	5	neoverse-n1	203.8	203.3	204.8		1.0006
+1	aarch64-pc-windows-msvc	tests/sfdp/gen_rnd2000.gv	plain	5	neoverse-v2	202.2	201.2	203.5		0.9929
+1	aarch64-pc-windows-msvc	tests/sfdp/gen_rnd2000.gv	png	5	default	268.8	268.0	269.8		1.0000
+1	aarch64-pc-windows-msvc	tests/sfdp/gen_rnd2000.gv	png	5	neoverse-n1	270.9	270.0	271.1		1.0079
+1	aarch64-pc-windows-msvc	tests/sfdp/gen_rnd2000.gv	png	5	neoverse-v2	268.0	266.7	269.7		0.9970
+1	aarch64-pc-windows-msvc	tests/sfdp/gen_tree9.gv	svg	5	default	128.2	127.7	128.3		1.0000
+1	aarch64-pc-windows-msvc	tests/sfdp/gen_tree9.gv	svg	5	neoverse-n1	124.2	123.7	125.1		0.9691
+1	aarch64-pc-windows-msvc	tests/sfdp/gen_tree9.gv	svg	5	neoverse-v2	126.7	126.4	126.9		0.9883
+1	aarch64-pc-windows-msvc	tests/sfdp/gen_powerlaw1000.gv	svg	5	default	115.5	115.3	115.8		1.0000
+1	aarch64-pc-windows-msvc	tests/sfdp/gen_powerlaw1000.gv	svg	5	neoverse-n1	112.2	111.5	113.8		0.9715
+1	aarch64-pc-windows-msvc	tests/sfdp/gen_powerlaw1000.gv	svg	5	neoverse-v2	114.4	113.7	114.5		0.9904
+1	aarch64-pc-windows-msvc	tests/sfdp/attr_quadtree_none.gv	svg	5	default	17.2	17.0	18.1		1.0000
+1	aarch64-pc-windows-msvc	tests/sfdp/attr_quadtree_none.gv	svg	5	neoverse-n1	17.4	17.3	17.8		1.0143
+1	aarch64-pc-windows-msvc	tests/sfdp/attr_quadtree_none.gv	svg	5	neoverse-v2	17.3	17.1	17.6		1.0037
+1	aarch64-pc-windows-msvc	tests/sfdp/gen_grid20x20.gv	svg	5	default	31.5	31.3	31.8		1.0000
+1	aarch64-pc-windows-msvc	tests/sfdp/gen_grid20x20.gv	svg	5	neoverse-n1	31.8	31.4	32.6		1.0067
+1	aarch64-pc-windows-msvc	tests/sfdp/gen_grid20x20.gv	svg	5	neoverse-v2	31.8	31.2	32.5		1.0081
+1	aarch64-pc-windows-msvc	synth/sfdp_sparse_1000.gv	svg	5	default	93.5	92.9	94.2		1.0000
+1	aarch64-pc-windows-msvc	synth/sfdp_sparse_1000.gv	svg	5	neoverse-n1	93.8	93.5	94.0		1.0023
+1	aarch64-pc-windows-msvc	synth/sfdp_sparse_1000.gv	svg	5	neoverse-v2	93.1	92.3	93.9		0.9949
+1	aarch64-pc-windows-msvc	synth/sfdp_sparse_5000.gv	svg	3	default	605.3	603.3	611.4		1.0000
+1	aarch64-pc-windows-msvc	synth/sfdp_sparse_5000.gv	svg	3	neoverse-n1	608.6	606.3	612.4		1.0055
+1	aarch64-pc-windows-msvc	synth/sfdp_sparse_5000.gv	svg	3	neoverse-v2	605.8	595.5	606.0		1.0009
+1	aarch64-pc-windows-msvc	synth/sfdp_sparse_20000.gv	svg	3	default	3700.5	3693.4	3722.7		1.0000
+1	aarch64-pc-windows-msvc	synth/sfdp_sparse_20000.gv	svg	3	neoverse-n1	3695.8	3694.1	3736.9		0.9987
+1	aarch64-pc-windows-msvc	synth/sfdp_sparse_20000.gv	svg	3	neoverse-v2	3671.4	3659.8	3681.5		0.9921
+1	aarch64-pc-windows-msvc	tests/circo/wild_gv16_graphs_badvoro_2e8cb8.gv	svg	3	default	33.4	33.3	36.7		1.0000
+1	aarch64-pc-windows-msvc	tests/circo/wild_gv16_graphs_badvoro_2e8cb8.gv	svg	3	neoverse-n1	33.3	33.1	37.4		0.9981
+1	aarch64-pc-windows-msvc	tests/circo/wild_gv16_graphs_badvoro_2e8cb8.gv	svg	3	neoverse-v2	34.0	33.4	36.4		1.0184
+1	aarch64-pc-windows-msvc	tests/circo/wild_gv16_linux_x86_dotsplines_dot1_3910e3.gv	svg	5	default	60.7	60.5	61.3		1.0000
+1	aarch64-pc-windows-msvc	tests/circo/wild_gv16_linux_x86_dotsplines_dot1_3910e3.gv	svg	5	neoverse-n1	61.0	60.8	61.1		1.0050
+1	aarch64-pc-windows-msvc	tests/circo/wild_gv16_linux_x86_dotsplines_dot1_3910e3.gv	svg	5	neoverse-v2	61.2	61.1	61.5		1.0071
+1	aarch64-pc-windows-msvc	tests/circo/wild_gv16_linux_x86_neatosplines_neato_c2c6f6.gv	svg	5	default	55.5	54.9	55.7		1.0000
+1	aarch64-pc-windows-msvc	tests/circo/wild_gv16_linux_x86_neatosplines_neato_c2c6f6.gv	svg	5	neoverse-n1	55.5	55.2	55.8		0.9995
+1	aarch64-pc-windows-msvc	tests/circo/wild_gv16_linux_x86_neatosplines_neato_c2c6f6.gv	svg	5	neoverse-v2	55.5	55.3	56.3		0.9986
+1	aarch64-pc-windows-msvc	tests/circo/wild_gv16_directed_sdh_29b016.gv	svg	5	default	10.9	10.9	11.4		1.0000
+1	aarch64-pc-windows-msvc	tests/circo/wild_gv16_directed_sdh_29b016.gv	svg	5	neoverse-n1	11.0	10.9	11.1		1.0100
+1	aarch64-pc-windows-msvc	tests/circo/wild_gv16_directed_sdh_29b016.gv	svg	5	neoverse-v2	11.0	10.9	11.2		1.0072
+1	aarch64-pc-windows-msvc	synth/circo_sparse_100.gv	svg	5	default	10.5	10.3	10.8		1.0000
+1	aarch64-pc-windows-msvc	synth/circo_sparse_100.gv	svg	5	neoverse-n1	10.6	10.3	11.1		1.0118
+1	aarch64-pc-windows-msvc	synth/circo_sparse_100.gv	svg	5	neoverse-v2	10.6	10.4	11.3		1.0086
+1	aarch64-pc-windows-msvc	synth/circo_sparse_200.gv	svg	5	default	13.7	13.4	14.1		1.0000
+1	aarch64-pc-windows-msvc	synth/circo_sparse_200.gv	svg	5	neoverse-n1	13.9	13.5	16.6		1.0120
+1	aarch64-pc-windows-msvc	synth/circo_sparse_200.gv	svg	5	neoverse-v2	13.7	13.7	14.4		0.9976
+1	aarch64-pc-windows-msvc	synth/circo_sparse_400.gv	svg	3	default	20.5	20.4	24.0		1.0000
+1	aarch64-pc-windows-msvc	synth/circo_sparse_400.gv	svg	3	neoverse-n1	21.5	20.5	23.9		1.0526
+1	aarch64-pc-windows-msvc	synth/circo_sparse_400.gv	svg	3	neoverse-v2	21.3	20.7	24.6		1.0423
+1	aarch64-pc-windows-msvc	tests/twopi/wild_gv16_undirected_ngk10_4_793340.gv	svg	5	default	66.2	66.0	67.5		1.0000
+1	aarch64-pc-windows-msvc	tests/twopi/wild_gv16_undirected_ngk10_4_793340.gv	svg	5	neoverse-n1	67.2	67.0	67.5		1.0148
+1	aarch64-pc-windows-msvc	tests/twopi/wild_gv16_undirected_ngk10_4_793340.gv	svg	5	neoverse-v2	68.3	67.5	68.3		1.0317
+1	aarch64-pc-windows-msvc	tests/twopi/fx_arrows.gv	svg	5	default	29.1	28.9	30.2		1.0000
+1	aarch64-pc-windows-msvc	tests/twopi/fx_arrows.gv	svg	5	neoverse-n1	29.2	29.2	29.4		1.0050
+1	aarch64-pc-windows-msvc	tests/twopi/fx_arrows.gv	svg	5	neoverse-v2	29.3	29.0	29.6		1.0085
+1	aarch64-pc-windows-msvc	tests/twopi/wild_gv16_linux_x86_arrows_dot_1ce23f.gv	svg	5	default	29.1	28.7	29.4		1.0000
+1	aarch64-pc-windows-msvc	tests/twopi/wild_gv16_linux_x86_arrows_dot_1ce23f.gv	svg	5	neoverse-n1	29.2	29.1	29.7		1.0045
+1	aarch64-pc-windows-msvc	tests/twopi/wild_gv16_linux_x86_arrows_dot_1ce23f.gv	svg	5	neoverse-v2	29.3	29.1	29.4		1.0054
+1	aarch64-pc-windows-msvc	synth/twopi_tree_1000.gv	svg	5	default	16.9	16.3	18.0		1.0000
+1	aarch64-pc-windows-msvc	synth/twopi_tree_1000.gv	svg	5	neoverse-n1	16.6	16.4	17.1		0.9831
+1	aarch64-pc-windows-msvc	synth/twopi_tree_1000.gv	svg	5	neoverse-v2	17.1	16.3	17.2		1.0103
+1	aarch64-pc-windows-msvc	synth/twopi_tree_5000.gv	svg	5	default	46.4	45.1	47.3		1.0000
+1	aarch64-pc-windows-msvc	synth/twopi_tree_5000.gv	svg	5	neoverse-n1	47.4	46.8	48.1		1.0222
+1	aarch64-pc-windows-msvc	synth/twopi_tree_5000.gv	svg	5	neoverse-v2	46.9	46.5	48.4		1.0101
+1	aarch64-pc-windows-msvc	synth/twopi_tree_20000.gv	svg	5	default	169.8	163.1	173.9		1.0000
+1	aarch64-pc-windows-msvc	synth/twopi_tree_20000.gv	svg	5	neoverse-n1	170.7	167.2	183.0		1.0057
+1	aarch64-pc-windows-msvc	synth/twopi_tree_20000.gv	svg	5	neoverse-v2	169.4	168.7	173.5		0.9979
+1	aarch64-pc-windows-msvc	synth/twopi_tree_20000.gv	plain	5	default	173.3	170.1	176.1		1.0000
+1	aarch64-pc-windows-msvc	synth/twopi_tree_20000.gv	plain	5	neoverse-n1	173.5	172.3	179.1		1.0016
+1	aarch64-pc-windows-msvc	synth/twopi_tree_20000.gv	plain	5	neoverse-v2	176.2	170.2	177.1		1.0170
+1	aarch64-pc-windows-msvc	tests/osage/wild_gv16_graphs_b51_33bcb0.gv	svg	5	default	10.0	9.8	11.8		1.0000
+1	aarch64-pc-windows-msvc	tests/osage/wild_gv16_graphs_b51_33bcb0.gv	svg	5	neoverse-n1	10.0	9.9	10.5		1.0067
+1	aarch64-pc-windows-msvc	tests/osage/wild_gv16_graphs_b51_33bcb0.gv	svg	5	neoverse-v2	10.0	9.9	10.6		1.0041
+1	aarch64-pc-windows-msvc	tests/osage/wild_gv16_graphs_b15_8c212e.gv	svg	5	default	11.8	11.4	12.1		1.0000
+1	aarch64-pc-windows-msvc	tests/osage/wild_gv16_graphs_b15_8c212e.gv	svg	5	neoverse-n1	11.6	11.5	12.0		0.9847
+1	aarch64-pc-windows-msvc	tests/osage/wild_gv16_graphs_b15_8c212e.gv	svg	5	neoverse-v2	11.6	11.6	12.0		0.9798
+1	aarch64-pc-windows-msvc	synth/osage_clustered_1000.gv	svg	5	default	13.5	13.1	15.1		1.0000
+1	aarch64-pc-windows-msvc	synth/osage_clustered_1000.gv	svg	5	neoverse-n1	13.6	13.2	16.7		1.0069
+1	aarch64-pc-windows-msvc	synth/osage_clustered_1000.gv	svg	5	neoverse-v2	13.3	13.1	14.6		0.9812
+1	aarch64-pc-windows-msvc	synth/osage_clustered_5000.gv	svg	5	default	34.3	33.1	35.7		1.0000
+1	aarch64-pc-windows-msvc	synth/osage_clustered_5000.gv	svg	5	neoverse-n1	35.3	33.0	37.3		1.0293
+1	aarch64-pc-windows-msvc	synth/osage_clustered_5000.gv	svg	5	neoverse-v2	34.7	33.0	35.3		1.0096
+1	aarch64-pc-windows-msvc	synth/osage_clustered_20000.gv	svg	5	default	102.8	101.7	104.5		1.0000
+1	aarch64-pc-windows-msvc	synth/osage_clustered_20000.gv	svg	5	neoverse-n1	105.2	103.6	106.2		1.0226
+1	aarch64-pc-windows-msvc	synth/osage_clustered_20000.gv	svg	5	neoverse-v2	103.2	102.6	105.2		1.0033
+1	aarch64-pc-windows-msvc	synth/osage_clustered_20000.gv	plain	5	default	104.8	103.9	105.9		1.0000
+1	aarch64-pc-windows-msvc	synth/osage_clustered_20000.gv	plain	5	neoverse-n1	105.8	104.7	107.2		1.0098
+1	aarch64-pc-windows-msvc	synth/osage_clustered_20000.gv	plain	5	neoverse-v2	106.5	106.0	107.9		1.0163
+1	aarch64-pc-windows-msvc	tests/patchwork/wild_gv16_graphs_b51_33bcb0.gv	svg	5	default	10.2	10.2	11.8		1.0000
+1	aarch64-pc-windows-msvc	tests/patchwork/wild_gv16_graphs_b51_33bcb0.gv	svg	5	neoverse-n1	10.4	10.0	10.8		1.0133
+1	aarch64-pc-windows-msvc	tests/patchwork/wild_gv16_graphs_b51_33bcb0.gv	svg	5	neoverse-v2	10.3	10.1	10.7		1.0090
+1	aarch64-pc-windows-msvc	tests/patchwork/wild_gv16_infosrc_plugins_1a797f.gv	svg	5	default	10.0	9.6	10.3		1.0000
+1	aarch64-pc-windows-msvc	tests/patchwork/wild_gv16_infosrc_plugins_1a797f.gv	svg	5	neoverse-n1	9.9	9.7	10.2		0.9950
+1	aarch64-pc-windows-msvc	tests/patchwork/wild_gv16_infosrc_plugins_1a797f.gv	svg	5	neoverse-v2	10.0	9.6	10.2		1.0030
+1	aarch64-pc-windows-msvc	synth/patchwork_clustered_1000.gv	svg	5	default	14.5	14.3	14.6		1.0000
+1	aarch64-pc-windows-msvc	synth/patchwork_clustered_1000.gv	svg	5	neoverse-n1	14.4	14.1	15.2		0.9912
+1	aarch64-pc-windows-msvc	synth/patchwork_clustered_1000.gv	svg	5	neoverse-v2	14.4	14.2	14.7		0.9934
+1	aarch64-pc-windows-msvc	synth/patchwork_clustered_5000.gv	svg	5	default	36.3	35.3	36.8		1.0000
+1	aarch64-pc-windows-msvc	synth/patchwork_clustered_5000.gv	svg	5	neoverse-n1	36.2	35.3	36.7		0.9966
+1	aarch64-pc-windows-msvc	synth/patchwork_clustered_5000.gv	svg	5	neoverse-v2	36.0	35.3	37.2		0.9897
+1	aarch64-pc-windows-msvc	synth/patchwork_clustered_20000.gv	svg	5	default	114.6	113.7	117.5		1.0000
+1	aarch64-pc-windows-msvc	synth/patchwork_clustered_20000.gv	svg	5	neoverse-n1	116.3	114.8	117.5		1.0156
+1	aarch64-pc-windows-msvc	synth/patchwork_clustered_20000.gv	svg	5	neoverse-v2	115.1	113.4	115.7		1.0052
+1	aarch64-pc-windows-msvc	synth/patchwork_clustered_20000.gv	plain	5	default	110.5	108.8	113.2		1.0000
+1	aarch64-pc-windows-msvc	synth/patchwork_clustered_20000.gv	plain	5	neoverse-n1	115.0	113.3	115.8		1.0411
+1	aarch64-pc-windows-msvc	synth/patchwork_clustered_20000.gv	plain	5	neoverse-v2	113.7	113.0	115.1		1.0288
+1	aarch64-unknown-linux-musl	tests/fixtures/unix.gv	svg	5	default	3.4	3.2	3.5	3.3	1.0000
+1	aarch64-unknown-linux-musl	tests/fixtures/unix.gv	svg	5	neoverse-n1	3.4	3.2	4.2	3.3	1.0105
+1	aarch64-unknown-linux-musl	tests/fixtures/unix.gv	svg	5	neoverse-v2	3.3	3.2	3.4	3.2	0.9715
+1	aarch64-unknown-linux-musl	tests/fixtures/unix.gv	plain	5	default	3.3	3.2	3.4	3.2	1.0000
+1	aarch64-unknown-linux-musl	tests/fixtures/unix.gv	plain	5	neoverse-n1	3.3	3.2	3.3	3.2	0.9842
+1	aarch64-unknown-linux-musl	tests/fixtures/unix.gv	plain	5	neoverse-v2	3.3	3.2	3.3	3.2	0.9980
+1	aarch64-unknown-linux-musl	tests/fixtures/unix.gv	png	5	default	19.4	19.1	19.9	19.3	1.0000
+1	aarch64-unknown-linux-musl	tests/fixtures/unix.gv	png	5	neoverse-n1	20.0	19.0	20.0	19.8	1.0289
+1	aarch64-unknown-linux-musl	tests/fixtures/unix.gv	png	5	neoverse-v2	19.8	19.2	20.6	19.7	1.0195
+1	aarch64-unknown-linux-musl	tests/wild/gv16_graphs_b29_d1e4db.gv	svg	5	default	148.9	147.7	151.5	148.7	1.0000
+1	aarch64-unknown-linux-musl	tests/wild/gv16_graphs_b29_d1e4db.gv	svg	5	neoverse-n1	148.3	147.2	152.1	148.0	0.9956
+1	aarch64-unknown-linux-musl	tests/wild/gv16_graphs_b29_d1e4db.gv	svg	5	neoverse-v2	149.7	146.0	152.0	149.4	1.0048
+1	aarch64-unknown-linux-musl	tests/wild/gv16_graphs_b29_d1e4db.gv	plain	5	default	148.2	147.1	150.1	147.9	1.0000
+1	aarch64-unknown-linux-musl	tests/wild/gv16_graphs_b29_d1e4db.gv	plain	5	neoverse-n1	149.0	145.0	150.5	148.8	1.0057
+1	aarch64-unknown-linux-musl	tests/wild/gv16_graphs_b29_d1e4db.gv	plain	5	neoverse-v2	148.7	145.3	150.3	148.5	1.0035
+1	aarch64-unknown-linux-musl	tests/wild/gv16_graphs_b29_d1e4db.gv	png	5	default	831.5	826.7	838.8	831.3	1.0000
+1	aarch64-unknown-linux-musl	tests/wild/gv16_graphs_b29_d1e4db.gv	png	5	neoverse-n1	851.1	841.9	851.5	850.8	1.0235
+1	aarch64-unknown-linux-musl	tests/wild/gv16_graphs_b29_d1e4db.gv	png	5	neoverse-v2	840.6	837.0	849.8	840.3	1.0109
+1	aarch64-unknown-linux-musl	tests/wild/gv16_graphs_b143_5416de.gv	svg	5	default	53.0	52.6	53.2	52.9	1.0000
+1	aarch64-unknown-linux-musl	tests/wild/gv16_graphs_b143_5416de.gv	svg	5	neoverse-n1	53.2	52.9	54.1	53.0	1.0023
+1	aarch64-unknown-linux-musl	tests/wild/gv16_graphs_b143_5416de.gv	svg	5	neoverse-v2	53.0	52.2	53.2	52.8	0.9984
+1	aarch64-unknown-linux-musl	tests/wild/gv16_graphs_b143_5416de.gv	plain	5	default	51.9	51.3	52.5	51.7	1.0000
+1	aarch64-unknown-linux-musl	tests/wild/gv16_graphs_b143_5416de.gv	plain	5	neoverse-n1	52.5	51.7	52.8	52.4	1.0129
+1	aarch64-unknown-linux-musl	tests/wild/gv16_graphs_b143_5416de.gv	plain	5	neoverse-v2	52.6	51.9	53.1	52.5	1.0151
+1	aarch64-unknown-linux-musl	tests/wild/gv16_graphs_b143_5416de.gv	png	5	default	796.4	793.5	802.9	796.1	1.0000
+1	aarch64-unknown-linux-musl	tests/wild/gv16_graphs_b143_5416de.gv	png	5	neoverse-n1	811.9	810.1	815.8	811.6	1.0195
+1	aarch64-unknown-linux-musl	tests/wild/gv16_graphs_b143_5416de.gv	png	5	neoverse-v2	803.5	802.6	809.0	803.3	1.0090
+1	aarch64-unknown-linux-musl	tests/wild/gv16_graphs_b106_471493.gv	svg	5	default	40.3	39.9	40.7	40.0	1.0000
+1	aarch64-unknown-linux-musl	tests/wild/gv16_graphs_b106_471493.gv	svg	5	neoverse-n1	40.1	40.0	40.6	40.0	0.9954
+1	aarch64-unknown-linux-musl	tests/wild/gv16_graphs_b106_471493.gv	svg	5	neoverse-v2	40.2	39.7	40.3	40.1	0.9978
+1	aarch64-unknown-linux-musl	tests/wild/gv16_graphs_badvoro_2e8cb8.gv	svg	5	default	111.7	110.4	112.8	111.5	1.0000
+1	aarch64-unknown-linux-musl	tests/wild/gv16_graphs_badvoro_2e8cb8.gv	svg	5	neoverse-n1	110.6	110.3	113.3	110.3	0.9905
+1	aarch64-unknown-linux-musl	tests/wild/gv16_graphs_badvoro_2e8cb8.gv	svg	5	neoverse-v2	111.0	109.4	111.2	110.8	0.9941
+1	aarch64-unknown-linux-musl	tests/wild/gv16_graphs_b124_4440e1.gv	svg	5	default	22.6	22.1	22.7	22.5	1.0000
+1	aarch64-unknown-linux-musl	tests/wild/gv16_graphs_b124_4440e1.gv	svg	5	neoverse-n1	22.4	22.3	22.9	22.3	0.9923
+1	aarch64-unknown-linux-musl	tests/wild/gv16_graphs_b124_4440e1.gv	svg	5	neoverse-v2	22.2	21.9	22.6	22.1	0.9850
+1	aarch64-unknown-linux-musl	synth/dot_dag_1000.gv	svg	5	default	64.0	62.6	65.1	63.9	1.0000
+1	aarch64-unknown-linux-musl	synth/dot_dag_1000.gv	svg	5	neoverse-n1	64.2	62.8	64.9	64.1	1.0042
+1	aarch64-unknown-linux-musl	synth/dot_dag_1000.gv	svg	5	neoverse-v2	63.7	62.8	64.9	63.6	0.9962
+1	aarch64-unknown-linux-musl	synth/dot_dag_1000.gv	plain	5	default	64.1	62.2	64.5	63.9	1.0000
+1	aarch64-unknown-linux-musl	synth/dot_dag_1000.gv	plain	5	neoverse-n1	63.8	63.0	65.0	63.6	0.9952
+1	aarch64-unknown-linux-musl	synth/dot_dag_1000.gv	plain	5	neoverse-v2	63.1	62.4	65.0	62.9	0.9845
+1	aarch64-unknown-linux-musl	synth/dot_dag_5000.gv	svg	5	default	376.9	373.1	380.8	376.6	1.0000
+1	aarch64-unknown-linux-musl	synth/dot_dag_5000.gv	svg	5	neoverse-n1	392.6	378.1	394.4	392.3	1.0416
+1	aarch64-unknown-linux-musl	synth/dot_dag_5000.gv	svg	5	neoverse-v2	378.7	376.7	386.1	378.5	1.0046
+1	aarch64-unknown-linux-musl	synth/dot_dag_5000.gv	plain	5	default	375.0	372.5	378.9	374.8	1.0000
+1	aarch64-unknown-linux-musl	synth/dot_dag_5000.gv	plain	5	neoverse-n1	390.2	375.2	422.3	389.9	1.0406
+1	aarch64-unknown-linux-musl	synth/dot_dag_5000.gv	plain	5	neoverse-v2	376.5	374.3	387.7	376.1	1.0040
+1	aarch64-unknown-linux-musl	synth/dot_dag_20000.gv	svg	3	default	1831.8	1784.0	1880.9	1831.4	1.0000
+1	aarch64-unknown-linux-musl	synth/dot_dag_20000.gv	svg	3	neoverse-n1	1872.9	1870.5	1893.7	1872.4	1.0224
+1	aarch64-unknown-linux-musl	synth/dot_dag_20000.gv	svg	3	neoverse-v2	1842.1	1836.6	1873.5	1841.5	1.0056
+1	aarch64-unknown-linux-musl	tests/neato/wild_gv16_graphs_badvoro_2e8cb8.gv	svg	3	default	1332.0	1314.5	1334.2	1331.2	1.0000
+1	aarch64-unknown-linux-musl	tests/neato/wild_gv16_graphs_badvoro_2e8cb8.gv	svg	3	neoverse-n1	1363.3	1343.2	1364.8	1362.9	1.0235
+1	aarch64-unknown-linux-musl	tests/neato/wild_gv16_graphs_badvoro_2e8cb8.gv	svg	3	neoverse-v2	1291.6	1277.3	1293.3	1291.2	0.9697
+1	aarch64-unknown-linux-musl	tests/neato/hw3_vpsc_random200.gv	svg	5	default	33.2	33.2	33.4	33.1	1.0000
+1	aarch64-unknown-linux-musl	tests/neato/hw3_vpsc_random200.gv	svg	5	neoverse-n1	33.9	33.8	34.0	33.8	1.0210
+1	aarch64-unknown-linux-musl	tests/neato/hw3_vpsc_random200.gv	svg	5	neoverse-v2	32.8	32.7	33.0	32.7	0.9864
+1	aarch64-unknown-linux-musl	tests/neato/hw3_vpsc_random200.gv	plain	5	default	33.2	33.1	33.4	33.1	1.0000
+1	aarch64-unknown-linux-musl	tests/neato/hw3_vpsc_random200.gv	plain	5	neoverse-n1	33.9	33.7	34.0	33.8	1.0212
+1	aarch64-unknown-linux-musl	tests/neato/hw3_vpsc_random200.gv	plain	5	neoverse-v2	32.7	32.7	33.0	32.6	0.9838
+1	aarch64-unknown-linux-musl	tests/neato/hw3_vpsc_random200.gv	png	5	default	119.3	118.9	120.6	119.0	1.0000
+1	aarch64-unknown-linux-musl	tests/neato/hw3_vpsc_random200.gv	png	5	neoverse-n1	121.5	120.5	122.6	121.2	1.0184
+1	aarch64-unknown-linux-musl	tests/neato/hw3_vpsc_random200.gv	png	5	neoverse-v2	119.3	118.6	120.3	119.1	1.0005
+1	aarch64-unknown-linux-musl	tests/neato/hw2_random_120.gv	svg	5	default	20.5	20.4	20.7	20.4	1.0000
+1	aarch64-unknown-linux-musl	tests/neato/hw2_random_120.gv	svg	5	neoverse-n1	21.1	20.8	21.2	21.0	1.0317
+1	aarch64-unknown-linux-musl	tests/neato/hw2_random_120.gv	svg	5	neoverse-v2	20.4	20.2	20.4	20.3	0.9960
+1	aarch64-unknown-linux-musl	tests/neato/fx_NaN.gv	svg	5	default	10.7	10.6	10.8	10.6	1.0000
+1	aarch64-unknown-linux-musl	tests/neato/fx_NaN.gv	svg	5	neoverse-n1	10.9	10.9	11.0	10.8	1.0248
+1	aarch64-unknown-linux-musl	tests/neato/fx_NaN.gv	svg	5	neoverse-v2	10.5	10.4	10.5	10.4	0.9833
+1	aarch64-unknown-linux-musl	tests/neato/wild_gv16_graphs_b69_4b5b48.gv	svg	5	default	8.9	8.9	9.1	8.9	1.0000
+1	aarch64-unknown-linux-musl	tests/neato/wild_gv16_graphs_b69_4b5b48.gv	svg	5	neoverse-n1	9.2	9.1	9.3	9.1	1.0270
+1	aarch64-unknown-linux-musl	tests/neato/wild_gv16_graphs_b69_4b5b48.gv	svg	5	neoverse-v2	8.9	8.8	9.0	8.9	0.9997
+1	aarch64-unknown-linux-musl	synth/neato_sparse_250.gv	svg	5	default	60.7	60.5	60.9	60.4	1.0000
+1	aarch64-unknown-linux-musl	synth/neato_sparse_250.gv	svg	5	neoverse-n1	61.4	61.0	61.7	61.3	1.0123
+1	aarch64-unknown-linux-musl	synth/neato_sparse_250.gv	svg	5	neoverse-v2	59.3	58.9	59.5	59.1	0.9776
+1	aarch64-unknown-linux-musl	synth/neato_sparse_500.gv	svg	5	default	264.4	261.7	267.8	264.2	1.0000
+1	aarch64-unknown-linux-musl	synth/neato_sparse_500.gv	svg	5	neoverse-n1	267.1	264.7	276.2	266.8	1.0100
+1	aarch64-unknown-linux-musl	synth/neato_sparse_500.gv	svg	5	neoverse-v2	254.7	253.6	258.2	254.5	0.9634
+1	aarch64-unknown-linux-musl	synth/neato_sparse_1000.gv	svg	3	default	1166.6	1149.9	1167.3	1166.2	1.0000
+1	aarch64-unknown-linux-musl	synth/neato_sparse_1000.gv	svg	3	neoverse-n1	1189.6	1173.7	1191.4	1189.1	1.0197
+1	aarch64-unknown-linux-musl	synth/neato_sparse_1000.gv	svg	3	neoverse-v2	1133.3	1118.3	1133.5	1132.8	0.9715
+1	aarch64-unknown-linux-musl	synth/neato_sparse_2000.gv	svg	3	default	4492.9	4453.4	4498.0	4492.0	1.0000
+1	aarch64-unknown-linux-musl	synth/neato_sparse_2000.gv	svg	3	neoverse-n1	4605.2	4571.5	4606.4	4604.5	1.0250
+1	aarch64-unknown-linux-musl	synth/neato_sparse_2000.gv	svg	3	neoverse-v2	4344.5	4343.8	4346.0	4343.8	0.9670
+1	aarch64-unknown-linux-musl	tests/fdp/wild_gv16_graphs_badvoro_2e8cb8.gv	svg	3	default	18836.9	18828.2	18845.9	18835.1	1.0000
+1	aarch64-unknown-linux-musl	tests/fdp/wild_gv16_graphs_badvoro_2e8cb8.gv	svg	3	neoverse-n1	18789.8	18775.9	18820.3	18788.1	0.9975
+1	aarch64-unknown-linux-musl	tests/fdp/wild_gv16_graphs_badvoro_2e8cb8.gv	svg	3	neoverse-v2	19300.9	19289.6	19310.2	19299.0	1.0246
+1	aarch64-unknown-linux-musl	tests/fdp/wild_gv16_graphs_viewport_651d5b.gv	svg	5	default	354.6	354.1	354.7	354.3	1.0000
+1	aarch64-unknown-linux-musl	tests/fdp/wild_gv16_graphs_viewport_651d5b.gv	svg	5	neoverse-n1	352.6	352.3	353.1	352.3	0.9943
+1	aarch64-unknown-linux-musl	tests/fdp/wild_gv16_graphs_viewport_651d5b.gv	svg	5	neoverse-v2	367.7	367.2	368.1	367.4	1.0368
+1	aarch64-unknown-linux-musl	tests/fdp/wild_gv16_graphs_viewport_651d5b.gv	plain	5	default	354.0	354.0	354.4	353.8	1.0000
+1	aarch64-unknown-linux-musl	tests/fdp/wild_gv16_graphs_viewport_651d5b.gv	plain	5	neoverse-n1	352.6	352.4	352.9	352.3	0.9960
+1	aarch64-unknown-linux-musl	tests/fdp/wild_gv16_graphs_viewport_651d5b.gv	plain	5	neoverse-v2	367.3	367.1	367.6	366.9	1.0373
+1	aarch64-unknown-linux-musl	tests/fdp/wild_gv16_undirected_ngk10_4_793340.gv	svg	5	default	73.6	72.8	74.1	73.4	1.0000
+1	aarch64-unknown-linux-musl	tests/fdp/wild_gv16_undirected_ngk10_4_793340.gv	svg	5	neoverse-n1	73.2	72.7	73.9	73.0	0.9950
+1	aarch64-unknown-linux-musl	tests/fdp/wild_gv16_undirected_ngk10_4_793340.gv	svg	5	neoverse-v2	73.6	73.2	74.3	73.5	1.0001
+1	aarch64-unknown-linux-musl	tests/fdp/wild_gv16_graphs_b69_4b5b48.gv	svg	5	default	53.6	53.4	53.8	53.5	1.0000
+1	aarch64-unknown-linux-musl	tests/fdp/wild_gv16_graphs_b69_4b5b48.gv	svg	5	neoverse-n1	53.3	53.1	53.7	53.1	0.9938
+1	aarch64-unknown-linux-musl	tests/fdp/wild_gv16_graphs_b69_4b5b48.gv	svg	5	neoverse-v2	54.8	54.6	54.9	54.6	1.0213
+1	aarch64-unknown-linux-musl	synth/fdp_sparse_250.gv	svg	5	default	634.7	634.7	634.8	634.4	1.0000
+1	aarch64-unknown-linux-musl	synth/fdp_sparse_250.gv	svg	5	neoverse-n1	632.2	631.8	632.8	631.9	0.9961
+1	aarch64-unknown-linux-musl	synth/fdp_sparse_250.gv	svg	5	neoverse-v2	656.6	656.6	657.0	656.3	1.0346
+1	aarch64-unknown-linux-musl	synth/fdp_sparse_500.gv	svg	3	default	2812.9	2812.7	2813.8	2812.6	1.0000
+1	aarch64-unknown-linux-musl	synth/fdp_sparse_500.gv	svg	3	neoverse-n1	2803.7	2801.4	2806.1	2803.3	0.9967
+1	aarch64-unknown-linux-musl	synth/fdp_sparse_500.gv	svg	3	neoverse-v2	2890.7	2889.7	2892.0	2890.3	1.0276
+1	aarch64-unknown-linux-musl	synth/fdp_sparse_1000.gv	svg	3	default	10749.4	10735.4	10757.7	10748.5	1.0000
+1	aarch64-unknown-linux-musl	synth/fdp_sparse_1000.gv	svg	3	neoverse-n1	10691.1	10683.3	10697.7	10690.3	0.9946
+1	aarch64-unknown-linux-musl	synth/fdp_sparse_1000.gv	svg	3	neoverse-v2	11063.3	11053.0	11066.4	11062.6	1.0292
+1	aarch64-unknown-linux-musl	tests/sfdp/gen_rnd2000.gv	svg	5	default	199.6	199.0	200.3	199.2	1.0000
+1	aarch64-unknown-linux-musl	tests/sfdp/gen_rnd2000.gv	svg	5	neoverse-n1	201.6	200.2	204.1	201.4	1.0103
+1	aarch64-unknown-linux-musl	tests/sfdp/gen_rnd2000.gv	svg	5	neoverse-v2	202.0	201.8	203.1	201.7	1.0121
+1	aarch64-unknown-linux-musl	tests/sfdp/gen_rnd2000.gv	plain	5	default	199.3	198.5	200.5	199.0	1.0000
+1	aarch64-unknown-linux-musl	tests/sfdp/gen_rnd2000.gv	plain	5	neoverse-n1	201.9	200.8	202.2	201.6	1.0131
+1	aarch64-unknown-linux-musl	tests/sfdp/gen_rnd2000.gv	plain	5	neoverse-v2	202.5	201.8	204.2	202.3	1.0163
+1	aarch64-unknown-linux-musl	tests/sfdp/gen_rnd2000.gv	png	5	default	268.8	267.7	269.1	268.6	1.0000
+1	aarch64-unknown-linux-musl	tests/sfdp/gen_rnd2000.gv	png	5	neoverse-n1	270.5	269.9	272.3	270.2	1.0063
+1	aarch64-unknown-linux-musl	tests/sfdp/gen_rnd2000.gv	png	5	neoverse-v2	271.0	269.8	272.2	270.6	1.0080
+1	aarch64-unknown-linux-musl	tests/sfdp/gen_tree9.gv	svg	5	default	121.8	121.5	122.3	121.6	1.0000
+1	aarch64-unknown-linux-musl	tests/sfdp/gen_tree9.gv	svg	5	neoverse-n1	118.6	118.5	118.7	118.4	0.9738
+1	aarch64-unknown-linux-musl	tests/sfdp/gen_tree9.gv	svg	5	neoverse-v2	121.4	121.0	122.5	121.2	0.9965
+1	aarch64-unknown-linux-musl	tests/sfdp/gen_powerlaw1000.gv	svg	5	default	109.3	109.1	110.1	109.1	1.0000
+1	aarch64-unknown-linux-musl	tests/sfdp/gen_powerlaw1000.gv	svg	5	neoverse-n1	106.8	106.6	107.0	106.6	0.9774
+1	aarch64-unknown-linux-musl	tests/sfdp/gen_powerlaw1000.gv	svg	5	neoverse-v2	108.6	108.3	109.0	108.5	0.9939
+1	aarch64-unknown-linux-musl	tests/sfdp/attr_quadtree_none.gv	svg	5	default	10.3	10.2	10.4	10.2	1.0000
+1	aarch64-unknown-linux-musl	tests/sfdp/attr_quadtree_none.gv	svg	5	neoverse-n1	10.4	10.3	10.4	10.3	1.0085
+1	aarch64-unknown-linux-musl	tests/sfdp/attr_quadtree_none.gv	svg	5	neoverse-v2	10.3	10.3	10.5	10.3	1.0042
+1	aarch64-unknown-linux-musl	tests/sfdp/gen_grid20x20.gv	svg	5	default	24.9	24.7	25.1	24.8	1.0000
+1	aarch64-unknown-linux-musl	tests/sfdp/gen_grid20x20.gv	svg	5	neoverse-n1	25.0	25.0	25.1	25.0	1.0076
+1	aarch64-unknown-linux-musl	tests/sfdp/gen_grid20x20.gv	svg	5	neoverse-v2	25.0	25.0	25.2	24.9	1.0077
+1	aarch64-unknown-linux-musl	synth/sfdp_sparse_1000.gv	svg	5	default	88.1	88.0	88.3	88.0	1.0000
+1	aarch64-unknown-linux-musl	synth/sfdp_sparse_1000.gv	svg	5	neoverse-n1	89.1	88.5	89.5	88.9	1.0110
+1	aarch64-unknown-linux-musl	synth/sfdp_sparse_1000.gv	svg	5	neoverse-v2	89.4	89.2	89.7	89.2	1.0144
+1	aarch64-unknown-linux-musl	synth/sfdp_sparse_5000.gv	svg	3	default	626.7	604.7	631.2	626.3	1.0000
+1	aarch64-unknown-linux-musl	synth/sfdp_sparse_5000.gv	svg	3	neoverse-n1	622.6	620.2	632.2	622.3	0.9935
+1	aarch64-unknown-linux-musl	synth/sfdp_sparse_5000.gv	svg	3	neoverse-v2	618.6	616.2	621.5	618.2	0.9871
+1	aarch64-unknown-linux-musl	synth/sfdp_sparse_20000.gv	svg	3	default	3923.7	3897.9	3925.8	3922.8	1.0000
+1	aarch64-unknown-linux-musl	synth/sfdp_sparse_20000.gv	svg	3	neoverse-n1	3683.9	3668.4	3921.2	3683.3	0.9389
+1	aarch64-unknown-linux-musl	synth/sfdp_sparse_20000.gv	svg	3	neoverse-v2	3938.3	3930.1	3954.6	3937.4	1.0037
+1	aarch64-unknown-linux-musl	tests/circo/wild_gv16_graphs_badvoro_2e8cb8.gv	svg	3	default	30.1	30.0	30.4	30.0	1.0000
+1	aarch64-unknown-linux-musl	tests/circo/wild_gv16_graphs_badvoro_2e8cb8.gv	svg	3	neoverse-n1	30.2	30.0	30.6	30.1	1.0037
+1	aarch64-unknown-linux-musl	tests/circo/wild_gv16_graphs_badvoro_2e8cb8.gv	svg	3	neoverse-v2	30.5	30.1	30.5	30.3	1.0115
+1	aarch64-unknown-linux-musl	tests/circo/wild_gv16_linux_x86_dotsplines_dot1_3910e3.gv	svg	5	default	54.0	53.8	54.2	53.9	1.0000
+1	aarch64-unknown-linux-musl	tests/circo/wild_gv16_linux_x86_dotsplines_dot1_3910e3.gv	svg	5	neoverse-n1	54.3	53.9	54.3	54.1	1.0040
+1	aarch64-unknown-linux-musl	tests/circo/wild_gv16_linux_x86_dotsplines_dot1_3910e3.gv	svg	5	neoverse-v2	53.9	53.7	54.0	53.7	0.9969
+1	aarch64-unknown-linux-musl	tests/circo/wild_gv16_linux_x86_neatosplines_neato_c2c6f6.gv	svg	5	default	53.8	53.6	54.1	53.6	1.0000
+1	aarch64-unknown-linux-musl	tests/circo/wild_gv16_linux_x86_neatosplines_neato_c2c6f6.gv	svg	5	neoverse-n1	53.9	53.9	54.4	53.8	1.0024
+1	aarch64-unknown-linux-musl	tests/circo/wild_gv16_linux_x86_neatosplines_neato_c2c6f6.gv	svg	5	neoverse-v2	53.7	53.4	54.1	53.5	0.9994
+1	aarch64-unknown-linux-musl	tests/circo/wild_gv16_directed_sdh_29b016.gv	svg	5	default	4.4	4.3	4.5	4.4	1.0000
+1	aarch64-unknown-linux-musl	tests/circo/wild_gv16_directed_sdh_29b016.gv	svg	5	neoverse-n1	4.4	4.3	4.6	4.4	1.0016
+1	aarch64-unknown-linux-musl	tests/circo/wild_gv16_directed_sdh_29b016.gv	svg	5	neoverse-v2	4.5	4.4	4.5	4.4	1.0076
+1	aarch64-unknown-linux-musl	synth/circo_sparse_100.gv	svg	5	default	3.7	3.7	3.8	3.6	1.0000
+1	aarch64-unknown-linux-musl	synth/circo_sparse_100.gv	svg	5	neoverse-n1	3.7	3.7	3.7	3.6	1.0001
+1	aarch64-unknown-linux-musl	synth/circo_sparse_100.gv	svg	5	neoverse-v2	3.7	3.7	3.8	3.7	1.0000
+1	aarch64-unknown-linux-musl	synth/circo_sparse_200.gv	svg	5	default	7.3	7.3	7.4	7.3	1.0000
+1	aarch64-unknown-linux-musl	synth/circo_sparse_200.gv	svg	5	neoverse-n1	7.4	7.4	7.5	7.3	1.0119
+1	aarch64-unknown-linux-musl	synth/circo_sparse_200.gv	svg	5	neoverse-v2	7.4	7.4	7.5	7.3	1.0117
+1	aarch64-unknown-linux-musl	synth/circo_sparse_400.gv	svg	3	default	15.2	15.0	15.4	15.1	1.0000
+1	aarch64-unknown-linux-musl	synth/circo_sparse_400.gv	svg	3	neoverse-n1	15.4	14.9	15.4	15.2	1.0096
+1	aarch64-unknown-linux-musl	synth/circo_sparse_400.gv	svg	3	neoverse-v2	15.3	15.2	15.4	15.2	1.0066
+1	aarch64-unknown-linux-musl	tests/twopi/wild_gv16_undirected_ngk10_4_793340.gv	svg	5	default	64.5	64.0	64.9	64.3	1.0000
+1	aarch64-unknown-linux-musl	tests/twopi/wild_gv16_undirected_ngk10_4_793340.gv	svg	5	neoverse-n1	65.0	64.5	65.3	64.8	1.0078
+1	aarch64-unknown-linux-musl	tests/twopi/wild_gv16_undirected_ngk10_4_793340.gv	svg	5	neoverse-v2	65.0	64.7	65.4	64.8	1.0081
+1	aarch64-unknown-linux-musl	tests/twopi/fx_arrows.gv	svg	5	default	25.7	25.5	26.1	25.6	1.0000
+1	aarch64-unknown-linux-musl	tests/twopi/fx_arrows.gv	svg	5	neoverse-n1	25.8	25.7	26.6	25.6	1.0010
+1	aarch64-unknown-linux-musl	tests/twopi/fx_arrows.gv	svg	5	neoverse-v2	25.9	25.5	26.3	25.8	1.0069
+1	aarch64-unknown-linux-musl	tests/twopi/wild_gv16_linux_x86_arrows_dot_1ce23f.gv	svg	5	default	25.9	25.8	26.4	25.8	1.0000
+1	aarch64-unknown-linux-musl	tests/twopi/wild_gv16_linux_x86_arrows_dot_1ce23f.gv	svg	5	neoverse-n1	26.0	25.8	26.2	25.9	1.0045
+1	aarch64-unknown-linux-musl	tests/twopi/wild_gv16_linux_x86_arrows_dot_1ce23f.gv	svg	5	neoverse-v2	26.1	25.8	26.5	25.9	1.0063
+1	aarch64-unknown-linux-musl	synth/twopi_tree_1000.gv	svg	5	default	10.4	10.3	10.6	10.3	1.0000
+1	aarch64-unknown-linux-musl	synth/twopi_tree_1000.gv	svg	5	neoverse-n1	10.4	10.3	10.6	10.3	1.0004
+1	aarch64-unknown-linux-musl	synth/twopi_tree_1000.gv	svg	5	neoverse-v2	10.6	10.5	10.8	10.5	1.0129
+1	aarch64-unknown-linux-musl	synth/twopi_tree_5000.gv	svg	5	default	45.9	45.5	46.9	45.7	1.0000
+1	aarch64-unknown-linux-musl	synth/twopi_tree_5000.gv	svg	5	neoverse-n1	46.5	44.9	47.3	46.3	1.0129
+1	aarch64-unknown-linux-musl	synth/twopi_tree_5000.gv	svg	5	neoverse-v2	46.3	45.4	47.6	46.2	1.0101
+1	aarch64-unknown-linux-musl	synth/twopi_tree_20000.gv	svg	5	default	194.0	188.5	251.3	193.8	1.0000
+1	aarch64-unknown-linux-musl	synth/twopi_tree_20000.gv	svg	5	neoverse-n1	194.5	188.0	242.3	194.3	1.0029
+1	aarch64-unknown-linux-musl	synth/twopi_tree_20000.gv	svg	5	neoverse-v2	196.9	191.9	243.5	196.7	1.0152
+1	aarch64-unknown-linux-musl	synth/twopi_tree_20000.gv	plain	5	default	197.3	193.7	205.7	197.0	1.0000
+1	aarch64-unknown-linux-musl	synth/twopi_tree_20000.gv	plain	5	neoverse-n1	200.5	194.2	204.5	200.1	1.0162
+1	aarch64-unknown-linux-musl	synth/twopi_tree_20000.gv	plain	5	neoverse-v2	199.1	195.1	232.0	198.9	1.0092
+1	aarch64-unknown-linux-musl	tests/osage/wild_gv16_graphs_b51_33bcb0.gv	svg	5	default	3.7	3.7	3.9	3.7	1.0000
+1	aarch64-unknown-linux-musl	tests/osage/wild_gv16_graphs_b51_33bcb0.gv	svg	5	neoverse-n1	3.8	3.6	3.8	3.6	1.0012
+1	aarch64-unknown-linux-musl	tests/osage/wild_gv16_graphs_b51_33bcb0.gv	svg	5	neoverse-v2	3.7	3.7	3.8	3.6	0.9925
+1	aarch64-unknown-linux-musl	tests/osage/wild_gv16_graphs_b15_8c212e.gv	svg	5	default	6.3	6.1	6.4	6.2	1.0000
+1	aarch64-unknown-linux-musl	tests/osage/wild_gv16_graphs_b15_8c212e.gv	svg	5	neoverse-n1	6.3	6.2	6.4	6.2	1.0078
+1	aarch64-unknown-linux-musl	tests/osage/wild_gv16_graphs_b15_8c212e.gv	svg	5	neoverse-v2	6.2	6.2	6.3	6.2	0.9987
+1	aarch64-unknown-linux-musl	synth/osage_clustered_1000.gv	svg	5	default	7.1	7.0	7.3	7.0	1.0000
+1	aarch64-unknown-linux-musl	synth/osage_clustered_1000.gv	svg	5	neoverse-n1	7.3	7.0	7.4	7.2	1.0217
+1	aarch64-unknown-linux-musl	synth/osage_clustered_1000.gv	svg	5	neoverse-v2	7.1	7.0	7.8	7.0	0.9968
+1	aarch64-unknown-linux-musl	synth/osage_clustered_5000.gv	svg	5	default	29.4	28.9	29.8	29.3	1.0000
+1	aarch64-unknown-linux-musl	synth/osage_clustered_5000.gv	svg	5	neoverse-n1	29.3	28.8	29.7	29.2	0.9950
+1	aarch64-unknown-linux-musl	synth/osage_clustered_5000.gv	svg	5	neoverse-v2	28.9	28.3	30.1	28.8	0.9831
+1	aarch64-unknown-linux-musl	synth/osage_clustered_20000.gv	svg	5	default	116.2	113.5	117.0	115.8	1.0000
+1	aarch64-unknown-linux-musl	synth/osage_clustered_20000.gv	svg	5	neoverse-n1	118.8	114.9	119.3	118.6	1.0223
+1	aarch64-unknown-linux-musl	synth/osage_clustered_20000.gv	svg	5	neoverse-v2	116.1	114.6	117.3	115.9	0.9994
+1	aarch64-unknown-linux-musl	synth/osage_clustered_20000.gv	plain	5	default	114.7	113.9	116.7	114.5	1.0000
+1	aarch64-unknown-linux-musl	synth/osage_clustered_20000.gv	plain	5	neoverse-n1	115.9	113.3	117.3	115.6	1.0102
+1	aarch64-unknown-linux-musl	synth/osage_clustered_20000.gv	plain	5	neoverse-v2	115.5	114.2	117.6	115.2	1.0065
+1	aarch64-unknown-linux-musl	tests/patchwork/wild_gv16_graphs_b51_33bcb0.gv	svg	5	default	2.8	2.8	2.9	2.7	1.0000
+1	aarch64-unknown-linux-musl	tests/patchwork/wild_gv16_graphs_b51_33bcb0.gv	svg	5	neoverse-n1	2.8	2.8	2.9	2.7	1.0021
+1	aarch64-unknown-linux-musl	tests/patchwork/wild_gv16_graphs_b51_33bcb0.gv	svg	5	neoverse-v2	2.8	2.8	2.8	2.7	1.0040
+1	aarch64-unknown-linux-musl	tests/patchwork/wild_gv16_infosrc_plugins_1a797f.gv	svg	5	default	2.6	2.6	2.7	2.5	1.0000
+1	aarch64-unknown-linux-musl	tests/patchwork/wild_gv16_infosrc_plugins_1a797f.gv	svg	5	neoverse-n1	2.6	2.5	2.7	2.5	0.9906
+1	aarch64-unknown-linux-musl	tests/patchwork/wild_gv16_infosrc_plugins_1a797f.gv	svg	5	neoverse-v2	2.6	2.5	2.7	2.6	1.0027
+1	aarch64-unknown-linux-musl	synth/patchwork_clustered_1000.gv	svg	5	default	8.1	7.8	8.3	8.0	1.0000
+1	aarch64-unknown-linux-musl	synth/patchwork_clustered_1000.gv	svg	5	neoverse-n1	8.1	8.0	8.2	8.0	0.9943
+1	aarch64-unknown-linux-musl	synth/patchwork_clustered_1000.gv	svg	5	neoverse-v2	8.1	7.9	8.3	8.1	0.9994
+1	aarch64-unknown-linux-musl	synth/patchwork_clustered_5000.gv	svg	5	default	32.3	31.7	33.1	32.1	1.0000
+1	aarch64-unknown-linux-musl	synth/patchwork_clustered_5000.gv	svg	5	neoverse-n1	32.9	32.1	33.9	32.8	1.0189
+1	aarch64-unknown-linux-musl	synth/patchwork_clustered_5000.gv	svg	5	neoverse-v2	32.7	31.9	32.8	32.5	1.0132
+1	aarch64-unknown-linux-musl	synth/patchwork_clustered_20000.gv	svg	5	default	122.7	122.5	128.1	122.6	1.0000
+1	aarch64-unknown-linux-musl	synth/patchwork_clustered_20000.gv	svg	5	neoverse-n1	126.1	124.6	127.9	125.8	1.0278
+1	aarch64-unknown-linux-musl	synth/patchwork_clustered_20000.gv	svg	5	neoverse-v2	124.5	122.8	124.9	124.2	1.0141
+1	aarch64-unknown-linux-musl	synth/patchwork_clustered_20000.gv	plain	5	default	120.9	119.2	122.8	120.6	1.0000
+1	aarch64-unknown-linux-musl	synth/patchwork_clustered_20000.gv	plain	5	neoverse-n1	122.7	120.8	125.0	122.4	1.0150
+1	aarch64-unknown-linux-musl	synth/patchwork_clustered_20000.gv	plain	5	neoverse-v2	122.6	119.3	124.0	122.4	1.0145
+2	aarch64-apple-darwin	tests/fixtures/unix.gv	svg	5	default	4.4	4.2	5.0	3.6	1.0000
+2	aarch64-apple-darwin	tests/fixtures/unix.gv	svg	5	default2	4.7	4.3	4.9	3.7	1.0569
+2	aarch64-apple-darwin	tests/fixtures/unix.gv	svg	5	nopgo	4.6	4.5	4.7	3.7	1.0341
+2	aarch64-apple-darwin	tests/fixtures/unix.gv	plain	5	default	4.3	4.1	4.9	3.5	1.0000
+2	aarch64-apple-darwin	tests/fixtures/unix.gv	plain	5	default2	4.7	4.0	4.9	3.9	1.1085
+2	aarch64-apple-darwin	tests/fixtures/unix.gv	plain	5	nopgo	5.0	4.3	6.1	3.9	1.1606
+2	aarch64-apple-darwin	tests/fixtures/unix.gv	png	5	default	15.5	15.4	20.2	14.4	1.0000
+2	aarch64-apple-darwin	tests/fixtures/unix.gv	png	5	default2	16.1	15.2	20.0	14.9	1.0354
+2	aarch64-apple-darwin	tests/fixtures/unix.gv	png	5	nopgo	20.3	15.4	22.3	16.8	1.3068
+2	aarch64-apple-darwin	tests/wild/gv16_graphs_b29_d1e4db.gv	svg	5	default	149.9	133.9	588.3	139.6	1.0000
+2	aarch64-apple-darwin	tests/wild/gv16_graphs_b29_d1e4db.gv	svg	5	default2	157.3	149.0	189.4	148.8	1.0490
+2	aarch64-apple-darwin	tests/wild/gv16_graphs_b29_d1e4db.gv	svg	5	nopgo	165.4	150.2	168.0	153.7	1.1032
+2	aarch64-apple-darwin	tests/wild/gv16_graphs_b29_d1e4db.gv	plain	5	default	132.9	122.1	149.4	131.8	1.0000
+2	aarch64-apple-darwin	tests/wild/gv16_graphs_b29_d1e4db.gv	plain	5	default2	128.0	120.3	148.3	126.8	0.9635
+2	aarch64-apple-darwin	tests/wild/gv16_graphs_b29_d1e4db.gv	plain	5	nopgo	137.2	123.3	149.5	136.0	1.0321
+2	aarch64-apple-darwin	tests/wild/gv16_graphs_b29_d1e4db.gv	png	5	default	702.7	695.2	775.3	700.9	1.0000
+2	aarch64-apple-darwin	tests/wild/gv16_graphs_b29_d1e4db.gv	png	5	default2	701.5	690.6	709.2	695.1	0.9982
+2	aarch64-apple-darwin	tests/wild/gv16_graphs_b29_d1e4db.gv	png	5	nopgo	721.2	698.1	790.5	719.0	1.0263
+2	aarch64-apple-darwin	tests/wild/gv16_graphs_b143_5416de.gv	svg	5	default	43.7	42.7	44.5	42.6	1.0000
+2	aarch64-apple-darwin	tests/wild/gv16_graphs_b143_5416de.gv	svg	5	default2	43.3	43.1	43.6	42.1	0.9919
+2	aarch64-apple-darwin	tests/wild/gv16_graphs_b143_5416de.gv	svg	5	nopgo	44.7	44.5	45.0	43.7	1.0245
+2	aarch64-apple-darwin	tests/wild/gv16_graphs_b143_5416de.gv	plain	5	default	46.2	42.8	46.5	45.0	1.0000
+2	aarch64-apple-darwin	tests/wild/gv16_graphs_b143_5416de.gv	plain	5	default2	46.1	42.8	49.4	44.8	0.9985
+2	aarch64-apple-darwin	tests/wild/gv16_graphs_b143_5416de.gv	plain	5	nopgo	47.7	44.6	49.3	46.3	1.0327
+2	aarch64-apple-darwin	tests/wild/gv16_graphs_b143_5416de.gv	png	5	default	624.8	614.3	722.1	623.1	1.0000
+2	aarch64-apple-darwin	tests/wild/gv16_graphs_b143_5416de.gv	png	5	default2	634.0	611.3	671.0	632.1	1.0148
+2	aarch64-apple-darwin	tests/wild/gv16_graphs_b143_5416de.gv	png	5	nopgo	636.1	632.7	663.8	634.4	1.0181
+2	aarch64-apple-darwin	tests/wild/gv16_graphs_b106_471493.gv	svg	5	default	32.7	32.6	32.8	31.6	1.0000
+2	aarch64-apple-darwin	tests/wild/gv16_graphs_b106_471493.gv	svg	5	default2	32.8	32.6	33.1	31.7	1.0043
+2	aarch64-apple-darwin	tests/wild/gv16_graphs_b106_471493.gv	svg	5	nopgo	34.2	33.7	34.6	33.1	1.0472
+2	aarch64-apple-darwin	tests/wild/gv16_graphs_badvoro_2e8cb8.gv	svg	5	default	90.4	87.6	90.8	89.4	1.0000
+2	aarch64-apple-darwin	tests/wild/gv16_graphs_badvoro_2e8cb8.gv	svg	5	default2	90.2	87.6	91.7	89.2	0.9981
+2	aarch64-apple-darwin	tests/wild/gv16_graphs_badvoro_2e8cb8.gv	svg	5	nopgo	91.1	89.4	92.8	90.1	1.0080
+2	aarch64-apple-darwin	tests/wild/gv16_graphs_b124_4440e1.gv	svg	5	default	19.4	18.9	20.2	18.3	1.0000
+2	aarch64-apple-darwin	tests/wild/gv16_graphs_b124_4440e1.gv	svg	5	default2	18.9	18.8	19.4	18.0	0.9735
+2	aarch64-apple-darwin	tests/wild/gv16_graphs_b124_4440e1.gv	svg	5	nopgo	19.2	19.1	19.7	18.3	0.9902
+2	aarch64-apple-darwin	synth/dot_dag_1000.gv	svg	5	default	47.9	46.9	57.3	46.9	1.0000
+2	aarch64-apple-darwin	synth/dot_dag_1000.gv	svg	5	default2	48.3	48.1	51.5	47.3	1.0083
+2	aarch64-apple-darwin	synth/dot_dag_1000.gv	svg	5	nopgo	50.4	49.8	50.5	49.3	1.0506
+2	aarch64-apple-darwin	synth/dot_dag_1000.gv	plain	5	default	48.5	48.1	50.5	47.4	1.0000
+2	aarch64-apple-darwin	synth/dot_dag_1000.gv	plain	5	default2	48.0	47.8	50.2	47.0	0.9895
+2	aarch64-apple-darwin	synth/dot_dag_1000.gv	plain	5	nopgo	49.6	49.2	54.4	48.5	1.0212
+2	aarch64-apple-darwin	synth/dot_dag_5000.gv	svg	5	default	299.1	296.1	346.7	297.4	1.0000
+2	aarch64-apple-darwin	synth/dot_dag_5000.gv	svg	5	default2	297.8	286.5	375.0	296.3	0.9956
+2	aarch64-apple-darwin	synth/dot_dag_5000.gv	svg	5	nopgo	301.4	292.5	334.4	299.9	1.0078
+2	aarch64-apple-darwin	synth/dot_dag_5000.gv	plain	5	default	303.6	294.0	324.1	302.1	1.0000
+2	aarch64-apple-darwin	synth/dot_dag_5000.gv	plain	5	default2	304.1	301.0	346.4	302.7	1.0016
+2	aarch64-apple-darwin	synth/dot_dag_5000.gv	plain	5	nopgo	298.2	295.1	332.9	296.8	0.9824
+2	aarch64-apple-darwin	synth/dot_dag_20000.gv	svg	3	default	1570.3	1499.1	1604.8	1566.0	1.0000
+2	aarch64-apple-darwin	synth/dot_dag_20000.gv	svg	3	default2	1546.6	1515.4	1580.2	1543.3	0.9849
+2	aarch64-apple-darwin	synth/dot_dag_20000.gv	svg	3	nopgo	1512.7	1506.5	1546.2	1509.8	0.9633
+2	aarch64-apple-darwin	tests/neato/wild_gv16_graphs_badvoro_2e8cb8.gv	svg	3	default	1203.8	1202.8	1277.0	1201.3	1.0000
+2	aarch64-apple-darwin	tests/neato/wild_gv16_graphs_badvoro_2e8cb8.gv	svg	3	default2	1201.5	1199.9	1202.4	1199.4	0.9981
+2	aarch64-apple-darwin	tests/neato/wild_gv16_graphs_badvoro_2e8cb8.gv	svg	3	nopgo	1202.7	1185.9	1226.6	1199.8	0.9991
+2	aarch64-apple-darwin	tests/neato/hw3_vpsc_random200.gv	svg	5	default	36.5	32.8	50.5	35.2	1.0000
+2	aarch64-apple-darwin	tests/neato/hw3_vpsc_random200.gv	svg	5	default2	37.1	32.1	44.7	35.9	1.0168
+2	aarch64-apple-darwin	tests/neato/hw3_vpsc_random200.gv	svg	5	nopgo	37.5	31.9	48.2	34.9	1.0271
+2	aarch64-apple-darwin	tests/neato/hw3_vpsc_random200.gv	plain	5	default	43.7	43.1	47.7	39.5	1.0000
+2	aarch64-apple-darwin	tests/neato/hw3_vpsc_random200.gv	plain	5	default2	46.0	35.8	53.8	40.9	1.0528
+2	aarch64-apple-darwin	tests/neato/hw3_vpsc_random200.gv	plain	5	nopgo	41.5	36.7	49.7	39.4	0.9494
+2	aarch64-apple-darwin	tests/neato/hw3_vpsc_random200.gv	png	5	default	96.3	96.1	102.1	95.2	1.0000
+2	aarch64-apple-darwin	tests/neato/hw3_vpsc_random200.gv	png	5	default2	96.4	96.1	99.7	95.2	1.0005
+2	aarch64-apple-darwin	tests/neato/hw3_vpsc_random200.gv	png	5	nopgo	98.0	96.4	98.6	96.8	1.0169
+2	aarch64-apple-darwin	tests/neato/hw2_random_120.gv	svg	5	default	20.3	19.9	20.5	19.4	1.0000
+2	aarch64-apple-darwin	tests/neato/hw2_random_120.gv	svg	5	default2	20.3	20.0	20.3	19.3	0.9976
+2	aarch64-apple-darwin	tests/neato/hw2_random_120.gv	svg	5	nopgo	20.1	19.6	20.6	19.0	0.9878
+2	aarch64-apple-darwin	tests/neato/fx_NaN.gv	svg	5	default	11.5	11.4	11.8	10.6	1.0000
+2	aarch64-apple-darwin	tests/neato/fx_NaN.gv	svg	5	default2	11.6	11.6	12.1	10.7	1.0131
+2	aarch64-apple-darwin	tests/neato/fx_NaN.gv	svg	5	nopgo	11.5	11.3	11.9	10.6	0.9980
+2	aarch64-apple-darwin	tests/neato/wild_gv16_graphs_b69_4b5b48.gv	svg	5	default	9.3	9.1	11.1	8.4	1.0000
+2	aarch64-apple-darwin	tests/neato/wild_gv16_graphs_b69_4b5b48.gv	svg	5	default2	9.3	9.2	9.9	8.4	0.9964
+2	aarch64-apple-darwin	tests/neato/wild_gv16_graphs_b69_4b5b48.gv	svg	5	nopgo	9.5	9.2	9.9	8.7	1.0264
+2	aarch64-apple-darwin	synth/neato_sparse_250.gv	svg	5	default	57.0	57.0	58.4	56.0	1.0000
+2	aarch64-apple-darwin	synth/neato_sparse_250.gv	svg	5	default2	56.9	56.4	57.4	55.9	0.9984
+2	aarch64-apple-darwin	synth/neato_sparse_250.gv	svg	5	nopgo	56.7	55.9	56.9	55.7	0.9946
+2	aarch64-apple-darwin	synth/neato_sparse_500.gv	svg	5	default	241.3	237.3	265.7	240.2	1.0000
+2	aarch64-apple-darwin	synth/neato_sparse_500.gv	svg	5	default2	242.8	236.9	257.1	241.4	1.0060
+2	aarch64-apple-darwin	synth/neato_sparse_500.gv	svg	5	nopgo	241.8	236.4	254.1	240.5	1.0021
+2	aarch64-apple-darwin	synth/neato_sparse_1000.gv	svg	3	default	1045.3	1042.6	1054.3	1044.1	1.0000
+2	aarch64-apple-darwin	synth/neato_sparse_1000.gv	svg	3	default2	1036.8	1032.2	1075.5	1035.6	0.9918
+2	aarch64-apple-darwin	synth/neato_sparse_1000.gv	svg	3	nopgo	1039.1	1038.5	1074.3	1037.6	0.9940
+2	aarch64-apple-darwin	synth/neato_sparse_2000.gv	svg	3	default	4317.0	4302.9	4317.8	4313.2	1.0000
+2	aarch64-apple-darwin	synth/neato_sparse_2000.gv	svg	3	default2	4296.2	4258.4	4320.6	4293.9	0.9952
+2	aarch64-apple-darwin	synth/neato_sparse_2000.gv	svg	3	nopgo	4286.6	4206.0	4370.3	4275.9	0.9930
+2	aarch64-apple-darwin	tests/fdp/wild_gv16_graphs_badvoro_2e8cb8.gv	svg	3	default	12201.9	12192.8	12335.6	12198.1	1.0000
+2	aarch64-apple-darwin	tests/fdp/wild_gv16_graphs_badvoro_2e8cb8.gv	svg	3	default2	12167.8	12163.8	12170.3	12164.3	0.9972
+2	aarch64-apple-darwin	tests/fdp/wild_gv16_graphs_badvoro_2e8cb8.gv	svg	3	nopgo	14016.2	13982.4	14178.9	14010.1	1.1487
+2	aarch64-apple-darwin	tests/fdp/wild_gv16_graphs_viewport_651d5b.gv	svg	5	default	237.1	236.8	248.1	235.9	1.0000
+2	aarch64-apple-darwin	tests/fdp/wild_gv16_graphs_viewport_651d5b.gv	svg	5	default2	237.2	233.5	249.7	236.1	1.0002
+2	aarch64-apple-darwin	tests/fdp/wild_gv16_graphs_viewport_651d5b.gv	svg	5	nopgo	249.0	244.9	250.8	247.9	1.0501
+2	aarch64-apple-darwin	tests/fdp/wild_gv16_graphs_viewport_651d5b.gv	plain	5	default	235.0	231.9	237.1	233.8	1.0000
+2	aarch64-apple-darwin	tests/fdp/wild_gv16_graphs_viewport_651d5b.gv	plain	5	default2	237.1	233.3	247.5	236.0	1.0090
+2	aarch64-apple-darwin	tests/fdp/wild_gv16_graphs_viewport_651d5b.gv	plain	5	nopgo	249.8	248.0	256.3	248.3	1.0630
+2	aarch64-apple-darwin	tests/fdp/wild_gv16_undirected_ngk10_4_793340.gv	svg	5	default	64.6	63.2	65.2	63.6	1.0000
+2	aarch64-apple-darwin	tests/fdp/wild_gv16_undirected_ngk10_4_793340.gv	svg	5	default2	64.4	63.2	65.2	63.4	0.9972
+2	aarch64-apple-darwin	tests/fdp/wild_gv16_undirected_ngk10_4_793340.gv	svg	5	nopgo	59.9	59.0	60.2	58.8	0.9262
+2	aarch64-apple-darwin	tests/fdp/wild_gv16_graphs_b69_4b5b48.gv	svg	5	default	38.9	38.0	39.2	37.9	1.0000
+2	aarch64-apple-darwin	tests/fdp/wild_gv16_graphs_b69_4b5b48.gv	svg	5	default2	38.1	38.0	39.1	37.1	0.9781
+2	aarch64-apple-darwin	tests/fdp/wild_gv16_graphs_b69_4b5b48.gv	svg	5	nopgo	44.8	43.7	45.5	43.8	1.1527
+2	aarch64-apple-darwin	synth/fdp_sparse_250.gv	svg	5	default	448.7	440.8	480.0	447.5	1.0000
+2	aarch64-apple-darwin	synth/fdp_sparse_250.gv	svg	5	default2	446.9	442.9	448.8	445.9	0.9961
+2	aarch64-apple-darwin	synth/fdp_sparse_250.gv	svg	5	nopgo	483.3	476.8	488.2	482.2	1.0772
+2	aarch64-apple-darwin	synth/fdp_sparse_500.gv	svg	3	default	1885.9	1877.3	1887.9	1884.5	1.0000
+2	aarch64-apple-darwin	synth/fdp_sparse_500.gv	svg	3	default2	1887.0	1879.1	1903.4	1884.5	1.0006
+2	aarch64-apple-darwin	synth/fdp_sparse_500.gv	svg	3	nopgo	2120.3	2087.3	2158.6	2118.3	1.1243
+2	aarch64-apple-darwin	synth/fdp_sparse_1000.gv	svg	3	default	7232.4	7215.1	7233.8	7227.8	1.0000
+2	aarch64-apple-darwin	synth/fdp_sparse_1000.gv	svg	3	default2	7241.8	7221.7	7279.9	7236.8	1.0013
+2	aarch64-apple-darwin	synth/fdp_sparse_1000.gv	svg	3	nopgo	7956.7	7947.1	8135.6	7952.0	1.1001
+2	aarch64-apple-darwin	tests/sfdp/gen_rnd2000.gv	svg	5	default	181.8	176.8	182.1	180.5	1.0000
+2	aarch64-apple-darwin	tests/sfdp/gen_rnd2000.gv	svg	5	default2	181.6	179.4	182.4	180.4	0.9985
+2	aarch64-apple-darwin	tests/sfdp/gen_rnd2000.gv	svg	5	nopgo	211.6	206.8	213.2	210.4	1.1636
+2	aarch64-apple-darwin	tests/sfdp/gen_rnd2000.gv	plain	5	default	181.9	177.5	184.2	180.7	1.0000
+2	aarch64-apple-darwin	tests/sfdp/gen_rnd2000.gv	plain	5	default2	183.8	176.7	197.6	182.6	1.0105
+2	aarch64-apple-darwin	tests/sfdp/gen_rnd2000.gv	plain	5	nopgo	214.3	207.6	231.9	213.1	1.1781
+2	aarch64-apple-darwin	tests/sfdp/gen_rnd2000.gv	png	5	default	238.0	231.2	261.9	236.7	1.0000
+2	aarch64-apple-darwin	tests/sfdp/gen_rnd2000.gv	png	5	default2	245.9	237.4	267.5	244.4	1.0330
+2	aarch64-apple-darwin	tests/sfdp/gen_rnd2000.gv	png	5	nopgo	273.2	268.0	288.9	271.8	1.1477
+2	aarch64-apple-darwin	tests/sfdp/gen_tree9.gv	svg	5	default	101.5	99.2	101.8	100.4	1.0000
+2	aarch64-apple-darwin	tests/sfdp/gen_tree9.gv	svg	5	default2	101.6	99.6	101.9	100.5	1.0008
+2	aarch64-apple-darwin	tests/sfdp/gen_tree9.gv	svg	5	nopgo	113.0	110.9	113.8	111.8	1.1134
+2	aarch64-apple-darwin	tests/sfdp/gen_powerlaw1000.gv	svg	5	default	88.9	87.5	90.8	87.9	1.0000
+2	aarch64-apple-darwin	tests/sfdp/gen_powerlaw1000.gv	svg	5	default2	90.6	88.4	91.4	89.5	1.0182
+2	aarch64-apple-darwin	tests/sfdp/gen_powerlaw1000.gv	svg	5	nopgo	99.2	97.9	101.8	98.1	1.1149
+2	aarch64-apple-darwin	tests/sfdp/attr_quadtree_none.gv	svg	5	default	9.4	9.3	9.6	8.5	1.0000
+2	aarch64-apple-darwin	tests/sfdp/attr_quadtree_none.gv	svg	5	default2	9.4	9.3	9.5	8.5	1.0006
+2	aarch64-apple-darwin	tests/sfdp/attr_quadtree_none.gv	svg	5	nopgo	9.5	9.4	9.9	8.7	1.0135
+2	aarch64-apple-darwin	tests/sfdp/gen_grid20x20.gv	svg	5	default	21.8	21.7	21.9	20.8	1.0000
+2	aarch64-apple-darwin	tests/sfdp/gen_grid20x20.gv	svg	5	default2	21.6	21.2	21.7	20.6	0.9904
+2	aarch64-apple-darwin	tests/sfdp/gen_grid20x20.gv	svg	5	nopgo	25.5	25.3	25.9	24.5	1.1700
+2	aarch64-apple-darwin	synth/sfdp_sparse_1000.gv	svg	5	default	80.7	76.3	82.7	79.6	1.0000
+2	aarch64-apple-darwin	synth/sfdp_sparse_1000.gv	svg	5	default2	78.6	76.9	81.2	77.7	0.9748
+2	aarch64-apple-darwin	synth/sfdp_sparse_1000.gv	svg	5	nopgo	92.0	89.3	102.0	91.0	1.1408
+2	aarch64-apple-darwin	synth/sfdp_sparse_5000.gv	svg	3	default	528.8	523.9	547.8	526.9	1.0000
+2	aarch64-apple-darwin	synth/sfdp_sparse_5000.gv	svg	3	default2	531.4	527.2	555.0	529.3	1.0048
+2	aarch64-apple-darwin	synth/sfdp_sparse_5000.gv	svg	3	nopgo	612.8	595.8	616.7	611.5	1.1588
+2	aarch64-apple-darwin	synth/sfdp_sparse_20000.gv	svg	3	default	2678.6	2671.6	2729.0	2675.9	1.0000
+2	aarch64-apple-darwin	synth/sfdp_sparse_20000.gv	svg	3	default2	2771.6	2682.1	2813.2	2767.5	1.0347
+2	aarch64-apple-darwin	synth/sfdp_sparse_20000.gv	svg	3	nopgo	3153.1	3097.0	3161.0	3149.9	1.1772
+2	aarch64-apple-darwin	tests/circo/wild_gv16_graphs_badvoro_2e8cb8.gv	svg	3	default	22.0	21.8	22.3	20.9	1.0000
+2	aarch64-apple-darwin	tests/circo/wild_gv16_graphs_badvoro_2e8cb8.gv	svg	3	default2	22.6	21.8	24.3	21.3	1.0281
+2	aarch64-apple-darwin	tests/circo/wild_gv16_graphs_badvoro_2e8cb8.gv	svg	3	nopgo	26.0	24.9	26.0	24.6	1.1839
+2	aarch64-apple-darwin	tests/circo/wild_gv16_linux_x86_dotsplines_dot1_3910e3.gv	svg	5	default	52.7	52.3	53.2	51.6	1.0000
+2	aarch64-apple-darwin	tests/circo/wild_gv16_linux_x86_dotsplines_dot1_3910e3.gv	svg	5	default2	52.6	52.3	52.8	51.6	0.9989
+2	aarch64-apple-darwin	tests/circo/wild_gv16_linux_x86_dotsplines_dot1_3910e3.gv	svg	5	nopgo	45.5	45.3	45.6	44.4	0.8635
+2	aarch64-apple-darwin	tests/circo/wild_gv16_linux_x86_neatosplines_neato_c2c6f6.gv	svg	5	default	46.2	45.5	46.6	45.2	1.0000
+2	aarch64-apple-darwin	tests/circo/wild_gv16_linux_x86_neatosplines_neato_c2c6f6.gv	svg	5	default2	45.7	45.5	47.1	44.7	0.9892
+2	aarch64-apple-darwin	tests/circo/wild_gv16_linux_x86_neatosplines_neato_c2c6f6.gv	svg	5	nopgo	43.0	42.6	43.4	42.0	0.9318
+2	aarch64-apple-darwin	tests/circo/wild_gv16_directed_sdh_29b016.gv	svg	5	default	5.3	5.1	5.3	4.5	1.0000
+2	aarch64-apple-darwin	tests/circo/wild_gv16_directed_sdh_29b016.gv	svg	5	default2	5.3	5.1	5.3	4.5	0.9992
+2	aarch64-apple-darwin	tests/circo/wild_gv16_directed_sdh_29b016.gv	svg	5	nopgo	5.5	5.4	5.6	4.7	1.0481
+2	aarch64-apple-darwin	synth/circo_sparse_100.gv	svg	5	default	4.9	4.8	5.0	4.2	1.0000
+2	aarch64-apple-darwin	synth/circo_sparse_100.gv	svg	5	default2	4.9	4.8	5.0	4.1	0.9955
+2	aarch64-apple-darwin	synth/circo_sparse_100.gv	svg	5	nopgo	5.1	4.9	5.2	4.3	1.0274
+2	aarch64-apple-darwin	synth/circo_sparse_200.gv	svg	5	default	7.1	7.0	7.5	6.3	1.0000
+2	aarch64-apple-darwin	synth/circo_sparse_200.gv	svg	5	default2	7.1	7.1	7.5	6.3	1.0021
+2	aarch64-apple-darwin	synth/circo_sparse_200.gv	svg	5	nopgo	7.9	7.7	8.5	7.0	1.1043
+2	aarch64-apple-darwin	synth/circo_sparse_400.gv	svg	3	default	12.7	12.3	13.2	11.7	1.0000
+2	aarch64-apple-darwin	synth/circo_sparse_400.gv	svg	3	default2	12.4	12.4	12.9	11.5	0.9822
+2	aarch64-apple-darwin	synth/circo_sparse_400.gv	svg	3	nopgo	13.9	13.8	13.9	13.0	1.0985
+2	aarch64-apple-darwin	tests/twopi/wild_gv16_undirected_ngk10_4_793340.gv	svg	5	default	57.6	57.4	58.2	56.6	1.0000
+2	aarch64-apple-darwin	tests/twopi/wild_gv16_undirected_ngk10_4_793340.gv	svg	5	default2	57.7	57.6	59.5	56.6	1.0010
+2	aarch64-apple-darwin	tests/twopi/wild_gv16_undirected_ngk10_4_793340.gv	svg	5	nopgo	53.7	53.5	55.4	52.7	0.9330
+2	aarch64-apple-darwin	tests/twopi/fx_arrows.gv	svg	5	default	23.4	22.9	27.7	22.0	1.0000
+2	aarch64-apple-darwin	tests/twopi/fx_arrows.gv	svg	5	default2	23.2	23.0	23.4	22.0	0.9896
+2	aarch64-apple-darwin	tests/twopi/fx_arrows.gv	svg	5	nopgo	20.8	20.3	20.9	19.5	0.8863
+2	aarch64-apple-darwin	tests/twopi/wild_gv16_linux_x86_arrows_dot_1ce23f.gv	svg	5	default	23.6	22.5	29.8	21.7	1.0000
+2	aarch64-apple-darwin	tests/twopi/wild_gv16_linux_x86_arrows_dot_1ce23f.gv	svg	5	default2	22.4	22.0	24.0	21.3	0.9522
+2	aarch64-apple-darwin	tests/twopi/wild_gv16_linux_x86_arrows_dot_1ce23f.gv	svg	5	nopgo	20.0	19.7	22.8	18.9	0.8468
+2	aarch64-apple-darwin	synth/twopi_tree_1000.gv	svg	5	default	8.9	8.2	9.4	7.8	1.0000
+2	aarch64-apple-darwin	synth/twopi_tree_1000.gv	svg	5	default2	8.6	8.3	8.8	7.6	0.9665
+2	aarch64-apple-darwin	synth/twopi_tree_1000.gv	svg	5	nopgo	8.9	8.7	9.5	7.9	0.9968
+2	aarch64-apple-darwin	synth/twopi_tree_5000.gv	svg	5	default	27.1	26.8	34.5	26.0	1.0000
+2	aarch64-apple-darwin	synth/twopi_tree_5000.gv	svg	5	default2	27.3	26.9	31.4	26.2	1.0059
+2	aarch64-apple-darwin	synth/twopi_tree_5000.gv	svg	5	nopgo	30.4	29.7	33.9	29.3	1.1230
+2	aarch64-apple-darwin	synth/twopi_tree_20000.gv	svg	5	default	109.6	105.4	112.2	107.8	1.0000
+2	aarch64-apple-darwin	synth/twopi_tree_20000.gv	svg	5	default2	109.5	103.0	114.6	107.7	0.9991
+2	aarch64-apple-darwin	synth/twopi_tree_20000.gv	svg	5	nopgo	119.6	118.0	127.4	117.8	1.0914
+2	aarch64-apple-darwin	synth/twopi_tree_20000.gv	plain	5	default	119.4	115.4	122.5	117.7	1.0000
+2	aarch64-apple-darwin	synth/twopi_tree_20000.gv	plain	5	default2	118.8	115.4	119.3	117.2	0.9952
+2	aarch64-apple-darwin	synth/twopi_tree_20000.gv	plain	5	nopgo	128.7	126.0	130.5	127.1	1.0779
+2	aarch64-apple-darwin	tests/osage/wild_gv16_graphs_b51_33bcb0.gv	svg	5	default	4.1	4.0	4.3	3.3	1.0000
+2	aarch64-apple-darwin	tests/osage/wild_gv16_graphs_b51_33bcb0.gv	svg	5	default2	4.0	4.0	4.5	3.3	0.9837
+2	aarch64-apple-darwin	tests/osage/wild_gv16_graphs_b51_33bcb0.gv	svg	5	nopgo	4.2	4.1	4.3	3.4	1.0395
+2	aarch64-apple-darwin	tests/osage/wild_gv16_graphs_b15_8c212e.gv	svg	5	default	4.6	4.5	4.8	3.9	1.0000
+2	aarch64-apple-darwin	tests/osage/wild_gv16_graphs_b15_8c212e.gv	svg	5	default2	4.7	4.6	4.8	3.9	1.0146
+2	aarch64-apple-darwin	tests/osage/wild_gv16_graphs_b15_8c212e.gv	svg	5	nopgo	4.9	4.8	4.9	4.1	1.0626
+2	aarch64-apple-darwin	synth/osage_clustered_1000.gv	svg	5	default	5.6	5.6	5.8	4.8	1.0000
+2	aarch64-apple-darwin	synth/osage_clustered_1000.gv	svg	5	default2	5.6	5.5	5.8	4.8	0.9970
+2	aarch64-apple-darwin	synth/osage_clustered_1000.gv	svg	5	nopgo	6.0	5.9	6.2	5.2	1.0738
+2	aarch64-apple-darwin	synth/osage_clustered_5000.gv	svg	5	default	16.0	15.9	17.0	15.0	1.0000
+2	aarch64-apple-darwin	synth/osage_clustered_5000.gv	svg	5	default2	15.9	15.7	16.5	14.9	0.9942
+2	aarch64-apple-darwin	synth/osage_clustered_5000.gv	svg	5	nopgo	18.0	17.8	18.6	16.9	1.1240
+2	aarch64-apple-darwin	synth/osage_clustered_20000.gv	svg	5	default	63.3	58.8	63.7	61.2	1.0000
+2	aarch64-apple-darwin	synth/osage_clustered_20000.gv	svg	5	default2	62.3	58.3	65.1	60.8	0.9847
+2	aarch64-apple-darwin	synth/osage_clustered_20000.gv	svg	5	nopgo	72.1	66.5	73.4	70.2	1.1401
+2	aarch64-apple-darwin	synth/osage_clustered_20000.gv	plain	5	default	64.7	64.3	65.3	63.2	1.0000
+2	aarch64-apple-darwin	synth/osage_clustered_20000.gv	plain	5	default2	64.7	64.1	65.1	63.4	1.0009
+2	aarch64-apple-darwin	synth/osage_clustered_20000.gv	plain	5	nopgo	72.0	70.7	73.1	70.6	1.1130
+2	aarch64-apple-darwin	tests/patchwork/wild_gv16_graphs_b51_33bcb0.gv	svg	5	default	3.4	3.4	3.5	2.8	1.0000
+2	aarch64-apple-darwin	tests/patchwork/wild_gv16_graphs_b51_33bcb0.gv	svg	5	default2	3.5	3.4	3.5	2.8	1.0055
+2	aarch64-apple-darwin	tests/patchwork/wild_gv16_graphs_b51_33bcb0.gv	svg	5	nopgo	3.6	3.5	3.7	2.9	1.0444
+2	aarch64-apple-darwin	tests/patchwork/wild_gv16_infosrc_plugins_1a797f.gv	svg	5	default	3.4	3.4	4.2	2.8	1.0000
+2	aarch64-apple-darwin	tests/patchwork/wild_gv16_infosrc_plugins_1a797f.gv	svg	5	default2	3.4	3.3	4.0	2.8	0.9961
+2	aarch64-apple-darwin	tests/patchwork/wild_gv16_infosrc_plugins_1a797f.gv	svg	5	nopgo	3.8	3.5	4.1	2.9	1.0914
+2	aarch64-apple-darwin	synth/patchwork_clustered_1000.gv	svg	5	default	5.8	5.8	6.3	5.1	1.0000
+2	aarch64-apple-darwin	synth/patchwork_clustered_1000.gv	svg	5	default2	5.8	5.7	6.1	5.0	0.9991
+2	aarch64-apple-darwin	synth/patchwork_clustered_1000.gv	svg	5	nopgo	6.6	6.2	6.9	5.7	1.1416
+2	aarch64-apple-darwin	synth/patchwork_clustered_5000.gv	svg	5	default	17.9	17.8	17.9	16.8	1.0000
+2	aarch64-apple-darwin	synth/patchwork_clustered_5000.gv	svg	5	default2	17.9	17.7	18.0	16.8	1.0019
+2	aarch64-apple-darwin	synth/patchwork_clustered_5000.gv	svg	5	nopgo	20.4	20.2	20.8	19.4	1.1421
+2	aarch64-apple-darwin	synth/patchwork_clustered_20000.gv	svg	5	default	67.6	67.3	68.0	66.0	1.0000
+2	aarch64-apple-darwin	synth/patchwork_clustered_20000.gv	svg	5	default2	68.0	66.4	69.2	66.2	1.0048
+2	aarch64-apple-darwin	synth/patchwork_clustered_20000.gv	svg	5	nopgo	78.4	78.2	78.8	76.8	1.1593
+2	aarch64-apple-darwin	synth/patchwork_clustered_20000.gv	plain	5	default	70.5	68.1	78.0	69.1	1.0000
+2	aarch64-apple-darwin	synth/patchwork_clustered_20000.gv	plain	5	default2	71.2	68.7	77.6	69.9	1.0105
+2	aarch64-apple-darwin	synth/patchwork_clustered_20000.gv	plain	5	nopgo	77.1	76.2	86.0	75.8	1.0945
+2	aarch64-pc-windows-msvc	tests/fixtures/unix.gv	svg	5	default	10.5	9.8	12.7		1.0000
+2	aarch64-pc-windows-msvc	tests/fixtures/unix.gv	svg	5	default2	10.1	9.8	11.4		0.9628
+2	aarch64-pc-windows-msvc	tests/fixtures/unix.gv	svg	5	nopgo	10.4	10.0	11.8		0.9915
+2	aarch64-pc-windows-msvc	tests/fixtures/unix.gv	plain	5	default	10.1	9.8	10.4		1.0000
+2	aarch64-pc-windows-msvc	tests/fixtures/unix.gv	plain	5	default2	10.0	9.8	10.6		0.9911
+2	aarch64-pc-windows-msvc	tests/fixtures/unix.gv	plain	5	nopgo	10.3	10.0	11.0		1.0171
+2	aarch64-pc-windows-msvc	tests/fixtures/unix.gv	png	5	default	26.5	25.9	26.9		1.0000
+2	aarch64-pc-windows-msvc	tests/fixtures/unix.gv	png	5	default2	26.3	25.7	27.0		0.9927
+2	aarch64-pc-windows-msvc	tests/fixtures/unix.gv	png	5	nopgo	27.4	26.9	28.1		1.0343
+2	aarch64-pc-windows-msvc	tests/wild/gv16_graphs_b29_d1e4db.gv	svg	5	default	148.9	147.8	151.2		1.0000
+2	aarch64-pc-windows-msvc	tests/wild/gv16_graphs_b29_d1e4db.gv	svg	5	default2	148.4	147.7	149.9		0.9966
+2	aarch64-pc-windows-msvc	tests/wild/gv16_graphs_b29_d1e4db.gv	svg	5	nopgo	149.0	148.7	153.7		1.0005
+2	aarch64-pc-windows-msvc	tests/wild/gv16_graphs_b29_d1e4db.gv	plain	5	default	147.4	146.3	148.9		1.0000
+2	aarch64-pc-windows-msvc	tests/wild/gv16_graphs_b29_d1e4db.gv	plain	5	default2	147.6	147.1	148.1		1.0009
+2	aarch64-pc-windows-msvc	tests/wild/gv16_graphs_b29_d1e4db.gv	plain	5	nopgo	148.6	148.0	151.4		1.0077
+2	aarch64-pc-windows-msvc	tests/wild/gv16_graphs_b29_d1e4db.gv	png	5	default	780.9	778.1	783.9		1.0000
+2	aarch64-pc-windows-msvc	tests/wild/gv16_graphs_b29_d1e4db.gv	png	5	default2	782.2	781.3	784.5		1.0017
+2	aarch64-pc-windows-msvc	tests/wild/gv16_graphs_b29_d1e4db.gv	png	5	nopgo	811.4	806.6	814.5		1.0391
+2	aarch64-pc-windows-msvc	tests/wild/gv16_graphs_b143_5416de.gv	svg	5	default	58.0	57.7	58.7		1.0000
+2	aarch64-pc-windows-msvc	tests/wild/gv16_graphs_b143_5416de.gv	svg	5	default2	57.9	57.7	58.1		0.9981
+2	aarch64-pc-windows-msvc	tests/wild/gv16_graphs_b143_5416de.gv	svg	5	nopgo	59.3	59.1	60.1		1.0224
+2	aarch64-pc-windows-msvc	tests/wild/gv16_graphs_b143_5416de.gv	plain	5	default	57.9	57.1	58.5		1.0000
+2	aarch64-pc-windows-msvc	tests/wild/gv16_graphs_b143_5416de.gv	plain	5	default2	57.7	56.9	58.1		0.9965
+2	aarch64-pc-windows-msvc	tests/wild/gv16_graphs_b143_5416de.gv	plain	5	nopgo	59.0	58.7	59.8		1.0199
+2	aarch64-pc-windows-msvc	tests/wild/gv16_graphs_b143_5416de.gv	png	5	default	767.8	766.9	769.2		1.0000
+2	aarch64-pc-windows-msvc	tests/wild/gv16_graphs_b143_5416de.gv	png	5	default2	766.1	765.9	771.7		0.9978
+2	aarch64-pc-windows-msvc	tests/wild/gv16_graphs_b143_5416de.gv	png	5	nopgo	788.8	788.2	790.1		1.0273
+2	aarch64-pc-windows-msvc	tests/wild/gv16_graphs_b106_471493.gv	svg	5	default	46.6	46.2	47.6		1.0000
+2	aarch64-pc-windows-msvc	tests/wild/gv16_graphs_b106_471493.gv	svg	5	default2	46.4	46.0	47.0		0.9964
+2	aarch64-pc-windows-msvc	tests/wild/gv16_graphs_b106_471493.gv	svg	5	nopgo	47.0	46.8	47.6		1.0080
+2	aarch64-pc-windows-msvc	tests/wild/gv16_graphs_badvoro_2e8cb8.gv	svg	5	default	116.0	115.6	116.6		1.0000
+2	aarch64-pc-windows-msvc	tests/wild/gv16_graphs_badvoro_2e8cb8.gv	svg	5	default2	117.9	115.5	118.2		1.0160
+2	aarch64-pc-windows-msvc	tests/wild/gv16_graphs_badvoro_2e8cb8.gv	svg	5	nopgo	117.4	117.2	118.8		1.0121
+2	aarch64-pc-windows-msvc	tests/wild/gv16_graphs_b124_4440e1.gv	svg	5	default	29.4	29.1	30.2		1.0000
+2	aarch64-pc-windows-msvc	tests/wild/gv16_graphs_b124_4440e1.gv	svg	5	default2	29.4	29.3	29.6		1.0003
+2	aarch64-pc-windows-msvc	tests/wild/gv16_graphs_b124_4440e1.gv	svg	5	nopgo	29.9	29.7	30.5		1.0153
+2	aarch64-pc-windows-msvc	synth/dot_dag_1000.gv	svg	5	default	68.6	67.8	69.0		1.0000
+2	aarch64-pc-windows-msvc	synth/dot_dag_1000.gv	svg	5	default2	68.5	67.2	69.8		0.9978
+2	aarch64-pc-windows-msvc	synth/dot_dag_1000.gv	svg	5	nopgo	70.7	70.1	71.1		1.0302
+2	aarch64-pc-windows-msvc	synth/dot_dag_1000.gv	plain	5	default	67.2	67.0	67.7		1.0000
+2	aarch64-pc-windows-msvc	synth/dot_dag_1000.gv	plain	5	default2	67.1	66.2	68.1		0.9998
+2	aarch64-pc-windows-msvc	synth/dot_dag_1000.gv	plain	5	nopgo	69.1	68.5	70.0		1.0297
+2	aarch64-pc-windows-msvc	synth/dot_dag_5000.gv	svg	5	default	382.6	380.0	390.6		1.0000
+2	aarch64-pc-windows-msvc	synth/dot_dag_5000.gv	svg	5	default2	382.2	379.3	387.2		0.9989
+2	aarch64-pc-windows-msvc	synth/dot_dag_5000.gv	svg	5	nopgo	389.7	387.6	391.0		1.0187
+2	aarch64-pc-windows-msvc	synth/dot_dag_5000.gv	plain	5	default	382.8	376.1	392.2		1.0000
+2	aarch64-pc-windows-msvc	synth/dot_dag_5000.gv	plain	5	default2	377.4	376.8	380.3		0.9860
+2	aarch64-pc-windows-msvc	synth/dot_dag_5000.gv	plain	5	nopgo	383.6	381.1	396.8		1.0021
+2	aarch64-pc-windows-msvc	synth/dot_dag_20000.gv	svg	3	default	1851.8	1850.2	1862.3		1.0000
+2	aarch64-pc-windows-msvc	synth/dot_dag_20000.gv	svg	3	default2	1886.7	1857.4	1914.2		1.0188
+2	aarch64-pc-windows-msvc	synth/dot_dag_20000.gv	svg	3	nopgo	1888.9	1882.1	1894.9		1.0200
+2	aarch64-pc-windows-msvc	tests/neato/wild_gv16_graphs_badvoro_2e8cb8.gv	svg	3	default	1332.2	1331.6	1333.2		1.0000
+2	aarch64-pc-windows-msvc	tests/neato/wild_gv16_graphs_badvoro_2e8cb8.gv	svg	3	default2	1328.9	1327.3	1332.9		0.9975
+2	aarch64-pc-windows-msvc	tests/neato/wild_gv16_graphs_badvoro_2e8cb8.gv	svg	3	nopgo	1349.5	1348.0	1353.4		1.0130
+2	aarch64-pc-windows-msvc	tests/neato/hw3_vpsc_random200.gv	svg	5	default	41.0	40.5	41.2		1.0000
+2	aarch64-pc-windows-msvc	tests/neato/hw3_vpsc_random200.gv	svg	5	default2	41.0	40.7	41.5		1.0018
+2	aarch64-pc-windows-msvc	tests/neato/hw3_vpsc_random200.gv	svg	5	nopgo	41.4	41.2	41.6		1.0108
+2	aarch64-pc-windows-msvc	tests/neato/hw3_vpsc_random200.gv	plain	5	default	40.7	40.5	41.7		1.0000
+2	aarch64-pc-windows-msvc	tests/neato/hw3_vpsc_random200.gv	plain	5	default2	40.9	40.5	41.3		1.0036
+2	aarch64-pc-windows-msvc	tests/neato/hw3_vpsc_random200.gv	plain	5	nopgo	41.3	41.2	41.7		1.0130
+2	aarch64-pc-windows-msvc	tests/neato/hw3_vpsc_random200.gv	png	5	default	119.5	118.5	123.8		1.0000
+2	aarch64-pc-windows-msvc	tests/neato/hw3_vpsc_random200.gv	png	5	default2	119.1	118.3	120.7		0.9965
+2	aarch64-pc-windows-msvc	tests/neato/hw3_vpsc_random200.gv	png	5	nopgo	123.5	123.2	129.4		1.0339
+2	aarch64-pc-windows-msvc	tests/neato/hw2_random_120.gv	svg	5	default	26.4	26.0	26.9		1.0000
+2	aarch64-pc-windows-msvc	tests/neato/hw2_random_120.gv	svg	5	default2	26.2	26.1	26.5		0.9924
+2	aarch64-pc-windows-msvc	tests/neato/hw2_random_120.gv	svg	5	nopgo	26.7	26.7	27.0		1.0147
+2	aarch64-pc-windows-msvc	tests/neato/fx_NaN.gv	svg	5	default	17.5	17.2	17.7		1.0000
+2	aarch64-pc-windows-msvc	tests/neato/fx_NaN.gv	svg	5	default2	17.7	17.3	17.9		1.0096
+2	aarch64-pc-windows-msvc	tests/neato/fx_NaN.gv	svg	5	nopgo	18.1	17.9	18.6		1.0313
+2	aarch64-pc-windows-msvc	tests/neato/wild_gv16_graphs_b69_4b5b48.gv	svg	5	default	16.7	16.6	17.8		1.0000
+2	aarch64-pc-windows-msvc	tests/neato/wild_gv16_graphs_b69_4b5b48.gv	svg	5	default2	16.6	16.5	16.9		0.9955
+2	aarch64-pc-windows-msvc	tests/neato/wild_gv16_graphs_b69_4b5b48.gv	svg	5	nopgo	17.3	17.0	17.3		1.0348
+2	aarch64-pc-windows-msvc	synth/neato_sparse_250.gv	svg	5	default	66.6	66.3	66.9		1.0000
+2	aarch64-pc-windows-msvc	synth/neato_sparse_250.gv	svg	5	default2	66.4	66.0	67.6		0.9972
+2	aarch64-pc-windows-msvc	synth/neato_sparse_250.gv	svg	5	nopgo	67.2	66.9	67.9		1.0093
+2	aarch64-pc-windows-msvc	synth/neato_sparse_500.gv	svg	5	default	263.5	263.2	265.8		1.0000
+2	aarch64-pc-windows-msvc	synth/neato_sparse_500.gv	svg	5	default2	264.1	262.9	265.4		1.0024
+2	aarch64-pc-windows-msvc	synth/neato_sparse_500.gv	svg	5	nopgo	266.4	265.9	267.0		1.0109
+2	aarch64-pc-windows-msvc	synth/neato_sparse_1000.gv	svg	3	default	1166.3	1165.4	1169.9		1.0000
+2	aarch64-pc-windows-msvc	synth/neato_sparse_1000.gv	svg	3	default2	1162.0	1161.5	1164.3		0.9962
+2	aarch64-pc-windows-msvc	synth/neato_sparse_1000.gv	svg	3	nopgo	1180.4	1175.5	1181.5		1.0121
+2	aarch64-pc-windows-msvc	synth/neato_sparse_2000.gv	svg	3	default	4520.5	4514.7	4538.6		1.0000
+2	aarch64-pc-windows-msvc	synth/neato_sparse_2000.gv	svg	3	default2	4505.6	4500.9	4527.0		0.9967
+2	aarch64-pc-windows-msvc	synth/neato_sparse_2000.gv	svg	3	nopgo	4562.9	4558.5	4570.6		1.0094
+2	aarch64-pc-windows-msvc	tests/fdp/wild_gv16_graphs_badvoro_2e8cb8.gv	svg	3	default	17223.2	17182.2	17314.7		1.0000
+2	aarch64-pc-windows-msvc	tests/fdp/wild_gv16_graphs_badvoro_2e8cb8.gv	svg	3	default2	17054.0	17049.8	17070.5		0.9902
+2	aarch64-pc-windows-msvc	tests/fdp/wild_gv16_graphs_badvoro_2e8cb8.gv	svg	3	nopgo	20094.2	20093.4	20161.5		1.1667
+2	aarch64-pc-windows-msvc	tests/fdp/wild_gv16_graphs_viewport_651d5b.gv	svg	5	default	358.7	358.4	359.6		1.0000
+2	aarch64-pc-windows-msvc	tests/fdp/wild_gv16_graphs_viewport_651d5b.gv	svg	5	default2	356.5	356.0	357.1		0.9940
+2	aarch64-pc-windows-msvc	tests/fdp/wild_gv16_graphs_viewport_651d5b.gv	svg	5	nopgo	409.1	408.2	410.2		1.1406
+2	aarch64-pc-windows-msvc	tests/fdp/wild_gv16_graphs_viewport_651d5b.gv	plain	5	default	358.6	358.4	359.1		1.0000
+2	aarch64-pc-windows-msvc	tests/fdp/wild_gv16_graphs_viewport_651d5b.gv	plain	5	default2	356.5	356.2	357.0		0.9940
+2	aarch64-pc-windows-msvc	tests/fdp/wild_gv16_graphs_viewport_651d5b.gv	plain	5	nopgo	408.3	407.8	409.1		1.1383
+2	aarch64-pc-windows-msvc	tests/fdp/wild_gv16_undirected_ngk10_4_793340.gv	svg	5	default	75.7	75.6	76.2		1.0000
+2	aarch64-pc-windows-msvc	tests/fdp/wild_gv16_undirected_ngk10_4_793340.gv	svg	5	default2	75.3	75.2	76.1		0.9951
+2	aarch64-pc-windows-msvc	tests/fdp/wild_gv16_undirected_ngk10_4_793340.gv	svg	5	nopgo	73.9	73.6	74.6		0.9768
+2	aarch64-pc-windows-msvc	tests/fdp/wild_gv16_graphs_b69_4b5b48.gv	svg	5	default	60.9	60.7	61.1		1.0000
+2	aarch64-pc-windows-msvc	tests/fdp/wild_gv16_graphs_b69_4b5b48.gv	svg	5	default2	60.6	60.4	61.4		0.9942
+2	aarch64-pc-windows-msvc	tests/fdp/wild_gv16_graphs_b69_4b5b48.gv	svg	5	nopgo	70.2	70.1	71.7		1.1518
+2	aarch64-pc-windows-msvc	synth/fdp_sparse_250.gv	svg	5	default	645.0	644.6	645.8		1.0000
+2	aarch64-pc-windows-msvc	synth/fdp_sparse_250.gv	svg	5	default2	640.6	640.4	640.8		0.9931
+2	aarch64-pc-windows-msvc	synth/fdp_sparse_250.gv	svg	5	nopgo	744.7	744.2	746.2		1.1546
+2	aarch64-pc-windows-msvc	synth/fdp_sparse_500.gv	svg	3	default	2705.1	2704.2	2707.6		1.0000
+2	aarch64-pc-windows-msvc	synth/fdp_sparse_500.gv	svg	3	default2	2688.2	2687.0	2688.3		0.9937
+2	aarch64-pc-windows-msvc	synth/fdp_sparse_500.gv	svg	3	nopgo	3132.2	3131.8	3142.5		1.1579
+2	aarch64-pc-windows-msvc	synth/fdp_sparse_1000.gv	svg	3	default	10340.2	10332.3	10340.2		1.0000
+2	aarch64-pc-windows-msvc	synth/fdp_sparse_1000.gv	svg	3	default2	10256.9	10255.2	10268.7		0.9919
+2	aarch64-pc-windows-msvc	synth/fdp_sparse_1000.gv	svg	3	nopgo	12022.2	12016.5	12075.0		1.1627
+2	aarch64-pc-windows-msvc	tests/sfdp/gen_rnd2000.gv	svg	5	default	204.0	203.4	204.5		1.0000
+2	aarch64-pc-windows-msvc	tests/sfdp/gen_rnd2000.gv	svg	5	default2	204.6	204.0	206.1		1.0029
+2	aarch64-pc-windows-msvc	tests/sfdp/gen_rnd2000.gv	svg	5	nopgo	245.6	244.8	248.0		1.2038
+2	aarch64-pc-windows-msvc	tests/sfdp/gen_rnd2000.gv	plain	5	default	204.8	204.5	205.8		1.0000
+2	aarch64-pc-windows-msvc	tests/sfdp/gen_rnd2000.gv	plain	5	default2	206.1	205.7	207.6		1.0062
+2	aarch64-pc-windows-msvc	tests/sfdp/gen_rnd2000.gv	plain	5	nopgo	245.5	245.1	248.0		1.1986
+2	aarch64-pc-windows-msvc	tests/sfdp/gen_rnd2000.gv	png	5	default	271.5	269.5	272.1		1.0000
+2	aarch64-pc-windows-msvc	tests/sfdp/gen_rnd2000.gv	png	5	default2	271.9	271.0	272.9		1.0014
+2	aarch64-pc-windows-msvc	tests/sfdp/gen_rnd2000.gv	png	5	nopgo	321.1	320.8	323.2		1.1825
+2	aarch64-pc-windows-msvc	tests/sfdp/gen_tree9.gv	svg	5	default	129.2	129.0	129.5		1.0000
+2	aarch64-pc-windows-msvc	tests/sfdp/gen_tree9.gv	svg	5	default2	129.6	129.5	130.0		1.0026
+2	aarch64-pc-windows-msvc	tests/sfdp/gen_tree9.gv	svg	5	nopgo	145.5	145.2	145.7		1.1258
+2	aarch64-pc-windows-msvc	tests/sfdp/gen_powerlaw1000.gv	svg	5	default	116.7	116.0	116.9		1.0000
+2	aarch64-pc-windows-msvc	tests/sfdp/gen_powerlaw1000.gv	svg	5	default2	116.7	116.4	117.5		1.0008
+2	aarch64-pc-windows-msvc	tests/sfdp/gen_powerlaw1000.gv	svg	5	nopgo	130.8	130.6	130.9		1.1214
+2	aarch64-pc-windows-msvc	tests/sfdp/attr_quadtree_none.gv	svg	5	default	18.7	18.6	19.0		1.0000
+2	aarch64-pc-windows-msvc	tests/sfdp/attr_quadtree_none.gv	svg	5	default2	18.6	18.1	19.4		0.9992
+2	aarch64-pc-windows-msvc	tests/sfdp/attr_quadtree_none.gv	svg	5	nopgo	20.9	20.7	21.0		1.1178
+2	aarch64-pc-windows-msvc	tests/sfdp/gen_grid20x20.gv	svg	5	default	32.8	32.5	33.0		1.0000
+2	aarch64-pc-windows-msvc	tests/sfdp/gen_grid20x20.gv	svg	5	default2	32.7	32.6	33.8		0.9978
+2	aarch64-pc-windows-msvc	tests/sfdp/gen_grid20x20.gv	svg	5	nopgo	38.2	37.9	38.4		1.1663
+2	aarch64-pc-windows-msvc	synth/sfdp_sparse_1000.gv	svg	5	default	94.4	93.9	95.1		1.0000
+2	aarch64-pc-windows-msvc	synth/sfdp_sparse_1000.gv	svg	5	default2	94.8	94.7	95.0		1.0045
+2	aarch64-pc-windows-msvc	synth/sfdp_sparse_1000.gv	svg	5	nopgo	112.7	112.4	112.7		1.1937
+2	aarch64-pc-windows-msvc	synth/sfdp_sparse_5000.gv	svg	3	default	617.4	616.5	624.0		1.0000
+2	aarch64-pc-windows-msvc	synth/sfdp_sparse_5000.gv	svg	3	default2	616.3	613.2	617.6		0.9982
+2	aarch64-pc-windows-msvc	synth/sfdp_sparse_5000.gv	svg	3	nopgo	734.4	733.4	735.5		1.1895
+2	aarch64-pc-windows-msvc	synth/sfdp_sparse_20000.gv	svg	3	default	3975.9	3931.0	4001.1		1.0000
+2	aarch64-pc-windows-msvc	synth/sfdp_sparse_20000.gv	svg	3	default2	3914.3	3900.0	3993.7		0.9845
+2	aarch64-pc-windows-msvc	synth/sfdp_sparse_20000.gv	svg	3	nopgo	4590.3	4561.4	4661.2		1.1545
+2	aarch64-pc-windows-msvc	tests/circo/wild_gv16_graphs_badvoro_2e8cb8.gv	svg	3	default	34.1	34.0	37.9		1.0000
+2	aarch64-pc-windows-msvc	tests/circo/wild_gv16_graphs_badvoro_2e8cb8.gv	svg	3	default2	33.9	33.7	37.5		0.9937
+2	aarch64-pc-windows-msvc	tests/circo/wild_gv16_graphs_badvoro_2e8cb8.gv	svg	3	nopgo	37.8	37.7	40.8		1.1095
+2	aarch64-pc-windows-msvc	tests/circo/wild_gv16_linux_x86_dotsplines_dot1_3910e3.gv	svg	5	default	61.8	61.3	62.1		1.0000
+2	aarch64-pc-windows-msvc	tests/circo/wild_gv16_linux_x86_dotsplines_dot1_3910e3.gv	svg	5	default2	61.8	61.6	62.2		1.0014
+2	aarch64-pc-windows-msvc	tests/circo/wild_gv16_linux_x86_dotsplines_dot1_3910e3.gv	svg	5	nopgo	59.6	59.4	59.8		0.9653
+2	aarch64-pc-windows-msvc	tests/circo/wild_gv16_linux_x86_neatosplines_neato_c2c6f6.gv	svg	5	default	56.3	55.9	56.9		1.0000
+2	aarch64-pc-windows-msvc	tests/circo/wild_gv16_linux_x86_neatosplines_neato_c2c6f6.gv	svg	5	default2	56.5	56.3	58.5		1.0050
+2	aarch64-pc-windows-msvc	tests/circo/wild_gv16_linux_x86_neatosplines_neato_c2c6f6.gv	svg	5	nopgo	55.9	55.6	56.4		0.9940
+2	aarch64-pc-windows-msvc	tests/circo/wild_gv16_directed_sdh_29b016.gv	svg	5	default	15.0	11.8	15.5		1.0000
+2	aarch64-pc-windows-msvc	tests/circo/wild_gv16_directed_sdh_29b016.gv	svg	5	default2	14.7	12.2	14.9		0.9794
+2	aarch64-pc-windows-msvc	tests/circo/wild_gv16_directed_sdh_29b016.gv	svg	5	nopgo	15.1	12.2	16.0		1.0082
+2	aarch64-pc-windows-msvc	synth/circo_sparse_100.gv	svg	5	default	11.7	11.3	12.9		1.0000
+2	aarch64-pc-windows-msvc	synth/circo_sparse_100.gv	svg	5	default2	11.6	11.5	11.9		0.9913
+2	aarch64-pc-windows-msvc	synth/circo_sparse_100.gv	svg	5	nopgo	11.9	11.6	12.0		1.0145
+2	aarch64-pc-windows-msvc	synth/circo_sparse_200.gv	svg	5	default	14.9	14.6	16.5		1.0000
+2	aarch64-pc-windows-msvc	synth/circo_sparse_200.gv	svg	5	default2	14.9	14.7	15.2		1.0023
+2	aarch64-pc-windows-msvc	synth/circo_sparse_200.gv	svg	5	nopgo	15.4	15.3	15.5		1.0339
+2	aarch64-pc-windows-msvc	synth/circo_sparse_400.gv	svg	3	default	21.7	21.4	24.9		1.0000
+2	aarch64-pc-windows-msvc	synth/circo_sparse_400.gv	svg	3	default2	22.3	21.8	25.5		1.0280
+2	aarch64-pc-windows-msvc	synth/circo_sparse_400.gv	svg	3	nopgo	22.9	22.9	27.2		1.0554
+2	aarch64-pc-windows-msvc	tests/twopi/wild_gv16_undirected_ngk10_4_793340.gv	svg	5	default	67.7	67.2	68.5		1.0000
+2	aarch64-pc-windows-msvc	tests/twopi/wild_gv16_undirected_ngk10_4_793340.gv	svg	5	default2	67.5	67.2	67.5		0.9974
+2	aarch64-pc-windows-msvc	tests/twopi/wild_gv16_undirected_ngk10_4_793340.gv	svg	5	nopgo	66.0	65.6	66.2		0.9751
+2	aarch64-pc-windows-msvc	tests/twopi/fx_arrows.gv	svg	5	default	30.2	30.0	30.6		1.0000
+2	aarch64-pc-windows-msvc	tests/twopi/fx_arrows.gv	svg	5	default2	30.0	29.9	30.3		0.9928
+2	aarch64-pc-windows-msvc	tests/twopi/fx_arrows.gv	svg	5	nopgo	29.3	29.3	29.4		0.9712
+2	aarch64-pc-windows-msvc	tests/twopi/wild_gv16_linux_x86_arrows_dot_1ce23f.gv	svg	5	default	30.2	30.1	30.5		1.0000
+2	aarch64-pc-windows-msvc	tests/twopi/wild_gv16_linux_x86_arrows_dot_1ce23f.gv	svg	5	default2	30.4	30.1	30.8		1.0070
+2	aarch64-pc-windows-msvc	tests/twopi/wild_gv16_linux_x86_arrows_dot_1ce23f.gv	svg	5	nopgo	29.5	29.4	29.6		0.9764
+2	aarch64-pc-windows-msvc	synth/twopi_tree_1000.gv	svg	5	default	17.5	17.4	18.3		1.0000
+2	aarch64-pc-windows-msvc	synth/twopi_tree_1000.gv	svg	5	default2	17.7	17.5	18.6		1.0101
+2	aarch64-pc-windows-msvc	synth/twopi_tree_1000.gv	svg	5	nopgo	18.6	18.3	18.9		1.0644
+2	aarch64-pc-windows-msvc	synth/twopi_tree_5000.gv	svg	5	default	48.4	48.3	49.8		1.0000
+2	aarch64-pc-windows-msvc	synth/twopi_tree_5000.gv	svg	5	default2	48.3	47.9	49.3		0.9983
+2	aarch64-pc-windows-msvc	synth/twopi_tree_5000.gv	svg	5	nopgo	53.5	52.8	53.8		1.1050
+2	aarch64-pc-windows-msvc	synth/twopi_tree_20000.gv	svg	5	default	177.4	176.8	178.8		1.0000
+2	aarch64-pc-windows-msvc	synth/twopi_tree_20000.gv	svg	5	default2	177.4	175.1	179.3		1.0002
+2	aarch64-pc-windows-msvc	synth/twopi_tree_20000.gv	svg	5	nopgo	198.0	195.2	199.7		1.1163
+2	aarch64-pc-windows-msvc	synth/twopi_tree_20000.gv	plain	5	default	184.9	183.0	186.4		1.0000
+2	aarch64-pc-windows-msvc	synth/twopi_tree_20000.gv	plain	5	default2	186.0	183.7	186.2		1.0064
+2	aarch64-pc-windows-msvc	synth/twopi_tree_20000.gv	plain	5	nopgo	206.1	205.3	206.4		1.1150
+2	aarch64-pc-windows-msvc	tests/osage/wild_gv16_graphs_b51_33bcb0.gv	svg	5	default	11.4	11.3	11.8		1.0000
+2	aarch64-pc-windows-msvc	tests/osage/wild_gv16_graphs_b51_33bcb0.gv	svg	5	default2	11.5	11.0	11.5		1.0082
+2	aarch64-pc-windows-msvc	tests/osage/wild_gv16_graphs_b51_33bcb0.gv	svg	5	nopgo	11.7	11.6	11.9		1.0278
+2	aarch64-pc-windows-msvc	tests/osage/wild_gv16_graphs_b15_8c212e.gv	svg	5	default	13.1	12.8	14.0		1.0000
+2	aarch64-pc-windows-msvc	tests/osage/wild_gv16_graphs_b15_8c212e.gv	svg	5	default2	12.8	12.7	13.1		0.9730
+2	aarch64-pc-windows-msvc	tests/osage/wild_gv16_graphs_b15_8c212e.gv	svg	5	nopgo	13.2	13.1	13.3		1.0064
+2	aarch64-pc-windows-msvc	synth/osage_clustered_1000.gv	svg	5	default	14.7	14.6	14.8		1.0000
+2	aarch64-pc-windows-msvc	synth/osage_clustered_1000.gv	svg	5	default2	14.9	14.6	15.2		1.0136
+2	aarch64-pc-windows-msvc	synth/osage_clustered_1000.gv	svg	5	nopgo	15.7	15.5	17.3		1.0678
+2	aarch64-pc-windows-msvc	synth/osage_clustered_5000.gv	svg	5	default	33.9	33.9	34.5		1.0000
+2	aarch64-pc-windows-msvc	synth/osage_clustered_5000.gv	svg	5	default2	34.3	33.9	35.0		1.0107
+2	aarch64-pc-windows-msvc	synth/osage_clustered_5000.gv	svg	5	nopgo	37.4	37.3	37.9		1.1025
+2	aarch64-pc-windows-msvc	synth/osage_clustered_20000.gv	svg	5	default	107.4	106.2	108.5		1.0000
+2	aarch64-pc-windows-msvc	synth/osage_clustered_20000.gv	svg	5	default2	107.9	107.2	108.1		1.0040
+2	aarch64-pc-windows-msvc	synth/osage_clustered_20000.gv	svg	5	nopgo	122.5	122.0	123.1		1.1405
+2	aarch64-pc-windows-msvc	synth/osage_clustered_20000.gv	plain	5	default	109.9	109.3	110.4		1.0000
+2	aarch64-pc-windows-msvc	synth/osage_clustered_20000.gv	plain	5	default2	110.5	108.9	110.8		1.0055
+2	aarch64-pc-windows-msvc	synth/osage_clustered_20000.gv	plain	5	nopgo	125.2	124.0	126.0		1.1397
+2	aarch64-pc-windows-msvc	tests/patchwork/wild_gv16_graphs_b51_33bcb0.gv	svg	5	default	11.0	10.9	11.6		1.0000
+2	aarch64-pc-windows-msvc	tests/patchwork/wild_gv16_graphs_b51_33bcb0.gv	svg	5	default2	11.1	10.8	11.3		1.0020
+2	aarch64-pc-windows-msvc	tests/patchwork/wild_gv16_graphs_b51_33bcb0.gv	svg	5	nopgo	11.2	10.9	11.7		1.0187
+2	aarch64-pc-windows-msvc	tests/patchwork/wild_gv16_infosrc_plugins_1a797f.gv	svg	5	default	10.8	10.4	11.0		1.0000
+2	aarch64-pc-windows-msvc	tests/patchwork/wild_gv16_infosrc_plugins_1a797f.gv	svg	5	default2	10.6	10.3	10.9		0.9858
+2	aarch64-pc-windows-msvc	tests/patchwork/wild_gv16_infosrc_plugins_1a797f.gv	svg	5	nopgo	11.0	10.7	11.1		1.0202
+2	aarch64-pc-windows-msvc	synth/patchwork_clustered_1000.gv	svg	5	default	15.3	15.1	15.5		1.0000
+2	aarch64-pc-windows-msvc	synth/patchwork_clustered_1000.gv	svg	5	default2	15.4	15.2	15.4		1.0064
+2	aarch64-pc-windows-msvc	synth/patchwork_clustered_1000.gv	svg	5	nopgo	16.2	15.9	16.4		1.0610
+2	aarch64-pc-windows-msvc	synth/patchwork_clustered_5000.gv	svg	5	default	37.0	36.5	37.4		1.0000
+2	aarch64-pc-windows-msvc	synth/patchwork_clustered_5000.gv	svg	5	default2	37.0	36.8	37.5		1.0002
+2	aarch64-pc-windows-msvc	synth/patchwork_clustered_5000.gv	svg	5	nopgo	40.9	40.8	40.9		1.1042
+2	aarch64-pc-windows-msvc	synth/patchwork_clustered_20000.gv	svg	5	default	118.9	118.1	119.7		1.0000
+2	aarch64-pc-windows-msvc	synth/patchwork_clustered_20000.gv	svg	5	default2	119.5	119.5	120.3		1.0051
+2	aarch64-pc-windows-msvc	synth/patchwork_clustered_20000.gv	svg	5	nopgo	136.0	134.8	136.3		1.1433
+2	aarch64-pc-windows-msvc	synth/patchwork_clustered_20000.gv	plain	5	default	117.1	116.6	117.3		1.0000
+2	aarch64-pc-windows-msvc	synth/patchwork_clustered_20000.gv	plain	5	default2	117.9	116.7	118.6		1.0066
+2	aarch64-pc-windows-msvc	synth/patchwork_clustered_20000.gv	plain	5	nopgo	132.7	131.3	134.4		1.1325
+2	aarch64-unknown-linux-musl	tests/fixtures/unix.gv	svg	5	default	3.5	3.4	3.6	3.4	1.0000
+2	aarch64-unknown-linux-musl	tests/fixtures/unix.gv	svg	5	default2	3.5	3.5	4.0	3.5	1.0078
+2	aarch64-unknown-linux-musl	tests/fixtures/unix.gv	svg	5	nopgo	3.6	3.6	3.7	3.5	1.0352
+2	aarch64-unknown-linux-musl	tests/fixtures/unix.gv	plain	5	default	3.3	3.3	3.4	3.3	1.0000
+2	aarch64-unknown-linux-musl	tests/fixtures/unix.gv	plain	5	default2	3.4	3.2	3.5	3.3	1.0060
+2	aarch64-unknown-linux-musl	tests/fixtures/unix.gv	plain	5	nopgo	3.4	3.4	3.5	3.4	1.0254
+2	aarch64-unknown-linux-musl	tests/fixtures/unix.gv	png	5	default	19.4	19.1	20.2	19.3	1.0000
+2	aarch64-unknown-linux-musl	tests/fixtures/unix.gv	png	5	default2	20.0	19.4	20.3	19.9	1.0298
+2	aarch64-unknown-linux-musl	tests/fixtures/unix.gv	png	5	nopgo	20.8	20.3	21.0	20.7	1.0718
+2	aarch64-unknown-linux-musl	tests/wild/gv16_graphs_b29_d1e4db.gv	svg	5	default	148.9	148.1	151.5	148.7	1.0000
+2	aarch64-unknown-linux-musl	tests/wild/gv16_graphs_b29_d1e4db.gv	svg	5	default2	152.1	148.8	153.3	151.8	1.0219
+2	aarch64-unknown-linux-musl	tests/wild/gv16_graphs_b29_d1e4db.gv	svg	5	nopgo	150.6	149.9	151.6	150.4	1.0113
+2	aarch64-unknown-linux-musl	tests/wild/gv16_graphs_b29_d1e4db.gv	plain	5	default	147.4	146.6	149.4	147.1	1.0000
+2	aarch64-unknown-linux-musl	tests/wild/gv16_graphs_b29_d1e4db.gv	plain	5	default2	149.2	148.3	151.6	148.9	1.0127
+2	aarch64-unknown-linux-musl	tests/wild/gv16_graphs_b29_d1e4db.gv	plain	5	nopgo	150.0	147.9	151.4	149.7	1.0179
+2	aarch64-unknown-linux-musl	tests/wild/gv16_graphs_b29_d1e4db.gv	png	5	default	840.0	838.7	845.3	839.8	1.0000
+2	aarch64-unknown-linux-musl	tests/wild/gv16_graphs_b29_d1e4db.gv	png	5	default2	844.9	842.1	846.6	844.6	1.0057
+2	aarch64-unknown-linux-musl	tests/wild/gv16_graphs_b29_d1e4db.gv	png	5	nopgo	865.1	863.3	867.0	864.8	1.0298
+2	aarch64-unknown-linux-musl	tests/wild/gv16_graphs_b143_5416de.gv	svg	5	default	53.7	53.2	54.2	53.6	1.0000
+2	aarch64-unknown-linux-musl	tests/wild/gv16_graphs_b143_5416de.gv	svg	5	default2	53.1	52.7	54.0	52.9	0.9880
+2	aarch64-unknown-linux-musl	tests/wild/gv16_graphs_b143_5416de.gv	svg	5	nopgo	54.1	54.1	54.8	54.0	1.0081
+2	aarch64-unknown-linux-musl	tests/wild/gv16_graphs_b143_5416de.gv	plain	5	default	52.3	51.8	53.1	52.2	1.0000
+2	aarch64-unknown-linux-musl	tests/wild/gv16_graphs_b143_5416de.gv	plain	5	default2	52.8	52.2	53.1	52.6	1.0089
+2	aarch64-unknown-linux-musl	tests/wild/gv16_graphs_b143_5416de.gv	plain	5	nopgo	53.2	53.0	54.2	53.1	1.0171
+2	aarch64-unknown-linux-musl	tests/wild/gv16_graphs_b143_5416de.gv	png	5	default	801.1	796.9	805.8	800.8	1.0000
+2	aarch64-unknown-linux-musl	tests/wild/gv16_graphs_b143_5416de.gv	png	5	default2	803.1	798.5	804.5	802.8	1.0026
+2	aarch64-unknown-linux-musl	tests/wild/gv16_graphs_b143_5416de.gv	png	5	nopgo	821.2	820.0	828.9	820.9	1.0252
+2	aarch64-unknown-linux-musl	tests/wild/gv16_graphs_b106_471493.gv	svg	5	default	40.6	39.9	40.8	40.4	1.0000
+2	aarch64-unknown-linux-musl	tests/wild/gv16_graphs_b106_471493.gv	svg	5	default2	40.3	39.9	40.9	40.2	0.9943
+2	aarch64-unknown-linux-musl	tests/wild/gv16_graphs_b106_471493.gv	svg	5	nopgo	40.7	40.5	41.3	40.5	1.0043
+2	aarch64-unknown-linux-musl	tests/wild/gv16_graphs_badvoro_2e8cb8.gv	svg	5	default	112.3	111.5	114.0	112.1	1.0000
+2	aarch64-unknown-linux-musl	tests/wild/gv16_graphs_badvoro_2e8cb8.gv	svg	5	default2	113.3	112.1	114.4	113.0	1.0084
+2	aarch64-unknown-linux-musl	tests/wild/gv16_graphs_badvoro_2e8cb8.gv	svg	5	nopgo	113.8	112.1	115.4	113.7	1.0133
+2	aarch64-unknown-linux-musl	tests/wild/gv16_graphs_b124_4440e1.gv	svg	5	default	22.6	22.2	22.7	22.6	1.0000
+2	aarch64-unknown-linux-musl	tests/wild/gv16_graphs_b124_4440e1.gv	svg	5	default2	22.3	22.0	22.6	22.2	0.9875
+2	aarch64-unknown-linux-musl	tests/wild/gv16_graphs_b124_4440e1.gv	svg	5	nopgo	22.6	22.5	22.8	22.5	0.9998
+2	aarch64-unknown-linux-musl	synth/dot_dag_1000.gv	svg	5	default	64.3	63.7	65.0	64.1	1.0000
+2	aarch64-unknown-linux-musl	synth/dot_dag_1000.gv	svg	5	default2	64.4	63.6	65.0	64.3	1.0024
+2	aarch64-unknown-linux-musl	synth/dot_dag_1000.gv	svg	5	nopgo	66.0	65.8	66.5	65.9	1.0275
+2	aarch64-unknown-linux-musl	synth/dot_dag_1000.gv	plain	5	default	63.9	62.4	64.2	63.7	1.0000
+2	aarch64-unknown-linux-musl	synth/dot_dag_1000.gv	plain	5	default2	63.1	62.6	63.5	62.9	0.9878
+2	aarch64-unknown-linux-musl	synth/dot_dag_1000.gv	plain	5	nopgo	65.9	63.9	66.5	65.7	1.0313
+2	aarch64-unknown-linux-musl	synth/dot_dag_5000.gv	svg	5	default	390.1	382.5	395.5	389.9	1.0000
+2	aarch64-unknown-linux-musl	synth/dot_dag_5000.gv	svg	5	default2	384.1	382.1	393.1	383.8	0.9845
+2	aarch64-unknown-linux-musl	synth/dot_dag_5000.gv	svg	5	nopgo	387.5	385.5	396.8	387.3	0.9934
+2	aarch64-unknown-linux-musl	synth/dot_dag_5000.gv	plain	5	default	385.9	384.2	391.8	385.6	1.0000
+2	aarch64-unknown-linux-musl	synth/dot_dag_5000.gv	plain	5	default2	382.0	380.6	389.1	381.8	0.9899
+2	aarch64-unknown-linux-musl	synth/dot_dag_5000.gv	plain	5	nopgo	387.4	379.9	389.4	386.9	1.0038
+2	aarch64-unknown-linux-musl	synth/dot_dag_20000.gv	svg	3	default	1830.4	1814.6	1853.5	1830.2	1.0000
+2	aarch64-unknown-linux-musl	synth/dot_dag_20000.gv	svg	3	default2	1826.2	1814.8	1845.0	1825.9	0.9977
+2	aarch64-unknown-linux-musl	synth/dot_dag_20000.gv	svg	3	nopgo	1820.2	1796.9	1862.5	1819.8	0.9944
+2	aarch64-unknown-linux-musl	tests/neato/wild_gv16_graphs_badvoro_2e8cb8.gv	svg	3	default	1326.4	1323.1	1331.2	1325.7	1.0000
+2	aarch64-unknown-linux-musl	tests/neato/wild_gv16_graphs_badvoro_2e8cb8.gv	svg	3	default2	1331.3	1320.6	1334.4	1330.8	1.0036
+2	aarch64-unknown-linux-musl	tests/neato/wild_gv16_graphs_badvoro_2e8cb8.gv	svg	3	nopgo	1321.2	1321.1	1321.8	1321.0	0.9960
+2	aarch64-unknown-linux-musl	tests/neato/hw3_vpsc_random200.gv	svg	5	default	33.4	33.2	33.5	33.2	1.0000
+2	aarch64-unknown-linux-musl	tests/neato/hw3_vpsc_random200.gv	svg	5	default2	33.2	33.2	33.4	33.1	0.9961
+2	aarch64-unknown-linux-musl	tests/neato/hw3_vpsc_random200.gv	svg	5	nopgo	33.4	33.3	33.5	33.3	1.0004
+2	aarch64-unknown-linux-musl	tests/neato/hw3_vpsc_random200.gv	plain	5	default	33.4	33.3	33.5	33.3	1.0000
+2	aarch64-unknown-linux-musl	tests/neato/hw3_vpsc_random200.gv	plain	5	default2	33.3	33.2	33.3	33.1	0.9970
+2	aarch64-unknown-linux-musl	tests/neato/hw3_vpsc_random200.gv	plain	5	nopgo	33.4	33.3	33.5	33.3	1.0016
+2	aarch64-unknown-linux-musl	tests/neato/hw3_vpsc_random200.gv	png	5	default	119.7	119.2	120.3	119.5	1.0000
+2	aarch64-unknown-linux-musl	tests/neato/hw3_vpsc_random200.gv	png	5	default2	119.3	118.4	120.1	119.0	0.9968
+2	aarch64-unknown-linux-musl	tests/neato/hw3_vpsc_random200.gv	png	5	nopgo	123.3	122.9	124.3	123.1	1.0301
+2	aarch64-unknown-linux-musl	tests/neato/hw2_random_120.gv	svg	5	default	20.7	20.3	20.7	20.6	1.0000
+2	aarch64-unknown-linux-musl	tests/neato/hw2_random_120.gv	svg	5	default2	20.6	20.5	20.7	20.5	0.9981
+2	aarch64-unknown-linux-musl	tests/neato/hw2_random_120.gv	svg	5	nopgo	20.9	20.5	20.9	20.8	1.0104
+2	aarch64-unknown-linux-musl	tests/neato/fx_NaN.gv	svg	5	default	10.7	10.6	10.8	10.6	1.0000
+2	aarch64-unknown-linux-musl	tests/neato/fx_NaN.gv	svg	5	default2	10.7	10.6	10.9	10.6	1.0021
+2	aarch64-unknown-linux-musl	tests/neato/fx_NaN.gv	svg	5	nopgo	11.1	10.8	11.1	11.0	1.0431
+2	aarch64-unknown-linux-musl	tests/neato/wild_gv16_graphs_b69_4b5b48.gv	svg	5	default	9.0	8.9	9.1	8.9	1.0000
+2	aarch64-unknown-linux-musl	tests/neato/wild_gv16_graphs_b69_4b5b48.gv	svg	5	default2	9.0	8.9	9.0	8.9	0.9970
+2	aarch64-unknown-linux-musl	tests/neato/wild_gv16_graphs_b69_4b5b48.gv	svg	5	nopgo	9.5	9.4	9.6	9.4	1.0516
+2	aarch64-unknown-linux-musl	synth/neato_sparse_250.gv	svg	5	default	60.5	60.1	60.8	60.4	1.0000
+2	aarch64-unknown-linux-musl	synth/neato_sparse_250.gv	svg	5	default2	60.1	59.7	60.9	60.0	0.9941
+2	aarch64-unknown-linux-musl	synth/neato_sparse_250.gv	svg	5	nopgo	60.5	60.2	60.8	60.3	0.9993
+2	aarch64-unknown-linux-musl	synth/neato_sparse_500.gv	svg	5	default	264.4	262.4	268.4	264.1	1.0000
+2	aarch64-unknown-linux-musl	synth/neato_sparse_500.gv	svg	5	default2	263.6	261.3	265.1	263.4	0.9971
+2	aarch64-unknown-linux-musl	synth/neato_sparse_500.gv	svg	5	nopgo	265.3	263.4	266.3	265.1	1.0034
+2	aarch64-unknown-linux-musl	synth/neato_sparse_1000.gv	svg	3	default	1163.3	1155.7	1166.7	1163.0	1.0000
+2	aarch64-unknown-linux-musl	synth/neato_sparse_1000.gv	svg	3	default2	1156.6	1156.4	1166.2	1156.3	0.9943
+2	aarch64-unknown-linux-musl	synth/neato_sparse_1000.gv	svg	3	nopgo	1155.7	1152.6	1164.6	1155.5	0.9935
+2	aarch64-unknown-linux-musl	synth/neato_sparse_2000.gv	svg	3	default	4471.1	4462.1	4472.6	4470.6	1.0000
+2	aarch64-unknown-linux-musl	synth/neato_sparse_2000.gv	svg	3	default2	4473.8	4473.2	4475.9	4473.3	1.0006
+2	aarch64-unknown-linux-musl	synth/neato_sparse_2000.gv	svg	3	nopgo	4477.5	4476.0	4480.9	4477.0	1.0014
+2	aarch64-unknown-linux-musl	tests/fdp/wild_gv16_graphs_badvoro_2e8cb8.gv	svg	3	default	18846.7	18844.2	18854.4	18846.6	1.0000
+2	aarch64-unknown-linux-musl	tests/fdp/wild_gv16_graphs_badvoro_2e8cb8.gv	svg	3	default2	18853.7	18842.6	18855.6	18853.7	1.0004
+2	aarch64-unknown-linux-musl	tests/fdp/wild_gv16_graphs_badvoro_2e8cb8.gv	svg	3	nopgo	23011.0	23003.8	23037.1	23011.1	1.2210
+2	aarch64-unknown-linux-musl	tests/fdp/wild_gv16_graphs_viewport_651d5b.gv	svg	5	default	353.7	353.4	354.0	353.5	1.0000
+2	aarch64-unknown-linux-musl	tests/fdp/wild_gv16_graphs_viewport_651d5b.gv	svg	5	default2	353.8	353.8	354.0	353.6	1.0003
+2	aarch64-unknown-linux-musl	tests/fdp/wild_gv16_graphs_viewport_651d5b.gv	svg	5	nopgo	436.2	435.5	436.3	435.8	1.2330
+2	aarch64-unknown-linux-musl	tests/fdp/wild_gv16_graphs_viewport_651d5b.gv	plain	5	default	353.5	353.3	354.0	353.2	1.0000
+2	aarch64-unknown-linux-musl	tests/fdp/wild_gv16_graphs_viewport_651d5b.gv	plain	5	default2	353.7	353.3	354.1	353.5	1.0004
+2	aarch64-unknown-linux-musl	tests/fdp/wild_gv16_graphs_viewport_651d5b.gv	plain	5	nopgo	435.8	435.4	436.0	435.5	1.2327
+2	aarch64-unknown-linux-musl	tests/fdp/wild_gv16_undirected_ngk10_4_793340.gv	svg	5	default	73.0	72.7	73.8	72.8	1.0000
+2	aarch64-unknown-linux-musl	tests/fdp/wild_gv16_undirected_ngk10_4_793340.gv	svg	5	default2	73.6	72.6	74.2	73.4	1.0087
+2	aarch64-unknown-linux-musl	tests/fdp/wild_gv16_undirected_ngk10_4_793340.gv	svg	5	nopgo	71.9	71.3	73.0	71.7	0.9850
+2	aarch64-unknown-linux-musl	tests/fdp/wild_gv16_graphs_b69_4b5b48.gv	svg	5	default	53.6	53.5	53.8	53.5	1.0000
+2	aarch64-unknown-linux-musl	tests/fdp/wild_gv16_graphs_b69_4b5b48.gv	svg	5	default2	53.7	53.5	54.0	53.5	1.0017
+2	aarch64-unknown-linux-musl	tests/fdp/wild_gv16_graphs_b69_4b5b48.gv	svg	5	nopgo	65.5	65.3	65.7	65.4	1.2229
+2	aarch64-unknown-linux-musl	synth/fdp_sparse_250.gv	svg	5	default	634.0	633.8	634.6	633.7	1.0000
+2	aarch64-unknown-linux-musl	synth/fdp_sparse_250.gv	svg	5	default2	634.1	633.9	634.6	633.8	1.0002
+2	aarch64-unknown-linux-musl	synth/fdp_sparse_250.gv	svg	5	nopgo	788.1	787.9	788.2	787.8	1.2431
+2	aarch64-unknown-linux-musl	synth/fdp_sparse_500.gv	svg	3	default	2812.8	2811.7	2813.1	2812.6	1.0000
+2	aarch64-unknown-linux-musl	synth/fdp_sparse_500.gv	svg	3	default2	2812.1	2811.2	2816.1	2812.0	0.9998
+2	aarch64-unknown-linux-musl	synth/fdp_sparse_500.gv	svg	3	nopgo	3454.1	3453.6	3456.2	3453.9	1.2280
+2	aarch64-unknown-linux-musl	synth/fdp_sparse_1000.gv	svg	3	default	10749.6	10732.4	10752.2	10749.7	1.0000
+2	aarch64-unknown-linux-musl	synth/fdp_sparse_1000.gv	svg	3	default2	10726.1	10725.6	10730.8	10726.2	0.9978
+2	aarch64-unknown-linux-musl	synth/fdp_sparse_1000.gv	svg	3	nopgo	13264.9	13256.3	13274.9	13265.1	1.2340
+2	aarch64-unknown-linux-musl	tests/sfdp/gen_rnd2000.gv	svg	5	default	198.9	198.7	200.8	198.6	1.0000
+2	aarch64-unknown-linux-musl	tests/sfdp/gen_rnd2000.gv	svg	5	default2	200.3	197.5	201.3	200.0	1.0073
+2	aarch64-unknown-linux-musl	tests/sfdp/gen_rnd2000.gv	svg	5	nopgo	242.1	241.5	242.6	241.8	1.2174
+2	aarch64-unknown-linux-musl	tests/sfdp/gen_rnd2000.gv	plain	5	default	200.6	199.4	202.4	200.2	1.0000
+2	aarch64-unknown-linux-musl	tests/sfdp/gen_rnd2000.gv	plain	5	default2	200.4	199.2	200.5	200.2	0.9991
+2	aarch64-unknown-linux-musl	tests/sfdp/gen_rnd2000.gv	plain	5	nopgo	242.2	241.3	243.0	242.0	1.2076
+2	aarch64-unknown-linux-musl	tests/sfdp/gen_rnd2000.gv	png	5	default	269.1	267.8	270.7	269.0	1.0000
+2	aarch64-unknown-linux-musl	tests/sfdp/gen_rnd2000.gv	png	5	default2	268.0	267.1	270.0	267.9	0.9958
+2	aarch64-unknown-linux-musl	tests/sfdp/gen_rnd2000.gv	png	5	nopgo	319.2	318.5	320.8	319.0	1.1860
+2	aarch64-unknown-linux-musl	tests/sfdp/gen_tree9.gv	svg	5	default	122.0	121.9	122.3	121.8	1.0000
+2	aarch64-unknown-linux-musl	tests/sfdp/gen_tree9.gv	svg	5	default2	122.1	121.8	122.4	121.8	1.0006
+2	aarch64-unknown-linux-musl	tests/sfdp/gen_tree9.gv	svg	5	nopgo	140.4	140.2	140.7	140.3	1.1507
+2	aarch64-unknown-linux-musl	tests/sfdp/gen_powerlaw1000.gv	svg	5	default	110.0	109.6	110.4	109.8	1.0000
+2	aarch64-unknown-linux-musl	tests/sfdp/gen_powerlaw1000.gv	svg	5	default2	109.9	109.8	110.2	109.8	0.9989
+2	aarch64-unknown-linux-musl	tests/sfdp/gen_powerlaw1000.gv	svg	5	nopgo	125.8	125.6	126.1	125.6	1.1427
+2	aarch64-unknown-linux-musl	tests/sfdp/attr_quadtree_none.gv	svg	5	default	10.6	10.5	10.7	10.5	1.0000
+2	aarch64-unknown-linux-musl	tests/sfdp/attr_quadtree_none.gv	svg	5	default2	10.5	10.4	10.6	10.5	0.9953
+2	aarch64-unknown-linux-musl	tests/sfdp/attr_quadtree_none.gv	svg	5	nopgo	12.4	12.3	12.4	12.3	1.1716
+2	aarch64-unknown-linux-musl	tests/sfdp/gen_grid20x20.gv	svg	5	default	25.1	24.8	25.3	24.9	1.0000
+2	aarch64-unknown-linux-musl	tests/sfdp/gen_grid20x20.gv	svg	5	default2	24.9	24.8	25.3	24.8	0.9931
+2	aarch64-unknown-linux-musl	tests/sfdp/gen_grid20x20.gv	svg	5	nopgo	30.6	30.3	30.7	30.5	1.2197
+2	aarch64-unknown-linux-musl	synth/sfdp_sparse_1000.gv	svg	5	default	88.7	88.4	88.9	88.5	1.0000
+2	aarch64-unknown-linux-musl	synth/sfdp_sparse_1000.gv	svg	5	default2	88.2	88.1	88.6	88.1	0.9947
+2	aarch64-unknown-linux-musl	synth/sfdp_sparse_1000.gv	svg	5	nopgo	107.6	106.9	108.1	107.4	1.2129
+2	aarch64-unknown-linux-musl	synth/sfdp_sparse_5000.gv	svg	3	default	617.4	607.7	623.5	617.2	1.0000
+2	aarch64-unknown-linux-musl	synth/sfdp_sparse_5000.gv	svg	3	default2	620.2	612.9	636.7	619.9	1.0045
+2	aarch64-unknown-linux-musl	synth/sfdp_sparse_5000.gv	svg	3	nopgo	733.1	727.2	733.3	732.8	1.1873
+2	aarch64-unknown-linux-musl	synth/sfdp_sparse_20000.gv	svg	3	default	3890.0	3684.2	3897.3	3889.7	1.0000
+2	aarch64-unknown-linux-musl	synth/sfdp_sparse_20000.gv	svg	3	default2	3708.9	3698.3	3870.7	3707.3	0.9534
+2	aarch64-unknown-linux-musl	synth/sfdp_sparse_20000.gv	svg	3	nopgo	4327.8	4303.5	4485.5	4327.5	1.1126
+2	aarch64-unknown-linux-musl	tests/circo/wild_gv16_graphs_badvoro_2e8cb8.gv	svg	3	default	30.0	29.9	30.3	29.9	1.0000
+2	aarch64-unknown-linux-musl	tests/circo/wild_gv16_graphs_badvoro_2e8cb8.gv	svg	3	default2	30.4	30.1	30.7	30.3	1.0131
+2	aarch64-unknown-linux-musl	tests/circo/wild_gv16_graphs_badvoro_2e8cb8.gv	svg	3	nopgo	31.8	31.6	32.8	31.6	1.0595
+2	aarch64-unknown-linux-musl	tests/circo/wild_gv16_linux_x86_dotsplines_dot1_3910e3.gv	svg	5	default	53.7	53.6	53.7	53.5	1.0000
+2	aarch64-unknown-linux-musl	tests/circo/wild_gv16_linux_x86_dotsplines_dot1_3910e3.gv	svg	5	default2	53.6	53.5	53.8	53.5	0.9998
+2	aarch64-unknown-linux-musl	tests/circo/wild_gv16_linux_x86_dotsplines_dot1_3910e3.gv	svg	5	nopgo	52.2	52.1	52.3	52.1	0.9726
+2	aarch64-unknown-linux-musl	tests/circo/wild_gv16_linux_x86_neatosplines_neato_c2c6f6.gv	svg	5	default	53.8	53.7	54.4	53.7	1.0000
+2	aarch64-unknown-linux-musl	tests/circo/wild_gv16_linux_x86_neatosplines_neato_c2c6f6.gv	svg	5	default2	54.2	53.6	54.4	54.0	1.0069
+2	aarch64-unknown-linux-musl	tests/circo/wild_gv16_linux_x86_neatosplines_neato_c2c6f6.gv	svg	5	nopgo	54.1	53.6	54.7	53.9	1.0055
+2	aarch64-unknown-linux-musl	tests/circo/wild_gv16_directed_sdh_29b016.gv	svg	5	default	4.3	4.2	4.3	4.2	1.0000
+2	aarch64-unknown-linux-musl	tests/circo/wild_gv16_directed_sdh_29b016.gv	svg	5	default2	4.3	4.3	4.4	4.2	1.0049
+2	aarch64-unknown-linux-musl	tests/circo/wild_gv16_directed_sdh_29b016.gv	svg	5	nopgo	4.5	4.5	4.7	4.4	1.0447
+2	aarch64-unknown-linux-musl	synth/circo_sparse_100.gv	svg	5	default	3.7	3.6	3.8	3.6	1.0000
+2	aarch64-unknown-linux-musl	synth/circo_sparse_100.gv	svg	5	default2	3.6	3.6	3.7	3.6	0.9867
+2	aarch64-unknown-linux-musl	synth/circo_sparse_100.gv	svg	5	nopgo	3.9	3.8	3.9	3.8	1.0578
+2	aarch64-unknown-linux-musl	synth/circo_sparse_200.gv	svg	5	default	7.2	7.1	7.3	7.1	1.0000
+2	aarch64-unknown-linux-musl	synth/circo_sparse_200.gv	svg	5	default2	7.2	7.1	7.2	7.1	0.9970
+2	aarch64-unknown-linux-musl	synth/circo_sparse_200.gv	svg	5	nopgo	7.8	7.7	7.9	7.7	1.0820
+2	aarch64-unknown-linux-musl	synth/circo_sparse_400.gv	svg	3	default	15.4	15.3	15.6	15.3	1.0000
+2	aarch64-unknown-linux-musl	synth/circo_sparse_400.gv	svg	3	default2	15.2	15.0	15.4	15.1	0.9901
+2	aarch64-unknown-linux-musl	synth/circo_sparse_400.gv	svg	3	nopgo	16.3	16.2	16.4	16.3	1.0642
+2	aarch64-unknown-linux-musl	tests/twopi/wild_gv16_undirected_ngk10_4_793340.gv	svg	5	default	64.7	64.5	65.0	64.6	1.0000
+2	aarch64-unknown-linux-musl	tests/twopi/wild_gv16_undirected_ngk10_4_793340.gv	svg	5	default2	65.0	64.4	65.2	64.8	1.0044
+2	aarch64-unknown-linux-musl	tests/twopi/wild_gv16_undirected_ngk10_4_793340.gv	svg	5	nopgo	63.2	62.9	63.5	63.1	0.9772
+2	aarch64-unknown-linux-musl	tests/twopi/fx_arrows.gv	svg	5	default	25.5	25.4	26.0	25.4	1.0000
+2	aarch64-unknown-linux-musl	tests/twopi/fx_arrows.gv	svg	5	default2	25.6	25.4	26.1	25.5	1.0043
+2	aarch64-unknown-linux-musl	tests/twopi/fx_arrows.gv	svg	5	nopgo	25.0	25.0	25.5	24.9	0.9824
+2	aarch64-unknown-linux-musl	tests/twopi/wild_gv16_linux_x86_arrows_dot_1ce23f.gv	svg	5	default	26.0	25.7	26.2	25.9	1.0000
+2	aarch64-unknown-linux-musl	tests/twopi/wild_gv16_linux_x86_arrows_dot_1ce23f.gv	svg	5	default2	26.1	25.9	26.3	25.9	1.0018
+2	aarch64-unknown-linux-musl	tests/twopi/wild_gv16_linux_x86_arrows_dot_1ce23f.gv	svg	5	nopgo	25.4	25.3	25.8	25.3	0.9783
+2	aarch64-unknown-linux-musl	synth/twopi_tree_1000.gv	svg	5	default	10.4	10.2	10.6	10.3	1.0000
+2	aarch64-unknown-linux-musl	synth/twopi_tree_1000.gv	svg	5	default2	10.4	10.3	10.9	10.3	1.0043
+2	aarch64-unknown-linux-musl	synth/twopi_tree_1000.gv	svg	5	nopgo	11.5	11.3	11.6	11.4	1.1076
+2	aarch64-unknown-linux-musl	synth/twopi_tree_5000.gv	svg	5	default	46.1	45.7	47.3	46.0	1.0000
+2	aarch64-unknown-linux-musl	synth/twopi_tree_5000.gv	svg	5	default2	46.4	45.0	47.1	46.3	1.0064
+2	aarch64-unknown-linux-musl	synth/twopi_tree_5000.gv	svg	5	nopgo	50.6	50.3	51.8	50.5	1.0967
+2	aarch64-unknown-linux-musl	synth/twopi_tree_20000.gv	svg	5	default	194.9	190.7	195.6	194.5	1.0000
+2	aarch64-unknown-linux-musl	synth/twopi_tree_20000.gv	svg	5	default2	193.1	191.5	198.6	192.9	0.9908
+2	aarch64-unknown-linux-musl	synth/twopi_tree_20000.gv	svg	5	nopgo	213.7	211.5	216.2	213.4	1.0965
+2	aarch64-unknown-linux-musl	synth/twopi_tree_20000.gv	plain	5	default	202.5	201.6	205.8	202.2	1.0000
+2	aarch64-unknown-linux-musl	synth/twopi_tree_20000.gv	plain	5	default2	207.0	203.0	207.7	206.7	1.0225
+2	aarch64-unknown-linux-musl	synth/twopi_tree_20000.gv	plain	5	nopgo	222.7	218.1	226.1	222.6	1.1000
+2	aarch64-unknown-linux-musl	tests/osage/wild_gv16_graphs_b51_33bcb0.gv	svg	5	default	3.7	3.6	3.7	3.6	1.0000
+2	aarch64-unknown-linux-musl	tests/osage/wild_gv16_graphs_b51_33bcb0.gv	svg	5	default2	3.7	3.7	3.8	3.6	0.9959
+2	aarch64-unknown-linux-musl	tests/osage/wild_gv16_graphs_b51_33bcb0.gv	svg	5	nopgo	3.9	3.8	3.9	3.8	1.0467
+2	aarch64-unknown-linux-musl	tests/osage/wild_gv16_graphs_b15_8c212e.gv	svg	5	default	6.4	6.4	7.4	6.4	1.0000
+2	aarch64-unknown-linux-musl	tests/osage/wild_gv16_graphs_b15_8c212e.gv	svg	5	default2	6.5	6.3	6.7	6.4	1.0146
+2	aarch64-unknown-linux-musl	tests/osage/wild_gv16_graphs_b15_8c212e.gv	svg	5	nopgo	6.8	6.7	6.8	6.7	1.0587
+2	aarch64-unknown-linux-musl	synth/osage_clustered_1000.gv	svg	5	default	7.3	7.2	7.4	7.2	1.0000
+2	aarch64-unknown-linux-musl	synth/osage_clustered_1000.gv	svg	5	default2	7.4	7.3	7.6	7.3	1.0063
+2	aarch64-unknown-linux-musl	synth/osage_clustered_1000.gv	svg	5	nopgo	8.0	7.9	8.2	7.9	1.0927
+2	aarch64-unknown-linux-musl	synth/osage_clustered_5000.gv	svg	5	default	29.9	29.2	30.1	29.8	1.0000
+2	aarch64-unknown-linux-musl	synth/osage_clustered_5000.gv	svg	5	default2	29.4	29.0	29.6	29.3	0.9858
+2	aarch64-unknown-linux-musl	synth/osage_clustered_5000.gv	svg	5	nopgo	32.1	31.6	33.2	32.0	1.0760
+2	aarch64-unknown-linux-musl	synth/osage_clustered_20000.gv	svg	5	default	120.0	118.4	120.5	119.7	1.0000
+2	aarch64-unknown-linux-musl	synth/osage_clustered_20000.gv	svg	5	default2	120.3	116.3	121.0	120.1	1.0030
+2	aarch64-unknown-linux-musl	synth/osage_clustered_20000.gv	svg	5	nopgo	132.7	130.7	135.2	132.5	1.1060
+2	aarch64-unknown-linux-musl	synth/osage_clustered_20000.gv	plain	5	default	120.5	119.1	120.9	120.3	1.0000
+2	aarch64-unknown-linux-musl	synth/osage_clustered_20000.gv	plain	5	default2	120.4	119.3	122.1	120.2	0.9992
+2	aarch64-unknown-linux-musl	synth/osage_clustered_20000.gv	plain	5	nopgo	134.3	133.1	137.4	134.0	1.1139
+2	aarch64-unknown-linux-musl	tests/patchwork/wild_gv16_graphs_b51_33bcb0.gv	svg	5	default	3.1	3.1	3.2	3.0	1.0000
+2	aarch64-unknown-linux-musl	tests/patchwork/wild_gv16_graphs_b51_33bcb0.gv	svg	5	default2	3.1	3.0	3.2	3.0	1.0028
+2	aarch64-unknown-linux-musl	tests/patchwork/wild_gv16_graphs_b51_33bcb0.gv	svg	5	nopgo	3.3	3.2	3.4	3.2	1.0627
+2	aarch64-unknown-linux-musl	tests/patchwork/wild_gv16_infosrc_plugins_1a797f.gv	svg	5	default	2.8	2.7	2.8	2.7	1.0000
+2	aarch64-unknown-linux-musl	tests/patchwork/wild_gv16_infosrc_plugins_1a797f.gv	svg	5	default2	2.7	2.7	2.8	2.6	0.9857
+2	aarch64-unknown-linux-musl	tests/patchwork/wild_gv16_infosrc_plugins_1a797f.gv	svg	5	nopgo	2.9	2.8	3.0	2.8	1.0398
+2	aarch64-unknown-linux-musl	synth/patchwork_clustered_1000.gv	svg	5	default	8.1	8.0	8.4	8.0	1.0000
+2	aarch64-unknown-linux-musl	synth/patchwork_clustered_1000.gv	svg	5	default2	8.2	8.2	8.4	8.2	1.0223
+2	aarch64-unknown-linux-musl	synth/patchwork_clustered_1000.gv	svg	5	nopgo	8.9	8.7	9.0	8.9	1.1061
+2	aarch64-unknown-linux-musl	synth/patchwork_clustered_5000.gv	svg	5	default	33.4	33.3	33.7	33.2	1.0000
+2	aarch64-unknown-linux-musl	synth/patchwork_clustered_5000.gv	svg	5	default2	33.4	32.5	33.9	33.3	1.0020
+2	aarch64-unknown-linux-musl	synth/patchwork_clustered_5000.gv	svg	5	nopgo	36.6	36.2	37.0	36.4	1.0972
+2	aarch64-unknown-linux-musl	synth/patchwork_clustered_20000.gv	svg	5	default	127.5	127.0	130.3	127.3	1.0000
+2	aarch64-unknown-linux-musl	synth/patchwork_clustered_20000.gv	svg	5	default2	128.6	128.3	129.3	128.3	1.0080
+2	aarch64-unknown-linux-musl	synth/patchwork_clustered_20000.gv	svg	5	nopgo	141.6	139.7	144.3	141.4	1.1103
+2	aarch64-unknown-linux-musl	synth/patchwork_clustered_20000.gv	plain	5	default	123.9	121.8	125.7	123.6	1.0000
+2	aarch64-unknown-linux-musl	synth/patchwork_clustered_20000.gv	plain	5	default2	123.4	122.9	125.3	123.3	0.9963
+2	aarch64-unknown-linux-musl	synth/patchwork_clustered_20000.gv	plain	5	nopgo	137.6	136.0	139.3	137.4	1.1106
