@@ -88,6 +88,12 @@ struct FontStrings {
     color: Option<Rc<str>>,
 }
 
+impl FontStrings {
+    fn log_key(&self, flags: u32, bits: u64) -> LogKey {
+        (self.name.clone(), self.color.clone(), flags, bits)
+    }
+}
+
 /// `textfont_comparf` (`lib/common/textspan.c`): names, colours, flags, then sizes with
 /// `<` and `>`, so a NaN size compares equal to any size.
 fn textfont_cmp(k1: &TextFontKey, k2: &TextFontKey) -> std::cmp::Ordering {
@@ -123,6 +129,68 @@ fn textfont_cmp(k1: &TextFontKey, k2: &TextFontKey) -> std::cmp::Ordering {
 /// A font key with its size's bits, for [`TextFontDict::log`].
 type LogKey = (Option<Rc<str>>, Option<Rc<str>>, u32, u64);
 
+/// The sizes `dtinsert` returned during the current layout, per key (with the size's bits),
+/// in order; with the next one to replay. Rust-only: C measures each label once.
+#[derive(Default)]
+struct FontLog {
+    /// Each key's place in `entries`.
+    index: std::collections::HashMap<LogKey, usize>,
+    /// The sizes, and the next one to replay.
+    entries: Vec<(Vec<f64>, usize)>,
+    /// The flags, size bits and entry of the last key found or added, whose names are the
+    /// dictionary's [`TextFontDict::request`]: a repeated font finds its entry without
+    /// hashing the names again. Cleared whenever the request's names change.
+    last: Option<(u32, u64, usize)>,
+}
+
+impl FontLog {
+    /// The entry of the key `names` + `flags` + `bits`, if it has one; `repeated` says that
+    /// `names` are the names of the last key looked up.
+    fn find(
+        &mut self,
+        names: &FontStrings,
+        repeated: bool,
+        flags: u32,
+        bits: u64,
+    ) -> Option<usize> {
+        if let Some(i) = self.cached(repeated, flags, bits) {
+            return Some(i);
+        }
+        let i = *self.index.get(&names.log_key(flags, bits))?;
+        self.last = Some((flags, bits, i));
+        Some(i)
+    }
+
+    /// [`FontLog::find`], adding an empty entry for a new key.
+    fn find_or_add(&mut self, names: &FontStrings, repeated: bool, flags: u32, bits: u64) -> usize {
+        if let Some(i) = self.cached(repeated, flags, bits) {
+            return i;
+        }
+        let Self { index, entries, .. } = self;
+        let i = *index.entry(names.log_key(flags, bits)).or_insert_with(|| {
+            entries.push(Default::default());
+            entries.len() - 1
+        });
+        self.last = Some((flags, bits, i));
+        i
+    }
+
+    fn cached(&mut self, repeated: bool, flags: u32, bits: u64) -> Option<usize> {
+        if !repeated {
+            self.last = None;
+        }
+        self.last
+            .filter(|&(f, b, _)| f == flags && b == bits)
+            .map(|(_, _, i)| i)
+    }
+
+    fn clear(&mut self) {
+        self.index.clear();
+        self.entries.clear();
+        self.last = None;
+    }
+}
+
 /// `gvc->textfont_dt`, and what the port needs to measure a label more than once.
 #[derive(Default)]
 struct TextFontDict {
@@ -130,22 +198,40 @@ struct TextFontDict {
     /// Own the last request once. Sharing its strings does not cache the dictionary
     /// answer: every first measurement still performs the same Cdt insert.
     request: Option<FontStrings>,
-    /// The sizes `dtinsert` returned during the current layout, per key (with the size's
-    /// bits), in order; with the next one to replay.
-    log: std::collections::HashMap<LogKey, (Vec<f64>, usize)>,
+    /// The sizes `dtinsert` returned during the current layout.
+    log: FontLog,
     /// Inside [`textfont_remeasuring`].
     remeasuring: u32,
     /// The sizes each object's labels got when layout first measured them, by
-    /// [`textfont_recording`]'s tag: what C keeps in each span's `font`.
-    objects: std::collections::HashMap<String, FontSizes>,
-    /// The open [`textfont_recording`] (tag, sizes) and [`textfont_replaying`] (sizes,
+    /// [`textfont_object`]'s tag: what C keeps in each span's `font`.
+    objects: FontObjects,
+    /// The open [`textfont_recording`] (object, sizes) and [`textfont_replaying`] (sizes,
     /// next) scopes, innermost last.
     scopes: Vec<Scope>,
 }
 
 enum Scope {
-    Record(String, FontSizes),
+    /// The object's place in [`FontObjects::sizes`], and the sizes so far.
+    Record(usize, FontSizes),
     Replay(FontSizes, usize),
+}
+
+/// [`TextFontDict::objects`]. Rust-only: one search of a tag finds a recorded object or
+/// makes the place a new one's sizes go when its measurement ends.
+#[derive(Default)]
+struct FontObjects {
+    /// Each tag's place in `sizes`.
+    index: std::collections::HashMap<String, usize>,
+    /// The recorded sizes; `None` while the object's first measurement runs, when the
+    /// object counts as not recorded yet.
+    sizes: Vec<Option<FontSizes>>,
+}
+
+impl FontObjects {
+    fn clear(&mut self) {
+        self.index.clear();
+        self.sizes.clear();
+    }
 }
 
 /// Rust-only storage for C's per-span font sizes. An ordinary one-span label needs
@@ -215,31 +301,36 @@ pub fn textfont_intern(name: Option<&str>, color: Option<&str>, flags: u32, size
         if !repeated {
             d.request = None;
         }
+        let d = &mut *d;
         let names = d.request.get_or_insert_with(|| FontStrings {
             name: name.map(Rc::from),
             color: color.map(Rc::from),
         });
+        let bits = size.to_bits();
+        if d.remeasuring > 0 {
+            return match d.log.find(names, repeated, flags, bits) {
+                Some(i) => match &mut d.log.entries[i] {
+                    (sizes, next) if !sizes.is_empty() => {
+                        let v = sizes[(*next).min(sizes.len() - 1)];
+                        *next += 1;
+                        v
+                    }
+                    _ => size,
+                },
+                None => size,
+            };
+        }
         let key = TextFontKey {
             name: names.name.clone(),
             color: names.color.clone(),
             flags,
             size,
         };
-        let lkey = (key.name.clone(), key.color.clone(), flags, size.to_bits());
-        if d.remeasuring > 0 {
-            return match d.log.get_mut(&lkey) {
-                Some((sizes, next)) if !sizes.is_empty() => {
-                    let v = sizes[(*next).min(sizes.len() - 1)];
-                    *next += 1;
-                    v
-                }
-                _ => size,
-            };
-        }
         let cmp = |e: &TextFontKey| textfont_cmp(&key, e);
         let (i, _) = d.dt.insert(key.clone(), &cmp);
         let v = d.dt.get(i).size;
-        d.log.entry(lkey).or_default().0.push(v);
+        let entry = d.log.find_or_add(names, repeated, flags, bits);
+        d.log.entries[entry].0.push(v);
         if let Some(Scope::Record(_, sizes)) = d.scopes.last_mut() {
             sizes.push(v);
         }
@@ -254,11 +345,36 @@ pub fn textfont_intern(name: Option<&str>, color: Option<&str>, flags: u32, size
 /// dictionary alone. The recorded sizes belong to the most recent layout on this thread
 /// ([`textfont_layout_begin`]), so a graph is rendered after its own layout.
 pub fn textfont_object<R>(tag: String, f: impl FnOnce() -> R) -> R {
-    let recorded = TEXTFONT_DT.with(|d| d.borrow().objects.contains_key(&tag));
-    if recorded {
-        textfont_replaying(&tag, f)
-    } else {
-        textfont_recording(tag, f)
+    enum Found {
+        /// Recorded: replay these sizes.
+        Recorded(FontSizes),
+        /// Not recorded; record into this place.
+        New(usize),
+        /// Not recorded, inside a replay: measure without recording.
+        Unrecorded,
+    }
+    let found = TEXTFONT_DT.with(|d| {
+        let d = &mut *d.borrow_mut();
+        let replaying = d.remeasuring > 0 || matches!(d.scopes.last(), Some(Scope::Replay(..)));
+        let objects = &mut d.objects;
+        let at = match objects.index.entry(tag) {
+            std::collections::hash_map::Entry::Occupied(e) => *e.get(),
+            std::collections::hash_map::Entry::Vacant(_) if replaying => return Found::Unrecorded,
+            std::collections::hash_map::Entry::Vacant(e) => {
+                objects.sizes.push(None);
+                *e.insert(objects.sizes.len() - 1)
+            }
+        };
+        match &objects.sizes[at] {
+            Some(sizes) => Found::Recorded(sizes.clone()),
+            None if replaying => Found::Unrecorded,
+            None => Found::New(at),
+        }
+    });
+    match found {
+        Found::Recorded(sizes) => textfont_replaying(sizes, f),
+        Found::New(at) => textfont_recording(at, f),
+        Found::Unrecorded => f(),
     }
 }
 
@@ -267,14 +383,13 @@ pub fn textfont_object<R>(tag: String, f: impl FnOnce() -> R) -> R {
 /// interns) again and whose ids restart at 0. The layout's own records come back when the
 /// guard is dropped.
 pub fn textfont_other_graph() -> impl Drop {
-    type Saved = (
-        std::collections::HashMap<String, FontSizes>,
-        std::collections::HashMap<LogKey, (Vec<f64>, usize)>,
-    );
+    type Saved = (FontObjects, FontLog);
     struct Guard(Option<Saved>);
     impl Drop for Guard {
         fn drop(&mut self) {
-            let (objects, log) = self.0.take().unwrap_or_default();
+            let (objects, mut log) = self.0.take().unwrap_or_default();
+            // The request may have changed since: look its names up again.
+            log.last = None;
             TEXTFONT_DT.with(|d| {
                 let mut d = d.borrow_mut();
                 d.objects = objects;
@@ -288,41 +403,37 @@ pub fn textfont_other_graph() -> impl Drop {
     })))
 }
 
-/// Runs `f`, layout's first measurement of the labels of the object `tag` names: fonts
-/// are interned, and the sizes they get are kept for [`textfont_replaying`].
-fn textfont_recording<R>(tag: impl Into<String>, f: impl FnOnce() -> R) -> R {
+/// Runs `f`, layout's first measurement of the labels of an object outside any replay:
+/// fonts are interned, and the sizes they get are kept at `at` in
+/// [`TextFontDict::objects`] for [`textfont_replaying`]. No measurement swaps the objects
+/// ([`textfont_other_graph`]) while it runs.
+fn textfont_recording<R>(at: usize, f: impl FnOnce() -> R) -> R {
     struct Guard;
     impl Drop for Guard {
         fn drop(&mut self) {
             TEXTFONT_DT.with(|d| {
-                let mut d = d.borrow_mut();
-                if let Some(Scope::Record(tag, sizes)) = d.scopes.pop() {
-                    d.objects.insert(tag, sizes);
+                let d = &mut *d.borrow_mut();
+                if let Some(Scope::Record(at, sizes)) = d.scopes.pop()
+                    && let Some(slot) = d.objects.sizes.get_mut(at)
+                {
+                    *slot = Some(sizes);
                 }
             });
         }
     }
-    let replaying = TEXTFONT_DT.with(|d| {
-        let mut d = d.borrow_mut();
-        let replaying = d.remeasuring > 0 || matches!(d.scopes.last(), Some(Scope::Replay(..)));
-        if !replaying {
-            d.scopes
-                .push(Scope::Record(tag.into(), FontSizes::default()));
-        }
-        replaying
+    TEXTFONT_DT.with(|d| {
+        d.borrow_mut()
+            .scopes
+            .push(Scope::Record(at, FontSizes::default()))
     });
-    if replaying {
-        return f();
-    }
     let _guard = Guard;
     f()
 }
 
-/// Runs `f`, a measurement of the labels of the object `tag` names that layout has
-/// already made: each lookup returns the size the recorded measurement got, in order, and
-/// the dictionary does not change. An object never recorded is measured as
-/// [`textfont_remeasuring`] does.
-fn textfont_replaying<R>(tag: &str, f: impl FnOnce() -> R) -> R {
+/// Runs `f`, a measurement of the labels of an object that layout has already made, whose
+/// fonts got `sizes`: each lookup returns the size the recorded measurement got, in order,
+/// and the dictionary does not change.
+fn textfont_replaying<R>(sizes: FontSizes, f: impl FnOnce() -> R) -> R {
     struct Guard;
     impl Drop for Guard {
         fn drop(&mut self) {
@@ -331,10 +442,6 @@ fn textfont_replaying<R>(tag: &str, f: impl FnOnce() -> R) -> R {
             });
         }
     }
-    let sizes = TEXTFONT_DT.with(|d| d.borrow().objects.get(tag).cloned());
-    let Some(sizes) = sizes else {
-        return textfont_remeasuring(f);
-    };
     TEXTFONT_DT.with(|d| d.borrow_mut().scopes.push(Scope::Replay(sizes, 0)));
     let _guard = Guard;
     f()
@@ -352,7 +459,7 @@ pub fn textfont_remeasuring<R>(f: impl FnOnce() -> R) -> R {
     TEXTFONT_DT.with(|d| {
         let mut d = d.borrow_mut();
         if d.remeasuring == 0 {
-            for (_, next) in d.log.values_mut() {
+            for (_, next) in &mut d.log.entries {
                 *next = 0;
             }
         }
@@ -365,10 +472,18 @@ pub fn textfont_remeasuring<R>(f: impl FnOnce() -> R) -> R {
 /// Starts a graph's layout: later [`textfont_remeasuring`] calls replay this layout's
 /// lookups. The dictionary itself is kept, as C keeps it for the next graph.
 pub fn textfont_layout_begin() {
+    textfont_layout_begin_for(0);
+}
+
+/// [`textfont_layout_begin`] for a layout that will record about `objects` objects (its
+/// nodes), whose records are reserved once instead of grown.
+pub fn textfont_layout_begin_for(objects: usize) {
     TEXTFONT_DT.with(|d| {
         let mut d = d.borrow_mut();
         d.log.clear();
         d.objects.clear();
+        d.objects.index.reserve(objects);
+        d.objects.sizes.reserve(objects);
     });
 }
 
@@ -1351,6 +1466,97 @@ mod tests {
                 );
             }
         }
+        textfont_dict_reset();
+    }
+
+    /// Remeasuring finds each key's logged sizes, in order, whether or not the key repeats
+    /// the last request's names, flags or size: checked against the log kept by key alone,
+    /// through other graphs' logs and a new layout.
+    #[test]
+    fn remeasured_fonts_replay_each_keys_log_in_order() {
+        type Key = (Option<&'static str>, Option<&'static str>, u32, u64);
+        let sizes = [10.0, 14.0, -0.0, 0.0, f64::NAN, f64::INFINITY, 20.0];
+        let mut state = 0x9e37_79b9_7f4a_7c15_u64;
+        let mut next = || {
+            state = state.wrapping_mul(6364136223846793005).wrapping_add(1);
+            let name = [None, Some("Times-Roman"), Some("Courier")][(state >> 32) as usize % 3];
+            let color = [None, Some("black")][(state >> 40) as usize % 2];
+            let flags = (state >> 48) as u32 % 2;
+            // runs of one key, as one font's labels make them
+            let size = sizes[(state >> 16) as usize % sizes.len()];
+            (name, color, flags, size)
+        };
+        textfont_dict_reset();
+        for layout in 0..3 {
+            textfont_layout_begin_for(layout * 10);
+            let mut log: std::collections::HashMap<Key, (Vec<f64>, usize)> =
+                std::collections::HashMap::new();
+            for round in 0..4 {
+                for _ in 0..300 {
+                    let (name, color, flags, size) = next();
+                    let repeats = if round % 2 == 0 { 3 } else { 1 };
+                    for _ in 0..repeats {
+                        let v = textfont_intern(name, color, flags, size);
+                        log.entry((name, color, flags, size.to_bits()))
+                            .or_default()
+                            .0
+                            .push(v);
+                    }
+                }
+                if round == 1 {
+                    // another graph's lookups go to its own log
+                    let _other = textfont_other_graph();
+                    for _ in 0..50 {
+                        let (name, color, flags, size) = next();
+                        textfont_intern(name, color, flags, size);
+                    }
+                }
+                for (_, n) in log.values_mut() {
+                    *n = 0;
+                }
+                textfont_remeasuring(|| {
+                    for i in 0..600 {
+                        let (name, color, flags, size) = next();
+                        let want = match log.get_mut(&(name, color, flags, size.to_bits())) {
+                            Some((v, n)) if !v.is_empty() => {
+                                let s = v[(*n).min(v.len() - 1)];
+                                *n += 1;
+                                s
+                            }
+                            _ => size,
+                        };
+                        assert_eq!(
+                            textfont_intern(name, color, flags, size).to_bits(),
+                            want.to_bits(),
+                            "layout {layout}, round {round}, lookup {i}"
+                        );
+                    }
+                });
+            }
+        }
+        textfont_dict_reset();
+    }
+
+    /// An object measured inside its own first measurement counts as not recorded: both
+    /// record, and the outer measurement's sizes are the object's.
+    #[test]
+    fn an_object_measured_inside_itself_keeps_the_outer_sizes() {
+        textfont_dict_reset();
+        let font = Some("Times-Roman");
+        textfont_object("a".into(), || {
+            assert_eq!(textfont_intern(font, None, 0, 10.0), 10.0);
+            textfont_object("a".into(), || {
+                assert_eq!(textfont_intern(font, None, 0, 20.0), 20.0);
+            });
+            // the inner record is the object's until the outer one ends
+            textfont_object("a".into(), || {
+                assert_eq!(textfont_intern(None, None, 1, 99.0), 20.0);
+            });
+        });
+        textfont_object("a".into(), || {
+            assert_eq!(textfont_intern(None, None, 1, 99.0), 10.0);
+            assert_eq!(textfont_intern(None, None, 1, 99.0), 99.0);
+        });
         textfont_dict_reset();
     }
 

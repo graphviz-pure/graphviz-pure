@@ -235,7 +235,15 @@ fn layout_in_run(graph: &mut Graph, engine: LayoutEngine, options: LayoutOptions
         "a subgraph lists a member twice or lacks one of its nested subgraphs'"
     );
     common::splines::reset_bz_split_budget();
-    graphviz_pure_core::font::textfont_layout_begin();
+    // The labels of each node, cluster and the root are recorded once (`node_geometry`,
+    // `graph_label_geometry_in`); labelled edges add theirs.
+    graphviz_pure_core::font::textfont_layout_begin_for(
+        graph
+            .nodes
+            .len()
+            .saturating_add(graph.subgraphs.len())
+            .saturating_add(1),
+    );
     common::utils::set_ps_inputscale(options.inputscale);
     fdpgen::tlayout::set_fdp_parms(options.fdp);
     neatogen::stuff::set_reduce(options.reduce);

@@ -433,6 +433,16 @@ the sorted-`Vec` prototype showed as well. Property tests in
 `graph::attr_map_tests` check both forms against a `BTreeMap` oracle,
 including promotion under reverse-ordered insertion.
 
+## Step 4 at node sizing, ahead of step 3 (#822)
+
+Sizing a node (`node_geometry`: `common_init_node` and the shape `initfn`s) read 20 attributes,
+each with its own `AttrMap::get`. Most were misses on a one- or two-entry map, and together they
+cost about 1,100 instructions per node on `synth/osage_clustered_20000.gv`. `NodeAttrs`
+(`geom/src/node_size.rs`) now finds all 23 values the sizing reads in one pass over the map,
+and the sizing reads them as fields. That gives step 4's call-site shape without step 3's store:
+once the store is dense, only `NodeAttrs::of` changes, from a scan to one indexed read per symbol.
+Other read sites keep calling `AttrMap::get`.
+
 ## Expected gains
 
 - **Memory, parse:** the retained graph on big drops from 309 MB to about 153 MB (175.2 MB of maps
