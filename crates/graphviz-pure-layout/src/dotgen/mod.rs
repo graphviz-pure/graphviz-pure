@@ -106,6 +106,9 @@ pub struct Dot<'a> {
     /// node index, while the nodes are initialised (when this graph measures its nodes as
     /// `root_input` does).
     pub measured: Option<init::MeasuredNodes>,
+    /// Root only: [`Self::measured`] once the nodes are initialised, kept for the renderer
+    /// as C keeps `ND_label` and `ND_shape_info` (`layout_dot` leaves it on the graph).
+    pub handoff: Option<init::MeasuredNodes>,
     /// The node arenas, one per part of `Agnodeinfo_t` ([`NodeInfo`]), indexed alike.
     /// [`Self::push_node`] grows the first three together.
     pub nodes: Vec<NodeInfo>,
@@ -244,6 +247,7 @@ impl<'a> Dot<'a> {
             cg_in_id_packed: false,
             cg_root_node: None,
             measured: None,
+            handoff: None,
             nodes: Vec::new(),
             ns_nodes: Vec::new(),
             mc_nodes: Vec::new(),
@@ -386,9 +390,10 @@ impl<'a> Dot<'a> {
         }
         self.dot_init_subg();
         self.dot_init_node_edge()?;
-        // A pack component's caller takes the measurement back for the next component.
+        // A pack component's caller takes the measurement back for the next component and
+        // keeps it for the renderer once the last one is done.
         if !self.comp {
-            self.measured = None;
+            self.handoff = self.measured.take();
         }
         // Not in C: each phase starts with the limits of the caller's `Limits::run`.
         check_limits()?;
@@ -448,7 +453,7 @@ pub fn layout_dot(graph: &mut Graph) -> Result<()> {
     // dot_init_node's common_init_node reports the node diagnostics, in C's place.
     let measured = graphviz_pure_core::diag::quietly(|| init::MeasuredNodes::measure(graph))?;
     let aborted;
-    let (result, labels) = {
+    let (result, labels, handoff) = {
         let mut d = Dot::new(graph);
         d.measured = Some(measured);
         d.kept_labels = Some(Default::default());
@@ -476,12 +481,21 @@ pub fn layout_dot(graph: &mut Graph) -> Result<()> {
             // agdelete renumbers the subgraphs the clusters' labels are keyed by
             labels.clusters.clear();
         }
-        (output::Output::collect(&d, phase_attrs), labels.sorted())
+        (
+            output::Output::collect(&d, phase_attrs),
+            labels.sorted(),
+            d.handoff.take(),
+        )
     };
     result.apply(graph);
     // ED_label and GD_label stay on the input's edges and clusters for the renderer.
     if !(labels.edges.is_empty() && labels.clusters.is_empty()) {
         graph.layout.label_geometry.put(labels);
+    }
+    // What the layout measured of each node, which the renderer draws instead of measuring
+    // the nodes again (`ND_label`, `ND_shape_info`).
+    if let Some(measured) = handoff {
+        graph.layout.node_geometry.put(measured.into_laid_out());
     }
     if aborted {
         // no place_graph_label: labels keep their zeroed position

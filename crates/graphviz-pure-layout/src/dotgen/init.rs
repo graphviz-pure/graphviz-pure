@@ -19,33 +19,26 @@ pub fn pad(d: Point) -> Point {
 
 pub use crate::common::ports::{ccwrotatepf, cwrotatepf};
 
-/// What `common_init_node` measured of each node of a graph that dot's own initialisation
-/// reads, by input node: C keeps it in `ND_shape_info`, `ND_label` and `ND_xlabel`.
+/// What `common_init_node` measured of each node of a graph, by input node: C keeps it in
+/// `ND_shape_info`, `ND_label` and `ND_xlabel` from `dot_init_node` to the end of the render.
 ///
 /// C measures each node once, in `dot_init_node`. The port measures the input's nodes
 /// before it builds dot's records ([`MeasuredNodes::measure`], quietly), for their sizes.
 /// `dot_init_node` and the port lookups of `common_init_edge` then take the measurement
 /// from here instead of measuring again, wherever a repeat would give the same result and
-/// do nothing more ([`graphviz_pure_core::diag::observe`]). It is dropped once the nodes
-/// are initialised, before the layout's own peak: the renderer measures the nodes again
-/// (#833).
+/// do nothing more ([`graphviz_pure_core::diag::observe`]). Once the nodes are initialised
+/// it waits in [`super::Dot::handoff`] for the renderer, which draws the nodes from it
+/// ([`MeasuredNodes::into_laid_out`]) instead of measuring them again.
 pub struct MeasuredNodes(Vec<MeasuredNode>);
 
 /// [`MeasuredNodes`] of one node.
 struct MeasuredNode {
-    /// `ND_width`, `ND_height` in inches.
-    width: f64,
-    height: f64,
+    /// What the renderer draws: `ND_width`, `ND_height`, `ND_label`, `ND_xlabel` and
+    /// `ND_shape_info` (the polygon, whose vertices `dot_init_node` shares with the shape,
+    /// and the record, whose cells port lookups read, as they read the HTML label's).
+    laid: graphviz_pure_geom::LaidOutNode,
     /// `ND_outline_width`, `ND_outline_height` in inches.
     outline: (f64, f64),
-    /// `ND_shape_info` of a polygon. `dot_init_node` moves the vertices into the shape.
-    polygon: Option<graphviz_pure_geom::PolygonGeometry>,
-    /// `ND_shape_info` of a record.
-    record: Option<Box<graphviz_pure_geom::RecordField>>,
-    /// `ND_xlabel`.
-    xlabel: Option<Box<graphviz_pure_geom::LabelGeometry>>,
-    /// `ND_label(n)->u.html`, whose cells port lookups read.
-    html_label: Option<Box<graphviz_pure_geom::html_label::HtmlLabel>>,
     /// The measurement wrote no diagnostic, so a quiet repeat (a port lookup) would give
     /// it and write nothing either.
     quiet: bool,
@@ -60,13 +53,8 @@ impl MeasuredNode {
         seen: graphviz_pure_core::diag::Observed,
     ) -> Self {
         Self {
-            width: geom.width,
-            height: geom.height,
             outline: (geom.outline_width, geom.outline_height),
-            polygon: geom.polygon,
-            record: geom.record.map(Box::new),
-            xlabel: geom.xlabel.map(Box::new),
-            html_label: geom.label.html_label,
+            laid: geom.into(),
             quiet: !seen.wrote,
             reported: seen.untouched(),
         }
@@ -78,15 +66,10 @@ impl MeasuredNode {
     #[cfg(any(debug_assertions, test))]
     fn is_measurement(&self, fresh: &graphviz_pure_geom::NodeGeometry) -> bool {
         let bits = |a: f64, b: f64| a.to_bits() == b.to_bits();
-        bits(self.width, fresh.width)
-            && bits(self.height, fresh.height)
-            && bits(self.outline.0, fresh.outline_width)
+        bits(self.outline.0, fresh.outline_width)
             && bits(self.outline.1, fresh.outline_height)
-            && format!("{:?}", self.polygon) == format!("{:?}", fresh.polygon)
-            && format!("{:?}", self.record.as_deref()) == format!("{:?}", fresh.record.as_ref())
-            && format!("{:?}", self.xlabel.as_deref()) == format!("{:?}", fresh.xlabel.as_ref())
-            && format!("{:?}", self.html_label.as_deref())
-                == format!("{:?}", fresh.label.html_label.as_deref())
+            && format!("{:?}", self.laid)
+                == format!("{:?}", graphviz_pure_geom::LaidOutNode::from(fresh.clone()))
     }
 }
 
@@ -111,8 +94,8 @@ impl MeasuredNodes {
             }
         }
         for (nd, m) in graph.nodes.iter_mut().zip(&nodes) {
-            nd.width = m.width;
-            nd.height = m.height;
+            nd.width = m.laid.width;
+            nd.height = m.laid.height;
         }
         match failed {
             Some(e) => Err(e),
@@ -135,9 +118,15 @@ impl MeasuredNodes {
     pub fn for_port(&self, i: usize) -> Option<crate::common::ports::PortShape<'_>> {
         let m = self.0.get(i).filter(|m| m.quiet)?;
         Some(crate::common::ports::PortShape {
-            record: m.record.as_deref(),
-            html_label: m.html_label.as_deref(),
+            record: m.laid.record.as_deref(),
+            html_label: m.laid.label.html_label.as_deref(),
         })
+    }
+
+    /// What the renderer draws of each node, by input node, as the layout leaves it in
+    /// [`graphviz_pure_core::GraphLayout::node_geometry`].
+    pub fn into_laid_out(self) -> graphviz_pure_geom::LaidOutNodes {
+        graphviz_pure_geom::LaidOutNodes(self.0.into_iter().map(|m| Some(m.laid)).collect())
     }
 }
 
@@ -432,13 +421,13 @@ impl<'a> Dot<'a> {
     }
 
     /// [`Self::dot_init_node`] from the node's measurement `m`, whose vertices the shape
-    /// takes.
+    /// shares (a four- or eight-point array) or copies.
     fn init_node_measured(
         &mut self,
         n: N,
         nd: &graphviz_pure_core::NodeData,
         env: &graphviz_pure_geom::NodeSizeEnv<'_>,
-        m: &mut MeasuredNode,
+        m: &MeasuredNode,
     ) -> Result<(), String> {
         #[cfg(debug_assertions)]
         debug_assert!(
@@ -449,13 +438,14 @@ impl<'a> Dot<'a> {
         );
         #[cfg(not(debug_assertions))]
         let _ = env;
-        let vertices = m.polygon.as_mut().map(|p| std::mem::take(&mut p.vertices));
+        let (m, outline) = (&m.laid, m.outline);
+        let polygon = m.polygon.as_ref().map(|p| (p, p.vertices.clone()));
         let shape = crate::common::shapes::NodeShape::from_parts(
             nd,
             m.width,
             m.height,
-            m.outline,
-            m.polygon.as_ref().zip(vertices),
+            outline,
+            polygon,
             m.record.as_ref().map(|r| r.bbox),
         )
         .map_err(super::fatal)?;
