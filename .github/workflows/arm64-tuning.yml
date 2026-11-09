@@ -5,8 +5,13 @@ name: arm64 tuning (temporary, #826)
 # once per candidate -C target-cpu, then on the same runner: whole-corpus output hashes against
 # the x86-64 v1 musl build, an a*b+c contraction probe, and interleaved timing on full.tsv.
 
+# workflow_dispatch only finds workflows on the default branch, so a push to this branch with a
+# change to the measurement itself starts it.
 on:
   workflow_dispatch:
+  push:
+    branches: ["perf/826-arm64-tuning"]
+    paths: [".github/workflows/arm64-tuning.yml", "scripts/bench/arm64_tuning.py"]
 
 permissions:
   contents: read
