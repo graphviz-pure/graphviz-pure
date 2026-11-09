@@ -517,12 +517,13 @@ fn add_cluster(g: &mut LGraph<'_>) {
         if !is_a_cluster(sg) {
             continue;
         }
-        let (label, label_pos) = crate::common::init::graph_label(
+        let (label, label_pos, kept) = crate::common::init::graph_label_kept(
             &sg.graph_attrs,
             &src.subgraph_name(si),
             sg.html_name,
             false,
         );
+        g.keep_cluster_label(si, kept);
         let mut border = [Point::default(); 4];
         if let Some(l) = &label {
             let d = crate::common::init::pad(l.dimen);
@@ -868,12 +869,13 @@ fn nop_dfs(g: &mut LGraph<'_>, si: usize, parent: Option<usize>) {
         }
         return;
     };
-    let (mut label, label_pos) = crate::common::init::graph_label(
+    let (mut label, label_pos, kept) = crate::common::init::graph_label_kept(
         &sg.graph_attrs,
         &src.subgraph_name(si),
         sg.html_name,
         false,
     );
+    g.keep_cluster_label(si, kept);
     let mut border = [Point::default(); 4];
     let [bottom, _, top, _] = &mut border;
     if let Some(l) = &label {

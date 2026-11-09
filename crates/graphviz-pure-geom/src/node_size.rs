@@ -671,6 +671,62 @@ impl From<NodeGeometry> for LaidOutNode {
 #[derive(Debug, Default)]
 pub struct LaidOutNodes(pub Vec<Option<LaidOutNode>>);
 
+/// The edge, cluster and root labels a layout measured, as C keeps them in `ED_label`
+/// (and the edge's other labels) and `GD_label` from `common_init_edge` and
+/// `do_graph_label` to the end of the render. The layout leaves it in
+/// [`graphviz_pure_core::GraphLayout::label_geometry`] and the renderer takes it there
+/// instead of measuring the labels again. Only labelled objects have an entry.
+#[derive(Debug, Default)]
+pub struct LaidOutLabels {
+    /// The root graph's label.
+    pub root: Option<GraphLabelGeometry>,
+    /// Edges with at least one label, by edge index, ascending.
+    pub edges: Vec<(usize, LaidOutEdge)>,
+    /// Labelled clusters, by subgraph index, ascending; `None` once the renderer took it.
+    pub clusters: Vec<(usize, Option<GraphLabelGeometry>)>,
+}
+
+/// What the renderer draws of an edge's [`EdgeLabelGeometry`], as the layout keeps it until
+/// the render: its labels, boxed, because an edge has one or two of the four at most.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct LaidOutEdge {
+    pub label: Option<Box<LabelGeometry>>,
+    pub xlabel: Option<Box<LabelGeometry>>,
+    pub head_label: Option<Box<LabelGeometry>>,
+    pub tail_label: Option<Box<LabelGeometry>>,
+}
+
+impl LaidOutEdge {
+    /// The edge's labels, or `None` when it has none.
+    pub fn of(g: EdgeLabelGeometry) -> Option<Self> {
+        let EdgeLabelGeometry {
+            label,
+            xlabel,
+            head_label,
+            tail_label,
+            ..
+        } = g;
+        let kept = Self {
+            label: label.map(Box::new),
+            xlabel: xlabel.map(Box::new),
+            head_label: head_label.map(Box::new),
+            tail_label: tail_label.map(Box::new),
+        };
+        (kept != Self::default()).then_some(kept)
+    }
+}
+
+impl LaidOutLabels {
+    /// Orders the entries by index, as the fields require, keeping one per object.
+    pub fn sorted(mut self) -> Self {
+        self.edges.sort_by_key(|&(i, _)| i);
+        self.edges.dedup_by_key(|&mut (i, _)| i);
+        self.clusters.sort_by_key(|&(i, _)| i);
+        self.clusters.dedup_by_key(|&mut (i, _)| i);
+        self
+    }
+}
+
 /// `getPenColor` (htmltable.c): the object's `pencolor`, else its `color`.
 fn get_pen_color(attrs: &AttrMap) -> Option<&str> {
     ["pencolor", "color"]
@@ -920,6 +976,24 @@ pub struct GraphLabelGeometry {
     pub border: Option<(BorderSide, Point)>,
 }
 
+impl GraphLabelGeometry {
+    /// The label as [`graph_label_geometry_in`] makes it without `flip`, from one it made
+    /// with `flip`: the label's border entry back on its side, its two coordinates swapped
+    /// back (no arithmetic).
+    /// C: lib/common/input.c:do_graph_label
+    pub fn unflipped(mut self, flip: bool) -> Self {
+        if flip && let Some((side, d)) = &mut self.border {
+            *side = match *side {
+                BorderSide::Right => BorderSide::Top,
+                BorderSide::Left => BorderSide::Bottom,
+                other => other,
+            };
+            *d = Point::new(d.y, d.x);
+        }
+        self
+    }
+}
+
 /// `do_graph_label`: the label of the root graph (`is_root`) or of a cluster named `name`.
 /// `attrs` are the graph's effective attributes; `flip` is `GD_flip(root)` (`rankdir` LR/RL in
 /// dot). Returns `None` when there is no (non-empty) label.
@@ -1051,16 +1125,35 @@ pub fn edge_label_geometry_of(
     env: &NodeSizeEnv<'_>,
 ) -> EdgeLabelGeometry {
     // Without a label no font is looked up, so there is nothing to record or replay.
-    let labelled = ["label", "xlabel", "headlabel", "taillabel"]
-        .iter()
-        .any(|key| attrs.get(*key).is_some_and(|s| !s.is_empty()));
-    if !labelled {
+    if !edge_has_labels(attrs) {
         return edge_label_geometry(attrs, tail_name, head_name, directed, env);
     }
+    labelled_edge_label_geometry(id, attrs, tail_name, head_name, directed, env)
+}
+
+/// [`edge_label_geometry_of`] for an edge that [`edge_has_labels`] says has a label.
+/// C: lib/common/utils.c:common_init_edge
+pub fn labelled_edge_label_geometry(
+    id: u64,
+    attrs: &AttrMap,
+    tail_name: &str,
+    head_name: &str,
+    directed: bool,
+    env: &NodeSizeEnv<'_>,
+) -> EdgeLabelGeometry {
     let tag = format!("edge:{tail_name}->{head_name}#{id}");
     graphviz_pure_core::font::textfont_object(tag, || {
         edge_label_geometry(attrs, tail_name, head_name, directed, env)
     })
+}
+
+/// Whether an edge with effective attributes `attrs` has a label of any kind: without one,
+/// every label of its [`EdgeLabelGeometry`] is `None`.
+/// C: lib/common/utils.c:common_init_edge
+pub fn edge_has_labels(attrs: &AttrMap) -> bool {
+    ["label", "xlabel", "headlabel", "taillabel"]
+        .iter()
+        .any(|key| attrs.get(*key).is_some_and(|s| !s.is_empty()))
 }
 
 /// `common_init_edge`: sizes the labels of an edge with effective attributes `attrs`

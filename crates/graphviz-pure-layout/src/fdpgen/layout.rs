@@ -384,6 +384,7 @@ pub fn with_lgraph<R>(
         nodes,
         // a derived graph: the renderer measures nothing of it
         node_geometry: Vec::new(),
+        label_geometry: Default::default(),
         edges: ledges,
         out,
         inn,

@@ -163,6 +163,11 @@ pub struct Dot<'a> {
     pub node_phase: Vec<Option<i32>>,
     /// The `tend`/`hend` ends dot's edge routers last left (#360).
     pub stale_ends: dotsplines::StaleEnds,
+    /// The input's edge and cluster labels `common_init_edge` and `do_graph_label`
+    /// measured, which C keeps in `ED_label` and `GD_label` for the renderer. Only the
+    /// root's layout keeps them (`Some`): a pack component's or an aux graph's objects are
+    /// not the input's.
+    pub kept_labels: Option<graphviz_pure_geom::LaidOutLabels>,
 }
 
 impl Dot<'_> {
@@ -268,6 +273,7 @@ impl<'a> Dot<'a> {
             aborted: false,
             node_styles_cleared: false,
             stale_ends: Default::default(),
+            kept_labels: None,
         }
     }
 
@@ -442,9 +448,10 @@ pub fn layout_dot(graph: &mut Graph) -> Result<()> {
     // dot_init_node's common_init_node reports the node diagnostics, in C's place.
     let measured = graphviz_pure_core::diag::quietly(|| init::MeasuredNodes::measure(graph))?;
     let aborted;
-    let result = {
+    let (result, labels) = {
         let mut d = Dot::new(graph);
         d.measured = Some(measured);
+        d.kept_labels = Some(Default::default());
         d.graph_init();
         let maxphase = utils::late_int(d.agget(0, "phase"), -1, 1);
         // dot_layout: doDot only when there are nodes; dotneato_postprocess always.
@@ -464,9 +471,18 @@ pub fn layout_dot(graph: &mut Graph) -> Result<()> {
         let packed = !d.node_phase.is_empty();
         let phase_attrs =
             ((1..=3).contains(&maxphase) && !aborted && !packed).then(|| maxphase.min(2));
-        output::Output::collect(&d, phase_attrs)
+        let mut labels = d.kept_labels.take().unwrap_or_default();
+        if !d.cc_deleted.is_empty() {
+            // agdelete renumbers the subgraphs the clusters' labels are keyed by
+            labels.clusters.clear();
+        }
+        (output::Output::collect(&d, phase_attrs), labels.sorted())
     };
     result.apply(graph);
+    // ED_label and GD_label stay on the input's edges and clusters for the renderer.
+    if !(labels.edges.is_empty() && labels.clusters.is_empty()) {
+        graph.layout.label_geometry.put(labels);
+    }
     if aborted {
         // no place_graph_label: labels keep their zeroed position
         crate::common::postproc::labels_at_origin(graph);

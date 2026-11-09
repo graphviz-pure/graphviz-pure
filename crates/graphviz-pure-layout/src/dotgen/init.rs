@@ -348,6 +348,13 @@ impl<'a> Dot<'a> {
         if let Some((side, d)) = gl.border {
             self.graphs[sg].border[side as usize] = d;
         }
+        // GD_label stays on an input cluster for the renderer, which draws it unflipped.
+        if sg != 0
+            && let Some(si) = self.graphs.get(sg).and_then(|g| g.sub_index)
+            && let Some(kept) = &mut self.kept_labels
+        {
+            kept.clusters.push((si, Some(gl.unflipped(flip))));
+        }
     }
 
     fn push_label(&mut self, lg: &graphviz_pure_geom::LabelGeometry) -> L {
@@ -586,6 +593,12 @@ impl<'a> Dot<'a> {
             let l = self.push_label_text(lg, text);
             self.edges[e].tail_label = Some(l);
             self.graphs[0].has_labels |= TAIL_LABEL;
+        }
+        // ED_label and the edge's other labels stay on the input edge for the renderer.
+        if let Some(kept) = &mut self.kept_labels
+            && let Some(edge) = graphviz_pure_geom::LaidOutEdge::of(geo)
+        {
+            kept.edges.push((r, edge));
         }
         let ie = &self.input.edges[r];
         let tp = ie.tail_port.clone();

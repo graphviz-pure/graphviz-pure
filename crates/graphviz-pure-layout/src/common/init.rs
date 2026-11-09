@@ -8,7 +8,7 @@ use super::utils::{late_double, map_bool, mapbool};
 use graphviz_pure_core::font::{LabelSubstContext, measure_multiline_label_with_context};
 use graphviz_pure_core::strtod::{atof, sscanf};
 use graphviz_pure_core::{AttrMap, BoundingBox, Graph, GraphKind, NodeData, Point, Result};
-use graphviz_pure_geom::LaidOutNode;
+use graphviz_pure_geom::{GraphLabelGeometry, LaidOutLabels, LaidOutNode};
 
 pub const DEFAULT_FONTSIZE: f64 = 14.0;
 pub const MIN_FONTSIZE: f64 = 1.0;
@@ -65,8 +65,21 @@ pub fn graph_label(
     html_name: bool,
     is_root: bool,
 ) -> (Option<TextLabel>, u8) {
+    let (label, pos, _) = graph_label_kept(attrs, name, html_name, is_root);
+    (label, pos)
+}
+
+/// [`graph_label`] with the measurement it made, which C keeps in `GD_label` for the
+/// renderer.
+/// C: lib/common/input.c:do_graph_label
+pub fn graph_label_kept(
+    attrs: &AttrMap,
+    name: &str,
+    html_name: bool,
+    is_root: bool,
+) -> (Option<TextLabel>, u8, Option<GraphLabelGeometry>) {
     let Some(text) = attrs.get("label").filter(|s| !s.is_empty()) else {
-        return (None, 0);
+        return (None, 0, None);
     };
     let env = graphviz_pure_geom::NodeSizeEnv::new(name);
     let make = || {
@@ -79,7 +92,7 @@ pub fn graph_label(
         make()
     };
     let Some(geom) = geom else {
-        return (None, 0);
+        return (None, 0, None);
     };
     let lbl = TextLabel {
         text: text.clone(),
@@ -108,7 +121,7 @@ pub fn graph_label(
             flag |= LABEL_AT_RIGHT;
         }
     }
-    (Some(lbl), flag)
+    (Some(lbl), flag, Some(geom))
 }
 
 /// `PAD(d)`: label padding of `4*GAP` by `2*GAP`.
@@ -122,7 +135,8 @@ pub fn do_graph_label(g: &mut LGraph<'_>, c: usize) {
     let si = g.clusters[c].subgraph;
     let sg = &g.src.subgraphs[si];
     let name = g.src.subgraph_name(si);
-    let (label, label_pos) = graph_label(&sg.graph_attrs, &name, sg.html_name, false);
+    let (label, label_pos, kept) = graph_label_kept(&sg.graph_attrs, &name, sg.html_name, false);
+    g.keep_cluster_label(si, kept);
     let cl = &mut g.clusters[c];
     if let Some(l) = &label {
         cl.border[if label_pos & LABEL_AT_TOP != 0 { 2 } else { 0 }] = pad(l.dimen);
@@ -240,9 +254,24 @@ impl<'a> LGraph<'a> {
             e.xlabel = conv("xlabel", &lg.xlabel);
             e.head_label = conv("headlabel", &lg.head_label);
             e.tail_label = conv("taillabel", &lg.tail_label);
+            // Not kept for the renderer as C keeps ED_label (dot keeps it): alive through
+            // the layout beside the LEdge's own labels, it raised the peak heap of these
+            // engines by 5-8% on label-heavy graphs (#836).
             super::ports::resolve_edge_ports(self, ei)?;
         }
         Ok(())
+    }
+
+    /// Keeps a cluster label `do_graph_label` measured for the subgraph `subgraph` of
+    /// [`Self::src`], which C keeps in `GD_label` for the renderer.
+    pub(crate) fn keep_cluster_label(
+        &mut self,
+        subgraph: usize,
+        label: Option<GraphLabelGeometry>,
+    ) {
+        if let Some(label) = label {
+            self.label_geometry.clusters.push((subgraph, Some(label)));
+        }
     }
 
     /// [`Self::new`] without `common_init_edge`: the edges have no labels and keep centre
@@ -415,6 +444,7 @@ impl<'a> LGraph<'a> {
             src: graph,
             nodes,
             node_geometry,
+            label_geometry: LaidOutLabels::default(),
             edges,
             out,
             inn,
@@ -442,6 +472,7 @@ impl<'a> LGraph<'a> {
             odim: self.odim,
             nodes: self.nodes,
             node_geometry: self.node_geometry,
+            label_geometry: self.label_geometry,
             edges: self.edges,
             bb: self.bb,
             clusters: self.clusters,
@@ -456,6 +487,7 @@ impl<'a> LGraph<'a> {
             odim: self.odim,
             nodes: &self.nodes,
             node_geometry: std::mem::take(&mut self.node_geometry),
+            label_geometry: std::mem::take(&mut self.label_geometry),
             edges: &self.edges,
             bb: self.bb,
             clusters: &self.clusters,
@@ -472,6 +504,7 @@ pub(crate) struct LayoutResult {
     odim: usize,
     nodes: Vec<LNode>,
     node_geometry: Vec<Option<LaidOutNode>>,
+    label_geometry: LaidOutLabels,
     edges: Vec<LEdge>,
     bb: BoundingBox,
     clusters: Vec<LCluster>,
@@ -486,6 +519,7 @@ impl LayoutResult {
             odim: self.odim,
             nodes: &self.nodes,
             node_geometry: self.node_geometry,
+            label_geometry: self.label_geometry,
             edges: &self.edges,
             bb: self.bb,
             clusters: &self.clusters,
@@ -501,6 +535,7 @@ struct LayoutResultView<'a> {
     odim: usize,
     nodes: &'a [LNode],
     node_geometry: Vec<Option<LaidOutNode>>,
+    label_geometry: LaidOutLabels,
     edges: &'a [LEdge],
     bb: BoundingBox,
     clusters: &'a [LCluster],
@@ -591,6 +626,18 @@ impl LayoutResultView<'_> {
                 .layout
                 .node_geometry
                 .put(graphviz_pure_geom::LaidOutNodes(self.node_geometry));
+        }
+        // GD_label likewise, for the clusters written above (and ED_label for the edges, of
+        // which none is kept yet, #836). The root's label is the one `graph_init` made
+        // (`layout_graph_with_options`).
+        let labels = self.label_geometry.sorted();
+        let fits = self.edges.len() == graph.edges.len()
+            && labels
+                .clusters
+                .last()
+                .is_none_or(|&(si, _)| si < graph.subgraphs.len());
+        if fits && !(labels.edges.is_empty() && labels.clusters.is_empty()) {
+            graph.layout.label_geometry.put(labels);
         }
     }
 }
