@@ -17,118 +17,118 @@
  },
  "cases": {
   "laid/tests/wild/gv16_graphs_b29_d1e4db.gv -Tcanon -Knop2": {
-   "heap_blocks": 128687,
-   "heap_bytes": 8506608,
+   "heap_blocks": 126459,
+   "heap_bytes": 8467708,
    "heap_peak_bytes": 2855773,
-   "instructions": 113581419
+   "instructions": 110394073
   },
   "laid/tests/wild/gv16_graphs_b29_d1e4db.gv -Tsvg -Knop2": {
-   "heap_blocks": 88138,
-   "heap_bytes": 6722347,
-   "heap_peak_bytes": 2137119,
-   "instructions": 97727581
+   "heap_blocks": 85910,
+   "heap_bytes": 6683447,
+   "heap_peak_bytes": 2179073,
+   "instructions": 94549235
   },
   "synth/dot_components_1000.gv -Tsvg": {
    "heap_blocks": 162752,
    "heap_bytes": 32020325,
    "heap_peak_bytes": 9318926,
-   "instructions": 349726738
+   "instructions": 349346841
   },
   "synth/dot_dag_1000.gv -Tsvg": {
    "heap_blocks": 167384,
    "heap_bytes": 42419550,
    "heap_peak_bytes": 12522933,
-   "instructions": 729822188
+   "instructions": 729111674
   },
   "synth/dot_par_10_500.gv -Tsvg": {
    "heap_blocks": 123578,
    "heap_bytes": 119536946,
    "heap_peak_bytes": 59807299,
-   "instructions": 1442510718
+   "instructions": 1442807329
   },
   "synth/nop2_subgraph_10000.gv -Tcanon -Knop2": {
    "heap_blocks": 600299,
-   "heap_bytes": 53680054,
-   "heap_peak_bytes": 23601364,
-   "instructions": 718182037
+   "heap_bytes": 53680198,
+   "heap_peak_bytes": 23601484,
+   "instructions": 718133274
   },
   "synth/twopi_pairs_1000.gv -Tsvg": {
    "heap_blocks": 100120,
-   "heap_bytes": 70740535,
-   "heap_peak_bytes": 15340622,
-   "instructions": 596549403
+   "heap_bytes": 70388535,
+   "heap_peak_bytes": 14988622,
+   "instructions": 595748585
   },
   "synth/twopi_tree_5000.gv -Tsvg": {
    "heap_blocks": 295779,
-   "heap_bytes": 45883542,
+   "heap_bytes": 44123894,
    "heap_peak_bytes": 20903348,
-   "instructions": 379249904
+   "instructions": 375254466
   },
   "tests/circo/wild_gv16_directed_sdh_29b016.gv -Tsvg": {
    "heap_blocks": 15889,
-   "heap_bytes": 1928201,
-   "heap_peak_bytes": 869458,
-   "instructions": 25253607
+   "heap_bytes": 1884081,
+   "heap_peak_bytes": 824666,
+   "instructions": 25100257
   },
   "tests/fdp/wild_gv16_graphs_b69_4b5b48.gv -Tsvg": {
    "heap_blocks": 177444,
-   "heap_bytes": 8250679,
-   "heap_peak_bytes": 1082733,
-   "instructions": 2629814108
+   "heap_bytes": 8104951,
+   "heap_peak_bytes": 985229,
+   "instructions": 2629559405
   },
   "tests/fixtures/unix.gv -Tpng": {
    "heap_blocks": 18771,
    "heap_bytes": 12625485,
    "heap_peak_bytes": 6058927,
-   "instructions": 136281802
+   "instructions": 136260570
   },
   "tests/fixtures/unix.gv -Tsvg": {
    "heap_blocks": 5934,
    "heap_bytes": 1575455,
    "heap_peak_bytes": 519942,
-   "instructions": 16543404
+   "instructions": 16522309
   },
   "tests/neato/hw2_random_120.gv -Tsvg": {
    "heap_blocks": 10827,
-   "heap_bytes": 2397935,
-   "heap_peak_bytes": 602591,
-   "instructions": 2282697721
+   "heap_bytes": 2341615,
+   "heap_peak_bytes": 592167,
+   "instructions": 2282572099
   },
   "tests/osage/wild_gv16_graphs_b51_33bcb0.gv -Tsvg": {
-   "heap_blocks": 11239,
-   "heap_bytes": 1668044,
-   "heap_peak_bytes": 748292,
-   "instructions": 18547163
+   "heap_blocks": 11131,
+   "heap_bytes": 1658483,
+   "heap_peak_bytes": 748676,
+   "instructions": 18311915
   },
   "tests/patchwork/wild_gv16_graphs_b51_33bcb0.gv -Tsvg": {
    "heap_blocks": 7212,
-   "heap_bytes": 1459064,
-   "heap_peak_bytes": 699232,
-   "instructions": 11225021
+   "heap_bytes": 1434392,
+   "heap_peak_bytes": 699616,
+   "instructions": 11227626
   },
   "tests/sfdp/gen_grid20x20.gv -Tsvg": {
    "heap_blocks": 37711,
-   "heap_bytes": 6687566,
-   "heap_peak_bytes": 2392886,
-   "instructions": 610077534
+   "heap_bytes": 6420046,
+   "heap_peak_bytes": 2300228,
+   "instructions": 609471737
   },
   "tests/twopi/fx_arrows.gv -Tsvg": {
-   "heap_blocks": 15681,
-   "heap_bytes": 6494229,
-   "heap_peak_bytes": 827462,
-   "instructions": 549049869
+   "heap_blocks": 15646,
+   "heap_bytes": 6497955,
+   "heap_peak_bytes": 830092,
+   "instructions": 548464306
   },
   "tests/wild/gv16_graphs_b143_5416de.gv -Tplain": {
-   "heap_blocks": 89871,
-   "heap_bytes": 23202632,
-   "heap_peak_bytes": 8280289,
-   "instructions": 751769800
+   "heap_blocks": 88965,
+   "heap_bytes": 23315024,
+   "heap_peak_bytes": 8392201,
+   "instructions": 749956446
   },
   "tests/wild/gv16_graphs_b143_5416de.gv -Tsvg": {
-   "heap_blocks": 97241,
-   "heap_bytes": 24052748,
-   "heap_peak_bytes": 8280285,
-   "instructions": 758922362
+   "heap_blocks": 96335,
+   "heap_bytes": 24165140,
+   "heap_peak_bytes": 8392197,
+   "instructions": 757107626
   }
  },
  "reference": {
@@ -152,5 +152,5 @@
   "name": "0.2.2"
  },
  "target": "x86_64-unknown-linux-musl",
- "wasm_bytes": 4326039
+ "wasm_bytes": 4357809
 }
