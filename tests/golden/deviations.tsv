@@ -1,10 +1,10 @@
 # Inputs whose output deliberately differs from C 16.1.0's reference build.
 #
 # Each line: input path<TAB>hash of the port's normalized -Tsvg (gv-diff e2e's hash)<TAB>issue.
-# `gv-diff e2e` checks a listed input against its pinned hash instead of C's; the layout
-# (`gv-diff`) and structural (`gv-diff structure`) ratchets skip it. When a change moves a
-# listed output on purpose, `gv-diff e2e` prints the new hash. Adding a line takes a decision
-# on the issue named; see docs/versioning.md, "What identical to C means".
+# `gv-diff e2e` and scripts/wasm-e2e.mjs check a listed input against its pinned hash instead of
+# C's; the layout (`gv-diff`) and structural (`gv-diff structure`) ratchets skip it. When a
+# change moves a listed output on purpose, `gv-diff e2e` prints the new hash. Adding a line
+# takes a decision on the issue named; see docs/versioning.md, "What identical to C means".
 #
 # #846: where C's fused `ccw` puts a route's end in no triangle, so that C loses the edge or
 # draws it straight, the port repeats the point-in-triangle test with `ccw` unfused
