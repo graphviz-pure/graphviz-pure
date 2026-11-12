@@ -22,17 +22,17 @@ graphviz-pure is an independent port. It is not affiliated with or endorsed by t
 - PDF output (`-Tpdf`) converts the existing SVG with usvg and svg2pdf: it matches C’s layout, not C’s cairo PDF bytes. It uses the same bundled fonts as outlines, omits images, and has no timestamps ([PDF fidelity and reproducibility](docs/porting/pdf.md)). The CLI’s default `pdf` Cargo feature includes it in native and WASI (`wasm32-wasip1`) release binaries; `--no-default-features` removes it. The facade library and `graphviz-pure-wasm` browser/JavaScript bindings leave it disabled.
 - The renderers, devices, layouts and image loaders are built in, and `-P` and `-v` report them as a statically linked C build (`dot_static`) reports its own: no plugin library, demand loading disabled, packages in its built-in order. The packages are `core`, `dot_layout`, `neato_layout`, and `cairo` for the raster devices (`-T png:cairo`). `-P` draws the plugin graph; `-v` reports each plugin looked up and lists them, and the layouts write C's progress messages (#416), with UTC time stamps.
 - Text is measured with Graphviz's built-in font metric tables, which is what C does when built without Pango. The reference outputs come from C 16.1.0 run that way (see `scripts/gen-golden.sh`).
-- C behaviour is reproduced where output depends on it, including C bugs and platform details: the macOS `qsort` and `rand`, `drand48`, clang's fused multiply-adds, cdt's splay trees, and C's error counting and exit status. `docs/c-bugs-ledger.md` lists the reproduced C bugs.
+- C behaviour is reproduced where output depends on it, including C bugs and platform details: the macOS `qsort` and `rand`, `drand48`, clang's fused multiply-adds, cdt's splay trees, and C's error counting and exit status. `docs/c-bugs-ledger.md` lists the reproduced C bugs. One is deliberately not reproduced: where clang's fused `ccw` puts a route's end in no triangle, so that C loses the edge or draws it straight, the port repeats that point-in-triangle test unfused, as C built without FMA computes it, and routes the edge (#846; `tests/golden/deviations.tsv`).
 
 ### Fidelity against C Graphviz 16.1.0
 
-Re-measured on 2026-10-28 with `gv-diff` (the commands below), which `cargo test --workspace` runs as ratchets that fail on any regression. The reference is C Graphviz computing with the port's math functions (`scripts/dot-portable-libm.sh` interposes them into the stock `dot`), so the comparison measures the port, not the platform's libm:
+Re-measured on 2026-10-28 (the #846 deviations on 2026-11-12) with `gv-diff` (the commands below), which `cargo test --workspace` runs as ratchets that fail on any regression. The reference is C Graphviz computing with the port's math functions (`scripts/dot-portable-libm.sh` interposes them into the stock `dot`), so the comparison measures the port, not the platform's libm:
 
 | Check | Every platform (Linux, Windows, macOS, WASM) |
 | :--- | :---: |
-| Full `-Tsvg` byte identity (`gv-diff e2e`), 9 corpora (14 inputs skipped: C's own output changes between runs on 11, and C crashes on 3) | 2,595 / 2,595 |
-| Layout geometry, main corpus (566 files: wild graphs, upstream fixtures, fuzz reproducers) | 566 / 566 exact |
-| Per-engine corpora, exact | neato 442/445, sfdp 297/297, circo 282/282, fdp 386/388, osage 180/180, patchwork 141/141, twopi 281/289 |
+| Full `-Tsvg` byte identity (`gv-diff e2e`), 9 corpora (12 inputs skipped: C's own output changes between runs on 9, and C crashes on 3) | 2,582 / 2,595; the other 13, and 2 inputs C is unstable on, are deliberate deviations (#846), checked against the port's pinned output |
+| Layout geometry, main corpus (566 files: wild graphs, upstream fixtures, fuzz reproducers) | 562 / 562 exact, 4 deliberate deviations skipped |
+| Per-engine corpora, exact | neato 435/438, sfdp 295/295, circo 282/282, fdp 386/387, osage 180/180, patchwork 141/141, twopi 281/289 (10 deliberate deviations skipped, #846) |
 | Renderers given C's layout (`gv-diff render`, 587 layouts, 9 formats) | svg, svg_inline, cmapx, xdot, dot, json0 587/587; json 551/551; plain and plain-ext 577/577 |
 | Historical broad validation: C's own test graphs (`graphs/`, `tests/graphs/`, `tests/regression_tests/`), dot with base, LR, ortho, concentrate and newrank variants | 379 / 379 per variant |
 | Differential fuzzing (6,000 random graphs, all engines, historical round 4) | 98.8% identical |

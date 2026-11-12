@@ -122,6 +122,19 @@ def measure(*extra):
         return load(hp)
 
 
+def deviations():
+    """The deliberate deviations from C (tests/golden/deviations.tsv), keyed corpus/stem like the
+    goldens. The e2e baseline ratchets them against the port's pinned output, so they are in its
+    identical set without being identical to C."""
+    dirs = {d.strip(): name for name, (ds, _) in E2E_CORPORA.items() for d in ds.split(",")}
+    out = set()
+    for line in (GOLDEN / "deviations.tsv").read_text(encoding="utf-8").splitlines():
+        if line.strip() and not line.startswith("#"):
+            p = Path(line.split("\t")[0])
+            out.add(f"{dirs[p.parent.as_posix()]}/{p.stem}")
+    return out
+
+
 def matching(hashes, golden):
     return {k for k, h in hashes.items() if h is not None and golden.get(k) == h}
 
@@ -138,13 +151,14 @@ def main():
 
     golden = load(GOLDEN / "e2e.libm-matched.json")
     stock_golden = load(GOLDEN / "e2e.json")
-    ident = set(load(GOLDEN / "e2e-baseline.libm-matched.portable.json")["identical"])
+    devs = deviations()
+    ident = set(load(GOLDEN / "e2e-baseline.libm-matched.portable.json")["identical"]) - devs
     stock_ident = set(load(GOLDEN / "e2e-baseline.portable.json")["identical"])
     if a.measure:
         subprocess.run(["cargo", "build", "--release", "-p", "graphviz-pure-diff"], cwd=ROOT, check=True)
         hashes = measure()
         got = matching(hashes, golden["files"])
-        lost = ident - got
+        lost = ident - got - devs
         if lost:
             sys.exit(f"{len(lost)} files in the committed baseline no longer match C, e.g. {sorted(lost)[:5]}")
         ident = got
@@ -181,6 +195,8 @@ def main():
         "unstable": unstable,
         "files": files,
         "differs": sorted(set(files) - ident),
+        # Deliberate deviations from C, pinned to the port's output (tests/golden/deviations.tsv).
+        "deviations": sorted(devs),
         # Informational: stock C on macOS computes with Apple's libm, which no build follows.
         "stock": {
             "corpora": [

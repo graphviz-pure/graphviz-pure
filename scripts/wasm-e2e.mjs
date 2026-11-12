@@ -2,6 +2,8 @@
 // WASM end-to-end check: renders every corpus input with the wasm build and compares the
 // normalized SVG hash with C Graphviz's computed with the same math functions
 // (tests/golden/e2e.libm-matched.json), like `gv-diff e2e` does for the native build. No npm packages are needed.
+// An input listed in tests/golden/deviations.tsv, a deliberate deviation from C, is compared with
+// the port's pinned hash instead, as `gv-diff e2e` does.
 //
 // Build the package first (see docs/porting/libm.md):
 //   cargo build --release --target wasm32-unknown-unknown -p graphviz-pure-wasm
@@ -12,7 +14,8 @@
 //   node scripts/wasm-e2e.mjs [--pkg /tmp/gvwasm/pkg] [--baseline FILE] [--filter SUBSTR]
 //                             [--list] [--hashes FILE] [--golden FILE]
 //
-// Exits non-zero when a file in the baseline does not match under wasm. Every build uses the
+// Exits non-zero when a file in the baseline does not match under wasm, or a deviation does not
+// match its pin. Every build uses the
 // same math functions, so the default baseline is the native one,
 // tests/golden/e2e-baseline.libm-matched.portable.json.
 // `--hashes FILE` writes every output's hash in the format of `gv-diff e2e --hashes`, so the
@@ -74,6 +77,17 @@ const corpora = {
   render: ['tests/render'],
 };
 
+// The deliberate deviations, keyed like the golden (corpus/stem), as
+// crates/graphviz-pure-diff/src/lib.rs reads them: `path<TAB>hash<TAB>issue`.
+const deviations = {};
+for (const line of fs.readFileSync(path.join(root, 'tests/golden/deviations.tsv'), 'utf8').split('\n')) {
+  if (!line.trim() || line.startsWith('#')) continue;
+  const [file, hash, issue] = line.split('\t');
+  const c = Object.keys(corpora).find((k) => corpora[k].includes(path.posix.dirname(file)));
+  assert.ok(c && /^[0-9a-f]{16}$/.test(hash) && /^\d+$/.test(issue), `deviations.tsv: ${line}`);
+  deviations[`${c}/${path.posix.basename(file, '.gv')}`] = { hash, issue };
+}
+
 // Drops the generator comment, which names the program and version.
 function normalize(bytes) {
   const out = [];
@@ -111,6 +125,7 @@ const per = {};
 const hashes = {};
 const bad = [];
 let regressions = 0;
+let brokenDeviations = 0;
 for (const [c, dirs] of Object.entries(corpora)) {
   const r = (per[c] = { total: 0, identical: 0, differ: 0, error: 0, inBaseline: 0 });
   for (const d of dirs) {
@@ -118,7 +133,9 @@ for (const [c, dirs] of Object.entries(corpora)) {
     if (!fs.existsSync(dir)) continue;
     for (const f of fs.readdirSync(dir).filter((x) => x.endsWith('.gv')).sort()) {
       const key = `${c}/${f.slice(0, -3)}`;
-      if (!golden[key] || (filter && !key.includes(filter))) continue;
+      const dev = deviations[key];
+      if (!(golden[key] || dev) || (filter && !key.includes(filter))) continue;
+      const expected = dev ? dev.hash : golden[key];
       r.total++;
       if (baseline.has(key)) r.inBaseline++;
       const src = fs.readFileSync(path.join(dir, f));
@@ -130,10 +147,15 @@ for (const [c, dirs] of Object.entries(corpora)) {
         hashes[key] = null;
         bad.push(`${key} ERROR ${String(e).slice(0, 80)}`);
         if (baseline.has(key)) regressions++;
+        if (dev) brokenDeviations++;
         continue;
       }
       const h = (hashes[key] = fnv(normalize(out)));
-      if (h === golden[key]) r.identical++;
+      if (dev && (h !== dev.hash || golden[key] === dev.hash)) {
+        brokenDeviations++;
+        console.log(`deviation (#${dev.issue}) does not hold: ${key}: wasm ${h}, pinned ${dev.hash}`);
+      }
+      if (h === expected) r.identical++;
       else {
         r.differ++;
         bad.push(key);
@@ -155,10 +177,12 @@ console.log(
   `${'all'.padEnd(10)} ${String(sum.total).padStart(5)}  ${String(sum.identical).padStart(14)}  ${String(sum.inBaseline).padStart(16)}  ${String(sum.differ).padStart(6)}  ${String(sum.error).padStart(5)}`,
 );
 console.log(`${((Date.now() - t0) / 1000).toFixed(1)}s; ${regressions} file(s) of ${baselinePath} differ under wasm`);
+const devCount = Object.keys(hashes).filter((k) => deviations[k]).length;
+if (devCount) console.log(`${devCount} of them deliberate deviations from C, compared with the port's pinned output (tests/golden/deviations.tsv); ${brokenDeviations} do not hold`);
 if (list) console.log(bad.join('\n'));
 if (hashesPath) {
   const sorted = Object.fromEntries(Object.keys(hashes).sort().map((k) => [k, hashes[k]]));
   fs.writeFileSync(hashesPath, JSON.stringify(sorted, null, 2) + '\n');
   console.log(`hashes written: ${hashesPath}`);
 }
-process.exit(regressions ? 1 : 0);
+process.exit(regressions || brokenDeviations ? 1 : 0);

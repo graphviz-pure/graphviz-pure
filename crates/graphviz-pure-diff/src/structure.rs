@@ -492,6 +492,17 @@ pub fn main(args: Vec<String>) -> ExitCode {
         .map(|g| g.unstable)
         .unwrap_or_default();
     items.retain(|(k, _)| golden.files.contains_key(k));
+    // A deliberate deviation is not compared with C's drawing; `gv-diff e2e` pins its output.
+    let deviations = graphviz_pure_diff::deviations(Path::new("."));
+    let before = items.len();
+    items.retain(|(_, p)| !deviations.contains_key(&graphviz_pure_diff::input_key(p)));
+    if items.len() < before {
+        println!(
+            "{} deliberate deviations from C skipped ({})",
+            before - items.len(),
+            graphviz_pure_diff::DEVIATIONS
+        );
+    }
     std::panic::set_hook(Box::new(|_| {}));
     let outs = e2e::parallel(&items, |p| {
         std::fs::read(p)

@@ -510,6 +510,30 @@ in Homebrew's), but since only the predicates' signs are used, that cannot expla
 differences above. None of these
 builds is the reference; the port follows the macOS arm64 build.
 
+A fused operation can change more than a last digit. `ccw` (`lib/pathplan/triang.c`) is fused as
+`fma(a, b, -(c * d))`, which is not antisymmetric: for a point halfway along a segment both
+products are equal, so unfused `ccw` is 0 both ways, while the fused one returns the rounding
+error of `c * d`, the same nonzero value both ways. A route's end there, on an edge shared by
+two triangles of `Pshortestpath`'s triangulation, is in neither triangle (`pointintri`), so
+the reference build reports "source (or destination) point not in any triangle": dot loses the
+edge, and the neato-family engines (`genroute`) draw it straight with a warning. That end is
+common: the centre of a record port's end box (#846, the documentation's "structs" example)
+or a compass port. On 600 random circo, neato and twopi graphs with compass ports and
+`splines=true`, the reference build straightens an edge in 365; C built without FMA in none.
+
+**Here the port deviates from the reference on purpose (#846).** Where C's fused search finds
+no triangle, `pathplan::shortest::locate` repeats it with `ccw` unfused, as C built without FMA
+computes it; the rest of the route (triangulation, funnel, spline fit) is computed as the
+reference computes it. Every input C routes is unchanged. On the corpus the retry changes 15
+inputs, listed in `tests/golden/deviations.tsv` with a hash of the port's output: `gv-diff e2e`
+checks them against it instead of C's (and fails if one drifts or equals C's), and the layout
+and structural ratchets skip them. On 12 of the 15 the port's output equals unfused C's byte
+for byte; the other three are fdp and sfdp layouts that differ between the C builds. That is
+an observation, not a guarantee: elsewhere the fused route after the retry can differ from
+unfused C's in a last digit, or route an edge whose spline fit fails in unfused C. Unit test: `pathplan::shortest`'s
+`an_end_on_a_diagonal_c_misses_is_found_unfused`; CLI test:
+`issue846_nested_record_port_on_a_triangulation_diagonal_is_drawn`.
+
 ## Provenance and licences
 
 Everything under `crates/graphviz-pure-core/src/math/`:

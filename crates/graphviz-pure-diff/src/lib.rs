@@ -462,3 +462,59 @@ pub fn compare_file(source: &str, golden_text: &str) -> FileReport {
         },
     }
 }
+
+/// The list of inputs whose output deliberately differs from C's.
+pub const DEVIATIONS: &str = "tests/golden/deviations.tsv";
+
+/// An input whose output deliberately differs from C's (`tests/golden/deviations.tsv`).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Deviation {
+    /// Hash of the port's normalized `-Tsvg` (`gv-diff e2e`'s hash), which the e2e ratchet
+    /// checks in place of C's.
+    pub svg_hash: String,
+    /// The issue that decided the deviation.
+    pub issue: u32,
+}
+
+/// An input's path relative to the repository root, `/`-separated and without `./`: the key
+/// of `tests/golden/deviations.tsv`.
+pub fn input_key(path: &std::path::Path) -> String {
+    path.components()
+        .filter(|c| !matches!(c, std::path::Component::CurDir))
+        .map(|c| c.as_os_str().to_string_lossy().into_owned())
+        .collect::<Vec<_>>()
+        .join("/")
+}
+
+/// Reads `tests/golden/deviations.tsv` under `root`: lines of `path<TAB>svg-hash<TAB>issue`,
+/// `#` comments and blank lines ignored. A missing file is an empty list; a malformed line
+/// panics, so a typo cannot silently drop an input from the ratchets.
+pub fn deviations(root: &std::path::Path) -> BTreeMap<String, Deviation> {
+    let Ok(text) = std::fs::read_to_string(root.join(DEVIATIONS)) else {
+        return BTreeMap::new();
+    };
+    let mut out = BTreeMap::new();
+    for (n, line) in text.lines().enumerate() {
+        let line = line.trim_end();
+        if line.is_empty() || line.starts_with('#') {
+            continue;
+        }
+        let f: Vec<&str> = line.split('\t').collect();
+        let (Some(path), Some(hash), Some(issue)) = (f.first(), f.get(1), f.get(2)) else {
+            panic!("{DEVIATIONS}:{}: want path, svg hash and issue", n + 1);
+        };
+        let issue = issue
+            .parse()
+            .unwrap_or_else(|_| panic!("{DEVIATIONS}:{}: bad issue {issue:?}", n + 1));
+        let dev = Deviation {
+            svg_hash: (*hash).to_string(),
+            issue,
+        };
+        assert!(
+            out.insert((*path).to_string(), dev).is_none(),
+            "{DEVIATIONS}:{}: {path} listed twice",
+            n + 1
+        );
+    }
+    out
+}

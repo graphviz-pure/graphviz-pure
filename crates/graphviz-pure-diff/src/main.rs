@@ -92,6 +92,17 @@ fn main() -> ExitCode {
     if let Some(f) = &filter {
         files.retain(|p| p.to_string_lossy().contains(f.as_str()));
     }
+    // A deliberate deviation is not compared with C's layout; `gv-diff e2e` pins its output.
+    let deviations = graphviz_pure_diff::deviations(Path::new("."));
+    let before = files.len();
+    files.retain(|p| !deviations.contains_key(&graphviz_pure_diff::input_key(p)));
+    if files.len() < before {
+        println!(
+            "{} deliberate deviations from C skipped ({})",
+            before - files.len(),
+            graphviz_pure_diff::DEVIATIONS
+        );
+    }
 
     let results = run_all(&files, &golden);
     let current = Baseline { files: results };

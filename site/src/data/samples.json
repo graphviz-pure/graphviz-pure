@@ -79,17 +79,17 @@
    "records",
    "ports"
   ],
-  "identical": true,
-  "identical_stock": true,
+  "identical": false,
+  "identical_stock": false,
   "wasm_input": "input.gv",
   "sha256": {
    "c": "fc74dead1e83e86e827e1ff03055cc43fdcc51048093d6d99dcbebe2d4cc47d1",
-   "rust": "826245c1f850b6a37833b928df37241d438f0d824c49cd100f7ddcccf14780a9"
+   "rust": "80079e8ddf5b6c2bbbc7403f420d8d6fae28e4c6ea31671e37ad8246deb564fb"
   },
   "bytes": {
    "input": 307,
    "c": 3901,
-   "rust": 3901
+   "rust": 4213
   }
  },
  {

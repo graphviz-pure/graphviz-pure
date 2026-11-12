@@ -3,7 +3,7 @@
 //! funnel algorithm).
 
 use super::Ppoint;
-use super::triang::{ISCCW, ISCW, ccw};
+use super::triang::{ISCCW, ISCW, ISON, ccw};
 
 pub(super) const NONE: usize = usize::MAX;
 
@@ -51,7 +51,18 @@ impl Deque {
     }
 }
 
+/// C: lib/pathplan/shortest.c:pointintri, with C's `ccw` (fused as the reference build fuses it).
 fn pointintri(tris: &[Triangle], pnl: &Pnl, trii: usize, p: Ppoint) -> bool {
+    pointintri_with(tris, pnl, trii, p, ccw)
+}
+
+fn pointintri_with(
+    tris: &[Triangle],
+    pnl: &Pnl,
+    trii: usize,
+    p: Ppoint,
+    ccw: fn(Ppoint, Ppoint, Ppoint) -> i32,
+) -> bool {
     let mut sum = 0;
     for ei in 0..3 {
         let e = tris[trii].e[ei];
@@ -60,6 +71,35 @@ fn pointintri(tris: &[Triangle], pnl: &Pnl, trii: usize, p: Ppoint) -> bool {
         }
     }
     sum == 3 || sum == 0
+}
+
+/// `ccw` computed without contraction, as C built without FMA computes it.
+fn ccw_unfused(p1: Ppoint, p2: Ppoint, p3: Ppoint) -> i32 {
+    let d = (p1.y - p2.y) * (p3.x - p2.x) - (p3.y - p2.y) * (p1.x - p2.x);
+    if d > 0.0 {
+        ISCW
+    } else if d < 0.0 {
+        ISCCW
+    } else {
+        ISON
+    }
+}
+
+/// The first triangle that holds `p`: C's search (`Pshortestpath`'s two `pointintri` loops),
+/// then, only where it finds none, the same search with `ccw` unfused.
+///
+/// Deliberate deviation from C (#846, `docs/porting/libm.md`, "Fused multiply-adds"). The
+/// reference build fuses `ccw` as `fma(a, b, -(c * d))`, which is not antisymmetric: for a
+/// point halfway along a triangle's shared edge, such as the centre of a record port's end
+/// box, it gives the same nonzero sign both ways, so the point is in neither triangle and C
+/// loses the edge, or falls back to a straight one. Unfused, `ccw` is 0 both ways there and
+/// the point is in both, as in C built without FMA. The retry runs only where C finds no
+/// triangle, so every input C routes is unchanged; the inputs it changes are listed in
+/// `tests/golden/deviations.tsv`.
+fn locate(tris: &[Triangle], pnl: &Pnl, p: Ppoint) -> Option<usize> {
+    (0..tris.len())
+        .find(|&t| pointintri(tris, pnl, t, p))
+        .or_else(|| (0..tris.len()).find(|&t| pointintri_with(tris, pnl, t, p, ccw_unfused)))
 }
 
 fn marktripath(tris: &mut [Triangle], trii: usize, trij: usize) -> bool {
@@ -180,11 +220,11 @@ pub fn pshortestpath(
     if !whole {
         prerror(333, "triangulation failed");
     }
-    let Some(ftrii) = (0..tris.len()).find(|&t| pointintri(&tris, &pnl, t, eps[0])) else {
+    let Some(ftrii) = locate(&tris, &pnl, eps[0]) else {
         prerror(182, "source point not in any triangle");
         return Err(super::PathplanError);
     };
-    let Some(ltrii) = (0..tris.len()).find(|&t| pointintri(&tris, &pnl, t, eps[1])) else {
+    let Some(ltrii) = locate(&tris, &pnl, eps[1]) else {
         prerror(193, "destination point not in any triangle");
         return Err(super::PathplanError);
     };
@@ -436,5 +476,113 @@ mod tests {
         assert!(pshortestpath(&square, [outside, inside]).is_err());
         assert!(pshortestpath(&square, [inside, outside]).is_err());
         assert_eq!(REPORTED.with(|r| r.borrow().clone()), [182, 193]);
+    }
+
+    /// Issue #846: dot's routing polygon for `s1 -> s3:here`, where `here` is nested two levels
+    /// deep in a record (dot's coordinates before the final translation). The head end, the
+    /// port's centre, is the centre of the end box `[-34.107, 33.321] x [0, 75.4]`, so it lies
+    /// halfway along the box's diagonal from `(33.321, 75.4)` to `(-34.107, 0)`, an edge of two
+    /// of the triangles. Unfused, both products of `ccw` are equal, so it is 0 (`ISON`) both ways
+    /// and the point is in both triangles. C's reference build fuses `ccw` as
+    /// `fma(a, b, -(c * d))`, which gives the rounding error of `c * d`, the same positive value
+    /// both ways: `ISCW` in both triangles, so neither has the point inside all three edges
+    /// (`pointintri`), and C loses the edge. The port's `locate` then retries unfused, as C
+    /// built without FMA computes, and routes the edge (a deliberate deviation).
+    #[test]
+    fn an_end_on_a_diagonal_c_misses_is_found_unfused() {
+        let p = Ppoint::new;
+        let poly = [
+            p(72.32080078125, 129.9),
+            p(72.32080078125, 111.4),
+            p(72.32080078125, 111.4),
+            p(72.32080078125, 75.4),
+            p(33.32080078125, 75.4),
+            p(33.32080078125, 0.0),
+            p(-34.10693359375, 0.0),
+            p(-34.10693359375, 75.4),
+            p(-72.32080078125, 75.4),
+            p(-72.32080078125, 111.4),
+            p(-72.32080078125, 111.4),
+            p(-72.32080078125, 129.9),
+        ];
+        let (tail, head) = (p(0.0, 128.9), p(-0.39306640625, 37.7));
+        let (a, b) = (p(33.32080078125, 75.4), p(-34.10693359375, 0.0));
+        // The diagonal is an edge of two of C's triangles.
+        let points = loaded(&poly);
+        let (tris, whole) = triangulate_c(&points);
+        assert!(whole);
+        let is_ab = |e: &Tedge| {
+            let (p0, p1) = (points[e.pnl0], points[e.pnl1]);
+            (p0 == a && p1 == b) || (p0 == b && p1 == a)
+        };
+        assert_eq!(tris.iter().filter(|t| t.e.iter().any(is_ab)).count(), 2);
+        let unfused = |p1: Ppoint, p2: Ppoint, p3: Ppoint| {
+            (p1.y - p2.y) * (p3.x - p2.x) - (p3.y - p2.y) * (p1.x - p2.x)
+        };
+        assert_eq!((unfused(a, b, head), unfused(b, a, head)), (0.0, 0.0));
+        assert_eq!((ccw(a, b, head), ccw(b, a, head)), (ISCW, ISCW));
+        // C's search finds no triangle; the unfused retry finds the first of the two.
+        let mut pnl = Pnl {
+            pp: points.clone(),
+            link: Vec::new(),
+        };
+        pnl.pp.push(head);
+        assert!((0..tris.len()).all(|t| !pointintri(&tris, &pnl, t, head)));
+        let found: Vec<usize> = (0..tris.len())
+            .filter(|&t| pointintri_with(&tris, &pnl, t, head, ccw_unfused))
+            .collect();
+        assert_eq!(found.len(), 2);
+        assert_eq!(locate(&tris, &pnl, head), found.first().copied());
+        REPORTED.with(|r| r.borrow_mut().clear());
+        // Both ends are in one triangle strip without a bend: the straight segment.
+        assert_eq!(pshortestpath(&poly, [tail, head]), Ok(vec![tail, head]));
+        assert!(REPORTED.with(|r| r.borrow().is_empty()));
+    }
+
+    /// `locate` is C's search wherever that finds a triangle: the unfused retry changes only
+    /// the points C finds in none. Points on a 0.1 grid, so that the products round and the
+    /// fused and unfused `ccw` disagree on some.
+    #[test]
+    fn locate_is_cs_search_wherever_that_finds_a_triangle() {
+        let mut rng = Rng(0x846_0846_0846_0846);
+        let (mut same, mut rescued) = (0, 0);
+        for case in 0..3000 {
+            let n = 4 + rng.below(12) as usize;
+            let mut point = || {
+                Ppoint::new(
+                    rng.below(200) as f64 * 0.1 - 7.3,
+                    rng.below(200) as f64 * 0.1 + 3.7,
+                )
+            };
+            let poly: Vec<Ppoint> = (0..n).map(|_| point()).collect();
+            let points = loaded(&poly);
+            let (tris, whole) = triangulate_c(&points);
+            if !whole {
+                continue;
+            }
+            // Query the triangles' edge midpoints, where the two tests can disagree.
+            let mut pnl = Pnl {
+                pp: points.clone(),
+                link: Vec::new(),
+            };
+            pnl.pp.push(Ppoint::default());
+            let q = pnl.pp.len() - 1;
+            for t in &tris {
+                for e in t.e {
+                    let (a, b) = (points[e.pnl0], points[e.pnl1]);
+                    pnl.pp[q] = Ppoint::new((a.x + b.x) / 2.0, (a.y + b.y) / 2.0);
+                    let p = pnl.pp[q];
+                    let c = (0..tris.len()).find(|&t| pointintri(&tris, &pnl, t, p));
+                    match c {
+                        Some(_) => same += 1,
+                        None => rescued += usize::from(locate(&tris, &pnl, p).is_some()),
+                    }
+                    if c.is_some() {
+                        assert_eq!(locate(&tris, &pnl, p), c, "case {case}: {p:?}");
+                    }
+                }
+            }
+        }
+        assert!(same > 1000 && rescued > 0, "{same} {rescued}");
     }
 }

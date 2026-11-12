@@ -298,7 +298,23 @@ pub fn main(args: Vec<String>) -> ExitCode {
             return ExitCode::FAILURE;
         }
     };
-    items.retain(|(k, _)| golden.files.contains_key(k));
+    // A deliberate deviation from C is checked against the port's own pinned output, also
+    // where C's output is unstable. The stock report compares with stock C only and lists
+    // the deviations apart.
+    let listed = graphviz_pure_diff::deviations(Path::new("."));
+    let listed: BTreeMap<String, graphviz_pure_diff::Deviation> = items
+        .iter()
+        .filter_map(|(k, p)| {
+            let d = listed.get(&graphviz_pure_diff::input_key(p))?;
+            Some((k.clone(), d.clone()))
+        })
+        .collect();
+    let deviations = if stock {
+        BTreeMap::new()
+    } else {
+        listed.clone()
+    };
+    items.retain(|(k, _)| golden.files.contains_key(k) || deviations.contains_key(k));
     std::panic::set_hook(Box::new(|_| {}));
     let results = parallel(&items, |p| {
         std::fs::read(p)
@@ -310,11 +326,33 @@ pub fn main(args: Vec<String>) -> ExitCode {
 
     let mut identical = BTreeSet::new();
     let mut per: BTreeMap<&str, (usize, usize)> = BTreeMap::new();
+    let mut broken_deviations = 0usize;
     for (k, h) in &results {
         let corpus = k.split('/').next().unwrap_or("");
         let e = per.entry(corpus).or_default();
         e.1 += 1;
-        if h.as_ref() == golden.files.get(k) {
+        let expected = match deviations.get(k) {
+            Some(d) => {
+                if h.as_ref() != Some(&d.svg_hash) {
+                    broken_deviations += 1;
+                    println!(
+                        "  deviation (#{}) differs from its pinned output: {k}: port {}, pinned {}",
+                        d.issue,
+                        h.as_deref().unwrap_or("no output"),
+                        d.svg_hash
+                    );
+                } else if golden.files.get(k) == Some(&d.svg_hash) {
+                    broken_deviations += 1;
+                    println!(
+                        "  deviation (#{}) equals C's output, so it is no deviation: {k}",
+                        d.issue
+                    );
+                }
+                Some(&d.svg_hash)
+            }
+            None => golden.files.get(k),
+        };
+        if h.as_ref() == expected {
             e.0 += 1;
             identical.insert(k.clone());
         } else if list && !stock {
@@ -331,8 +369,19 @@ pub fn main(args: Vec<String>) -> ExitCode {
     println!(
         "{:<10} {ti:>9} {tf:>6}  ({} unstable C outputs skipped)",
         "total",
-        golden.unstable.len()
+        golden
+            .unstable
+            .iter()
+            .filter(|k| !deviations.contains_key(*k))
+            .count()
     );
+    if !deviations.is_empty() {
+        println!(
+            "{} of them deliberate deviations from C, compared with the port's pinned output ({})",
+            deviations.len(),
+            graphviz_pure_diff::DEVIATIONS
+        );
+    }
 
     if stock {
         // Which differences come from Apple's libm alone: the port equals C with the same math.
@@ -346,6 +395,10 @@ pub fn main(args: Vec<String>) -> ExitCode {
         let (mut libm, mut unknown, mut other) = (Vec::new(), Vec::new(), Vec::new());
         for (k, h) in &results {
             if identical.contains(k) {
+                continue;
+            }
+            if let Some(d) = listed.get(k) {
+                println!("  deliberate deviation (#{}): {k}", d.issue);
                 continue;
             }
             match same_math.files.get(k) {
@@ -380,6 +433,14 @@ pub fn main(args: Vec<String>) -> ExitCode {
         let json = serde_json::to_string_pretty(&results).expect("serialize hashes");
         std::fs::write(p, json + "\n").expect("write hashes");
         println!("hashes written: {}", p.display());
+    }
+    if broken_deviations > 0 {
+        println!(
+            "FAIL: {broken_deviations} deviations in {} do not hold; a deliberate change to one \
+             pins its new hash there",
+            graphviz_pure_diff::DEVIATIONS
+        );
+        return ExitCode::FAILURE;
     }
     crate::print_baseline(&baseline_path);
     if update {

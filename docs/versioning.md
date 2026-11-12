@@ -104,6 +104,13 @@ every platform (`graphviz_pure_core::math`), and is compared with C running thos
 - An output difference that comes only from a platform's libm is not a bug: for example, stock
   C on macOS calls Apple's libm, and differs from the port on the inputs that
   `gv-diff e2e --stock` lists as libm-only.
+- Nor is a difference between C builds that fuse multiply-adds differently: the reference is
+  Homebrew's macOS arm64 build, which fuses them ([porting/libm.md](porting/libm.md), "Fused
+  multiply-adds"). One exception is deliberate (#846): where the reference's fused
+  point-in-triangle test puts a route's end in no triangle, so that it loses the edge or draws
+  it straight, graphviz-pure repeats that test unfused and routes the edge. Every input the
+  reference routes is unchanged; the corpus inputs this changes are in
+  `tests/golden/deviations.tsv`.
 - SVG and layout outputs always use portable math, including in crates.io source builds.
 - PNG and JPEG output uses the same portable math in every build too. The five math-patched
   raster crates and the resvg/usvg forwarding forks are published under `graphviz-pure-`
