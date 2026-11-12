@@ -437,4 +437,51 @@ mod tests {
         assert!(pshortestpath(&square, [inside, outside]).is_err());
         assert_eq!(REPORTED.with(|r| r.borrow().clone()), [182, 193]);
     }
+
+    /// Issue #846: dot's routing polygon for `s1 -> s3:here`, where `here` is nested two levels
+    /// deep in a record (dot's coordinates before the final translation). The head end, the
+    /// port's centre, is the centre of the end box `[-34.107, 33.321] x [0, 75.4]`, so it lies
+    /// halfway along the box's diagonal from `(33.321, 75.4)` to `(-34.107, 0)`, an edge of two
+    /// of the triangles. Unfused, both products of `ccw` are equal, so it is 0 (`ISON`) both ways
+    /// and the point is in both triangles. C's reference build fuses `ccw` as
+    /// `fma(a, b, -(c * d))`, which gives the rounding error of `c * d`, the same positive value
+    /// both ways: `ISCW` in both triangles, so neither has the point inside all three edges
+    /// (`pointintri`), and C loses the edge. A C build without FMA draws it.
+    #[test]
+    fn an_end_on_a_diagonal_is_in_no_triangle_when_ccw_fuses() {
+        let p = Ppoint::new;
+        let poly = [
+            p(72.32080078125, 129.9),
+            p(72.32080078125, 111.4),
+            p(72.32080078125, 111.4),
+            p(72.32080078125, 75.4),
+            p(33.32080078125, 75.4),
+            p(33.32080078125, 0.0),
+            p(-34.10693359375, 0.0),
+            p(-34.10693359375, 75.4),
+            p(-72.32080078125, 75.4),
+            p(-72.32080078125, 111.4),
+            p(-72.32080078125, 111.4),
+            p(-72.32080078125, 129.9),
+        ];
+        let (tail, head) = (p(0.0, 128.9), p(-0.39306640625, 37.7));
+        let (a, b) = (p(33.32080078125, 75.4), p(-34.10693359375, 0.0));
+        // The diagonal is an edge of two of C's triangles.
+        let points = loaded(&poly);
+        let (tris, whole) = triangulate_c(&points);
+        assert!(whole);
+        let is_ab = |e: &Tedge| {
+            let (p0, p1) = (points[e.pnl0], points[e.pnl1]);
+            (p0 == a && p1 == b) || (p0 == b && p1 == a)
+        };
+        assert_eq!(tris.iter().filter(|t| t.e.iter().any(is_ab)).count(), 2);
+        let unfused = |p1: Ppoint, p2: Ppoint, p3: Ppoint| {
+            (p1.y - p2.y) * (p3.x - p2.x) - (p3.y - p2.y) * (p1.x - p2.x)
+        };
+        assert_eq!((unfused(a, b, head), unfused(b, a, head)), (0.0, 0.0));
+        assert_eq!((ccw(a, b, head), ccw(b, a, head)), (ISCW, ISCW));
+        REPORTED.with(|r| r.borrow_mut().clear());
+        assert!(pshortestpath(&poly, [tail, head]).is_err());
+        assert_eq!(REPORTED.with(|r| r.borrow().clone()), [193]);
+    }
 }

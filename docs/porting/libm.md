@@ -510,6 +510,19 @@ in Homebrew's), but since only the predicates' signs are used, that cannot expla
 differences above. None of these
 builds is the reference; the port follows the macOS arm64 build.
 
+A fused operation can change more than a last digit. `ccw` (`lib/pathplan/triang.c`) is fused as
+`fma(a, b, -(c * d))`, which is not antisymmetric: for a point halfway along a segment both
+products are equal, so unfused `ccw` is 0 both ways, while the fused one returns the rounding
+error of `c * d`, the same nonzero value both ways. In #846 dot's head end, the centre of a
+record port nested two levels deep, is the centre of its end box and lies halfway along the
+box's diagonal, an edge of the routing polygon's triangulation. Fused, it is in neither
+triangle beside the diagonal, so `Pshortestpath` fails ("destination point not in any
+triangle") and C loses the edge. That is the reference's output, and the corpus has it
+(`gv16_graphs_structs_68f492`, the documentation's "structs" example). Unfused C draws the
+edge. The port loses it too, by design (`pathplan::shortest`'s
+`an_end_on_a_diagonal_is_in_no_triangle_when_ccw_fuses`, and the CLI test
+`issue846_nested_record_port_on_a_triangulation_diagonal_is_lost_as_in_c`).
+
 ## Provenance and licences
 
 Everything under `crates/graphviz-pure-core/src/math/`:

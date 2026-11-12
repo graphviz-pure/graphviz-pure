@@ -12699,6 +12699,89 @@ n4 -> n2 [sametail=t0];
     );
 }
 
+/// Issue #846: an edge to a record port nested two levels deep, as reported. C 16.1.0's
+/// reference build (macOS arm64, which fuses multiply-adds) loses the edge, and so does the
+/// port: the port's centre lies exactly on a diagonal of the routing polygon's triangulation,
+/// and the fused `ccw` puts it in neither triangle
+/// (`pathplan::shortest::tests::an_end_on_a_diagonal_is_in_no_triangle_when_ccw_fuses`). C built
+/// without FMA, such as the usual x86-64 Linux build, draws the edge. The corpus input
+/// `gv16_graphs_structs_68f492` (the documentation's "structs" example) loses its
+/// `struct1:f2 -> struct3:here` the same way. In LR the polygon differs and the edge is drawn.
+/// The expected bytes are C's (`docs/porting/libm.md`, "Fused multiply-adds").
+#[test]
+fn issue846_nested_record_port_on_a_triangulation_diagonal_is_lost_as_in_c() {
+    let src = "digraph {
+  node [shape=record];
+  s1 [label=\"x\"];
+  s3 [label=\"a |{ b |{c|<here> d|e}| f}| g\"];
+  s1 -> s3:here;
+}
+";
+    let lost = "lib/pathplan/shortest.c:193: destination point not in any triangle\n\
+                Error: in routesplines, Pshortestpath failed\n\
+                Error: lost s1 s3 edge\n";
+    let (out, err, ok) = run(&["-Kdot", "-Tsvg"], src);
+    assert!(!ok);
+    assert_eq!(err, lost);
+    let want = r#"<!-- Pages: 1 -->
+<svg width="121pt" height="156pt"
+ viewBox="0.00 0.00 121.00 156.00" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="graph0" class="graph" transform="scale(1 1) rotate(0) translate(4 152.4)">
+<polygon fill="white" stroke="none" points="-4,4 -4,-152.4 116.64,-152.4 116.64,4 -4,4"/>
+<!-- s1 -->
+<g id="node1" class="node">
+<title>s1</title>
+<polygon fill="none" stroke="black" points="29.32,-111.9 29.32,-147.9 83.32,-147.9 83.32,-111.9 29.32,-111.9"/>
+<text xml:space="preserve" text-anchor="middle" x="56.32" y="-125.7" font-family="Times,serif" font-size="14.00">x</text>
+</g>
+<!-- s3 -->
+<g id="node2" class="node">
+<title>s3</title>
+<polygon fill="none" stroke="black" points="0,-0.5 0,-74.9 112.64,-74.9 112.64,-0.5 0,-0.5"/>
+<text xml:space="preserve" text-anchor="middle" x="11.11" y="-33.5" font-family="Times,serif" font-size="14.00">a</text>
+<polyline fill="none" stroke="black" points="22.21,-0.5 22.21,-74.9"/>
+<text xml:space="preserve" text-anchor="middle" x="55.93" y="-58.3" font-family="Times,serif" font-size="14.00">b</text>
+<polyline fill="none" stroke="black" points="22.21,-50.1 89.64,-50.1"/>
+<text xml:space="preserve" text-anchor="middle" x="33.32" y="-33.5" font-family="Times,serif" font-size="14.00">c</text>
+<polyline fill="none" stroke="black" points="44.43,-25.3 44.43,-50.1"/>
+<text xml:space="preserve" text-anchor="middle" x="55.93" y="-33.5" font-family="Times,serif" font-size="14.00">d</text>
+<polyline fill="none" stroke="black" points="67.43,-25.3 67.43,-50.1"/>
+<text xml:space="preserve" text-anchor="middle" x="78.53" y="-33.5" font-family="Times,serif" font-size="14.00">e</text>
+<polyline fill="none" stroke="black" points="22.21,-25.3 89.64,-25.3"/>
+<text xml:space="preserve" text-anchor="middle" x="55.93" y="-8.7" font-family="Times,serif" font-size="14.00">f</text>
+<polyline fill="none" stroke="black" points="89.64,-0.5 89.64,-74.9"/>
+<text xml:space="preserve" text-anchor="middle" x="101.14" y="-33.5" font-family="Times,serif" font-size="14.00">g</text>
+</g>
+</g>
+</svg>
+"#;
+    assert_eq!(out.split_once(" -->\n").map(|(_, b)| b), Some(want));
+
+    let (out, err, ok) = run(&["-Tplain"], src);
+    assert!(!ok);
+    assert_eq!(err, lost);
+    assert_eq!(
+        out,
+        "graph 1 1.5645 2.0611\n\
+         node s1 0.78223 1.8042 0.75 0.51389 x solid record black lightgrey\n\
+         node s3 0.78223 0.52361 1.5645 1.0472 \"a |{ b |{c|<here> d|e}| f}| g\" solid record black lightgrey\n\
+         \x20solid black\n\
+         stop\n"
+    );
+
+    let lr = src.replacen("digraph {", "digraph {\n  rankdir=LR;", 1);
+    let (out, err, ok) = run(&["-Tsvg"], &lr);
+    assert!(ok, "{err}");
+    assert_eq!(err, "");
+    assert!(
+        out.contains(
+            "<path fill=\"none\" stroke=\"black\" d=\"M54.37,-62.5C69.13,-62.5 87.36,-62.5 101.53,-62.5\"/>\n\
+             <polygon fill=\"black\" stroke=\"black\" points=\"101.24,-66 111.24,-62.5 101.24,-59 101.24,-66\"/>\n"
+        ),
+        "{out}"
+    );
+}
+
 /// Issue #323: deep nesting lays out in every engine that reads cluster members, with
 /// the members each subgraph's lists hold (see `subgraph_members_are_the_subgraphs_own_lists`
 /// for the size of what they collect). Clusters and plain subgraphs, 400 levels.
