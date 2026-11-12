@@ -3375,11 +3375,13 @@ fn osage_compound_multi_edge_is_a_cubic_like_c() {
     );
 }
 
-/// Issue #17, circo variant: with the star's obstacle, C's guiding polygon
-/// makes `Pshortestpath` fail in `genroute` (`lib/neatogen/multispline.c`),
-/// which warns and falls back to a straight edge.
+/// Issue #17, circo variant: with the star's obstacle, C's reference build finds the edge's head
+/// in no triangle of the guiding polygon (its fused `ccw`), so `Pshortestpath` fails in
+/// `genroute` (`lib/neatogen/multispline.c`), which warns and falls back to a straight edge.
+/// The port retries point location unfused (#846, a deliberate deviation) and routes the edge
+/// around the star, byte for byte as C built without FMA does.
 #[test]
-fn circo_star_obstacle_falls_back_to_straight_edge_with_warning() {
+fn circo_star_obstacle_routes_the_edge_as_unfused_c() {
     let src = "graph G {
 layout=circo;
 splines=true;
@@ -3389,17 +3391,17 @@ n2:w -- n13;
 ";
     let (out, err, ok) = run(&["-Tsvg"], src);
     assert!(ok, "{err}");
-    assert_eq!(
-        err,
-        "lib/pathplan/shortest.c:193: destination point not in any triangle\n\
-         Warning: Could not create control points for multiple spline for edge (n2,n13)\n"
-    );
+    assert_eq!(err, "");
     assert!(
         out.contains("<svg width=\"344pt\" height=\"150pt\""),
         "{out}"
     );
     assert!(
-        out.contains("d=\"M155.98,-18C155.98,-18 237.75,-18 281.83,-18\""),
+        out.contains(
+            "d=\"M155.98,-18.1C155.98,-18.1 155.82,-28.42 160.96,-33.38 168.37,-40.53 173,-38.64 \
+             183.23,-39.76 229.15,-44.76 243.29,-48.44 286.96,-33.38 288.29,-32.93 289.61,-32.36 \
+             290.91,-31.73\""
+        ),
         "{out}"
     );
 }
@@ -3665,11 +3667,13 @@ fn start_regular_places_nodes_like_c_with_the_same_math() {
     }
 }
 
-// The circo variant of issue #13 (repro-circo.gv). With C's record box the guiding polygon
-// does not triangulate, so `Pshortestpath` fails, genroute warns (multispline.c:703) and
-// the edge falls back to a straight line.
+// The circo variant of issue #13 (repro-circo.gv). With C's record box, C's reference build
+// finds the edge's head in no triangle of the guiding polygon (its fused `ccw`), so
+// `Pshortestpath` fails, genroute warns (multispline.c:703) and the edge falls back to a
+// straight line. The port retries point location unfused (#846, a deliberate deviation) and
+// routes it, byte for byte as C built without FMA does.
 #[test]
-fn circo_record_obstacle_falls_back_like_c() {
+fn circo_record_obstacle_routes_the_edge_as_unfused_c() {
     let src = "graph G {
 layout=circo;
 splines=spline;
@@ -3681,14 +3685,43 @@ n2;
     let (out, err, ok) = run(&["-Kcirco", "-Tsvg"], src);
     assert!(ok, "{err}");
     assert!(
-        out.contains(r#"d="M126.28,-22.32C89.29,-27.6 27,-36.5 27,-36.5""#),
+        out.contains(
+            r#"d="M128.1,-26.31C108.94,-31.75 81.69,-38.28 57.2,-39.7 43.73,-40.48 27,-36.6 27,-36.6""#
+        ),
         "{out}"
     );
+    assert_eq!(err, "");
+}
+
+// genroute's fallback (multispline.c) where `Pshortestpath` succeeds and the spline fit fails:
+// `mkCtrlPts` finds no control points for the doubled `n4 -- n0`, so C warns and draws both
+// copies straight. The #846 retry is only for point location, so the port does as C does.
+#[test]
+fn circo_multispline_fallback_without_a_point_location_failure_matches_c() {
+    let src = "graph G { layout=circo; splines=polyline; overlap=voronoi; sep=\"+4\";
+ n0 [shape=hexagon];
+ n1 [shape=circle width=0.3];
+ n2 [shape=diamond];
+ n3 [shape=triangle fixedsize=true width=0.1];
+ n4 [shape=circle fixedsize=true width=0.1];
+ n1:n -- n3;
+ n0:ne -- n2:sw;
+ n3:se -- n4:e;
+ n2:n -- n3:se;
+ n4:c -- n0:se;
+ n4:c -- n0:se;
+}
+";
+    let (out, err, ok) = run(&["-Tsvg"], src);
+    assert!(ok, "{err}");
     assert_eq!(
         err,
-        "lib/pathplan/shortest.c:193: destination point not in any triangle\n\
-         Warning: Could not create control points for multiple spline for edge (n1,n7)\n"
+        "Warning: node 'n3', graph 'G' size too small for label\n\
+         Warning: node 'n4', graph 'G' size too small for label\n\
+         Warning: Could not create control points for multiple spline for edge (n4,n0)\n"
     );
+    let straight = r#"d="M107.53,-6.17C95.18,-18.52 42.47,-71.22 42.47,-71.22""#;
+    assert_eq!(out.matches(straight).count(), 2, "{out}");
 }
 
 // Fuzz case 014-dot-pack-failed-component-not-absorbed (issue #23), its repro.gv verbatim.
@@ -12699,17 +12732,18 @@ n4 -> n2 [sametail=t0];
     );
 }
 
-/// Issue #846: an edge to a record port nested two levels deep, as reported. C 16.1.0's
-/// reference build (macOS arm64, which fuses multiply-adds) loses the edge, and so does the
-/// port: the port's centre lies exactly on a diagonal of the routing polygon's triangulation,
-/// and the fused `ccw` puts it in neither triangle
-/// (`pathplan::shortest::tests::an_end_on_a_diagonal_is_in_no_triangle_when_ccw_fuses`). C built
-/// without FMA, such as the usual x86-64 Linux build, draws the edge. The corpus input
-/// `gv16_graphs_structs_68f492` (the documentation's "structs" example) loses its
-/// `struct1:f2 -> struct3:here` the same way. In LR the polygon differs and the edge is drawn.
-/// The expected bytes are C's (`docs/porting/libm.md`, "Fused multiply-adds").
+/// Issue #846: an edge to a record port nested two levels deep, as reported. The port's centre
+/// lies exactly on a diagonal of the routing polygon's triangulation, and C 16.1.0's reference
+/// build (macOS arm64, which fuses multiply-adds) puts it in neither triangle with its fused
+/// `ccw`, so `Pshortestpath` fails and C loses the edge ("destination point not in any
+/// triangle"; the corpus's `gv16_graphs_structs_68f492`, the documentation's "structs"
+/// example, too). The port retries point location unfused where C finds no triangle
+/// (`pathplan::shortest::locate`, a deliberate deviation listed in
+/// `tests/golden/deviations.tsv`) and draws the edge. The expected bytes are those of C built
+/// without FMA, the build the issue compared with. In LR the polygon differs and both C builds
+/// draw the edge.
 #[test]
-fn issue846_nested_record_port_on_a_triangulation_diagonal_is_lost_as_in_c() {
+fn issue846_nested_record_port_on_a_triangulation_diagonal_is_drawn() {
     let src = "digraph {
   node [shape=record];
   s1 [label=\"x\"];
@@ -12717,12 +12751,9 @@ fn issue846_nested_record_port_on_a_triangulation_diagonal_is_lost_as_in_c() {
   s1 -> s3:here;
 }
 ";
-    let lost = "lib/pathplan/shortest.c:193: destination point not in any triangle\n\
-                Error: in routesplines, Pshortestpath failed\n\
-                Error: lost s1 s3 edge\n";
     let (out, err, ok) = run(&["-Kdot", "-Tsvg"], src);
-    assert!(!ok);
-    assert_eq!(err, lost);
+    assert!(ok, "{err}");
+    assert_eq!(err, "");
     let want = r#"<!-- Pages: 1 -->
 <svg width="121pt" height="156pt"
  viewBox="0.00 0.00 121.00 156.00" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
@@ -12752,20 +12783,26 @@ fn issue846_nested_record_port_on_a_triangulation_diagonal_is_lost_as_in_c() {
 <polyline fill="none" stroke="black" points="89.64,-0.5 89.64,-74.9"/>
 <text xml:space="preserve" text-anchor="middle" x="101.14" y="-33.5" font-family="Times,serif" font-size="14.00">g</text>
 </g>
+<!-- s1&#45;&gt;s3 -->
+<g id="edge1" class="edge">
+<title>s1&#45;&gt;s3:here</title>
+<path fill="none" stroke="black" d="M56.25,-111.75C56.19,-97.66 56.1,-77.54 56.03,-61.83"/>
+<polygon fill="black" stroke="black" points="59.53,-61.87 55.99,-51.89 52.53,-61.9 59.53,-61.87"/>
+</g>
 </g>
 </svg>
 "#;
     assert_eq!(out.split_once(" -->\n").map(|(_, b)| b), Some(want));
 
     let (out, err, ok) = run(&["-Tplain"], src);
-    assert!(!ok);
-    assert_eq!(err, lost);
+    assert!(ok, "{err}");
+    assert_eq!(err, "");
     assert_eq!(
         out,
         "graph 1 1.5645 2.0611\n\
          node s1 0.78223 1.8042 0.75 0.51389 x solid record black lightgrey\n\
          node s3 0.78223 0.52361 1.5645 1.0472 \"a |{ b |{c|<here> d|e}| f}| g\" solid record black lightgrey\n\
-         \x20solid black\n\
+         edge s1 s3 4 0.78121 1.552 0.78036 1.3564 0.77916 1.077 0.77822 0.85874 solid black\n\
          stop\n"
     );
 

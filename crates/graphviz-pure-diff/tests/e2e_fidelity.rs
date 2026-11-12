@@ -3,6 +3,8 @@
 //! computing with the port's own math functions (`tests/golden/e2e.libm-matched.json`, made with
 //! `scripts/dot-portable-libm.sh`), so the math library is out of the equation. The comparison
 //! with stock C on macOS (`gv-diff e2e --stock`) is a report and is not checked here.
+//! An input listed in `tests/golden/deviations.tsv`, where the port deliberately differs from C,
+//! is checked against the port's pinned output instead of C's.
 //!
 //! Refresh the baseline after an improvement with
 //! `cargo run --release -p graphviz-pure-diff -- e2e --update` (or run
@@ -22,6 +24,40 @@ fn e2e_svg_identity_does_not_regress() {
         status.success(),
         "e2e SVG identity regressed; see gv-diff output above"
     );
+}
+
+/// Every deliberate deviation names a corpus input that exists, once (`deviations` panics on a
+/// malformed or repeated line), with a 16-digit hash, and is in the e2e baseline, so that
+/// `gv-diff e2e` keeps checking it against its pinned output and a stale line cannot outlive
+/// its input.
+#[test]
+fn deviations_name_existing_inputs_in_the_baseline() {
+    let root = std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../.."));
+    let deviations = graphviz_pure_diff::deviations(root);
+    assert!(!deviations.is_empty());
+    let baseline =
+        std::fs::read_to_string(root.join("tests/golden/e2e-baseline.libm-matched.portable.json"))
+            .expect("read the e2e baseline");
+    for (path, d) in &deviations {
+        assert!(root.join(path).is_file(), "{path}: no such input");
+        assert_eq!(d.svg_hash.len(), 16, "{path}");
+        assert!(d.svg_hash.bytes().all(|b| b.is_ascii_hexdigit()), "{path}");
+        // `gv-diff e2e`'s key: the corpus (tests/wild and tests/fixtures are "main"), the stem.
+        let (dir, file) = path
+            .strip_prefix("tests/")
+            .and_then(|p| p.split_once('/'))
+            .expect("tests/<corpus>/<input>");
+        let corpus = if matches!(dir, "wild" | "fixtures") {
+            "main"
+        } else {
+            dir
+        };
+        let stem = file.strip_suffix(".gv").expect(".gv input");
+        assert!(
+            baseline.contains(&format!("\"{corpus}/{stem}\"")),
+            "{path}: not in the e2e baseline"
+        );
+    }
 }
 
 /// Issue #15 (fuzz case 006-fdp-cluster-port-sincos-fusion, now

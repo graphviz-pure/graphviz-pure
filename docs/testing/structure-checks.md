@@ -24,6 +24,8 @@ For each graph in each corpus input, the port's drawing is compared with a summa
 
 Geometric checks are skipped for the inputs that `tests/golden/e2e.json` records as unstable,
 because C's own geometry changes from run to run there.
+Inputs listed in `tests/golden/deviations.tsv`, where the port deliberately differs from C
+(#846), are skipped; `gv-diff e2e` checks them against the port's pinned output instead.
 
 Where the tolerances come from: in a review of the 119 inputs that differed from stock C at the time
 (the automated measures below, plus looking at every pair side by side), the

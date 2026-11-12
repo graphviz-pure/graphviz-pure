@@ -1,0 +1,26 @@
+# Inputs whose output deliberately differs from C 16.1.0's reference build.
+#
+# Each line: input path<TAB>hash of the port's normalized -Tsvg (gv-diff e2e's hash)<TAB>issue.
+# `gv-diff e2e` checks a listed input against its pinned hash instead of C's; the layout
+# (`gv-diff`) and structural (`gv-diff structure`) ratchets skip it. When a change moves a
+# listed output on purpose, `gv-diff e2e` prints the new hash. Adding a line takes a decision
+# on the issue named; see docs/versioning.md, "What identical to C means".
+#
+# #846: where C's fused `ccw` puts a route's end in no triangle, so that C loses the edge or
+# draws it straight, the port repeats the point-in-triangle test with `ccw` unfused
+# (pathplan::shortest::locate) and routes the edge.
+tests/fdp/wild_gv16_undirected_ngk10_4_793340.gv	aabeac752c345f2b	846
+tests/neato/hw3_ms_fan2_box.gv	e6cff683ae9e5044	846
+tests/neato/hw3_ms_fan3_digraph.gv	e96df1fb12cb92df	846
+tests/neato/hw3_ms_fan3_labels.gv	22c1fea63aeca714	846
+tests/neato/hw3_ms_fan_fail.gv	f031dfa5ee0c9596	846
+tests/neato/hw3_ms_fan_polyline.gv	911998d69f2ab3a4	846
+tests/neato/hw3_ms_ports.gv	b6de169d8e78e1e8	846
+tests/neato/hw3_ms_ports_box.gv	f85eee37dbc331f1	846
+tests/render/records.gv	53d690072f347d7e	846
+tests/sfdp/wild_gv16_linux_x86_neatosplines_neato1_448ced.gv	0748eefaf7a7f324	846
+tests/sfdp/wild_gv16_linux_x86_neatosplines_neato_c2c6f6.gv	8a514edc16526374	846
+tests/wild/fuzz_lost_edge_label.gv	5ee43b142e1b1fc4	846
+tests/wild/gallery_shapes_1_91cd61.gv	3c0871d1f5ba600d	846
+tests/wild/gv16_graphs_structs_68f492.gv	4f6ddaeb1aea58c4	846
+tests/wild/gv16_infosrc_record_14407c.gv	3c0871d1f5ba600d	846
